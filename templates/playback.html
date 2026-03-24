@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Playback - Karaoke{% endblock %}
+{% block header_icon %}tv{% endblock %}
+{% block header_title %}TV Playback{% endblock %}
+{% block header_subtitle %}Stage Display{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-background">
+    <main class="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 pb-6 pt-28 sm:px-6 lg:grid-cols-12 lg:px-8">
+        <section class="glass-card rounded-xl border border-outline-variant/20 p-4 sm:p-5 lg:col-span-8">
+            {% if current %}
+            <div class="mb-4 flex items-center justify-between gap-3">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Now Playing</p>
+                    <h2 class="mt-1 text-xl font-semibold text-on-surface sm:text-2xl">{{ current.title }}</h2>
+                    {% if current.artist %}
+                    <p class="text-sm text-on-surface-variant">{{ current.artist }}</p>
+                    {% endif %}
+                </div>
+                <span class="inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide {% if current.is_karaoke %}border-secondary/35 bg-secondary/15 text-secondary{% else %}border-outline-variant/40 bg-surface-container text-on-surface-variant{% endif %}">
+                    {{ 'Karaoke' if current.is_karaoke else 'Original' }}
+                </span>
+            </div>
+
+            <div class="overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-lowest">
+                <video id="video-player" class="block h-auto max-h-[70vh] w-full object-contain bg-black" controls autoplay playsinline>
+                    <source src="{{ current.media_path }}" type="video/mp4">
+                    Your browser does not support video playback.
+                </video>
+            </div>
+
+            <div class="mt-4 flex items-center justify-end">
+                <button id="skip-btn" class="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/20 px-5 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/30 disabled:cursor-not-allowed disabled:opacity-50">
+                    <span class="material-symbols-outlined text-base">skip_next</span>
+                    Skip Song
+                </button>
+            </div>
+            {% else %}
+            <div class="flex min-h-[45vh] flex-col items-center justify-center rounded-xl border border-outline-variant/30 bg-surface-container-low p-8 text-center">
+                <span class="material-symbols-outlined mb-3 text-5xl text-on-surface-variant/70">queue_music</span>
+                <h2 class="text-2xl font-semibold text-on-surface">Queue Empty</h2>
+                <p class="mt-2 text-on-surface-variant">No songs in queue. Add songs from the queue page.</p>
+            </div>
+            {% endif %}
+        </section>
+
+        <aside class="glass-card rounded-xl border border-outline-variant/20 p-4 sm:p-5 lg:col-span-4">
+            <h3 class="mb-3 text-lg font-semibold text-on-surface">Up Next</h3>
+            <div id="queue-preview" class="space-y-2.5">
+                {% set upcoming = queue | rejectattr('status', 'equalto', 'playing') | list %}
+                {% if upcoming %}
+                    {% for item in upcoming[:5] %}
+                    <div class="flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low p-3">
+                        <span class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-xs font-bold text-on-surface-variant">{{ loop.index }}</span>
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-semibold text-on-surface">{{ item.title }}</p>
+                            {% if item.artist %}
+                            <p class="truncate text-xs text-on-surface-variant">{{ item.artist }}</p>
+                            {% endif %}
+                        </div>
+                        <span class="inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide {% if item.is_karaoke %}border-secondary/35 bg-secondary/15 text-secondary{% else %}border-outline-variant/35 bg-surface-container text-on-surface-variant{% endif %}">
+                            {{ 'K' if item.is_karaoke else 'O' }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 text-sm text-on-surface-variant">No upcoming songs</p>
+                {% endif %}
+            </div>
+        </aside>
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const API_BASE = window.location.origin;
+const currentItemId = {{ (current.id if current else None) | tojson }};
+const queuePreview = document.getElementById('queue-preview');
+let isReloading = false;
+
+function safeReload() {
+    if (!isReloading) {
+        isReloading = true;
+        window.location.reload();
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+}
+
+function renderQueuePreview(queue) {
+    if (!queuePreview) return;
+
+    const upcoming = queue
+        .filter(item => item.status !== 'playing')
+        .slice(0, 5);
+
+    if (upcoming.length === 0) {
+        queuePreview.innerHTML = '<p class="rounded-lg border border-outline-variant/20 bg-surface-container-low p-3 text-sm text-on-surface-variant">No upcoming songs</p>';
+        return;
+    }
+
+    queuePreview.innerHTML = upcoming.map((item, index) => `
+        <div class="flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low p-3">
+            <span class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-xs font-bold text-on-surface-variant">${index + 1}</span>
+            <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-semibold text-on-surface">${escapeHtml(item.title)}</p>
+                ${item.artist ? `<p class="truncate text-xs text-on-surface-variant">${escapeHtml(item.artist)}</p>` : ''}
+            </div>
+            <span class="inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${item.is_karaoke ? 'border-secondary/35 bg-secondary/15 text-secondary' : 'border-outline-variant/35 bg-surface-container text-on-surface-variant'}">${item.is_karaoke ? 'K' : 'O'}</span>
+        </div>
+    `).join('');
+}
+
+// Auto-advance to next song when current ends
+const video = document.getElementById('video-player');
+if (video) {
+    video.addEventListener('ended', async function() {
+        try {
+            const response = await fetch(`${API_BASE}/api/queue/complete-current`, {
+                method: 'POST'
+            });
+            if (!response.ok) {
+                throw new Error('Failed to complete current song');
+            }
+        } catch (error) {
+            console.error('Failed to advance after playback ended:', error);
+        } finally {
+            safeReload();
+        }
+    });
+}
+
+const skipBtn = document.getElementById('skip-btn');
+if (skipBtn) {
+    skipBtn.addEventListener('click', async function() {
+        skipBtn.disabled = true;
+        skipBtn.textContent = 'Skipping...';
+        try {
+            const response = await fetch(`${API_BASE}/api/queue/skip`, { method: 'POST' });
+            if (!response.ok) {
+                throw new Error('Skip failed');
+            }
+            safeReload();
+        } catch (error) {
+            skipBtn.disabled = false;
+            skipBtn.textContent = 'Skip Song';
+            alert('Failed to skip song');
+        }
+    });
+}
+
+async function pollPlaybackState() {
+    try {
+        const [currentResponse, queueResponse] = await Promise.all([
+            fetch(`${API_BASE}/api/queue/current`),
+            fetch(`${API_BASE}/api/queue/`)
+        ]);
+
+        if (!currentResponse.ok || !queueResponse.ok) {
+            return;
+        }
+
+        const serverCurrent = await currentResponse.json();
+        const queue = await queueResponse.json();
+        const serverCurrentId = serverCurrent ? serverCurrent.id : null;
+
+        // Only refresh page when the currently playing song actually changes.
+        if (serverCurrentId !== currentItemId) {
+            safeReload();
+            return;
+        }
+
+        renderQueuePreview(queue);
+    } catch (error) {
+        console.error('Playback poll failed:', error);
+    }
+}
+
+// Poll queue data without resetting current playback.
+setInterval(pollPlaybackState, 5000);
+</script>
+{% endblock %}

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}Karaoke Queue{% endblock %}
+{% block header_icon %}music_note{% endblock %}
+{% block header_title %}Karaoke{% endblock %}
+{% block header_subtitle %}Queue Manager{% endblock %}
+
+{% block content %}
+<main class="pt-28 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-8 sm:px-6 lg:px-8">
+    <!-- Search Section -->
+    <section class="flex flex-col gap-4">
+        <div class="relative group">
+            <input 
+                id="search-input"
+                class="w-full bg-surface-container border-none h-16 pl-4 pr-24 rounded-full text-on-surface focus:ring-2 focus:ring-primary/30 transition-all font-body text-lg shadow-inner focus:outline-none" 
+                placeholder="Search YouTube Karaoke..." 
+                type="text"
+                autocomplete="off"
+            />
+            <button 
+                id="search-btn"
+                class="absolute right-2 top-1/2 -translate-y-1/2 bg-primary text-on-primary px-4 py-2 rounded-full font-bold text-sm hover:brightness-110 active:scale-95 transition-all"
+            >
+                <span class="material-symbols-outlined text-base">search</span>
+            </button>
+        </div>
+        
+        <!-- Search Results -->
+        <div id="search-results" class="flex flex-col gap-3"></div>
+    </section>
+
+    <!-- Queue Section -->
+    <section class="flex flex-col gap-6">
+        <div class="flex items-end justify-between px-2">
+            <div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">Up Next</span>
+                <h2 class="font-headline font-black text-3xl tracking-tight text-on-surface">Stage Queue</h2>
+            </div>
+            <button 
+                id="clear-all-btn"
+                class="text-secondary font-bold text-sm px-4 py-2 hover:bg-secondary/10 rounded-full transition-colors"
+            >
+                Clear All
+            </button>
+        </div>
+        
+        <div id="queue-list" class="flex flex-col gap-4">
+            {% if queue %}
+                {% for item in queue %}
+                <div class="queue-item {% if item.status.value == 'playing' %}glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]{% else %}bg-surface-container-low hover:bg-surface-container{% endif %} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="{{ item.id }}" data-status="{{ item.status.value }}">
+                    <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 {% if item.status.value != 'playing' %}grayscale-[50%]{% endif %}">
+                        <div class="w-full h-full bg-surface-container-highest flex items-center justify-center">
+                            <span class="material-symbols-outlined text-2xl text-on-surface-variant">music_note</span>
+                        </div>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h3 class="font-bold {% if item.status.value == 'playing' %}text-on-surface{% else %}text-on-surface/80{% endif %} truncate">{{ item.title }}</h3>
+                        {% if item.artist %}
+                        <p class="text-xs text-on-surface-variant truncate">{{ item.artist }}</p>
+                        {% endif %}
+                        <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full 
+                            {% if item.status.value == 'playing' %}bg-primary/10 border border-primary/20{% elif item.status.value == 'processing' %}bg-tertiary/10 border border-tertiary/20{% elif item.status.value == 'downloading' %}bg-tertiary/10 border border-tertiary/20{% elif item.status.value == 'failed' %}bg-error/10 border border-error/20{% else %}bg-on-surface/5 border border-on-surface/10{% endif %}">
+                            {% if item.status.value == 'playing' %}
+                                <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-primary">Playing</span>
+                            {% elif item.status.value == 'processing' %}
+                                <span class="material-symbols-outlined text-[12px] text-tertiary animate-spin">auto_fix_high</span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-tertiary">Processing AI</span>
+                            {% elif item.status.value == 'downloading' %}
+                                <span class="material-symbols-outlined text-[12px] text-tertiary animate-pulse">download</span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-tertiary">Downloading</span>
+                            {% elif item.status.value == 'failed' %}
+                                <span class="material-symbols-outlined text-[12px] text-error">error</span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-error">Failed</span>
+                            {% elif item.status.value == 'ready' %}
+                                <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-secondary">Ready</span>
+                            {% else %}
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant">In Queue</span>
+                            {% endif %}
+                        </div>
+                        {% if item.is_karaoke %}
+                        <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
+                            <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>
+                            <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">Karaoke</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        {% if item.status == 'ready' %}
+                        <button class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_0_15px_rgba(0,242,255,0.3)] active:scale-90 transition-all neon-glow" 
+                                onclick="skipToSong('{{ item.id }}')">
+                            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">play_arrow</span>
+                        </button>
+                        {% else %}
+                        <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors" 
+                                onclick="removeSong('{{ item.id }}')">
+                            <span class="material-symbols-outlined">remove</span>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center py-12">
+                    <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">
+                        <span class="material-symbols-outlined text-4xl text-on-surface-variant">queue_music</span>
+                    </div>
+                    <p class="text-on-surface-variant text-lg font-medium">Queue is empty</p>
+                    <p class="text-on-surface-variant/60 text-sm">Search and add songs to get started!</p>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <!-- Navigation hint -->
+    <div class="text-center mt-8">
+        <div class="flex justify-center gap-4">
+            <a href="/queue" class="inline-flex items-center gap-2 text-primary hover:text-primary/80 transition-colors px-4 py-2 rounded-full bg-primary/10">
+                <span class="material-symbols-outlined">queue_music</span>
+                <span class="font-medium">Queue</span>
+            </a>
+            <a href="/playback" class="inline-flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors px-4 py-2 rounded-full">
+                <span class="material-symbols-outlined">tv</span>
+                <span class="font-medium">TV Display</span>
+            </a>
+        </div>
+    </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/queue.js"></script>
+<script>
+// Additional mobile-specific functionality
+function skipToSong(songId) {
+    fetch(`${API_BASE}/api/queue/skip-to/${songId}`, {
+        method: 'POST'
+    }).then(response => {
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Failed to skip to song');
+        }
+    }).catch(error => {
+        console.error('Error:', error);
+        alert('Failed to skip to song');
+    });
+}
+
+function removeSong(songId) {
+    fetch(`${API_BASE}/api/queue/${songId}`, {
+        method: 'DELETE'
+    }).then(response => {
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert('Failed to remove song');
+        }
+    }).catch(error => {
+        console.error('Error:', error);
+        alert('Failed to remove song');
+    });
+}
+
+document.getElementById('clear-all-btn')?.addEventListener('click', function() {
+    if (confirm('Are you sure you want to clear all songs from the queue?')) {
+        fetch(`${API_BASE}/api/queue/clear`, {
+            method: 'POST'
+        }).then(response => {
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Failed to clear queue');
+            }
+        }).catch(error => {
+            console.error('Error:', error);
+            alert('Failed to clear queue');
+        });
+    }
+});
+</script>
+{% endblock %}
