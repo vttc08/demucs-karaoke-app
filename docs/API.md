@@ -174,13 +174,16 @@ GET /api/settings/
 ```
 
 Returns current in-memory runtime settings used by the application.
+This endpoint is optimized for fast page load and does not perform a live Demucs network probe.
+It returns cached/pending health indicators and the UI should call `/api/settings/demucs-health`
+for a real-time status refresh.
 
 **Response:**
 ```json
 {
   "demucs_api_url": "http://10.10.120.191:8001",
-  "demucs_healthy": true,
-  "demucs_health_detail": "Demucs service is healthy",
+  "demucs_healthy": false,
+  "demucs_health_detail": "Health check pending",
   "ffmpeg_preset": "superfast",
   "ffmpeg_crf": 23,
   "ytdlp_path": "/home/user/.venv/bin/yt-dlp",

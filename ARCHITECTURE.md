@@ -17,26 +17,19 @@ This project currently uses two services:
 - runs demucs two-stem vocals separation
 - returns path or metadata for generated `no_vocals.wav`
 
+## Software Stack
+
+**Backend**: FastAPI
+
+**Frontend**: HTML Jinja Templates/Tailwind CSS
+
+**Database**: SQLite
+
+**Other Services**: yt-dlp, ffmpeg, [Demucs](https://github.com/facebookresearch/demucs)
+
 ## Design principles
 - Keep the MVP CLI-friendly and easy to run locally
 - Prefer local filesystem storage for media artifacts
 - Prefer SQLite for queue and metadata during MVP
 - Keep Demucs integration simple and replaceable
 - Keep playback flow deterministic and testable
-
-## Current scope
-In scope:
-- YouTube search
-- queue song
-- TV playback
-- karaoke vs non-karaoke handling
-- basic lyrics lookup
-- basic burned subtitles
-- Demucs offload API
-
-Out of scope:
-- Whisper transcription
-- file upload
-- user accounts
-- streaming optimization
-- distributed job queues

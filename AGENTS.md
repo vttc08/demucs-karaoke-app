@@ -44,7 +44,6 @@ Before making changes, read:
 - `README.md`
 - `TASKS.md`
 - `ARCHITECTURE.md`
-- `DECISIONS.md`
 - relevant docs in `/docs`
 
 For each non-trivial change:
@@ -56,6 +55,8 @@ When finished:
 - update docs if needed
 - update tasks if scope changed
 - include commands to run and test
+- commit the changes with git if the change is major
+  - check whether there are uncommitted changes or secrets
 
 ## Testing requirements
 - Add or update API tests for new endpoints
