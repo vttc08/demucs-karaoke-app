@@ -25,18 +25,29 @@ class RuntimeSettingsService:
         """Return Demucs health for the current configured API URL."""
         return DemucsClient(api_url=settings.demucs_api_url).health_check()
 
-    def get_settings(self) -> RuntimeSettingsResponse:
-        """Return current runtime settings snapshot."""
-        demucs_health = self.get_demucs_health()
+    def _build_settings_response(
+        self, demucs_health: DemucsHealthResponse | None
+    ) -> RuntimeSettingsResponse:
+        if demucs_health is None:
+            demucs_healthy = False
+            demucs_health_detail = "Health check pending"
+        else:
+            demucs_healthy = demucs_health.healthy
+            demucs_health_detail = demucs_health.detail
+
         return RuntimeSettingsResponse(
             demucs_api_url=settings.demucs_api_url,
-            demucs_healthy=demucs_health.healthy,
-            demucs_health_detail=demucs_health.detail,
+            demucs_healthy=demucs_healthy,
+            demucs_health_detail=demucs_health_detail,
             ffmpeg_preset=settings.ffmpeg_preset,
             ffmpeg_crf=settings.ffmpeg_crf,
             ytdlp_path=settings.ytdlp_path,
             ffmpeg_path=settings.ffmpeg_path,
         )
+
+    def get_settings(self) -> RuntimeSettingsResponse:
+        """Return current runtime settings snapshot without blocking network calls."""
+        return self._build_settings_response(demucs_health=None)
 
     def update_settings(
         self, payload: RuntimeSettingsUpdateRequest
@@ -76,7 +87,8 @@ class RuntimeSettingsService:
             settings.ffmpeg_path = self._resolve_executable_path(ffmpeg_input)
 
         settings.ensure_paths()
-        return self.get_settings()
+        demucs_health = self.get_demucs_health()
+        return self._build_settings_response(demucs_health=demucs_health)
 
     @staticmethod
     def _resolve_executable_path(value: str) -> str:

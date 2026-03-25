@@ -8,6 +8,7 @@ from models import DemucsHealthResponse, DemucsResponse
 
 class DemucsClient:
     """Client for Demucs vocal separation service."""
+    HEALTH_TIMEOUT_SECONDS = 2.0
 
     def __init__(self, api_url: str = None):
         self.api_url = api_url or settings.demucs_api_url
@@ -49,7 +50,9 @@ class DemucsClient:
     def health_check(self) -> DemucsHealthResponse:
         """Check if Demucs service is available and ready."""
         try:
-            response = httpx.get(f"{self.api_url}/health", timeout=5.0)
+            response = httpx.get(
+                f"{self.api_url}/health", timeout=self.HEALTH_TIMEOUT_SECONDS
+            )
             if response.status_code != 200:
                 return DemucsHealthResponse(
                     api_url=self.api_url,

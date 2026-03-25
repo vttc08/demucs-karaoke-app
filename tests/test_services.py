@@ -1,5 +1,6 @@
 """Tests for service layer."""
 import pytest
+import httpx
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from pathlib import Path
 from services.queue_service import QueueService
@@ -7,7 +8,15 @@ from services.youtube_service import YouTubeService
 from services.karaoke_service import KaraokeService
 from services.lyrics_service import LyricsService
 from services.demucs_client import DemucsClient
-from models import DemucsHealthResponse, QueueItemCreate, QueueItem, QueueStatus, Base
+from services.runtime_settings_service import RuntimeSettingsService
+from models import (
+    Base,
+    DemucsHealthResponse,
+    QueueItem,
+    QueueItemCreate,
+    QueueStatus,
+    RuntimeSettingsUpdateRequest,
+)
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -528,3 +537,53 @@ def test_demucs_client_health_check_reports_degraded_payload():
 
     assert health.healthy is False
     assert "demucs cli unavailable" in health.detail
+
+
+def test_demucs_client_health_check_uses_short_timeout():
+    """Demucs health check should fail fast on unreachable endpoints."""
+    expected_timeout = DemucsClient.HEALTH_TIMEOUT_SECONDS
+    with patch(
+        "services.demucs_client.httpx.get",
+        side_effect=httpx.TimeoutException("timed out"),
+    ) as mock_get:
+        client = DemucsClient(api_url="http://127.0.0.1:8002")
+        health = client.health_check()
+
+    mock_get.assert_called_once_with(
+        "http://127.0.0.1:8002/health",
+        timeout=expected_timeout,
+    )
+    assert health.healthy is False
+    assert health.detail == "Health check timed out"
+
+
+def test_runtime_settings_get_settings_is_non_blocking():
+    """Settings snapshot should not call external health checks."""
+    service = RuntimeSettingsService()
+    with patch.object(
+        RuntimeSettingsService,
+        "get_demucs_health",
+        side_effect=AssertionError("health check should not be called"),
+    ):
+        result = service.get_settings()
+
+    assert result.demucs_healthy is False
+    assert result.demucs_health_detail == "Health check pending"
+
+
+def test_runtime_settings_update_settings_includes_demucs_health():
+    """Updating settings should still return current Demucs health."""
+    service = RuntimeSettingsService()
+    with patch.object(
+        RuntimeSettingsService,
+        "get_demucs_health",
+        return_value=DemucsHealthResponse(
+            api_url="http://127.0.0.1:8001",
+            healthy=True,
+            detail="Demucs service is healthy",
+        ),
+    ):
+        result = service.update_settings(RuntimeSettingsUpdateRequest())
+
+    assert result.demucs_healthy is True
+    assert result.demucs_health_detail == "Demucs service is healthy"

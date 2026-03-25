@@ -5,8 +5,10 @@ const form = document.getElementById("settings-form");
 const saveBtn = document.getElementById("save-settings-btn");
 const reloadBtn = document.getElementById("reload-settings-btn");
 const statusEl = document.getElementById("settings-status");
+const engineStatusDot = document.getElementById("engine-status-dot");
 const engineStatusText = document.getElementById("engine-status-text");
 const lastSyncText = document.getElementById("last-sync-text");
+const ENGINE_STATUS_STORAGE_KEY = "karaoke.engineStatus";
 
 const fields = {
     demucs_api_url: document.getElementById("demucs_api_url"),
@@ -22,22 +24,63 @@ function setStatus(message, isError = false) {
         statusEl.classList.toggle("text-error", isError);
         statusEl.classList.toggle("text-secondary", !isError);
     }
-    if (engineStatusText) {
-        engineStatusText.textContent = isError ? "AI Engine: Warning" : "AI Engine: Online";
-    }
-    if (lastSyncText) {
-        const now = new Date();
-        lastSyncText.textContent = `Last Sync: ${now.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}`;
+}
+
+function persistEngineStatus(state, detail) {
+    try {
+        localStorage.setItem(
+            ENGINE_STATUS_STORAGE_KEY,
+            JSON.stringify({state, detail}),
+        );
+    } catch (_) {
+        // Keep UX functional even when storage is unavailable.
     }
 }
 
-function applyDemucsHealthToUI(health) {
-    if (!engineStatusText || !lastSyncText) {
+function readPersistedEngineStatus() {
+    try {
+        const raw = localStorage.getItem(ENGINE_STATUS_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function setEngineStatus(state, detail, persist = true) {
+    if (!engineStatusText || !lastSyncText || !engineStatusDot) {
         return;
     }
-    engineStatusText.textContent = health.healthy ? "AI Engine: Online" : "AI Engine: Offline";
-    const detail = health.detail || (health.healthy ? "Healthy" : "Unavailable");
+
+    if (state === "online") {
+        engineStatusText.textContent = "AI Engine: Online";
+    } else if (state === "offline") {
+        engineStatusText.textContent = "AI Engine: Offline";
+    } else if (state === "checking") {
+        engineStatusText.textContent = "AI Engine: Checking";
+    } else {
+        engineStatusText.textContent = "AI Engine: Unknown";
+    }
+
+    engineStatusDot.classList.remove("bg-primary", "bg-error", "bg-warning", "bg-outline");
+    if (state === "online") {
+        engineStatusDot.classList.add("bg-primary");
+    } else if (state === "offline") {
+        engineStatusDot.classList.add("bg-error");
+    } else if (state === "checking") {
+        engineStatusDot.classList.add("bg-warning");
+    } else {
+        engineStatusDot.classList.add("bg-outline");
+    }
+
     lastSyncText.textContent = detail;
+    if (persist && (state === "online" || state === "offline" || state === "unknown")) {
+        persistEngineStatus(state, detail);
+    }
+}
+
+function applyDemucsHealthToUI(health, persist = true) {
+    const detail = health.detail || (health.healthy ? "Healthy" : "Unavailable");
+    setEngineStatus(health.healthy ? "online" : "offline", detail, persist);
 }
 
 function setFormState(disabled) {
@@ -65,13 +108,11 @@ async function loadSettings() {
         }
         const data = await response.json();
         applySettingsToForm(data);
-        applyDemucsHealthToUI({
-            healthy: Boolean(data.demucs_healthy),
-            detail: data.demucs_health_detail,
-        });
         setStatus("Settings loaded");
+        return true;
     } catch (error) {
         setStatus(error.message || "Unable to load settings", true);
+        return false;
     } finally {
         setFormState(false);
     }
@@ -84,6 +125,7 @@ async function saveSettings() {
 
     setFormState(true);
     setStatus("Saving settings...");
+    setEngineStatus("checking", "Checking Demucs health...", false);
 
     const payload = {
         demucs_api_url: fields.demucs_api_url.value.trim(),
@@ -112,12 +154,14 @@ async function saveSettings() {
         setStatus(updated.demucs_healthy ? "Settings saved" : "Settings saved (Demucs offline)", !updated.demucs_healthy);
     } catch (error) {
         setStatus(error.message || "Unable to save settings", true);
+        setEngineStatus("offline", String(error.message || "Save failed"));
     } finally {
         setFormState(false);
     }
 }
 
 async function refreshDemucsHealth() {
+    setEngineStatus("checking", "Checking Demucs health...", false);
     try {
         const response = await fetch(DEMUCS_HEALTH_API);
         if (!response.ok) {
@@ -133,12 +177,26 @@ async function refreshDemucsHealth() {
     }
 }
 
+async function reloadEngineStatus() {
+    setStatus("Reloading engine status...");
+    const loaded = await loadSettings();
+    if (!loaded) {
+        return;
+    }
+    await refreshDemucsHealth();
+    setStatus("Engine status refreshed");
+}
+
 if (saveBtn) {
     saveBtn.addEventListener("click", saveSettings);
 }
 if (reloadBtn) {
-    reloadBtn.addEventListener("click", loadSettings);
+    reloadBtn.addEventListener("click", reloadEngineStatus);
+}
+
+const persistedState = readPersistedEngineStatus();
+if (persistedState?.state && persistedState?.detail) {
+    setEngineStatus(persistedState.state, persistedState.detail, false);
 }
 
 loadSettings();
-refreshDemucsHealth();
