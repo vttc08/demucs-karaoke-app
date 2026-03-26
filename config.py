@@ -58,6 +58,15 @@ class Settings(BaseSettings):
     ffmpeg_preset: str = "veryfast"
     ffmpeg_crf: int = 23
 
+    # Logging
+    log_level: str = "INFO"
+    log_dir: Path = Path("./logs")
+    log_file_name: str = "karaoke.log"
+    log_max_bytes: int = 5_242_880  # 5 MB
+    log_backup_count: int = 5
+    log_format: str = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    log_to_file_in_reload: bool = False
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Resolve executable paths on initialization
@@ -68,6 +77,7 @@ class Settings(BaseSettings):
         """Create required directories if they don't exist."""
         self.media_path.mkdir(parents=True, exist_ok=True)
         self.cache_path.mkdir(parents=True, exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
 
 
 settings = Settings()

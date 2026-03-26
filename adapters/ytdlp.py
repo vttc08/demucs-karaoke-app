@@ -14,7 +14,7 @@ class YtDlpAdapter:
 
     def __init__(self, ytdlp_path: str = None):
         self.ytdlp_path = ytdlp_path or settings.ytdlp_path
-        logger.info(f"YtDlpAdapter initialized with path: {self.ytdlp_path}")
+        logger.info("YtDlpAdapter initialized ytdlp_path=%s", self.ytdlp_path)
 
     def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
         """
@@ -42,7 +42,7 @@ class YtDlpAdapter:
             "--no-warnings",
         ]
 
-        logger.info(f"Executing YouTube search: {query}")
+        logger.info("Executing YouTube search query=%r max_results=%s", query, max_results)
         
         try:
             result = subprocess.run(
@@ -53,16 +53,16 @@ class YtDlpAdapter:
                 timeout=30  # 30 second timeout
             )
         except subprocess.TimeoutExpired:
-            logger.error(f"YouTube search timed out for query: {query}")
+            logger.error("YouTube search timed out query=%r", query)
             raise RuntimeError("YouTube search timed out. Please try again.")
         except subprocess.CalledProcessError as e:
-            logger.error(f"YouTube search failed: {e.stderr}")
+            logger.error("YouTube search failed query=%r stderr=%s", query, e.stderr)
             raise RuntimeError(f"YouTube search failed: {e.stderr[:200]}")
         except FileNotFoundError:
-            logger.error(f"yt-dlp not found at: {self.ytdlp_path}")
+            logger.error("yt-dlp not found path=%s", self.ytdlp_path)
             raise RuntimeError(f"yt-dlp not found. Please install it: pip install yt-dlp")
         except Exception as e:
-            logger.error(f"Unexpected error during search: {str(e)}")
+            logger.exception("Unexpected error during search query=%r error=%s", query, str(e))
             raise RuntimeError(f"Search failed: {str(e)}")
 
         # yt-dlp outputs one JSON object per line for search results
@@ -81,10 +81,10 @@ class YtDlpAdapter:
                         }
                     )
                 except json.JSONDecodeError:
-                    logger.warning(f"Failed to parse search result line: {line[:100]}")
+                    logger.warning("Failed to parse search result line prefix=%r", line[:100])
                     continue
-        
-        logger.info(f"Search returned {len(videos)} results for query: {query}")
+
+        logger.info("YouTube search completed query=%r result_count=%s", query, len(videos))
         return videos
 
     def download_audio(self, youtube_id: str, output_dir: Path) -> Path:
@@ -191,7 +191,7 @@ class YtDlpAdapter:
         url = f"https://www.youtube.com/watch?v={youtube_id}"
         last_error = "unknown failure"
 
-        logger.info(f"Downloading {media_type} for: {youtube_id}")
+        logger.info("Downloading media_type=%s youtube_id=%s", media_type, youtube_id)
         for fmt, client, merge_mp4, use_extractor_args in attempts:
             cmd = [
                 self.ytdlp_path,

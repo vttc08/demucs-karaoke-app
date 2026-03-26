@@ -38,6 +38,10 @@ Current sprint goal:
 - Avoid hardcoding personal paths, IPs, or secrets.
 - Use clear filenames and small functions.
 - Prefer incremental changes and minimal diffs.
+- Use module-level loggers (`logging.getLogger(__name__)`) and structured context in log messages (ids, operation, paths where relevant).
+- Do not log secrets, credentials, or full sensitive payloads.
+- Prefer `logger.exception(...)` when handling unexpected exceptions to preserve stack traces.
+- Keep logs actionable and concise; avoid noisy per-line debug logging in normal flows.
 
 ## Required behavior for agents
 Before making changes, read:
@@ -63,7 +67,7 @@ When finished:
 - Add service-level tests where practical
 - Prefer mock/stub subprocess calls in tests
 - Do not rely on Demucs being available in the dev workspace
+- For logging changes, add focused tests that validate configuration behavior (handlers, levels, rotation setup) without brittle string matching.
 
 ## Documentation 
 - If you need to create summary documents or instruction, please place it in the `/docs` and not in the root folder
-

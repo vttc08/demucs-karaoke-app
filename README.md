@@ -66,7 +66,7 @@ uv run python main.py
 
 Or with uvicorn directly:
 ```bash
-uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude 'logs/*' --reload-exclude '*.log' --reload-exclude '*.log.*'
 ```
 
 ### Production mode
@@ -118,6 +118,29 @@ uv run pytest
 ```bash
 uv run pytest --cov=. --cov-report=html
 ```
+
+### Logging
+The app uses centralized Python logging with:
+- Console output
+- Rotating file logs
+
+Configure via `.env`:
+- `LOG_LEVEL` (e.g. `DEBUG`, `INFO`, `WARNING`, `ERROR`)
+- `LOG_DIR` (default `./logs`)
+- `LOG_FILE_NAME` (default `karaoke.log`)
+- `LOG_MAX_BYTES` (default `5242880`)
+- `LOG_BACKUP_COUNT` (default `5`)
+- `LOG_TO_FILE_IN_RELOAD` (default `false`)
+
+Example:
+```bash
+LOG_LEVEL=DEBUG
+LOG_DIR=./logs
+```
+
+Logs are written to `${LOG_DIR}/${LOG_FILE_NAME}` and rotated automatically.
+
+Hot reload note: by default file logging is disabled while running under reload mode to prevent log-write reload loops. Set `LOG_TO_FILE_IN_RELOAD=true` only if needed.
 
 ## Project Structure
 

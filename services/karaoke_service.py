@@ -36,15 +36,29 @@ class KaraokeService:
         # Get item from database
         item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
         if not item:
+            logger.warning("Queue item not found for processing item_id=%s", item_id)
             return
 
         try:
+            logger.info(
+                "Processing queue item item_id=%s youtube_id=%s karaoke=%s burn_lyrics=%s",
+                item.id,
+                item.youtube_id,
+                item.is_karaoke,
+                item.burn_lyrics,
+            )
             # Update status to downloading
             self.queue_service.update_status(db, item_id, QueueStatus.DOWNLOADING)
 
             if item.is_karaoke:
                 demucs_health = self.demucs_client.health_check()
                 if not demucs_health.healthy:
+                    logger.warning(
+                        "Demucs unhealthy for item_id=%s api_url=%s detail=%s",
+                        item_id,
+                        demucs_health.api_url,
+                        demucs_health.detail,
+                    )
                     self.queue_service.update_status(
                         db,
                         item_id,
@@ -72,6 +86,7 @@ class KaraokeService:
                 )
                 self.queue_service.set_media_path(db, item_id, str(video_path))
                 self.queue_service.update_status(db, item_id, QueueStatus.READY)
+                logger.info("Non-karaoke processing completed item_id=%s output=%s", item_id, video_path)
 
         except Exception as e:
             logger.exception("Failed processing queue item %s", item_id)
@@ -97,6 +112,11 @@ class KaraokeService:
         # Remove vocals using Demucs
         demucs_response = await self.demucs_client.separate_vocals(audio_path)
         no_vocals_path = Path(demucs_response.no_vocals_path)
+        logger.info(
+            "Demucs separation completed item_id=%s no_vocals=%s",
+            item.id,
+            no_vocals_path,
+        )
 
         output_path = settings.cache_path / f"{item.youtube_id}_karaoke.mp4"
         if item.burn_lyrics:
@@ -121,3 +141,4 @@ class KaraokeService:
         # Update item with final media path
         self.queue_service.set_media_path(db, item.id, str(output_path))
         self.queue_service.update_status(db, item.id, QueueStatus.READY)
+        logger.info("Karaoke processing completed item_id=%s output=%s", item.id, output_path)

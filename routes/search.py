@@ -15,12 +15,12 @@ youtube_service = YouTubeService()
 async def search_youtube(q: str = Query(..., description="Search query")):
     """Search YouTube for videos."""
     try:
-        logger.info(f"Received search request for: {q}")
+        logger.info("YouTube search requested query=%r", q)
         results = youtube_service.search(q)
         return results
     except RuntimeError as e:
-        logger.error(f"Search failed: {str(e)}")
+        logger.error("YouTube search failed query=%r error=%s", q, str(e))
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
-        logger.error(f"Unexpected error in search: {str(e)}")
+        logger.exception("Unexpected search error query=%r error=%s", q, str(e))
         raise HTTPException(status_code=500, detail="Search failed. Please try again.")

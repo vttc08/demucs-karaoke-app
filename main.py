@@ -1,17 +1,21 @@
-"""Main FastAPI application."""
-import logging
+"""Main FastAPI application"""
+import os
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from database import init_db
 from config import settings
-from routes import media_files, pages, queue, search, settings as settings_routes
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Must be set before logging configuration is imported/executed.
+if __name__ == "__main__":
+    os.environ["KARAOKE_RELOAD_ACTIVE"] = "1"
+
+from logging_config import configure_logging
+from routes import media_files, pages, queue, search, settings as settings_routes
+import logging
+
+configure_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -19,20 +23,23 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
-    logger.info("Starting karaoke application...")
-    logger.info(f"yt-dlp path: {settings.ytdlp_path}")
-    logger.info(f"ffmpeg path: {settings.ffmpeg_path}")
-    
+    logger.info("Starting karaoke application")
+    logger.info("Tool configuration loaded: ytdlp=%s ffmpeg=%s", settings.ytdlp_path, settings.ffmpeg_path)
+
     settings.ensure_paths()
-    logger.info(f"Media path: {settings.media_path}")
-    logger.info(f"Cache path: {settings.cache_path}")
-    
+    logger.info(
+        "Storage paths ensured: media=%s cache=%s logs=%s",
+        settings.media_path,
+        settings.cache_path,
+        settings.log_dir,
+    )
+
     init_db()
     logger.info("Database initialized")
-    
+
     yield
     # Shutdown (cleanup if needed)
-    logger.info("Shutting down karaoke application...")
+    logger.info("Shutting down karaoke application")
 
 
 app = FastAPI(
@@ -65,9 +72,24 @@ def health_check():
 if __name__ == "__main__":
     import uvicorn
 
+    log_dir = Path(settings.log_dir)
+    if log_dir.is_absolute():
+        try:
+            log_dir = log_dir.resolve().relative_to(Path.cwd().resolve())
+        except ValueError:
+            log_dir = Path("logs")
+
     uvicorn.run(
         "main:app",
         host=settings.host,
         port=settings.port,
         reload=True,
+        reload_excludes=[
+            str(log_dir),
+            f"{log_dir}/*",
+            f"{log_dir}/**/*",
+            "logs/*",
+            "*.log",
+            "*.log.*",
+        ],
     )
