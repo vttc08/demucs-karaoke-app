@@ -20,7 +20,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 ## New Todos
 - [x] settings page and checking the health status of demucs backend
 - [x] disable karaoke mode if demucs is determined unhealthy
-- [ ] customize file behavior of karaoke cache and media and configure it to be served from different location
+- [x] customize file behavior of karaoke cache and media and configure it to be served from different location
 - [ ] demucs API microservice as configurable options for cpu, cuda, demucs model and mp3 output
 - [ ] real time application push instead of polling
 - [ ] yt-dlp refinement, fix bugs with video downloading and less errors

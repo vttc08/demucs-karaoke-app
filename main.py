@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from database import init_db
 from config import settings
-from routes import queue, search, pages, settings as settings_routes
+from routes import media_files, pages, queue, search, settings as settings_routes
 
 # Configure logging
 logging.basicConfig(
@@ -47,18 +47,9 @@ settings.ensure_paths()
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount(
-    str(settings.media_path),
-    StaticFiles(directory=str(settings.media_path)),
-    name="media-files",
-)
-app.mount(
-    str(settings.cache_path),
-    StaticFiles(directory=str(settings.cache_path)),
-    name="cache-files",
-)
 
 # Include routers
+app.include_router(media_files.router)
 app.include_router(pages.router)
 app.include_router(queue.router)
 app.include_router(search.router)

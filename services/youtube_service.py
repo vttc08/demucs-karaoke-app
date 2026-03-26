@@ -11,7 +11,10 @@ class YouTubeService:
 
     def __init__(self):
         self.ytdlp = YtDlpAdapter()
-        self.media_path = settings.media_path
+
+    @staticmethod
+    def _media_path() -> Path:
+        return settings.media_path
 
     def search(self, query: str, max_results: int = 10) -> List[YouTubeSearchResult]:
         """
@@ -47,7 +50,7 @@ class YouTubeService:
         Returns:
             Path to downloaded audio file
         """
-        return self.ytdlp.download_audio(youtube_id, self.media_path)
+        return self.ytdlp.download_audio(youtube_id, self._media_path())
 
     def download_video(self, youtube_id: str) -> Path:
         """
@@ -59,7 +62,7 @@ class YouTubeService:
         Returns:
             Path to downloaded video file
         """
-        return self.ytdlp.download_video(youtube_id, self.media_path)
+        return self.ytdlp.download_video(youtube_id, self._media_path())
 
     def download_video_with_audio(self, youtube_id: str) -> Path:
         """
@@ -71,4 +74,4 @@ class YouTubeService:
         Returns:
             Path to downloaded video file containing audio
         """
-        return self.ytdlp.download_video_with_audio(youtube_id, self.media_path)
+        return self.ytdlp.download_video_with_audio(youtube_id, self._media_path())

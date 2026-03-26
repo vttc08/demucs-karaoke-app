@@ -59,6 +59,14 @@
                 </div>
                 <div class="space-y-4">
                     <label class="flex flex-col gap-1.5">
+                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Media Path</span>
+                        <input id="media_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
+                    </label>
+                    <label class="flex flex-col gap-1.5">
+                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Cache Path</span>
+                        <input id="cache_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
+                    </label>
+                    <label class="flex flex-col gap-1.5">
                         <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">yt-dlp Path</span>
                         <input id="ytdlp_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
                     </label>
@@ -105,7 +113,7 @@
 
         <div class="mt-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
             <div class="flex flex-wrap items-center gap-3">
-                <button id="save-settings-btn" class="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-primary to-primary-container px-6 py-3 text-xs font-black uppercase tracking-widest text-on-primary shadow-[0_0_24px_rgba(193,255,254,0.35)] transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60">
+                <button id="save-settings-btn" class="inline-flex items-center gap-2 rounded-lg border border-primary/30 bg-primary px-6 py-3 text-xs font-black uppercase tracking-widest text-on-primary transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
                     <span class="material-symbols-outlined text-base">save</span>
                     Save Settings
                 </button>
@@ -129,6 +137,11 @@
         </div>
     </section>
 </main>
+
+<div id="save-feedback" class="pointer-events-none fixed inset-x-4 bottom-4 z-[60] flex translate-y-3 items-center gap-2 rounded-lg border border-primary/30 bg-surface-container px-4 py-3 text-sm text-on-surface opacity-0 shadow-xl transition duration-200 md:inset-x-auto md:right-6 md:bottom-6 md:max-w-md" role="status" aria-live="polite">
+    <span id="save-feedback-icon" class="material-symbols-outlined text-base text-primary">check_circle</span>
+    <span id="save-feedback-text" class="font-medium">Settings saved</span>
+</div>
 {% endblock %}
 
 {% block scripts %}

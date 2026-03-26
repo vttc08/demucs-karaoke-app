@@ -97,12 +97,30 @@ GET /api/queue/
     "is_karaoke": true,
     "burn_lyrics": true,
     "status": "ready",
-    "media_path": "/path/to/video.mp4",
+    "media_path": "/media/dQw4w9WgXcQ.mp4",
     "error": null,
     "created_at": "2024-01-01T00:00:00"
   }
 ]
 ```
+
+---
+
+### Serve Media File
+```
+GET /media/{file_path}
+```
+
+Serves files from the configured `MEDIA_PATH` (or runtime `media_path` setting)
+under a stable `/media/...` URL prefix.
+
+### Serve Cache File
+```
+GET /cache/{file_path}
+```
+
+Serves files from the configured `CACHE_PATH` (or runtime `cache_path` setting)
+under a stable `/cache/...` URL prefix.
 
 ---
 
@@ -186,6 +204,8 @@ for a real-time status refresh.
   "demucs_health_detail": "Health check pending",
   "ffmpeg_preset": "superfast",
   "ffmpeg_crf": 23,
+  "media_path": "/mnt/karaoke_media",
+  "cache_path": "/mnt/karaoke_cache",
   "ytdlp_path": "/home/user/.venv/bin/yt-dlp",
   "ffmpeg_path": "/usr/bin/ffmpeg"
 }
@@ -206,6 +226,8 @@ Updates runtime settings immediately for new requests while the app is running.
   "demucs_api_url": "http://127.0.0.1:9001",
   "ffmpeg_preset": "veryfast",
   "ffmpeg_crf": 23,
+  "media_path": "/mnt/karaoke_media",
+  "cache_path": "/mnt/karaoke_cache",
   "ytdlp_path": "yt-dlp",
   "ffmpeg_path": "ffmpeg"
 }
@@ -215,6 +237,11 @@ Validation:
 - `ffmpeg_preset` must be one of FFmpeg preset values (`ultrafast` ... `veryslow`)
 - `ffmpeg_crf` must be between `0` and `51`
 - executable paths cannot be empty
+- `media_path` and `cache_path` cannot be empty when provided
+
+Notes:
+- Updating `media_path`/`cache_path` applies immediately for processing and new outputs.
+- Static file mounts are initialized at app startup; restart the app after path changes so serving mounts align with new paths.
 
 ---
 

@@ -89,6 +89,8 @@ class RuntimeSettingsResponse(BaseModel):
     ffmpeg_crf: int
     ytdlp_path: str
     ffmpeg_path: str
+    media_path: str
+    cache_path: str
 
 
 class RuntimeSettingsUpdateRequest(BaseModel):
@@ -99,6 +101,8 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     ffmpeg_crf: Optional[int] = None
     ytdlp_path: Optional[str] = None
     ffmpeg_path: Optional[str] = None
+    media_path: Optional[str] = None
+    cache_path: Optional[str] = None
 
 
 class DemucsRequest(BaseModel):

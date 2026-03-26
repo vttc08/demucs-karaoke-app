@@ -1,7 +1,9 @@
 """Queue service for managing the karaoke queue."""
+from pathlib import Path
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from models import QueueItem, QueueItemCreate, QueueItemResponse, QueueStatus
+from config import settings
 
 
 class QueueService:
@@ -227,7 +229,7 @@ class QueueService:
         """
         item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
         if item:
-            item.media_path = media_path
+            item.media_path = self.build_media_url(Path(media_path))
             db.commit()
 
     def set_lyrics(self, db: Session, item_id: int, lyrics: str):
@@ -243,3 +245,23 @@ class QueueService:
         if item:
             item.lyrics = lyrics
             db.commit()
+    @staticmethod
+    def build_media_url(file_path: Path) -> str:
+        """Build a stable API URL for files under configured media/cache roots."""
+        resolved = file_path.resolve()
+        media_root = settings.media_path.resolve()
+        cache_root = settings.cache_path.resolve()
+
+        try:
+            relative = resolved.relative_to(media_root)
+            return f"/media/{relative.as_posix()}"
+        except ValueError:
+            pass
+
+        try:
+            relative = resolved.relative_to(cache_root)
+            return f"/cache/{relative.as_posix()}"
+        except ValueError:
+            pass
+
+        raise ValueError(f"File path is outside media/cache roots: {file_path}")

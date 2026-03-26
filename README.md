@@ -88,10 +88,11 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
     - Auto-advances when song ends
 
 3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
-   - View current runtime settings
-   - Update Demucs URL, FFmpeg preset/CRF, and tool paths
-   - Apply settings immediately without restarting the app
-   - View real-time Demucs engine health (online/offline with detail)
+    - View current runtime settings
+    - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, and tool paths
+    - Apply settings immediately without restarting the app (for processing/runtime behavior)
+    - If media/cache paths are changed, restart the app so static file mounts use the new paths
+    - View real-time Demucs engine health (online/offline with detail)
 
 When karaoke mode is enabled:
 - `Burn lyrics` ON: app fetches real lyrics from LRCLIB and burns subtitles.

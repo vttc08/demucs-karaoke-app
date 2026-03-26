@@ -43,6 +43,8 @@ class RuntimeSettingsService:
             ffmpeg_crf=settings.ffmpeg_crf,
             ytdlp_path=settings.ytdlp_path,
             ffmpeg_path=settings.ffmpeg_path,
+            media_path=str(settings.media_path),
+            cache_path=str(settings.cache_path),
         )
 
     def get_settings(self) -> RuntimeSettingsResponse:
@@ -85,6 +87,18 @@ class RuntimeSettingsService:
             if not ffmpeg_input:
                 raise ValueError("ffmpeg_path cannot be empty")
             settings.ffmpeg_path = self._resolve_executable_path(ffmpeg_input)
+
+        if payload.media_path is not None:
+            media_path_input = payload.media_path.strip()
+            if not media_path_input:
+                raise ValueError("media_path cannot be empty")
+            settings.media_path = Path(media_path_input)
+
+        if payload.cache_path is not None:
+            cache_path_input = payload.cache_path.strip()
+            if not cache_path_input:
+                raise ValueError("cache_path cannot be empty")
+            settings.cache_path = Path(cache_path_input)
 
         settings.ensure_paths()
         demucs_health = self.get_demucs_health()

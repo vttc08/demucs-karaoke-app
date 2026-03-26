@@ -9,6 +9,7 @@ from services.karaoke_service import KaraokeService
 from services.lyrics_service import LyricsService
 from services.demucs_client import DemucsClient
 from services.runtime_settings_service import RuntimeSettingsService
+from config import settings
 from models import (
     Base,
     DemucsHealthResponse,
@@ -270,6 +271,24 @@ def test_youtube_service_download_video_with_audio(mock_ytdlp):
     mock_instance.download_video_with_audio.assert_called_once()
 
 
+@patch("services.youtube_service.YtDlpAdapter")
+def test_youtube_service_uses_latest_media_path_setting(mock_ytdlp, tmp_path):
+    """YouTube service should honor runtime media_path changes."""
+    mock_instance = Mock()
+    mock_instance.download_video_with_audio.return_value = tmp_path / "v.mp4"
+    mock_ytdlp.return_value = mock_instance
+
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media-now"
+        service = YouTubeService()
+        service.download_video_with_audio("id123")
+        called_output_dir = mock_instance.download_video_with_audio.call_args[0][1]
+        assert called_output_dir == settings.media_path
+    finally:
+        settings.media_path = original_media
+
+
 @pytest.mark.asyncio
 async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session):
     """Non-karaoke processing should use video+audio direct download."""
@@ -300,7 +319,7 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session)
     updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
     assert updated_item is not None
     assert updated_item.status == QueueStatus.READY
-    assert updated_item.media_path == "/tmp/karaoke_media/plain123.mp4"
+    assert updated_item.media_path == "/media/plain123.mp4"
 
 
 @pytest.mark.asyncio
@@ -587,3 +606,67 @@ def test_runtime_settings_update_settings_includes_demucs_health():
 
     assert result.demucs_healthy is True
     assert result.demucs_health_detail == "Demucs service is healthy"
+
+
+def test_runtime_settings_update_settings_accepts_media_and_cache_paths(tmp_path):
+    """Updating runtime settings should accept configurable media/cache paths."""
+    service = RuntimeSettingsService()
+    media_path = tmp_path / "media"
+    cache_path = tmp_path / "cache"
+
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        with patch.object(
+            RuntimeSettingsService,
+            "get_demucs_health",
+            return_value=DemucsHealthResponse(
+                api_url="http://127.0.0.1:8001",
+                healthy=True,
+                detail="Demucs service is healthy",
+            ),
+        ):
+            result = service.update_settings(
+                RuntimeSettingsUpdateRequest(
+                    media_path=str(media_path),
+                    cache_path=str(cache_path),
+                )
+            )
+
+        assert result.media_path == str(media_path)
+        assert result.cache_path == str(cache_path)
+        assert media_path.exists()
+        assert cache_path.exists()
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_runtime_settings_update_settings_rejects_empty_media_path():
+    """Runtime settings should reject blank media path values."""
+    service = RuntimeSettingsService()
+    with pytest.raises(ValueError, match="media_path cannot be empty"):
+        service.update_settings(RuntimeSettingsUpdateRequest(media_path=" "))
+
+
+def test_queue_service_build_media_url_for_media_and_cache(tmp_path):
+    """Queue service should map filesystem paths to stable API URLs."""
+    service = QueueService()
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.ensure_paths()
+
+        media_file = settings.media_path / "karaoke.webm"
+        cache_file = settings.cache_path / "out" / "mix.mp4"
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        media_file.write_text("x", encoding="utf-8")
+        cache_file.write_text("y", encoding="utf-8")
+
+        assert service.build_media_url(media_file) == "/media/karaoke.webm"
+        assert service.build_media_url(cache_file) == "/cache/out/mix.mp4"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache

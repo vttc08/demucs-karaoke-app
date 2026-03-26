@@ -32,8 +32,23 @@ app.dependency_overrides[get_db] = override_get_db
 @pytest.fixture(scope="function")
 def client():
     """Create test client and database."""
+    original_demucs_api_url = settings.demucs_api_url
+    original_ffmpeg_preset = settings.ffmpeg_preset
+    original_ffmpeg_crf = settings.ffmpeg_crf
+    original_ytdlp_path = settings.ytdlp_path
+    original_ffmpeg_path = settings.ffmpeg_path
+    original_media_path = settings.media_path
+    original_cache_path = settings.cache_path
+
     Base.metadata.create_all(bind=engine)
     yield TestClient(app)
+    settings.demucs_api_url = original_demucs_api_url
+    settings.ffmpeg_preset = original_ffmpeg_preset
+    settings.ffmpeg_crf = original_ffmpeg_crf
+    settings.ytdlp_path = original_ytdlp_path
+    settings.ffmpeg_path = original_ffmpeg_path
+    settings.media_path = original_media_path
+    settings.cache_path = original_cache_path
     Base.metadata.drop_all(bind=engine)
 
 
@@ -163,6 +178,8 @@ def test_get_runtime_settings(client):
     assert "ffmpeg_crf" in data
     assert "ytdlp_path" in data
     assert "ffmpeg_path" in data
+    assert "media_path" in data
+    assert "cache_path" in data
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
 
@@ -175,6 +192,8 @@ def test_update_runtime_settings(client):
             "demucs_api_url": "http://127.0.0.1:9001",
             "ffmpeg_preset": "superfast",
             "ffmpeg_crf": 28,
+            "media_path": "/tmp/karaoke_media_test",
+            "cache_path": "/tmp/karaoke_cache_test",
             "ytdlp_path": "yt-dlp",
             "ffmpeg_path": "ffmpeg",
         },
@@ -184,6 +203,8 @@ def test_update_runtime_settings(client):
     assert data["demucs_api_url"] == "http://127.0.0.1:9001"
     assert data["ffmpeg_preset"] == "superfast"
     assert data["ffmpeg_crf"] == 28
+    assert data["media_path"] == "/tmp/karaoke_media_test"
+    assert data["cache_path"] == "/tmp/karaoke_cache_test"
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
 
@@ -308,9 +329,22 @@ def test_media_file_served_from_media_mount(client):
     media_file = Path(settings.media_path) / "test-media-file.txt"
     media_file.write_text("ok", encoding="utf-8")
     try:
-        response = client.get(str(media_file))
+        response = client.get("/media/test-media-file.txt")
         assert response.status_code == 200
         assert response.text == "ok"
     finally:
         if media_file.exists():
             media_file.unlink()
+
+
+def test_cache_file_served_from_cache_route(client):
+    """Test files under configured cache path are served by /cache route."""
+    cache_file = Path(settings.cache_path) / "test-cache-file.txt"
+    cache_file.write_text("ok-cache", encoding="utf-8")
+    try:
+        response = client.get("/cache/test-cache-file.txt")
+        assert response.status_code == 200
+        assert response.text == "ok-cache"
+    finally:
+        if cache_file.exists():
+            cache_file.unlink()

@@ -24,7 +24,6 @@ class KaraokeService:
         self.demucs_client = DemucsClient()
         self.queue_service = QueueService()
         self.ffmpeg = FFmpegAdapter()
-        self.output_path = settings.cache_path
 
     async def process_queue_item(self, db: Session, item_id: int):
         """
@@ -99,7 +98,7 @@ class KaraokeService:
         demucs_response = await self.demucs_client.separate_vocals(audio_path)
         no_vocals_path = Path(demucs_response.no_vocals_path)
 
-        output_path = self.output_path / f"{item.youtube_id}_karaoke.mp4"
+        output_path = settings.cache_path / f"{item.youtube_id}_karaoke.mp4"
         if item.burn_lyrics:
             lyrics = await self.lyrics_service.fetch_lyrics(item.title, item.artist)
             if lyrics:
