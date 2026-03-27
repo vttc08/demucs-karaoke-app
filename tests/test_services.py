@@ -9,6 +9,7 @@ from services.karaoke_service import KaraokeService
 from services.lyrics_service import LyricsService
 from services.demucs_client import DemucsClient
 from services.runtime_settings_service import RuntimeSettingsService
+from services.websocket_manager import ConnectionManager
 from config import settings
 from models import (
     Base,
@@ -96,6 +97,36 @@ def test_queue_service_update_status(db_session):
     # Verify
     updated_queue = service.get_queue(db_session)
     assert updated_queue[0].status == QueueStatus.READY
+
+
+@pytest.mark.asyncio
+async def test_queue_service_update_status_async_broadcasts(db_session):
+    """Async status updates should broadcast queue_item_updated events."""
+    service = QueueService()
+    item = QueueItemCreate(
+        youtube_id="async-status", title="Async Status", is_karaoke=False
+    )
+    created = service.add_to_queue(db_session, item)
+
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self):
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    socket = DummySocket()
+    manager.active_connections.append(socket)
+
+    with patch("services.websocket_manager.manager", manager):
+        await service.update_status_async(db_session, created.id, QueueStatus.READY)
+
+    assert len(socket.messages) == 1
+    assert socket.messages[0]["type"] == "queue_item_updated"
+    assert socket.messages[0]["data"]["id"] == created.id
+    assert socket.messages[0]["data"]["status"] == "ready"
 
 
 def test_queue_service_skip_current_item_promotes_next_ready(db_session):

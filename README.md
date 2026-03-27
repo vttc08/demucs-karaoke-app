@@ -8,6 +8,7 @@ Lightweight AI-powered karaoke application for home use.
 - **TV Playback Page**: Auto-play queue with karaoke mode
 - **Karaoke Mode**: Vocal removal + burned-in lyrics
 - **Non-Karaoke Mode**: Play original videos
+- **Real-time Queue Updates**: WebSocket push with polling fallback
 
 ## Requirements
 
@@ -81,6 +82,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
    - Toggle "Karaoke mode" checkbox
    - Optionally toggle "Burn lyrics" (enabled only in karaoke mode)
    - Add to queue
+   - Queue status updates in real time (downloading, processing, ready, playing, failed)
    
 2. **Playback Page** (TV): Open `http://<server-ip>:8000/playback`
    - Auto-plays current song
@@ -102,6 +104,13 @@ When karaoke mode is enabled:
 ## API Endpoints
 
 See [docs/API.md](docs/API.md) for full API documentation.
+
+### Real-time endpoint
+
+- WebSocket: `/api/queue/ws`
+  - Server heartbeat: `ping`
+  - Client response: `pong`
+  - Queue events: `queue_item_added`, `queue_item_updated`, `queue_item_removed`, `queue_cleared`, `current_item_changed`, `queue_item_failed`
 
 ## Architecture
 
@@ -188,6 +197,11 @@ ffmpeg -version
 
 ### Demucs service not available
 Karaoke mode requires Demucs service running. Configure `DEMUCS_API_URL` in `.env`.
+
+### WebSocket troubleshooting
+
+- If real-time updates are unavailable, the queue page automatically falls back to periodic polling.
+- Verify reverse proxy/network path allows WebSocket upgrade requests to `/api/queue/ws`.
 
 ### Remote Demucs (Windows + NVIDIA)
 Use your Windows project venv/service path:

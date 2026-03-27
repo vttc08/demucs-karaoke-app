@@ -31,17 +31,24 @@
 
     <!-- Queue Section -->
     <section class="flex flex-col gap-6">
-        <div class="flex items-end justify-between px-2">
+        <div class="flex items-end justify-between gap-3 px-2">
             <div>
                 <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">Up Next</span>
                 <h2 class="font-headline font-black text-3xl tracking-tight text-on-surface">Stage Queue</h2>
             </div>
-            <button 
-                id="clear-all-btn"
-                class="text-secondary font-bold text-sm px-4 py-2 hover:bg-secondary/10 rounded-full transition-colors"
-            >
-                Clear All
-            </button>
+            <div class="flex items-center gap-2">
+                <span
+                    id="ws-status"
+                    class="hidden items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider"
+                    aria-live="polite"
+                ></span>
+                <button 
+                    id="clear-all-btn"
+                    class="text-secondary font-bold text-sm px-4 py-2 hover:bg-secondary/10 rounded-full transition-colors"
+                >
+                    Clear All
+                </button>
+            </div>
         </div>
         
         <div id="queue-list" class="flex flex-col gap-4">
@@ -87,10 +94,14 @@
                         {% endif %}
                     </div>
                     <div class="flex flex-col gap-2">
-                        {% if item.status == 'ready' %}
+                        {% if item.status.value == 'ready' %}
                         <button class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_0_15px_rgba(0,242,255,0.3)] active:scale-90 transition-all neon-glow" 
                                 onclick="skipToSong('{{ item.id }}')">
                             <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">play_arrow</span>
+                        </button>
+                        {% elif item.status.value == 'playing' %}
+                        <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="Currently playing">
+                            <span class="material-symbols-outlined">equalizer</span>
                         </button>
                         {% else %}
                         <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors" 
@@ -138,7 +149,8 @@ function skipToSong(songId) {
         method: 'POST'
     }).then(response => {
         if (response.ok) {
-            location.reload();
+            // WebSocket will handle the update, no need to reload
+            console.log('Skipped to song:', songId);
         } else {
             alert('Failed to skip to song');
         }
@@ -151,11 +163,19 @@ function skipToSong(songId) {
 function removeSong(songId) {
     fetch(`${API_BASE}/api/queue/${songId}`, {
         method: 'DELETE'
-    }).then(response => {
+    }).then(async (response) => {
         if (response.ok) {
-            location.reload();
+            // WebSocket will handle the update, no need to reload
+            console.log('Removed song:', songId);
         } else {
-            alert('Failed to remove song');
+            let detail = 'Failed to remove song';
+            try {
+                const payload = await response.json();
+                if (payload?.detail) detail = payload.detail;
+            } catch (_) {
+                // Keep default detail text.
+            }
+            alert(detail);
         }
     }).catch(error => {
         console.error('Error:', error);
@@ -169,7 +189,8 @@ document.getElementById('clear-all-btn')?.addEventListener('click', function() {
             method: 'POST'
         }).then(response => {
             if (response.ok) {
-                location.reload();
+                // WebSocket will handle the update, no need to reload
+                console.log('Queue cleared');
             } else {
                 alert('Failed to clear queue');
             }

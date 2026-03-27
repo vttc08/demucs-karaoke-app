@@ -48,7 +48,9 @@ class KaraokeService:
                 item.burn_lyrics,
             )
             # Update status to downloading
-            self.queue_service.update_status(db, item_id, QueueStatus.DOWNLOADING)
+            await self.queue_service.update_status_async(
+                db, item_id, QueueStatus.DOWNLOADING
+            )
 
             if item.is_karaoke:
                 demucs_health = self.demucs_client.health_check()
@@ -59,7 +61,7 @@ class KaraokeService:
                         demucs_health.api_url,
                         demucs_health.detail,
                     )
-                    self.queue_service.update_status(
+                    await self.queue_service.update_status_async(
                         db,
                         item_id,
                         QueueStatus.FAILED,
@@ -85,12 +87,14 @@ class KaraokeService:
                     self.youtube_service.download_video_with_audio, item.youtube_id
                 )
                 self.queue_service.set_media_path(db, item_id, str(video_path))
-                self.queue_service.update_status(db, item_id, QueueStatus.READY)
+                await self.queue_service.update_status_async(
+                    db, item_id, QueueStatus.READY
+                )
                 logger.info("Non-karaoke processing completed item_id=%s output=%s", item_id, video_path)
 
         except Exception as e:
             logger.exception("Failed processing queue item %s", item_id)
-            self.queue_service.update_status(
+            await self.queue_service.update_status_async(
                 db, item_id, QueueStatus.FAILED, error=str(e)
             )
 
@@ -107,7 +111,9 @@ class KaraokeService:
             audio_path: Path to audio file
         """
         # Update status to processing
-        self.queue_service.update_status(db, item.id, QueueStatus.PROCESSING)
+        await self.queue_service.update_status_async(
+            db, item.id, QueueStatus.PROCESSING
+        )
 
         # Remove vocals using Demucs
         demucs_response = await self.demucs_client.separate_vocals(audio_path)
@@ -140,5 +146,5 @@ class KaraokeService:
 
         # Update item with final media path
         self.queue_service.set_media_path(db, item.id, str(output_path))
-        self.queue_service.update_status(db, item.id, QueueStatus.READY)
+        await self.queue_service.update_status_async(db, item.id, QueueStatus.READY)
         logger.info("Karaoke processing completed item_id=%s output=%s", item.id, output_path)

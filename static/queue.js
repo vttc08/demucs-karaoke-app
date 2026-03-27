@@ -261,11 +261,11 @@ async function addToQueue(videoId, title, channel) {
     }
 }
 
-async function refreshQueue() {
+async function refreshQueue(force = false) {
     // Don't refresh if user is actively searching or typing
-    if (document.activeElement === searchInput || 
+    if (!force && (document.activeElement === searchInput || 
         searchInput.value.trim().length > 0 || 
-        searchResults.children.length > 0) {
+        searchResults.children.length > 0)) {
         return;
     }
     
@@ -350,6 +350,10 @@ function updateQueueDisplay(queue) {
                             onclick="skipToSong('${item.id}')">
                         <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">play_arrow</span>
                     </button>
+                    ` : item.status === 'playing' ? `
+                    <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="Currently playing">
+                        <span class="material-symbols-outlined">equalizer</span>
+                    </button>
                     ` : `
                     <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors" 
                             onclick="removeSong('${item.id}')">
@@ -415,7 +419,344 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// WebSocket connection for real-time queue updates
+class QueueWebSocket {
+    constructor() {
+        this.ws = null;
+        this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 5;
+        this.reconnectDelay = 1000; // Start with 1 second
+        this.maxReconnectDelay = 8000; // Max 8 seconds
+        this.isConnected = false;
+        this.isReconnecting = false;
+        this.heartbeatTimeout = null;
+        this.statusIndicator = null;
+        
+        this.createStatusIndicator();
+        this.connect();
+    }
+    
+    createStatusIndicator() {
+        // Reuse header status chip so indicator never overlaps controls
+        this.statusIndicator = document.getElementById('ws-status');
+    }
+    
+    updateStatus(status, message) {
+        if (!this.statusIndicator) return;
+        
+        this.statusIndicator.textContent = message;
+        
+        switch (status) {
+            case 'connected':
+                this.statusIndicator.className = 'inline-flex items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary';
+                this.statusIndicator.innerHTML = '<span class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span><span>Live</span>';
+                this.statusIndicator.style.display = 'inline-flex';
+                setTimeout(() => {
+                    this.statusIndicator.style.display = 'none';
+                }, 3000);
+                break;
+            case 'reconnecting':
+                this.statusIndicator.className = 'inline-flex items-center gap-1.5 rounded-full border border-tertiary/35 bg-tertiary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-tertiary';
+                this.statusIndicator.innerHTML = `<span class="material-symbols-outlined text-[12px] animate-spin">sync</span><span>${message}</span>`;
+                this.statusIndicator.style.display = 'inline-flex';
+                break;
+            case 'disconnected':
+                this.statusIndicator.className = 'inline-flex items-center gap-1.5 rounded-full border border-error/35 bg-error/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-error';
+                this.statusIndicator.innerHTML = '<span class="material-symbols-outlined text-[12px]">portable_wifi_off</span><span>Offline</span>';
+                this.statusIndicator.style.display = 'inline-flex';
+                break;
+            case 'fallback':
+                this.statusIndicator.className = 'inline-flex items-center gap-1.5 rounded-full border border-outline-variant/40 bg-surface-container-high px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant';
+                this.statusIndicator.innerHTML = '<span class="material-symbols-outlined text-[12px]">schedule</span><span>Polling</span>';
+                this.statusIndicator.style.display = 'inline-flex';
+                break;
+        }
+    }
+    
+    connect() {
+        if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+            return;
+        }
+        
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/api/queue/ws`;
+        
+        console.log('[WebSocket] Connecting to', wsUrl);
+        this.updateStatus('reconnecting', 'Connecting...');
+        
+        try {
+            this.ws = new WebSocket(wsUrl);
+            
+            this.ws.onopen = () => {
+                console.log('[WebSocket] Connected');
+                this.isConnected = true;
+                this.isReconnecting = false;
+                this.reconnectAttempts = 0;
+                this.reconnectDelay = 1000;
+                this.updateStatus('connected', '● Live');
+                
+                // Stop polling when WebSocket is connected
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                    refreshInterval = null;
+                }
+            };
+            
+            this.ws.onmessage = (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    this.handleMessage(message);
+                } catch (error) {
+                    console.error('[WebSocket] Error parsing message:', error);
+                }
+            };
+            
+            this.ws.onerror = (error) => {
+                console.error('[WebSocket] Error:', error);
+            };
+            
+            this.ws.onclose = () => {
+                console.log('[WebSocket] Disconnected');
+                this.isConnected = false;
+                
+                if (this.heartbeatTimeout) {
+                    clearTimeout(this.heartbeatTimeout);
+                    this.heartbeatTimeout = null;
+                }
+                
+                // Attempt reconnection
+                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                    this.reconnect();
+                } else {
+                    console.log('[WebSocket] Max reconnection attempts reached, falling back to polling');
+                    this.updateStatus('fallback', 'Using polling');
+                    this.fallbackToPolling();
+                }
+            };
+        } catch (error) {
+            console.error('[WebSocket] Connection error:', error);
+            this.reconnect();
+        }
+    }
+    
+    reconnect() {
+        if (this.isReconnecting) return;
+        
+        this.isReconnecting = true;
+        this.reconnectAttempts++;
+        
+        const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), this.maxReconnectDelay);
+        
+        console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        this.updateStatus('reconnecting', `Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        
+        setTimeout(() => {
+            this.isReconnecting = false;
+            this.connect();
+        }, delay);
+    }
+    
+    fallbackToPolling() {
+        console.log('[WebSocket] Falling back to polling mode');
+        // Start the traditional polling interval
+        if (!refreshInterval) {
+            refreshInterval = setInterval(() => {
+                if (document.visibilityState === 'visible') {
+                    refreshQueue();
+                }
+            }, 15000); // 15 seconds in fallback mode
+        }
+    }
+    
+    handleMessage(message) {
+        console.log('[WebSocket] Received:', message.type, message.data);
+        
+        switch (message.type) {
+            case 'connected':
+                console.log('[WebSocket] Connection confirmed, active connections:', message.data.connection_count);
+                break;
+            case 'ping':
+                // Respond to server ping
+                this.send({ type: 'pong', timestamp: Date.now() });
+                break;
+            case 'queue_item_added':
+                window.dispatchEvent(new CustomEvent('queue_item_added', { detail: message.data }));
+                break;
+            case 'queue_item_updated':
+                window.dispatchEvent(new CustomEvent('queue_item_updated', { detail: message.data }));
+                break;
+            case 'queue_item_removed':
+                window.dispatchEvent(new CustomEvent('queue_item_removed', { detail: message.data }));
+                break;
+            case 'queue_cleared':
+                window.dispatchEvent(new CustomEvent('queue_cleared', { detail: message.data }));
+                break;
+            case 'current_item_changed':
+                window.dispatchEvent(new CustomEvent('current_item_changed', { detail: message.data }));
+                break;
+            case 'queue_item_failed':
+                window.dispatchEvent(new CustomEvent('queue_item_failed', { detail: message.data }));
+                break;
+            default:
+                console.log('[WebSocket] Unknown message type:', message.type);
+        }
+    }
+    
+    send(data) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(data));
+        }
+    }
+    
+    disconnect() {
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+        if (this.heartbeatTimeout) {
+            clearTimeout(this.heartbeatTimeout);
+            this.heartbeatTimeout = null;
+        }
+    }
+}
+
+// Initialize WebSocket connection
+let queueWebSocket = null;
+if (window.location.pathname === '/queue' || window.location.pathname === '/') {
+    queueWebSocket = new QueueWebSocket();
+}
+
+// WebSocket event handlers
+window.addEventListener('queue_item_added', (event) => {
+    console.log('[Event] Queue item added:', event.detail);
+    // Refresh the entire queue to maintain order
+    refreshQueue(true);
+});
+
+window.addEventListener('queue_item_updated', (event) => {
+    console.log('[Event] Queue item updated:', event.detail);
+    const item = event.detail;
+    const element = document.querySelector(`[data-id="${item.id}"]`);
+    
+    if (element) {
+        // Update the status without full refresh
+        const oldStatus = element.dataset.status;
+        if (oldStatus !== item.status) {
+            console.log(`[Event] Status changed for item ${item.id}: ${oldStatus} → ${item.status}`);
+            // Smooth refresh - update just this item's display
+            refreshQueue(true);
+        }
+    } else {
+        // Item not in DOM yet, refresh to add it
+        refreshQueue(true);
+    }
+});
+
+window.addEventListener('queue_item_removed', (event) => {
+    console.log('[Event] Queue item removed:', event.detail);
+    const itemId = event.detail.id;
+    const element = document.querySelector(`[data-id="${itemId}"]`);
+    
+    if (element) {
+        // Animate removal
+        element.style.transition = 'all 0.3s ease-out';
+        element.style.opacity = '0';
+        element.style.transform = 'translateX(100%)';
+        
+        setTimeout(() => {
+            element.remove();
+            
+            // Check if queue is now empty
+            const queueList = document.getElementById('queue-list');
+            if (queueList && queueList.children.length === 0) {
+                queueList.innerHTML = `
+                    <div class="text-center py-12">
+                        <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">
+                            <span class="material-symbols-outlined text-4xl text-on-surface-variant">queue_music</span>
+                        </div>
+                        <p class="text-on-surface-variant text-lg font-medium">Queue is empty</p>
+                        <p class="text-on-surface-variant/60 text-sm">Search and add songs to get started!</p>
+                    </div>
+                `;
+            }
+        }, 300);
+    }
+});
+
+window.addEventListener('queue_cleared', (event) => {
+    console.log('[Event] Queue cleared');
+    const queueList = document.getElementById('queue-list');
+    
+    if (queueList) {
+        // Remove all non-playing items with animation
+        const items = queueList.querySelectorAll('.queue-item');
+        items.forEach((item, index) => {
+            if (item.dataset.status !== 'playing') {
+                setTimeout(() => {
+                    item.style.transition = 'all 0.3s ease-out';
+                    item.style.opacity = '0';
+                    item.style.transform = 'translateX(100%)';
+                    
+                    setTimeout(() => {
+                        item.remove();
+                        
+                        // Check if only playing item or empty
+                        const remainingItems = queueList.querySelectorAll('.queue-item');
+                        if (remainingItems.length === 0) {
+                            queueList.innerHTML = `
+                                <div class="text-center py-12">
+                                    <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">
+                                        <span class="material-symbols-outlined text-4xl text-on-surface-variant">queue_music</span>
+                                    </div>
+                                    <p class="text-on-surface-variant text-lg font-medium">Queue is empty</p>
+                                    <p class="text-on-surface-variant/60 text-sm">Search and add songs to get started!</p>
+                                </div>
+                            `;
+                        }
+                    }, 300);
+                }, index * 50); // Stagger the animations
+            }
+        });
+    }
+});
+
+window.addEventListener('current_item_changed', (event) => {
+    console.log('[Event] Current item changed:', event.detail);
+    // Refresh to update playing state visuals
+    refreshQueue(true);
+});
+
+window.addEventListener('queue_item_failed', (event) => {
+    console.log('[Event] Queue item failed:', event.detail);
+    const { id, error } = event.detail;
+    
+    // Show error notification
+    const notification = document.createElement('div');
+    notification.className = 'fixed bottom-4 right-4 bg-error/90 text-on-error px-4 py-3 rounded-lg shadow-lg max-w-md z-50 animate-slide-in';
+    notification.innerHTML = `
+        <div class="flex items-start gap-3">
+            <span class="material-symbols-outlined">error</span>
+            <div>
+                <p class="font-medium">Processing Failed</p>
+                <p class="text-sm opacity-90">${escapeHtml(error)}</p>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.style.transition = 'all 0.3s ease-out';
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => notification.remove(), 300);
+    }, 5000);
+    
+    // Refresh queue to show failed status
+    refreshQueue(true);
+});
+
 // Much gentler auto-refresh - only when user is not actively using search
+// Note: This is primarily for fallback mode when WebSocket is unavailable
 let refreshInterval;
 function startQueueRefresh() {
     if (refreshInterval) clearInterval(refreshInterval);
@@ -423,11 +764,14 @@ function startQueueRefresh() {
         if (document.visibilityState === 'visible') {
             refreshQueue();
         }
-    }, 8000); // Increased to 8 seconds and made smarter
+    }, 8000); // 8 seconds for initial load, 15 seconds in fallback mode
 }
 
-// Start refresh on page load
-startQueueRefresh();
+// Don't start polling automatically - let WebSocket handle it
+// Only start if WebSocket initialization fails
+if (!queueWebSocket) {
+    startQueueRefresh();
+}
 refreshDemucsHealth();
 
 // Pause refresh during search interactions
@@ -436,7 +780,10 @@ searchInput.addEventListener('focus', () => {
 });
 
 searchInput.addEventListener('blur', () => {
-    setTimeout(startQueueRefresh, 2000); // Resume after 2 seconds
+    // Only resume if not connected via WebSocket
+    if (!queueWebSocket || !queueWebSocket.isConnected) {
+        setTimeout(startQueueRefresh, 2000);
+    }
 });
 
 // Clear search results when input is cleared

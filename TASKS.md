@@ -22,8 +22,8 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] disable karaoke mode if demucs is determined unhealthy
 - [x] customize file behavior of karaoke cache and media and configure it to be served from different location
 - [x] implement logging
-- [ ] demucs API microservice as configurable options for cpu, cuda, demucs model and mp3 output
-- [ ] real time application push instead of polling
+- [x] demucs API microservice as configurable options for cpu, cuda, demucs model and mp3 output
+- [x] real time application push instead of polling
 - [ ] yt-dlp refinement, fix bugs with video downloading and less errors
 - [ ] concurrent ytdlp search for karaoke phrase and settings page
 - [ ] configure proxy settings for YTDLP
@@ -31,10 +31,19 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [ ] background splash, show qrcode
 - [ ] database improvement, periodic and manual cleanup of failed songs and already played/skipped
 - [ ] fulltext and file search existing media
+- [ ] persist settings in database
 - [ ] integrate whisper (lang detect, word by word transcription), align lyrics if lyrics file present
 - [ ] explore client side lyrics compositing
 - [ ] explore client side multi-track playback and toggle vocals
+- [ ] user can upload mp3 and mp4 videos
 - [ ] frontend settings page polish
+- [ ] blueprints for subfolder custom path support
+- [ ] consistent themed restriction page for outside network and splash screen
+- [ ] admin login page for settings and splash
+- [ ] login page for device identification only, stored in local storage
+- [ ] real time join and enqueue feature
+- [ ] admin has ability to remove, skip or reorder queue
+- [ ] oidc authelia support
 
 ## Next steps (future sprints)
 - [x] Integrate real lyrics API (Genius/MusixMatch)

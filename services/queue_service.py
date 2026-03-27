@@ -33,6 +33,7 @@ class QueueService:
         db.add(db_item)
         db.commit()
         db.refresh(db_item)
+        
         return QueueItemResponse.model_validate(db_item)
 
     def get_queue(
@@ -109,6 +110,7 @@ class QueueService:
         next_ready.status = QueueStatus.PLAYING
         db.commit()
         db.refresh(next_ready)
+        
         return QueueItemResponse.model_validate(next_ready)
 
     def get_next_item(self, db: Session) -> Optional[QueueItemResponse]:
@@ -163,6 +165,7 @@ class QueueService:
             return None
 
         db.refresh(next_ready)
+        
         return QueueItemResponse.model_validate(next_ready)
 
     def complete_current_item(self, db: Session) -> Optional[QueueItemResponse]:
@@ -178,6 +181,7 @@ class QueueService:
             .order_by(QueueItem.id)
             .first()
         )
+        
         if current:
             current.status = QueueStatus.COMPLETED
 
@@ -197,13 +201,14 @@ class QueueService:
             return None
 
         db.refresh(next_ready)
+        
         return QueueItemResponse.model_validate(next_ready)
 
-    def update_status(
+    async def update_status_async(
         self, db: Session, item_id: int, status: QueueStatus, error: str = None
     ):
         """
-        Update item status.
+        Update item status (async version for use from async contexts).
 
         Args:
             db: Database session
@@ -217,6 +222,38 @@ class QueueService:
             if error:
                 item.error = error
             db.commit()
+            db.refresh(item)
+            
+            # Broadcast the status update
+            from services.websocket_manager import manager
+            response = QueueItemResponse.model_validate(item)
+            
+            if status == QueueStatus.FAILED and error:
+                await manager.broadcast_queue_item_failed(item_id, error)
+            else:
+                await manager.broadcast_queue_item_updated(
+                    response.model_dump(mode="json")
+                )
+
+    def update_status(
+        self, db: Session, item_id: int, status: QueueStatus, error: str = None
+    ):
+        """
+        Update item status (sync wrapper).
+
+        Args:
+            db: Database session
+            item_id: Queue item ID
+            status: New status
+            error: Error message if status is FAILED
+        """
+        item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
+        if item:
+            item.status = status
+            if error:
+                item.error = error
+            db.commit()
+            db.refresh(item)
 
     def set_media_path(self, db: Session, item_id: int, media_path: str):
         """

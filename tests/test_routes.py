@@ -368,3 +368,117 @@ def test_cache_file_served_from_cache_route(client):
     finally:
         if cache_file.exists():
             cache_file.unlink()
+
+
+def test_websocket_connect_and_receive_connected_message(client):
+    """WebSocket endpoint should accept connections and send initial connected payload."""
+    with client.websocket_connect("/api/queue/ws") as websocket:
+        message = websocket.receive_json()
+        assert message["type"] == "connected"
+        assert "connection_count" in message["data"]
+
+
+def test_websocket_broadcasts_queue_item_added_event(client):
+    """Adding a queue item should broadcast queue_item_added to websocket clients."""
+    with client.websocket_connect("/api/queue/ws") as websocket:
+        connected = websocket.receive_json()
+        assert connected["type"] == "connected"
+
+        response = client.post(
+            "/api/queue/",
+            json={"youtube_id": "ws-add", "title": "WS Add", "is_karaoke": False},
+        )
+        assert response.status_code == 200
+        item = response.json()
+
+        event = websocket.receive_json()
+        if event["type"] == "ping":
+            websocket.send_json({"type": "pong"})
+            event = websocket.receive_json()
+        assert event["type"] == "queue_item_added"
+        assert event["data"]["id"] == item["id"]
+        assert event["data"]["title"] == "WS Add"
+
+
+def test_websocket_broadcasts_queue_item_removed_event(client):
+    """Deleting a queue item should broadcast queue_item_removed."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-del", "title": "WS Remove", "is_karaoke": False},
+    ).json()
+
+    with client.websocket_connect("/api/queue/ws") as websocket:
+        connected = websocket.receive_json()
+        assert connected["type"] == "connected"
+
+        response = client.delete(f"/api/queue/{created['id']}")
+        assert response.status_code == 200
+
+        event = websocket.receive_json()
+        if event["type"] == "ping":
+            websocket.send_json({"type": "pong"})
+            event = websocket.receive_json()
+        assert event["type"] == "queue_item_removed"
+        assert event["data"]["id"] == created["id"]
+
+
+def test_websocket_broadcasts_current_item_changed_on_skip(client):
+    """Skipping current item should broadcast current_item_changed."""
+    first = client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-skip-1", "title": "WS Skip 1", "is_karaoke": False},
+    ).json()
+    second = client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-skip-2", "title": "WS Skip 2", "is_karaoke": False},
+    ).json()
+
+    db = TestingSessionLocal()
+    try:
+        first_row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        second_row = db.query(QueueItem).filter(QueueItem.id == second["id"]).first()
+        first_row.status = QueueStatus.PLAYING
+        second_row.status = QueueStatus.READY
+        db.commit()
+    finally:
+        db.close()
+
+    with client.websocket_connect("/api/queue/ws") as websocket:
+        connected = websocket.receive_json()
+        assert connected["type"] == "connected"
+
+        response = client.post("/api/queue/skip")
+        assert response.status_code == 200
+
+        event = websocket.receive_json()
+        if event["type"] == "ping":
+            websocket.send_json({"type": "pong"})
+            event = websocket.receive_json()
+        assert event["type"] == "current_item_changed"
+        assert event["data"]["id"] == second["id"]
+        assert event["data"]["previous_id"] == first["id"]
+
+
+def test_websocket_broadcasts_queue_cleared(client):
+    """Clearing queue should broadcast queue_cleared."""
+    client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-clear-1", "title": "WS Clear 1", "is_karaoke": False},
+    )
+    client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-clear-2", "title": "WS Clear 2", "is_karaoke": False},
+    )
+
+    with client.websocket_connect("/api/queue/ws") as websocket:
+        connected = websocket.receive_json()
+        assert connected["type"] == "connected"
+
+        response = client.post("/api/queue/clear")
+        assert response.status_code == 200
+
+        event = websocket.receive_json()
+        if event["type"] == "ping":
+            websocket.send_json({"type": "pong"})
+            event = websocket.receive_json()
+        assert event["type"] == "queue_cleared"
