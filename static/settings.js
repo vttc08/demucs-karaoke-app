@@ -11,11 +11,16 @@ const saveFeedbackText = document.getElementById("save-feedback-text");
 const engineStatusDot = document.getElementById("engine-status-dot");
 const engineStatusText = document.getElementById("engine-status-text");
 const lastSyncText = document.getElementById("last-sync-text");
+const demucsMp3BitrateGroup = document.getElementById("demucs-mp3-bitrate-group");
 const ENGINE_STATUS_STORAGE_KEY = "karaoke.engineStatus";
 let saveFeedbackTimer = null;
 
 const fields = {
     demucs_api_url: document.getElementById("demucs_api_url"),
+    demucs_model: document.getElementById("demucs_model"),
+    demucs_device: document.getElementById("demucs_device"),
+    demucs_output_format: document.getElementById("demucs_output_format"),
+    demucs_mp3_bitrate: document.getElementById("demucs_mp3_bitrate"),
     ffmpeg_preset: document.getElementById("ffmpeg_preset"),
     ffmpeg_crf: document.getElementById("ffmpeg_crf"),
     media_path: document.getElementById("media_path"),
@@ -124,12 +129,26 @@ function setFormState(disabled) {
 
 function applySettingsToForm(data) {
     fields.demucs_api_url.value = data.demucs_api_url || "";
+    fields.demucs_model.value = data.demucs_model || "htdemucs";
+    fields.demucs_device.value = data.demucs_device || "cuda";
+    fields.demucs_output_format.value = data.demucs_output_format || "wav";
+    fields.demucs_mp3_bitrate.value = String(data.demucs_mp3_bitrate ?? 320);
     fields.ffmpeg_preset.value = data.ffmpeg_preset || "veryfast";
     fields.ffmpeg_crf.value = String(data.ffmpeg_crf ?? 23);
     fields.media_path.value = data.media_path || "";
     fields.cache_path.value = data.cache_path || "";
     fields.ytdlp_path.value = data.ytdlp_path || "";
     fields.ffmpeg_path.value = data.ffmpeg_path || "";
+    updateDemucsOutputUi();
+}
+
+function updateDemucsOutputUi() {
+    const isMp3 = fields.demucs_output_format.value === "mp3";
+    if (demucsMp3BitrateGroup) {
+        demucsMp3BitrateGroup.classList.toggle("opacity-60", !isMp3);
+    }
+    fields.demucs_mp3_bitrate.disabled = !isMp3;
+    fields.demucs_mp3_bitrate.required = isMp3;
 }
 
 async function loadSettings() {
@@ -164,6 +183,9 @@ async function saveSettings() {
 
     const payload = {
         demucs_api_url: fields.demucs_api_url.value.trim(),
+        demucs_model: fields.demucs_model.value,
+        demucs_device: fields.demucs_device.value,
+        demucs_output_format: fields.demucs_output_format.value,
         ffmpeg_preset: fields.ffmpeg_preset.value,
         ffmpeg_crf: Number(fields.ffmpeg_crf.value),
         media_path: fields.media_path.value.trim(),
@@ -171,6 +193,9 @@ async function saveSettings() {
         ytdlp_path: fields.ytdlp_path.value.trim(),
         ffmpeg_path: fields.ffmpeg_path.value.trim(),
     };
+    if (fields.demucs_output_format.value === "mp3") {
+        payload.demucs_mp3_bitrate = Number(fields.demucs_mp3_bitrate.value);
+    }
 
     try {
         const response = await fetch(SETTINGS_API, {
@@ -236,6 +261,9 @@ if (saveBtn) {
 }
 if (reloadBtn) {
     reloadBtn.addEventListener("click", reloadEngineStatus);
+}
+if (fields.demucs_output_format) {
+    fields.demucs_output_format.addEventListener("change", updateDemucsOutputUi);
 }
 
 const persistedState = readPersistedEngineStatus();

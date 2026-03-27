@@ -33,6 +33,10 @@ app.dependency_overrides[get_db] = override_get_db
 def client():
     """Create test client and database."""
     original_demucs_api_url = settings.demucs_api_url
+    original_demucs_model = settings.demucs_model
+    original_demucs_device = settings.demucs_device
+    original_demucs_output_format = settings.demucs_output_format
+    original_demucs_mp3_bitrate = settings.demucs_mp3_bitrate
     original_ffmpeg_preset = settings.ffmpeg_preset
     original_ffmpeg_crf = settings.ffmpeg_crf
     original_ytdlp_path = settings.ytdlp_path
@@ -43,6 +47,10 @@ def client():
     Base.metadata.create_all(bind=engine)
     yield TestClient(app)
     settings.demucs_api_url = original_demucs_api_url
+    settings.demucs_model = original_demucs_model
+    settings.demucs_device = original_demucs_device
+    settings.demucs_output_format = original_demucs_output_format
+    settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
     settings.ffmpeg_preset = original_ffmpeg_preset
     settings.ffmpeg_crf = original_ffmpeg_crf
     settings.ytdlp_path = original_ytdlp_path
@@ -174,6 +182,10 @@ def test_get_runtime_settings(client):
     assert response.status_code == 200
     data = response.json()
     assert "demucs_api_url" in data
+    assert "demucs_model" in data
+    assert "demucs_device" in data
+    assert "demucs_output_format" in data
+    assert "demucs_mp3_bitrate" in data
     assert "ffmpeg_preset" in data
     assert "ffmpeg_crf" in data
     assert "ytdlp_path" in data
@@ -190,6 +202,10 @@ def test_update_runtime_settings(client):
         "/api/settings/",
         json={
             "demucs_api_url": "http://127.0.0.1:9001",
+            "demucs_model": "htdemucs_ft",
+            "demucs_device": "cpu",
+            "demucs_output_format": "mp3",
+            "demucs_mp3_bitrate": 256,
             "ffmpeg_preset": "superfast",
             "ffmpeg_crf": 28,
             "media_path": "/tmp/karaoke_media_test",
@@ -201,6 +217,10 @@ def test_update_runtime_settings(client):
     assert response.status_code == 200
     data = response.json()
     assert data["demucs_api_url"] == "http://127.0.0.1:9001"
+    assert data["demucs_model"] == "htdemucs_ft"
+    assert data["demucs_device"] == "cpu"
+    assert data["demucs_output_format"] == "mp3"
+    assert data["demucs_mp3_bitrate"] == 256
     assert data["ffmpeg_preset"] == "superfast"
     assert data["ffmpeg_crf"] == 28
     assert data["media_path"] == "/tmp/karaoke_media_test"

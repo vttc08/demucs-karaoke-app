@@ -31,6 +31,41 @@
                     </label>
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label class="flex flex-col gap-1.5">
+                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Demucs Model</span>
+                            <select id="demucs_model" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
+                                <option value="htdemucs">htdemucs (default)</option>
+                                <option value="htdemucs_ft">htdemucs_ft</option>
+                                <option value="htdemucs_6s">htdemucs_6s</option>
+                                <option value="hdemucs_mmi">hdemucs_mmi</option>
+                                <option value="mdx">mdx</option>
+                                <option value="mdx_extra">mdx_extra</option>
+                                <option value="mdx_q">mdx_q</option>
+                                <option value="mdx_extra_q">mdx_extra_q</option>
+                            </select>
+                        </label>
+                        <label class="flex flex-col gap-1.5">
+                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Demucs Device</span>
+                            <select id="demucs_device" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
+                                <option value="cuda">cuda</option>
+                                <option value="cpu">cpu</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <label class="flex flex-col gap-1.5">
+                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Demucs Output</span>
+                            <select id="demucs_output_format" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
+                                <option value="wav">wav</option>
+                                <option value="mp3">mp3</option>
+                            </select>
+                        </label>
+                        <label id="demucs-mp3-bitrate-group" class="flex flex-col gap-1.5">
+                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">MP3 Bitrate</span>
+                            <input id="demucs_mp3_bitrate" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="number" min="64" max="320" step="1" value="320" />
+                        </label>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <label class="flex flex-col gap-1.5">
                             <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">FFmpeg Preset</span>
                             <select id="ffmpeg_preset" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
                                 <option value="ultrafast">ultrafast</option>

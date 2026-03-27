@@ -517,23 +517,38 @@ async def test_demucs_client_upload_and_save(tmp_path):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def post(self, url, files):
+        async def post(self, url, files, data):
             assert url.endswith("/separate")
             assert "file" in files
+            assert data["model"] == "htdemucs"
+            assert data["device"] == "cuda"
+            assert data["output_format"] == "wav"
             return FakeResponse()
 
     from services import demucs_client as dc_module
 
     original_client = dc_module.httpx.AsyncClient
     original_cache = dc_module.settings.cache_path
+    original_demucs_model = dc_module.settings.demucs_model
+    original_demucs_device = dc_module.settings.demucs_device
+    original_demucs_output_format = dc_module.settings.demucs_output_format
+    original_demucs_mp3_bitrate = dc_module.settings.demucs_mp3_bitrate
     try:
         dc_module.httpx.AsyncClient = FakeAsyncClient
         dc_module.settings.cache_path = tmp_path
+        dc_module.settings.demucs_model = "htdemucs"
+        dc_module.settings.demucs_device = "cuda"
+        dc_module.settings.demucs_output_format = "wav"
+        dc_module.settings.demucs_mp3_bitrate = 320
         client = DemucsClient(api_url="http://127.0.0.1:8001")
         result = await client.separate_vocals(src)
     finally:
         dc_module.httpx.AsyncClient = original_client
         dc_module.settings.cache_path = original_cache
+        dc_module.settings.demucs_model = original_demucs_model
+        dc_module.settings.demucs_device = original_demucs_device
+        dc_module.settings.demucs_output_format = original_demucs_output_format
+        dc_module.settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
 
     assert result.no_vocals_path.endswith("_job123_no_vocals.wav")
     saved = Path(result.no_vocals_path)
@@ -588,6 +603,10 @@ def test_runtime_settings_get_settings_is_non_blocking():
 
     assert result.demucs_healthy is False
     assert result.demucs_health_detail == "Health check pending"
+    assert result.demucs_model == settings.demucs_model
+    assert result.demucs_device == settings.demucs_device
+    assert result.demucs_output_format == settings.demucs_output_format
+    assert result.demucs_mp3_bitrate == settings.demucs_mp3_bitrate
 
 
 def test_runtime_settings_update_settings_includes_demucs_health():
@@ -640,6 +659,53 @@ def test_runtime_settings_update_settings_accepts_media_and_cache_paths(tmp_path
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
+
+
+def test_runtime_settings_update_settings_accepts_demucs_advanced_fields():
+    """Runtime settings should accept demucs model/device/output/bitrate values."""
+    service = RuntimeSettingsService()
+    original_model = settings.demucs_model
+    original_device = settings.demucs_device
+    original_output = settings.demucs_output_format
+    original_bitrate = settings.demucs_mp3_bitrate
+    try:
+        with patch.object(
+            RuntimeSettingsService,
+            "get_demucs_health",
+            return_value=DemucsHealthResponse(
+                api_url="http://127.0.0.1:8001",
+                healthy=True,
+                detail="Demucs service is healthy",
+            ),
+        ):
+            result = service.update_settings(
+                RuntimeSettingsUpdateRequest(
+                    demucs_model="htdemucs_ft",
+                    demucs_device="cpu",
+                    demucs_output_format="mp3",
+                    demucs_mp3_bitrate=256,
+                )
+            )
+        assert result.demucs_model == "htdemucs_ft"
+        assert result.demucs_device == "cpu"
+        assert result.demucs_output_format == "mp3"
+        assert result.demucs_mp3_bitrate == 256
+    finally:
+        settings.demucs_model = original_model
+        settings.demucs_device = original_device
+        settings.demucs_output_format = original_output
+        settings.demucs_mp3_bitrate = original_bitrate
+
+
+def test_runtime_settings_update_settings_rejects_invalid_demucs_fields():
+    """Runtime settings should validate demucs advanced fields."""
+    service = RuntimeSettingsService()
+    with pytest.raises(ValueError, match="demucs_device"):
+        service.update_settings(RuntimeSettingsUpdateRequest(demucs_device="gpu"))
+    with pytest.raises(ValueError, match="demucs_output_format"):
+        service.update_settings(RuntimeSettingsUpdateRequest(demucs_output_format="flac"))
+    with pytest.raises(ValueError, match="demucs_mp3_bitrate"):
+        service.update_settings(RuntimeSettingsUpdateRequest(demucs_mp3_bitrate=32))
 
 
 def test_runtime_settings_update_settings_rejects_empty_media_path():

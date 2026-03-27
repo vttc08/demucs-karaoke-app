@@ -20,6 +20,8 @@ class RuntimeSettingsService:
         "slower",
         "veryslow",
     }
+    ALLOWED_DEMUCS_DEVICES = {"cuda", "cpu"}
+    ALLOWED_DEMUCS_OUTPUT_FORMATS = {"wav", "mp3"}
 
     def get_demucs_health(self) -> DemucsHealthResponse:
         """Return Demucs health for the current configured API URL."""
@@ -39,6 +41,10 @@ class RuntimeSettingsService:
             demucs_api_url=settings.demucs_api_url,
             demucs_healthy=demucs_healthy,
             demucs_health_detail=demucs_health_detail,
+            demucs_model=settings.demucs_model,
+            demucs_device=settings.demucs_device,
+            demucs_output_format=settings.demucs_output_format,
+            demucs_mp3_bitrate=settings.demucs_mp3_bitrate,
             ffmpeg_preset=settings.ffmpeg_preset,
             ffmpeg_crf=settings.ffmpeg_crf,
             ytdlp_path=settings.ytdlp_path,
@@ -60,6 +66,36 @@ class RuntimeSettingsService:
             if not value:
                 raise ValueError("demucs_api_url cannot be empty")
             settings.demucs_api_url = value
+
+        if payload.demucs_model is not None:
+            model = payload.demucs_model.strip()
+            if not model:
+                raise ValueError("demucs_model cannot be empty")
+            settings.demucs_model = model
+
+        if payload.demucs_device is not None:
+            device = payload.demucs_device.strip().lower()
+            if device not in self.ALLOWED_DEMUCS_DEVICES:
+                raise ValueError(
+                    "demucs_device must be one of: "
+                    + ", ".join(sorted(self.ALLOWED_DEMUCS_DEVICES))
+                )
+            settings.demucs_device = device
+
+        if payload.demucs_output_format is not None:
+            output_format = payload.demucs_output_format.strip().lower()
+            if output_format not in self.ALLOWED_DEMUCS_OUTPUT_FORMATS:
+                raise ValueError(
+                    "demucs_output_format must be one of: "
+                    + ", ".join(sorted(self.ALLOWED_DEMUCS_OUTPUT_FORMATS))
+                )
+            settings.demucs_output_format = output_format
+
+        if payload.demucs_mp3_bitrate is not None:
+            bitrate = payload.demucs_mp3_bitrate
+            if bitrate < 64 or bitrate > 320:
+                raise ValueError("demucs_mp3_bitrate must be between 64 and 320")
+            settings.demucs_mp3_bitrate = bitrate
 
         if payload.ffmpeg_preset is not None:
             preset = payload.ffmpeg_preset.strip().lower()

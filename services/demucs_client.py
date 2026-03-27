@@ -31,14 +31,24 @@ class DemucsClient:
 
         async with httpx.AsyncClient(timeout=600.0) as client:
             with audio_path.open("rb") as fh:
+                data = {
+                    "model": settings.demucs_model,
+                    "device": settings.demucs_device,
+                    "output_format": settings.demucs_output_format,
+                }
+                if settings.demucs_output_format == "mp3":
+                    data["mp3_bitrate"] = str(settings.demucs_mp3_bitrate)
                 response = await client.post(
                     f"{self.api_url}/separate",
                     files={"file": (audio_path.name, fh, "audio/wav")},
+                    data=data,
                 )
             response.raise_for_status()
 
             job_id = response.headers.get("X-Job-Id", "unknown")
-            output_path = out_dir / f"{audio_path.stem}_{job_id}_no_vocals.wav"
+            output_format = response.headers.get("X-Output-Format", "wav").lower()
+            extension = "mp3" if output_format == "mp3" else "wav"
+            output_path = out_dir / f"{audio_path.stem}_{job_id}_no_vocals.{extension}"
             output_path.write_bytes(response.content)
 
             vocals_path = response.headers.get("X-Vocals-Path")

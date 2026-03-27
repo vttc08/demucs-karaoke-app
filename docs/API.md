@@ -202,6 +202,10 @@ for a real-time status refresh.
   "demucs_api_url": "http://10.10.120.191:8001",
   "demucs_healthy": false,
   "demucs_health_detail": "Health check pending",
+  "demucs_model": "htdemucs",
+  "demucs_device": "cuda",
+  "demucs_output_format": "wav",
+  "demucs_mp3_bitrate": 320,
   "ffmpeg_preset": "superfast",
   "ffmpeg_crf": 23,
   "media_path": "/mnt/karaoke_media",
@@ -224,6 +228,10 @@ Updates runtime settings immediately for new requests while the app is running.
 ```json
 {
   "demucs_api_url": "http://127.0.0.1:9001",
+  "demucs_model": "htdemucs",
+  "demucs_device": "cuda",
+  "demucs_output_format": "wav",
+  "demucs_mp3_bitrate": 320,
   "ffmpeg_preset": "veryfast",
   "ffmpeg_crf": 23,
   "media_path": "/mnt/karaoke_media",
@@ -236,6 +244,9 @@ Updates runtime settings immediately for new requests while the app is running.
 Validation:
 - `ffmpeg_preset` must be one of FFmpeg preset values (`ultrafast` ... `veryslow`)
 - `ffmpeg_crf` must be between `0` and `51`
+- `demucs_device` must be `cuda` or `cpu`
+- `demucs_output_format` must be `wav` or `mp3`
+- `demucs_mp3_bitrate` must be between `64` and `320`
 - executable paths cannot be empty
 - `media_path` and `cache_path` cannot be empty when provided
 

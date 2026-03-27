@@ -48,6 +48,10 @@ class Settings(BaseSettings):
 
     # External services
     demucs_api_url: str = "http://localhost:8001"
+    demucs_model: str = "htdemucs"
+    demucs_device: str = "cuda"
+    demucs_output_format: str = "wav"
+    demucs_mp3_bitrate: int = 320
 
     # Database
     database_url: str = "sqlite:///./karaoke.db"

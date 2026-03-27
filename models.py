@@ -85,6 +85,10 @@ class RuntimeSettingsResponse(BaseModel):
     demucs_api_url: str
     demucs_healthy: bool
     demucs_health_detail: str
+    demucs_model: str
+    demucs_device: str
+    demucs_output_format: str
+    demucs_mp3_bitrate: int
     ffmpeg_preset: str
     ffmpeg_crf: int
     ytdlp_path: str
@@ -97,6 +101,10 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     """Partial update payload for runtime settings."""
 
     demucs_api_url: Optional[str] = None
+    demucs_model: Optional[str] = None
+    demucs_device: Optional[str] = None
+    demucs_output_format: Optional[str] = None
+    demucs_mp3_bitrate: Optional[int] = None
     ffmpeg_preset: Optional[str] = None
     ffmpeg_crf: Optional[int] = None
     ytdlp_path: Optional[str] = None

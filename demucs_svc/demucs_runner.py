@@ -4,18 +4,39 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from settings import INCOMING_ROOT, OUTPUT_ROOT, DEMUCS_MODEL, DEMUCS_DEVICE
+try:
+    from .models import SeparateConfig
+    from .settings import INCOMING_ROOT, OUTPUT_ROOT
+except ImportError:
+    from models import SeparateConfig
+    from settings import INCOMING_ROOT, OUTPUT_ROOT
 
 
 class DemucsRunResult:
-    def __init__(self, job_id: str, no_vocals_path: Path, vocals_path: Path, duration_ms: int):
+    def __init__(
+        self,
+        job_id: str,
+        no_vocals_path: Path,
+        vocals_path: Path,
+        duration_ms: int,
+        model: str,
+        device: str,
+        output_format: str,
+        mp3_bitrate: int | None,
+    ):
         self.job_id = job_id
         self.no_vocals_path = no_vocals_path
         self.vocals_path = vocals_path
         self.duration_ms = duration_ms
+        self.model = model
+        self.device = device
+        self.output_format = output_format
+        self.mp3_bitrate = mp3_bitrate
 
 
-def run_demucs_on_file(input_bytes: bytes, original_filename: str) -> DemucsRunResult:
+def run_demucs_on_file(
+    input_bytes: bytes, original_filename: str, config: SeparateConfig
+) -> DemucsRunResult:
     job_id = uuid4().hex
     incoming_dir = INCOMING_ROOT / job_id
     output_dir = OUTPUT_ROOT / job_id
@@ -32,21 +53,26 @@ def run_demucs_on_file(input_bytes: bytes, original_filename: str) -> DemucsRunR
         "-m",
         "demucs.separate",
         "-n",
-        DEMUCS_MODEL,
+        config.model,
         "--two-stems=vocals",
         "-d",
-        DEMUCS_DEVICE,
+        config.device,
         "-o",
         str(output_dir),
-        str(input_path),
     ]
+    if config.output_format == "mp3":
+        cmd.extend(["--mp3", "--mp3-bitrate", str(config.mp3_bitrate)])
+    cmd.append(
+        str(input_path),
+    )
     subprocess.run(cmd, check=True, capture_output=True, text=True)
     duration_ms = int((time.time() - start) * 1000)
 
-    # Expected layout: output/<job>/<model>/<track-stem>/{vocals.wav,no_vocals.wav}
-    stem_folder = output_dir / DEMUCS_MODEL / input_path.stem
-    no_vocals_path = stem_folder / "no_vocals.wav"
-    vocals_path = stem_folder / "vocals.wav"
+    # Expected layout: output/<job>/<model>/<track-stem>/{vocals.*,no_vocals.*}
+    stem_folder = output_dir / config.model / input_path.stem
+    extension = "mp3" if config.output_format == "mp3" else "wav"
+    no_vocals_path = stem_folder / f"no_vocals.{extension}"
+    vocals_path = stem_folder / f"vocals.{extension}"
 
     if not no_vocals_path.exists() or not vocals_path.exists():
         raise RuntimeError(f"Demucs output not found in expected path: {stem_folder}")
@@ -56,4 +82,8 @@ def run_demucs_on_file(input_bytes: bytes, original_filename: str) -> DemucsRunR
         no_vocals_path=no_vocals_path,
         vocals_path=vocals_path,
         duration_ms=duration_ms,
+        model=config.model,
+        device=config.device,
+        output_format=config.output_format,
+        mp3_bitrate=config.mp3_bitrate,
     )
