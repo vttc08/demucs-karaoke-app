@@ -105,7 +105,6 @@ class YtDlpAdapter:
         attempts = [
             ("bestaudio[ext=m4a]/bestaudio/best", "web", False, True),
             ("bestaudio/best", "web", False, True),
-            (None, "web", False, True),
             (None, None, False, False),
         ]
         return self._download_with_attempts(
@@ -134,9 +133,9 @@ class YtDlpAdapter:
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
         # Karaoke flow only needs a video track; avoid merge-heavy selectors.
         attempts = [
+            ("bestvideo/best", None, False, False),
             ("bestvideo[ext=mp4]/best[ext=mp4]/bestvideo/best", "web", False, True),
             ("bestvideo/best", "web", False, True),
-            ("bestvideo/best", None, False, False),
             (None, None, False, False),
         ]
         return self._download_with_attempts(
@@ -166,7 +165,6 @@ class YtDlpAdapter:
         attempts = [
             ("best[ext=mp4]/best", "web", False, True),
             ("best", "web", False, True),
-            (None, "web", False, True),
             (None, None, False, False),
         ]
         return self._download_with_attempts(
@@ -190,9 +188,10 @@ class YtDlpAdapter:
         """Run yt-dlp download attempts with format/client fallbacks."""
         url = f"https://www.youtube.com/watch?v={youtube_id}"
         last_error = "unknown failure"
+        attempt_list = list(attempts)
 
         logger.info("Downloading media_type=%s youtube_id=%s", media_type, youtube_id)
-        for fmt, client, merge_mp4, use_extractor_args in attempts:
+        for idx, (fmt, client, merge_mp4, use_extractor_args) in enumerate(attempt_list):
             cmd = [
                 self.ytdlp_path,
                 url,
@@ -237,13 +236,25 @@ class YtDlpAdapter:
             except subprocess.CalledProcessError as e:
                 stderr = self._decode_stderr(e.stderr)
                 last_error = self._extract_relevant_error(stderr, e.returncode)
-                logger.warning(
-                    "%s download attempt failed (%s, client=%s): %s",
-                    media_type.capitalize(),
-                    fmt or "<default>",
-                    client or "<default>",
-                    last_error,
-                )
+                remaining = len(attempt_list) - (idx + 1)
+                if (
+                    remaining > 0
+                    and "Requested format is not available" in last_error
+                ):
+                    logger.info(
+                        "%s fallback: format unavailable (%s, client=%s), trying next strategy",
+                        media_type.capitalize(),
+                        fmt or "<default>",
+                        client or "<default>",
+                    )
+                else:
+                    logger.warning(
+                        "%s download attempt failed (%s, client=%s): %s",
+                        media_type.capitalize(),
+                        fmt or "<default>",
+                        client or "<default>",
+                        last_error,
+                    )
 
         logger.error(
             "%s download failed for %s after fallback attempts: %s",

@@ -69,7 +69,10 @@ def test_download_video_retries_without_ios_client(monkeypatch, tmp_path):
 
     assert result == expected_output
     assert len(calls) >= 2
-    assert "youtube:player_client=web" in calls[0]
+    assert "youtube:player_client=web" not in calls[0]
+    assert "-f" in calls[0]
+    assert "bestvideo/best" in calls[0]
+    assert any("youtube:player_client=web" in call for call in calls[1:])
     assert all("youtube:player_client=ios" not in call for call in calls)
 
 

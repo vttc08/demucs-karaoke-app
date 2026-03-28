@@ -185,8 +185,41 @@ karaoke/
 pip install --upgrade yt-dlp
 ```
 
-For karaoke mode, this app now downloads source audio directly from yt-dlp formats (instead of yt-dlp ffmpeg postprocessing), which avoids `ffprobe/ffmpeg not found` during the audio-download step.
-The downloader also retries with alternate YouTube clients (`web` then `ios`) and broader format fallbacks when strict formats are unavailable.
+For karaoke mode, this app downloads source audio directly from yt-dlp formats (instead of yt-dlp ffmpeg postprocessing), which avoids `ffprobe/ffmpeg not found` during the audio-download step.
+The downloader uses progressive fallback for unavailable formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise.
+
+Manual yt-dlp debugging commands (replace `VIDEO_ID`):
+
+```bash
+# Inspect available formats
+yt-dlp -F "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Karaoke mode: separate video-only file
+yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
+  -f "bestvideo[ext=mp4]/best[ext=mp4]/bestvideo/best" \
+  --extractor-args "youtube:player_client=web" \
+  --no-playlist \
+  -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
+
+# Karaoke mode: separate audio-only file
+yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
+  -f "bestaudio[ext=m4a]/bestaudio/best" \
+  --extractor-args "youtube:player_client=web" \
+  --no-playlist \
+  -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
+
+# Non-karaoke mode: single progressive file (video+audio)
+yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
+  -f "best[ext=mp4]/best" \
+  --extractor-args "youtube:player_client=web" \
+  --no-playlist \
+  -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
+
+# Last-resort default selection (lets yt-dlp choose)
+yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --no-playlist \
+  -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
+```
 
 ### ffmpeg issues
 ```bash
