@@ -746,6 +746,62 @@ def test_runtime_settings_update_settings_rejects_empty_media_path():
         service.update_settings(RuntimeSettingsUpdateRequest(media_path=" "))
 
 
+def test_runtime_settings_update_settings_accepts_proxy_url():
+    """Runtime settings should accept valid yt-dlp proxy URLs."""
+    service = RuntimeSettingsService()
+    original_proxy = settings.ytdlp_proxy_url
+    try:
+        with patch.object(
+            RuntimeSettingsService,
+            "get_demucs_health",
+            return_value=DemucsHealthResponse(
+                api_url="http://127.0.0.1:8001",
+                healthy=True,
+                detail="Demucs service is healthy",
+            ),
+        ):
+            result = service.update_settings(
+                RuntimeSettingsUpdateRequest(
+                    ytdlp_proxy_url="http://user:pass@127.0.0.1:8080"
+                )
+            )
+        assert result.ytdlp_proxy_url == "http://user:pass@127.0.0.1:8080"
+    finally:
+        settings.ytdlp_proxy_url = original_proxy
+
+
+def test_runtime_settings_update_settings_accepts_empty_proxy_url():
+    """Runtime settings should allow clearing yt-dlp proxy URL."""
+    service = RuntimeSettingsService()
+    original_proxy = settings.ytdlp_proxy_url
+    try:
+        settings.ytdlp_proxy_url = "socks5://127.0.0.1:1080"
+        with patch.object(
+            RuntimeSettingsService,
+            "get_demucs_health",
+            return_value=DemucsHealthResponse(
+                api_url="http://127.0.0.1:8001",
+                healthy=True,
+                detail="Demucs service is healthy",
+            ),
+        ):
+            result = service.update_settings(
+                RuntimeSettingsUpdateRequest(ytdlp_proxy_url=" ")
+            )
+        assert result.ytdlp_proxy_url == ""
+    finally:
+        settings.ytdlp_proxy_url = original_proxy
+
+
+def test_runtime_settings_update_settings_rejects_invalid_proxy_url():
+    """Runtime settings should reject invalid yt-dlp proxy URLs."""
+    service = RuntimeSettingsService()
+    with pytest.raises(ValueError, match="ytdlp_proxy_url"):
+        service.update_settings(RuntimeSettingsUpdateRequest(ytdlp_proxy_url="proxy.local:8080"))
+    with pytest.raises(ValueError, match="ytdlp_proxy_url"):
+        service.update_settings(RuntimeSettingsUpdateRequest(ytdlp_proxy_url="ftp://proxy.local:21"))
+
+
 def test_queue_service_build_media_url_for_media_and_cache(tmp_path):
     """Queue service should map filesystem paths to stable API URLs."""
     service = QueueService()

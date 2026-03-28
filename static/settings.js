@@ -26,6 +26,7 @@ const fields = {
     media_path: document.getElementById("media_path"),
     cache_path: document.getElementById("cache_path"),
     ytdlp_path: document.getElementById("ytdlp_path"),
+    ytdlp_proxy_url: document.getElementById("ytdlp_proxy_url"),
     ffmpeg_path: document.getElementById("ffmpeg_path"),
 };
 
@@ -138,6 +139,7 @@ function applySettingsToForm(data) {
     fields.media_path.value = data.media_path || "";
     fields.cache_path.value = data.cache_path || "";
     fields.ytdlp_path.value = data.ytdlp_path || "";
+    fields.ytdlp_proxy_url.value = data.ytdlp_proxy_url || "";
     fields.ffmpeg_path.value = data.ffmpeg_path || "";
     updateDemucsOutputUi();
 }
@@ -191,6 +193,7 @@ async function saveSettings() {
         media_path: fields.media_path.value.trim(),
         cache_path: fields.cache_path.value.trim(),
         ytdlp_path: fields.ytdlp_path.value.trim(),
+        ytdlp_proxy_url: fields.ytdlp_proxy_url.value.trim(),
         ffmpeg_path: fields.ffmpeg_path.value.trim(),
     };
     if (fields.demucs_output_format.value === "mp3") {

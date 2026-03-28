@@ -16,6 +16,13 @@ class YtDlpAdapter:
         self.ytdlp_path = ytdlp_path or settings.ytdlp_path
         logger.info("YtDlpAdapter initialized ytdlp_path=%s", self.ytdlp_path)
 
+    @staticmethod
+    def _proxy_args() -> List[str]:
+        """Build proxy arguments for yt-dlp command if configured."""
+        if settings.ytdlp_proxy_url:
+            return ["--proxy", settings.ytdlp_proxy_url]
+        return []
+
     def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
         """
         Search YouTube for videos.
@@ -41,6 +48,7 @@ class YtDlpAdapter:
             "--no-playlist",
             "--no-warnings",
         ]
+        cmd.extend(self._proxy_args())
 
         logger.info("Executing YouTube search query=%r max_results=%s", query, max_results)
         
@@ -205,6 +213,7 @@ class YtDlpAdapter:
                 cmd[2:2] = ["--extractor-args", f"youtube:player_client={client}"]
             if merge_mp4:
                 cmd.extend(["--merge-output-format", "mp4"])
+            cmd.extend(self._proxy_args())
 
             try:
                 subprocess.run(cmd, check=True, capture_output=True, timeout=300)

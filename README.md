@@ -91,7 +91,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
 
 3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
     - View current runtime settings
-    - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, and tool paths
+    - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and yt-dlp proxy URL
     - Apply settings immediately without restarting the app (for processing/runtime behavior)
     - If media/cache paths are changed, restart the app so static file mounts use the new paths
     - View real-time Demucs engine health (online/offline with detail)
@@ -187,6 +187,9 @@ pip install --upgrade yt-dlp
 
 For karaoke mode, this app downloads source audio directly from yt-dlp formats (instead of yt-dlp ffmpeg postprocessing), which avoids `ffprobe/ffmpeg not found` during the audio-download step.
 The downloader uses progressive fallback for unavailable formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise.
+Runtime proxy is supported through settings (`yt-dlp Proxy URL`) and applied to both search and download commands.
+Supported schemes: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`.
+Leave proxy empty for direct connections.
 
 Manual yt-dlp debugging commands (replace `VIDEO_ID`):
 
@@ -219,6 +222,12 @@ yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
 yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
   --no-playlist \
   -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
+```
+
+If you want to manually test via proxy, add:
+
+```bash
+--proxy "socks5://127.0.0.1:1080"
 ```
 
 ### ffmpeg issues

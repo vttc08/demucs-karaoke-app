@@ -40,6 +40,7 @@ def client():
     original_ffmpeg_preset = settings.ffmpeg_preset
     original_ffmpeg_crf = settings.ffmpeg_crf
     original_ytdlp_path = settings.ytdlp_path
+    original_ytdlp_proxy_url = settings.ytdlp_proxy_url
     original_ffmpeg_path = settings.ffmpeg_path
     original_media_path = settings.media_path
     original_cache_path = settings.cache_path
@@ -54,6 +55,7 @@ def client():
     settings.ffmpeg_preset = original_ffmpeg_preset
     settings.ffmpeg_crf = original_ffmpeg_crf
     settings.ytdlp_path = original_ytdlp_path
+    settings.ytdlp_proxy_url = original_ytdlp_proxy_url
     settings.ffmpeg_path = original_ffmpeg_path
     settings.media_path = original_media_path
     settings.cache_path = original_cache_path
@@ -189,6 +191,7 @@ def test_get_runtime_settings(client):
     assert "ffmpeg_preset" in data
     assert "ffmpeg_crf" in data
     assert "ytdlp_path" in data
+    assert "ytdlp_proxy_url" in data
     assert "ffmpeg_path" in data
     assert "media_path" in data
     assert "cache_path" in data
@@ -211,6 +214,7 @@ def test_update_runtime_settings(client):
             "media_path": "/tmp/karaoke_media_test",
             "cache_path": "/tmp/karaoke_cache_test",
             "ytdlp_path": "yt-dlp",
+            "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
             "ffmpeg_path": "ffmpeg",
         },
     )
@@ -225,6 +229,7 @@ def test_update_runtime_settings(client):
     assert data["ffmpeg_crf"] == 28
     assert data["media_path"] == "/tmp/karaoke_media_test"
     assert data["cache_path"] == "/tmp/karaoke_cache_test"
+    assert data["ytdlp_proxy_url"] == "socks5://127.0.0.1:1080"
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
 

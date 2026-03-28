@@ -5,6 +5,7 @@ import subprocess
 import pytest
 
 from adapters.ytdlp import YtDlpAdapter
+from config import settings
 
 
 def test_download_audio_uses_direct_audio_format_without_extract(monkeypatch, tmp_path):
@@ -124,3 +125,50 @@ def test_download_audio_default_fallback_can_return_mp4(monkeypatch, tmp_path):
 
     assert result == expected_output
     assert "-f" not in calls[-1]
+
+
+def test_search_includes_proxy_when_configured(monkeypatch):
+    """Search command should include --proxy when ytdlp_proxy_url is set."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    original_proxy = settings.ytdlp_proxy_url
+    settings.ytdlp_proxy_url = "socks5://127.0.0.1:1080"
+    captured_cmd = {}
+
+    def fake_run(cmd, capture_output, text, check, timeout):
+        captured_cmd["cmd"] = cmd
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    try:
+        adapter.search("proxy test")
+    finally:
+        settings.ytdlp_proxy_url = original_proxy
+
+    cmd = captured_cmd["cmd"]
+    assert "--proxy" in cmd
+    assert "socks5://127.0.0.1:1080" in cmd
+
+
+def test_download_includes_proxy_when_configured(monkeypatch, tmp_path):
+    """Download command should include --proxy when ytdlp_proxy_url is set."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "proxydl123"
+    expected_output = tmp_path / f"{youtube_id}.m4a"
+    expected_output.write_bytes(b"audio")
+    original_proxy = settings.ytdlp_proxy_url
+    settings.ytdlp_proxy_url = "http://127.0.0.1:3128"
+    captured_cmd = {}
+
+    def fake_run(cmd, check, capture_output, timeout):
+        captured_cmd["cmd"] = cmd
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    try:
+        adapter.download_audio(youtube_id, tmp_path)
+    finally:
+        settings.ytdlp_proxy_url = original_proxy
+
+    cmd = captured_cmd["cmd"]
+    assert "--proxy" in cmd
+    assert "http://127.0.0.1:3128" in cmd

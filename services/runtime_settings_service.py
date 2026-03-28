@@ -1,5 +1,6 @@
 """Runtime settings service."""
 from pathlib import Path
+from urllib.parse import urlparse
 
 from config import find_executable, settings
 from models import DemucsHealthResponse, RuntimeSettingsResponse, RuntimeSettingsUpdateRequest
@@ -22,6 +23,7 @@ class RuntimeSettingsService:
     }
     ALLOWED_DEMUCS_DEVICES = {"cuda", "cpu"}
     ALLOWED_DEMUCS_OUTPUT_FORMATS = {"wav", "mp3"}
+    ALLOWED_PROXY_SCHEMES = {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
 
     def get_demucs_health(self) -> DemucsHealthResponse:
         """Return Demucs health for the current configured API URL."""
@@ -48,6 +50,7 @@ class RuntimeSettingsService:
             ffmpeg_preset=settings.ffmpeg_preset,
             ffmpeg_crf=settings.ffmpeg_crf,
             ytdlp_path=settings.ytdlp_path,
+            ytdlp_proxy_url=settings.ytdlp_proxy_url,
             ffmpeg_path=settings.ffmpeg_path,
             media_path=str(settings.media_path),
             cache_path=str(settings.cache_path),
@@ -117,6 +120,21 @@ class RuntimeSettingsService:
             if not ytdlp_input:
                 raise ValueError("ytdlp_path cannot be empty")
             settings.ytdlp_path = self._resolve_executable_path(ytdlp_input)
+
+        if payload.ytdlp_proxy_url is not None:
+            proxy = payload.ytdlp_proxy_url.strip()
+            if proxy:
+                parsed = urlparse(proxy)
+                if (
+                    not parsed.scheme
+                    or parsed.scheme.lower() not in self.ALLOWED_PROXY_SCHEMES
+                    or not parsed.netloc
+                ):
+                    raise ValueError(
+                        "ytdlp_proxy_url must be empty or a valid proxy URL with scheme "
+                        + ", ".join(sorted(self.ALLOWED_PROXY_SCHEMES))
+                    )
+            settings.ytdlp_proxy_url = proxy
 
         if payload.ffmpeg_path is not None:
             ffmpeg_input = payload.ffmpeg_path.strip()

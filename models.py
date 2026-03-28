@@ -92,6 +92,7 @@ class RuntimeSettingsResponse(BaseModel):
     ffmpeg_preset: str
     ffmpeg_crf: int
     ytdlp_path: str
+    ytdlp_proxy_url: str
     ffmpeg_path: str
     media_path: str
     cache_path: str
@@ -108,6 +109,7 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     ffmpeg_preset: Optional[str] = None
     ffmpeg_crf: Optional[int] = None
     ytdlp_path: Optional[str] = None
+    ytdlp_proxy_url: Optional[str] = None
     ffmpeg_path: Optional[str] = None
     media_path: Optional[str] = None
     cache_path: Optional[str] = None

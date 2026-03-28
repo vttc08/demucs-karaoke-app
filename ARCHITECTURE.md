@@ -54,6 +54,22 @@ The queue page uses a hybrid update model:
 
 **Other Services**: yt-dlp, ffmpeg, [Demucs](https://github.com/facebookresearch/demucs)
 
+## Runtime yt-dlp proxy flow
+
+- Runtime settings expose `ytdlp_proxy_url` through:
+  - `GET /api/settings/runtime`
+  - `PATCH /api/settings/runtime`
+- `services/runtime_settings_service.py` validates proxy values and allows:
+  - Empty value (direct connection)
+  - Schemes: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`
+- `adapters/ytdlp.py` injects `--proxy <url>` into yt-dlp commands for:
+  - YouTube search
+  - Audio download
+  - Video-only download
+  - Progressive video+audio download
+
+This is applied at command build time, so new operations use updated proxy settings immediately without app restart.
+
 ## Design principles
 - Keep the MVP CLI-friendly and easy to run locally
 - Prefer local filesystem storage for media artifacts

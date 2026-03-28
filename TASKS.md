@@ -26,7 +26,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] real time application push instead of polling
 - [x] yt-dlp refinement, fix bugs with video downloading and less errors
 - [ ] concurrent ytdlp search for karaoke phrase and settings page
-- [ ] configure proxy settings for YTDLP
+- [x] configure proxy settings for YTDLP
 - [ ] custom playback engine, since some browser don't autoplay
 - [ ] background splash, show qrcode
 - [ ] database improvement, periodic and manual cleanup of failed songs and already played/skipped
