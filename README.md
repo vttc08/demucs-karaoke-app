@@ -90,11 +90,18 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
     - Auto-advances when song ends
 
 3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
-    - View current runtime settings
-    - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and yt-dlp proxy URL
-    - Apply settings immediately without restarting the app (for processing/runtime behavior)
-    - If media/cache paths are changed, restart the app so static file mounts use the new paths
-    - View real-time Demucs engine health (online/offline with detail)
+     - View current runtime settings
+     - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and yt-dlp proxy URL
+     - Enable/disable concurrent yt-dlp search mode
+     - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
+     - Apply settings immediately without restarting the app (for processing/runtime behavior)
+     - If media/cache paths are changed, restart the app so static file mounts use the new paths
+     - View real-time Demucs engine health (online/offline with detail)
+
+When concurrent yt-dlp search is enabled:
+- Query without `karaoke` triggers two parallel searches: `<query>` and `<query> karaoke`
+- Query containing `karaoke` uses single-search mode
+- Combined results are staggered/interleaved and de-duplicated by video id
 
 When karaoke mode is enabled:
 - `Burn lyrics` ON: app fetches real lyrics from LRCLIB and burns subtitles.

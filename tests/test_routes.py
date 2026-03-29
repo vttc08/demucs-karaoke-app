@@ -1,6 +1,7 @@
 """Tests for API routes."""
 import pytest
 from pathlib import Path
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -192,6 +193,7 @@ def test_get_runtime_settings(client):
     assert "ffmpeg_crf" in data
     assert "ytdlp_path" in data
     assert "ytdlp_proxy_url" in data
+    assert "concurrent_ytdlp_search_enabled" in data
     assert "ffmpeg_path" in data
     assert "media_path" in data
     assert "cache_path" in data
@@ -215,6 +217,7 @@ def test_update_runtime_settings(client):
             "cache_path": "/tmp/karaoke_cache_test",
             "ytdlp_path": "yt-dlp",
             "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
+            "concurrent_ytdlp_search_enabled": True,
             "ffmpeg_path": "ffmpeg",
         },
     )
@@ -230,6 +233,7 @@ def test_update_runtime_settings(client):
     assert data["media_path"] == "/tmp/karaoke_media_test"
     assert data["cache_path"] == "/tmp/karaoke_cache_test"
     assert data["ytdlp_proxy_url"] == "socks5://127.0.0.1:1080"
+    assert data["concurrent_ytdlp_search_enabled"] is True
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
 
@@ -242,6 +246,60 @@ def test_get_demucs_health(client):
     assert "api_url" in data
     assert "healthy" in data
     assert "detail" in data
+
+
+def test_get_ytdlp_version(client):
+    """yt-dlp version endpoint should return current version."""
+    with patch(
+        "routes.settings.runtime_settings_service.get_ytdlp_version",
+        return_value={"version": "2026.03.01", "binary_path": "/usr/bin/yt-dlp"},
+    ):
+        response = client.get("/api/settings/ytdlp/version")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["version"] == "2026.03.01"
+    assert data["binary_path"] == "/usr/bin/yt-dlp"
+
+
+def test_get_ytdlp_version_error(client):
+    """yt-dlp version endpoint should map runtime errors to 400."""
+    with patch(
+        "routes.settings.runtime_settings_service.get_ytdlp_version",
+        side_effect=RuntimeError("yt-dlp version check failed"),
+    ):
+        response = client.get("/api/settings/ytdlp/version")
+    assert response.status_code == 400
+    assert "yt-dlp version check failed" in response.json()["detail"]
+
+
+def test_update_ytdlp(client):
+    """yt-dlp update endpoint should return update result."""
+    with patch(
+        "routes.settings.runtime_settings_service.update_ytdlp",
+        return_value={
+            "before_version": "2026.03.01",
+            "after_version": "2026.03.15",
+            "updated": True,
+            "detail": "Updated yt-dlp to stable@2026.03.15",
+        },
+    ):
+        response = client.post("/api/settings/ytdlp/update")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["before_version"] == "2026.03.01"
+    assert data["after_version"] == "2026.03.15"
+    assert data["updated"] is True
+
+
+def test_update_ytdlp_error(client):
+    """yt-dlp update endpoint should map runtime errors to 400."""
+    with patch(
+        "routes.settings.runtime_settings_service.update_ytdlp",
+        side_effect=RuntimeError("yt-dlp update failed"),
+    ):
+        response = client.post("/api/settings/ytdlp/update")
+    assert response.status_code == 400
+    assert "yt-dlp update failed" in response.json()["detail"]
 
 
 def test_update_runtime_settings_rejects_invalid_crf(client):

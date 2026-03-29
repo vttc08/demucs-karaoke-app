@@ -208,9 +208,11 @@ for a real-time status refresh.
   "demucs_mp3_bitrate": 320,
   "ffmpeg_preset": "superfast",
   "ffmpeg_crf": 23,
+  "concurrent_ytdlp_search_enabled": false,
   "media_path": "/mnt/karaoke_media",
   "cache_path": "/mnt/karaoke_cache",
   "ytdlp_path": "/home/user/.venv/bin/yt-dlp",
+  "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
   "ffmpeg_path": "/usr/bin/ffmpeg"
 }
 ```
@@ -234,9 +236,11 @@ Updates runtime settings immediately for new requests while the app is running.
   "demucs_mp3_bitrate": 320,
   "ffmpeg_preset": "veryfast",
   "ffmpeg_crf": 23,
+  "concurrent_ytdlp_search_enabled": true,
   "media_path": "/mnt/karaoke_media",
   "cache_path": "/mnt/karaoke_cache",
   "ytdlp_path": "yt-dlp",
+  "ytdlp_proxy_url": "",
   "ffmpeg_path": "ffmpeg"
 }
 ```
@@ -247,6 +251,7 @@ Validation:
 - `demucs_device` must be `cuda` or `cpu`
 - `demucs_output_format` must be `wav` or `mp3`
 - `demucs_mp3_bitrate` must be between `64` and `320`
+- `concurrent_ytdlp_search_enabled` toggles optional parallel search mode
 - executable paths cannot be empty
 - `media_path` and `cache_path` cannot be empty when provided
 
@@ -269,6 +274,53 @@ Returns current Demucs health for configured API URL.
   "api_url": "http://10.10.120.191:8001",
   "healthy": true,
   "detail": "Demucs service is healthy"
+}
+```
+
+---
+
+### Get yt-dlp Version
+```
+GET /api/settings/ytdlp/version
+```
+
+Returns the version from `yt-dlp --version` using current configured `ytdlp_path`.
+
+**Response:**
+```json
+{
+  "version": "2026.03.15",
+  "binary_path": "/home/user/.venv/bin/yt-dlp"
+}
+```
+
+---
+
+### Update yt-dlp
+```
+POST /api/settings/ytdlp/update
+```
+
+Runs `yt-dlp -U` and returns before/after version comparison.
+
+**Response:**
+```json
+{
+  "before_version": "2026.03.01",
+  "after_version": "2026.03.15",
+  "updated": true,
+  "detail": "Updated yt-dlp to stable@2026.03.15 from stable@2026.03.01"
+}
+```
+
+If already current:
+
+```json
+{
+  "before_version": "2026.03.15",
+  "after_version": "2026.03.15",
+  "updated": false,
+  "detail": "yt-dlp is up to date (stable@2026.03.15)"
 }
 ```
 

@@ -1,9 +1,16 @@
 """Runtime settings service."""
+import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
 from config import find_executable, settings
-from models import DemucsHealthResponse, RuntimeSettingsResponse, RuntimeSettingsUpdateRequest
+from models import (
+    DemucsHealthResponse,
+    RuntimeSettingsResponse,
+    RuntimeSettingsUpdateRequest,
+    YtDlpUpdateResponse,
+    YtDlpVersionResponse,
+)
 from services.demucs_client import DemucsClient
 
 
@@ -24,6 +31,7 @@ class RuntimeSettingsService:
     ALLOWED_DEMUCS_DEVICES = {"cuda", "cpu"}
     ALLOWED_DEMUCS_OUTPUT_FORMATS = {"wav", "mp3"}
     ALLOWED_PROXY_SCHEMES = {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
+    YTDLP_COMMAND_TIMEOUT_SECONDS = 60
 
     def get_demucs_health(self) -> DemucsHealthResponse:
         """Return Demucs health for the current configured API URL."""
@@ -51,6 +59,7 @@ class RuntimeSettingsService:
             ffmpeg_crf=settings.ffmpeg_crf,
             ytdlp_path=settings.ytdlp_path,
             ytdlp_proxy_url=settings.ytdlp_proxy_url,
+            concurrent_ytdlp_search_enabled=settings.concurrent_ytdlp_search_enabled,
             ffmpeg_path=settings.ffmpeg_path,
             media_path=str(settings.media_path),
             cache_path=str(settings.cache_path),
@@ -136,6 +145,9 @@ class RuntimeSettingsService:
                     )
             settings.ytdlp_proxy_url = proxy
 
+        if payload.concurrent_ytdlp_search_enabled is not None:
+            settings.concurrent_ytdlp_search_enabled = payload.concurrent_ytdlp_search_enabled
+
         if payload.ffmpeg_path is not None:
             ffmpeg_input = payload.ffmpeg_path.strip()
             if not ffmpeg_input:
@@ -165,3 +177,57 @@ class RuntimeSettingsService:
         if candidate.exists():
             return str(candidate)
         return find_executable(value.split("/")[-1])
+
+    def get_ytdlp_version(self) -> YtDlpVersionResponse:
+        """Return currently active yt-dlp version."""
+        cmd = [settings.ytdlp_path, "--version"]
+        try:
+            result = subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=self.YTDLP_COMMAND_TIMEOUT_SECONDS,
+            )
+        except FileNotFoundError as error:
+            raise RuntimeError(f"yt-dlp binary not found: {settings.ytdlp_path}") from error
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("yt-dlp version check timed out") from error
+        except subprocess.CalledProcessError as error:
+            stderr = (error.stderr or "").strip()
+            raise RuntimeError(f"yt-dlp version check failed: {stderr or 'unknown error'}") from error
+
+        version = (result.stdout or "").strip()
+        if not version:
+            raise RuntimeError("yt-dlp version check returned empty output")
+        return YtDlpVersionResponse(version=version, binary_path=settings.ytdlp_path)
+
+    def update_ytdlp(self) -> YtDlpUpdateResponse:
+        """Run `yt-dlp -U` and return update summary."""
+        before = self.get_ytdlp_version()
+        cmd = [settings.ytdlp_path, "-U"]
+        try:
+            result = subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=self.YTDLP_COMMAND_TIMEOUT_SECONDS,
+            )
+        except FileNotFoundError as error:
+            raise RuntimeError(f"yt-dlp binary not found: {settings.ytdlp_path}") from error
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("yt-dlp update timed out") from error
+        except subprocess.CalledProcessError as error:
+            stderr = (error.stderr or "").strip()
+            raise RuntimeError(f"yt-dlp update failed: {stderr or 'unknown error'}") from error
+
+        after = self.get_ytdlp_version()
+        detail = ((result.stdout or "").strip() or "yt-dlp update command completed")[:500]
+        updated = before.version != after.version
+        return YtDlpUpdateResponse(
+            before_version=before.version,
+            after_version=after.version,
+            updated=updated,
+            detail=detail,
+        )

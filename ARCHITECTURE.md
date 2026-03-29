@@ -70,6 +70,18 @@ The queue page uses a hybrid update model:
 
 This is applied at command build time, so new operations use updated proxy settings immediately without app restart.
 
+## Concurrent search mode
+
+- Runtime settings expose `concurrent_ytdlp_search_enabled` through:
+  - `GET /api/settings/`
+  - `PATCH /api/settings/`
+- In `services/youtube_service.py`, search behavior is:
+  - Disabled: single yt-dlp search for original query
+  - Enabled + query contains `karaoke` (case-insensitive substring): single search
+  - Enabled + query without `karaoke`: two concurrent searches (`query` and `query + " karaoke"`)
+- Results are merged as interleaved/staggered entries (normal, karaoke, normal, ...),
+  de-duplicated by `video_id`, then capped to requested `max_results`.
+
 ## Design principles
 - Keep the MVP CLI-friendly and easy to run locally
 - Prefer local filesystem storage for media artifacts

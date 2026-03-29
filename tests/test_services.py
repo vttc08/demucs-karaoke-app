@@ -802,6 +802,164 @@ def test_runtime_settings_update_settings_rejects_invalid_proxy_url():
         service.update_settings(RuntimeSettingsUpdateRequest(ytdlp_proxy_url="ftp://proxy.local:21"))
 
 
+def test_runtime_settings_get_ytdlp_version():
+    """yt-dlp version check should return parsed version string."""
+    service = RuntimeSettingsService()
+    with patch("services.runtime_settings_service.subprocess.run") as mock_run:
+        mock_run.return_value = Mock(stdout="2026.03.15\n")
+        result = service.get_ytdlp_version()
+    assert result.version == "2026.03.15"
+    assert result.binary_path == settings.ytdlp_path
+
+
+def test_runtime_settings_update_ytdlp_reports_updated():
+    """yt-dlp update should report updated when version changes."""
+    service = RuntimeSettingsService()
+    with patch.object(
+        RuntimeSettingsService,
+        "get_ytdlp_version",
+        side_effect=[
+            Mock(version="2026.03.01", binary_path="/usr/bin/yt-dlp"),
+            Mock(version="2026.03.15", binary_path="/usr/bin/yt-dlp"),
+        ],
+    ):
+        with patch("services.runtime_settings_service.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(stdout="Updated yt-dlp")
+            result = service.update_ytdlp()
+    assert result.updated is True
+    assert result.before_version == "2026.03.01"
+    assert result.after_version == "2026.03.15"
+
+
+def test_runtime_settings_update_ytdlp_reports_up_to_date():
+    """yt-dlp update should report no change when version is unchanged."""
+    service = RuntimeSettingsService()
+    with patch.object(
+        RuntimeSettingsService,
+        "get_ytdlp_version",
+        side_effect=[
+            Mock(version="2026.03.15", binary_path="/usr/bin/yt-dlp"),
+            Mock(version="2026.03.15", binary_path="/usr/bin/yt-dlp"),
+        ],
+    ):
+        with patch("services.runtime_settings_service.subprocess.run") as mock_run:
+            mock_run.return_value = Mock(stdout="yt-dlp is up to date")
+            result = service.update_ytdlp()
+    assert result.updated is False
+    assert result.before_version == "2026.03.15"
+    assert result.after_version == "2026.03.15"
+
+
+def test_runtime_settings_update_settings_accepts_concurrent_search_toggle():
+    """Runtime settings should accept concurrent search boolean updates."""
+    service = RuntimeSettingsService()
+    original_value = settings.concurrent_ytdlp_search_enabled
+    try:
+        with patch.object(
+            RuntimeSettingsService,
+            "get_demucs_health",
+            return_value=DemucsHealthResponse(
+                api_url="http://127.0.0.1:8001",
+                healthy=True,
+                detail="Demucs service is healthy",
+            ),
+        ):
+            result = service.update_settings(
+                RuntimeSettingsUpdateRequest(concurrent_ytdlp_search_enabled=True)
+            )
+        assert result.concurrent_ytdlp_search_enabled is True
+    finally:
+        settings.concurrent_ytdlp_search_enabled = original_value
+
+
+@patch("services.youtube_service.YtDlpAdapter")
+def test_youtube_service_search_concurrent_staggered_when_enabled(mock_ytdlp):
+    """Concurrent mode should stagger normal and karaoke-appended results."""
+    original_enabled = settings.concurrent_ytdlp_search_enabled
+    settings.concurrent_ytdlp_search_enabled = True
+    mock_instance = Mock()
+    mock_instance.search.side_effect = [
+        [
+            {"video_id": "n1", "title": "Normal 1", "channel": "C", "thumbnail": "t1"},
+            {"video_id": "n2", "title": "Normal 2", "channel": "C", "thumbnail": "t2"},
+        ],
+        [
+            {"video_id": "k1", "title": "Karaoke 1", "channel": "C", "thumbnail": "t3"},
+            {"video_id": "k2", "title": "Karaoke 2", "channel": "C", "thumbnail": "t4"},
+        ],
+    ]
+    mock_ytdlp.return_value = mock_instance
+    try:
+        service = YouTubeService()
+        results = service.search("queen bohemian", max_results=4)
+    finally:
+        settings.concurrent_ytdlp_search_enabled = original_enabled
+    assert [r.video_id for r in results] == ["n1", "k1", "n2", "k2"]
+    assert mock_instance.search.call_count == 2
+
+
+@patch("services.youtube_service.YtDlpAdapter")
+def test_youtube_service_search_single_when_query_has_karaoke(mock_ytdlp):
+    """Concurrent mode should bypass when query already contains karaoke."""
+    original_enabled = settings.concurrent_ytdlp_search_enabled
+    settings.concurrent_ytdlp_search_enabled = True
+    mock_instance = Mock()
+    mock_instance.search.return_value = [
+        {"video_id": "a1", "title": "Result", "channel": "C", "thumbnail": "t1"}
+    ]
+    mock_ytdlp.return_value = mock_instance
+    try:
+        service = YouTubeService()
+        results = service.search("queen karaoke", max_results=5)
+    finally:
+        settings.concurrent_ytdlp_search_enabled = original_enabled
+    assert [r.video_id for r in results] == ["a1"]
+    assert mock_instance.search.call_count == 1
+
+
+@patch("services.youtube_service.YtDlpAdapter")
+def test_youtube_service_search_single_when_feature_disabled(mock_ytdlp):
+    """Feature disabled should keep single-search behavior."""
+    original_enabled = settings.concurrent_ytdlp_search_enabled
+    settings.concurrent_ytdlp_search_enabled = False
+    mock_instance = Mock()
+    mock_instance.search.return_value = [
+        {"video_id": "a1", "title": "Result", "channel": "C", "thumbnail": "t1"}
+    ]
+    mock_ytdlp.return_value = mock_instance
+    try:
+        service = YouTubeService()
+        service.search("queen bohemian", max_results=5)
+    finally:
+        settings.concurrent_ytdlp_search_enabled = original_enabled
+    assert mock_instance.search.call_count == 1
+
+
+@patch("services.youtube_service.YtDlpAdapter")
+def test_youtube_service_search_concurrent_dedupes_video_ids(mock_ytdlp):
+    """Interleaved concurrent results should dedupe repeated video ids."""
+    original_enabled = settings.concurrent_ytdlp_search_enabled
+    settings.concurrent_ytdlp_search_enabled = True
+    mock_instance = Mock()
+    mock_instance.search.side_effect = [
+        [
+            {"video_id": "same", "title": "Normal", "channel": "C", "thumbnail": "t1"},
+            {"video_id": "n2", "title": "Normal 2", "channel": "C", "thumbnail": "t2"},
+        ],
+        [
+            {"video_id": "same", "title": "Karaoke", "channel": "C", "thumbnail": "t3"},
+            {"video_id": "k2", "title": "Karaoke 2", "channel": "C", "thumbnail": "t4"},
+        ],
+    ]
+    mock_ytdlp.return_value = mock_instance
+    try:
+        service = YouTubeService()
+        results = service.search("query", max_results=10)
+    finally:
+        settings.concurrent_ytdlp_search_enabled = original_enabled
+    assert [r.video_id for r in results] == ["same", "n2", "k2"]
+
+
 def test_queue_service_build_media_url_for_media_and_cache(tmp_path):
     """Queue service should map filesystem paths to stable API URLs."""
     service = QueueService()

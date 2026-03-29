@@ -25,8 +25,10 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] demucs API microservice as configurable options for cpu, cuda, demucs model and mp3 output
 - [x] real time application push instead of polling
 - [x] yt-dlp refinement, fix bugs with video downloading and less errors
-- [ ] concurrent ytdlp search for karaoke phrase and settings page
+- [x] check/update yt-dlp version from settings UI
+- [x] concurrent ytdlp search for karaoke phrase and settings page and filter for results
 - [x] configure proxy settings for YTDLP
+- [ ] ffmpeg microservice
 - [ ] custom playback engine, since some browser don't autoplay
 - [ ] background splash, show qrcode
 - [ ] database improvement, periodic and manual cleanup of failed songs and already played/skipped

@@ -1,4 +1,5 @@
 """YouTube service for search and download."""
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List
 from adapters.ytdlp import YtDlpAdapter
@@ -27,7 +28,7 @@ class YouTubeService:
         Returns:
             List of search results
         """
-        results = self.ytdlp.search(query, max_results)
+        results = self._search_results(query, max_results)
         normalized = []
         for result in results:
             if not result.get("thumbnail") and result.get("video_id"):
@@ -39,6 +40,44 @@ class YouTubeService:
                 }
             normalized.append(result)
         return [YouTubeSearchResult(**result) for result in normalized]
+
+    def _search_results(self, query: str, max_results: int) -> List[dict]:
+        """Search with optional concurrent karaoke query strategy."""
+        if not settings.concurrent_ytdlp_search_enabled:
+            return self.ytdlp.search(query, max_results)
+        if "karaoke" in query.lower():
+            return self.ytdlp.search(query, max_results)
+
+        karaoke_query = f"{query} karaoke"
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            base_future = executor.submit(self.ytdlp.search, query, max_results)
+            karaoke_future = executor.submit(self.ytdlp.search, karaoke_query, max_results)
+            base_results = base_future.result()
+            karaoke_results = karaoke_future.result()
+        merged = self._stagger_and_dedupe(base_results, karaoke_results)
+        return merged[:max_results]
+
+    @staticmethod
+    def _stagger_and_dedupe(base_results: List[dict], karaoke_results: List[dict]) -> List[dict]:
+        """Interleave base/karaoke lists and dedupe by video_id preserving order."""
+        merged: List[dict] = []
+        max_len = max(len(base_results), len(karaoke_results))
+        for index in range(max_len):
+            if index < len(base_results):
+                merged.append(base_results[index])
+            if index < len(karaoke_results):
+                merged.append(karaoke_results[index])
+
+        deduped: List[dict] = []
+        seen_video_ids = set()
+        for item in merged:
+            video_id = item.get("video_id")
+            if video_id and video_id in seen_video_ids:
+                continue
+            if video_id:
+                seen_video_ids.add(video_id)
+            deduped.append(item)
+        return deduped
 
     def download_audio(self, youtube_id: str) -> Path:
         """

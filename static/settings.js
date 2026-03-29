@@ -1,5 +1,7 @@
 const SETTINGS_API = `${window.location.origin}/api/settings/`;
 const DEMUCS_HEALTH_API = `${window.location.origin}/api/settings/demucs-health`;
+const YTDLP_VERSION_API = `${window.location.origin}/api/settings/ytdlp/version`;
+const YTDLP_UPDATE_API = `${window.location.origin}/api/settings/ytdlp/update`;
 
 const form = document.getElementById("settings-form");
 const saveBtn = document.getElementById("save-settings-btn");
@@ -8,6 +10,10 @@ const statusEl = document.getElementById("settings-status");
 const saveFeedback = document.getElementById("save-feedback");
 const saveFeedbackIcon = document.getElementById("save-feedback-icon");
 const saveFeedbackText = document.getElementById("save-feedback-text");
+const refreshYtdlpVersionBtn = document.getElementById("refresh-ytdlp-version-btn");
+const updateYtdlpBtn = document.getElementById("update-ytdlp-btn");
+const ytdlpVersionText = document.getElementById("ytdlp-version-text");
+const ytdlpUpdateStatus = document.getElementById("ytdlp-update-status");
 const engineStatusDot = document.getElementById("engine-status-dot");
 const engineStatusText = document.getElementById("engine-status-text");
 const lastSyncText = document.getElementById("last-sync-text");
@@ -27,6 +33,7 @@ const fields = {
     cache_path: document.getElementById("cache_path"),
     ytdlp_path: document.getElementById("ytdlp_path"),
     ytdlp_proxy_url: document.getElementById("ytdlp_proxy_url"),
+    concurrent_ytdlp_search_enabled: document.getElementById("concurrent_ytdlp_search_enabled"),
     ffmpeg_path: document.getElementById("ffmpeg_path"),
 };
 
@@ -128,6 +135,75 @@ function setFormState(disabled) {
     });
 }
 
+function setYtdlpActionsState(disabled) {
+    if (refreshYtdlpVersionBtn) {
+        refreshYtdlpVersionBtn.disabled = disabled;
+    }
+    if (updateYtdlpBtn) {
+        updateYtdlpBtn.disabled = disabled;
+    }
+}
+
+function setYtdlpStatus(message, isError = false) {
+    if (!ytdlpUpdateStatus) {
+        return;
+    }
+    ytdlpUpdateStatus.textContent = message;
+    ytdlpUpdateStatus.classList.toggle("text-error", isError);
+    ytdlpUpdateStatus.classList.toggle("text-on-surface-variant", !isError);
+}
+
+async function checkYtdlpVersion() {
+    if (!ytdlpVersionText) {
+        return;
+    }
+    setYtdlpActionsState(true);
+    setYtdlpStatus("Checking yt-dlp version...");
+    try {
+        const response = await fetch(YTDLP_VERSION_API);
+        if (!response.ok) {
+            const errorPayload = await response.json();
+            throw new Error(errorPayload.detail || "Failed to check yt-dlp version");
+        }
+        const data = await response.json();
+        ytdlpVersionText.textContent = data.version;
+        setYtdlpStatus(`Current version: ${data.version}`);
+    } catch (error) {
+        setYtdlpStatus(String(error.message || "Failed to check yt-dlp version"), true);
+    } finally {
+        setYtdlpActionsState(false);
+    }
+}
+
+async function updateYtdlp() {
+    if (!ytdlpVersionText) {
+        return;
+    }
+    setYtdlpActionsState(true);
+    setYtdlpStatus("Updating yt-dlp via -U...");
+    try {
+        const response = await fetch(YTDLP_UPDATE_API, {method: "POST"});
+        if (!response.ok) {
+            const errorPayload = await response.json();
+            throw new Error(errorPayload.detail || "Failed to update yt-dlp");
+        }
+        const data = await response.json();
+        ytdlpVersionText.textContent = data.after_version;
+        if (data.updated) {
+            setYtdlpStatus(`Updated ${data.before_version} -> ${data.after_version}`);
+            showSaveFeedback("yt-dlp updated successfully.", false);
+        } else {
+            setYtdlpStatus(`Already up to date (${data.after_version})`);
+            showSaveFeedback("yt-dlp is already up to date.", false);
+        }
+    } catch (error) {
+        setYtdlpStatus(String(error.message || "Failed to update yt-dlp"), true);
+        showSaveFeedback(String(error.message || "Failed to update yt-dlp"), true);
+    } finally {
+        setYtdlpActionsState(false);
+    }
+}
+
 function applySettingsToForm(data) {
     fields.demucs_api_url.value = data.demucs_api_url || "";
     fields.demucs_model.value = data.demucs_model || "htdemucs";
@@ -140,6 +216,7 @@ function applySettingsToForm(data) {
     fields.cache_path.value = data.cache_path || "";
     fields.ytdlp_path.value = data.ytdlp_path || "";
     fields.ytdlp_proxy_url.value = data.ytdlp_proxy_url || "";
+    fields.concurrent_ytdlp_search_enabled.checked = Boolean(data.concurrent_ytdlp_search_enabled);
     fields.ffmpeg_path.value = data.ffmpeg_path || "";
     updateDemucsOutputUi();
 }
@@ -194,6 +271,7 @@ async function saveSettings() {
         cache_path: fields.cache_path.value.trim(),
         ytdlp_path: fields.ytdlp_path.value.trim(),
         ytdlp_proxy_url: fields.ytdlp_proxy_url.value.trim(),
+        concurrent_ytdlp_search_enabled: fields.concurrent_ytdlp_search_enabled.checked,
         ffmpeg_path: fields.ffmpeg_path.value.trim(),
     };
     if (fields.demucs_output_format.value === "mp3") {
@@ -268,6 +346,12 @@ if (reloadBtn) {
 if (fields.demucs_output_format) {
     fields.demucs_output_format.addEventListener("change", updateDemucsOutputUi);
 }
+if (refreshYtdlpVersionBtn) {
+    refreshYtdlpVersionBtn.addEventListener("click", checkYtdlpVersion);
+}
+if (updateYtdlpBtn) {
+    updateYtdlpBtn.addEventListener("click", updateYtdlp);
+}
 
 const persistedState = readPersistedEngineStatus();
 if (persistedState?.state && persistedState?.detail) {
@@ -275,3 +359,4 @@ if (persistedState?.state && persistedState?.detail) {
 }
 
 loadSettings();
+checkYtdlpVersion();

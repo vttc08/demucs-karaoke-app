@@ -105,10 +105,36 @@
                         <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">yt-dlp Path</span>
                         <input id="ytdlp_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
                     </label>
+                    <div class="rounded-xl border border-white/10 bg-surface-container-highest/20 p-3">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">yt-dlp Version</p>
+                                <p id="ytdlp-version-text" class="truncate text-sm font-semibold text-on-surface">Unknown</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button id="refresh-ytdlp-version-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-primary/30 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60">
+                                    <span class="material-symbols-outlined text-sm">refresh</span>
+                                    Check
+                                </button>
+                                <button id="update-ytdlp-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-on-primary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
+                                    <span class="material-symbols-outlined text-sm">system_update</span>
+                                    Update
+                                </button>
+                            </div>
+                        </div>
+                        <p id="ytdlp-update-status" class="mt-2 text-xs text-on-surface-variant">Use check to read current version, then update via yt-dlp -U.</p>
+                    </div>
                     <label class="flex flex-col gap-1.5">
                         <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">yt-dlp Proxy URL</span>
                         <input id="ytdlp_proxy_url" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" placeholder="http://user:pass@proxy:8080 or socks5://proxy:1080" />
                         <span class="text-[11px] text-on-surface-variant/80">Leave empty for direct connection.</span>
+                    </label>
+                    <label class="flex items-center justify-between gap-3 rounded-lg bg-surface-container-highest/40 px-4 py-3">
+                        <div>
+                            <span class="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Concurrent yt-dlp Search</span>
+                            <span class="text-xs text-on-surface-variant/80">Run query + query with “karaoke” in parallel (skips when query already contains karaoke).</span>
+                        </div>
+                        <input id="concurrent_ytdlp_search_enabled" type="checkbox" class="h-5 w-5 accent-primary" />
                     </label>
                     <label class="flex flex-col gap-1.5">
                         <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">FFmpeg Path</span>

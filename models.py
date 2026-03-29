@@ -93,6 +93,7 @@ class RuntimeSettingsResponse(BaseModel):
     ffmpeg_crf: int
     ytdlp_path: str
     ytdlp_proxy_url: str
+    concurrent_ytdlp_search_enabled: bool
     ffmpeg_path: str
     media_path: str
     cache_path: str
@@ -110,9 +111,26 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     ffmpeg_crf: Optional[int] = None
     ytdlp_path: Optional[str] = None
     ytdlp_proxy_url: Optional[str] = None
+    concurrent_ytdlp_search_enabled: Optional[bool] = None
     ffmpeg_path: Optional[str] = None
     media_path: Optional[str] = None
     cache_path: Optional[str] = None
+
+
+class YtDlpVersionResponse(BaseModel):
+    """yt-dlp version details."""
+
+    version: str
+    binary_path: str
+
+
+class YtDlpUpdateResponse(BaseModel):
+    """Result of a yt-dlp self-update attempt."""
+
+    before_version: str
+    after_version: str
+    updated: bool
+    detail: str
 
 
 class DemucsRequest(BaseModel):
