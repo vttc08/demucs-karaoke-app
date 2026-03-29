@@ -37,3 +37,5 @@ Tailwind and frontend conventions:
   - Keep JS scoped and minimal in `static/`.
 - Prefer progressive enhancement and mobile-first responsive behavior.
 
+Frontend testing and validation: 
+- To test the frontend implementations and UI elements, you can use playwright skills and test the app on http://localhost:port
