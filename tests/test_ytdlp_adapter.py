@@ -172,3 +172,52 @@ def test_download_includes_proxy_when_configured(monkeypatch, tmp_path):
     cmd = captured_cmd["cmd"]
     assert "--proxy" in cmd
     assert "http://127.0.0.1:3128" in cmd
+
+
+def test_get_video_info_parses_single_json(monkeypatch):
+    """Single video info fetch should parse --dump-single-json response."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    captured_cmd = {}
+
+    def fake_run(cmd, capture_output, text, check, timeout):
+        captured_cmd["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout='{"id":"dQw4w9WgXcQ","title":"Song","uploader":"Channel","duration_string":"3:33","thumbnail":"https://i.ytimg.com/x.jpg"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = adapter.get_video_info("https://youtu.be/dQw4w9WgXcQ")
+    assert result["video_id"] == "dQw4w9WgXcQ"
+    assert result["title"] == "Song"
+    assert "--dump-single-json" in captured_cmd["cmd"]
+
+
+def test_get_video_info_fallback_without_extractor_args(monkeypatch):
+    """Metadata fetch should fallback to default client when web client fails."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    calls = []
+
+    def fake_run(cmd, capture_output, text, check, timeout):
+        calls.append(cmd)
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(
+                returncode=1,
+                cmd=cmd,
+                stderr=b"ERROR: [youtube] FQUTyz0WfOM: Requested format is not available.",
+            )
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout='{"id":"FQUTyz0WfOM","title":"Song","uploader":"Channel"}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = adapter.get_video_info("https://www.youtube.com/watch?v=FQUTyz0WfOM")
+    assert result["video_id"] == "FQUTyz0WfOM"
+    assert len(calls) == 2
+    assert "--extractor-args" in calls[0]
+    assert "--extractor-args" not in calls[1]

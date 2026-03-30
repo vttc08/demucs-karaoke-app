@@ -95,6 +95,95 @@ class YtDlpAdapter:
         logger.info("YouTube search completed query=%r result_count=%s", query, len(videos))
         return videos
 
+    def get_video_info(self, video_url: str) -> Dict[str, Any]:
+        """
+        Fetch metadata for a single YouTube video URL.
+
+        Args:
+            video_url: Full YouTube URL
+
+        Returns:
+            Video metadata dictionary
+
+        Raises:
+            RuntimeError: If metadata fetch fails
+        """
+        attempts = [
+            ("web", True),
+            (None, False),
+        ]
+        logger.info("Fetching YouTube metadata url=%r", video_url)
+        last_error = "unknown metadata failure"
+        video_data = None
+
+        for idx, (client, use_extractor_args) in enumerate(attempts):
+            cmd = [
+                self.ytdlp_path,
+                video_url,
+                "--dump-single-json",
+                "--skip-download",
+                "--no-playlist",
+                "--no-warnings",
+            ]
+            if use_extractor_args and client:
+                cmd[2:2] = ["--extractor-args", f"youtube:player_client={client}"]
+            cmd.extend(self._proxy_args())
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=30,
+                )
+                video_data = json.loads((result.stdout or "").strip())
+                break
+            except subprocess.TimeoutExpired:
+                logger.error("YouTube metadata fetch timed out url=%r", video_url)
+                raise RuntimeError("YouTube metadata fetch timed out. Please try again.")
+            except subprocess.CalledProcessError as e:
+                stderr = self._decode_stderr(e.stderr)
+                last_error = self._extract_relevant_error(stderr, e.returncode)
+                remaining = len(attempts) - (idx + 1)
+                if remaining > 0 and "Requested format is not available" in last_error:
+                    logger.info(
+                        "Metadata fallback: format unavailable (client=%s), trying next strategy",
+                        client or "<default>",
+                    )
+                elif remaining > 0:
+                    logger.info(
+                        "Metadata fallback: attempt failed (client=%s), trying next strategy",
+                        client or "<default>",
+                    )
+                else:
+                    logger.error(
+                        "YouTube metadata fetch failed url=%r client=%s error=%s",
+                        video_url,
+                        client or "<default>",
+                        last_error,
+                    )
+            except FileNotFoundError:
+                logger.error("yt-dlp not found path=%s", self.ytdlp_path)
+                raise RuntimeError("yt-dlp not found. Please install it: pip install yt-dlp")
+            except json.JSONDecodeError:
+                last_error = "Invalid yt-dlp metadata response"
+                logger.error(
+                    "Failed to decode yt-dlp single json url=%r client=%s",
+                    video_url,
+                    client or "<default>",
+                )
+
+        if not video_data:
+            raise RuntimeError(f"YouTube metadata fetch failed: {last_error[:200]}")
+
+        return {
+            "video_id": video_data.get("id"),
+            "title": video_data.get("title"),
+            "channel": video_data.get("uploader", video_data.get("channel")),
+            "duration": video_data.get("duration_string"),
+            "thumbnail": video_data.get("thumbnail"),
+        }
+
     def download_audio(self, youtube_id: str, output_dir: Path) -> Path:
         """
         Download audio from YouTube video.

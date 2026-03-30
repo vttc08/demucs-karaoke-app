@@ -1,6 +1,7 @@
 """YouTube service for search and download."""
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import re
 from typing import List
 from adapters.ytdlp import YtDlpAdapter
 from models import YouTubeSearchResult
@@ -9,6 +10,12 @@ from config import settings
 
 class YouTubeService:
     """Service for YouTube operations."""
+
+    YOUTUBE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{11}$")
+    YOUTUBE_URL_PATTERN = re.compile(
+        r"^(https?://)?(www\.)?(youtube\.com/watch\?[^ ]*v=|youtu\.be/)([A-Za-z0-9_-]{11})",
+        re.IGNORECASE,
+    )
 
     def __init__(self):
         self.ytdlp = YtDlpAdapter()
@@ -43,6 +50,10 @@ class YouTubeService:
 
     def _search_results(self, query: str, max_results: int) -> List[dict]:
         """Search with optional concurrent karaoke query strategy."""
+        youtube_url = self._extract_youtube_url(query)
+        if youtube_url:
+            return [self.ytdlp.get_video_info(youtube_url)]
+
         if not settings.concurrent_ytdlp_search_enabled:
             return self.ytdlp.search(query, max_results)
         if "karaoke" in query.lower():
@@ -56,6 +67,22 @@ class YouTubeService:
             karaoke_results = karaoke_future.result()
         merged = self._stagger_and_dedupe(base_results, karaoke_results)
         return merged[:max_results]
+
+    @classmethod
+    def _extract_youtube_url(cls, query: str) -> str | None:
+        """Return normalized YouTube URL when query looks like a YouTube link."""
+        text = query.strip()
+        if not text:
+            return None
+        if cls.YOUTUBE_ID_PATTERN.match(text):
+            return f"https://www.youtube.com/watch?v={text}"
+        match = cls.YOUTUBE_URL_PATTERN.search(text)
+        if not match:
+            return None
+        url = text
+        if not url.lower().startswith(("http://", "https://")):
+            url = f"https://{url}"
+        return url
 
     @staticmethod
     def _stagger_and_dedupe(base_results: List[dict], karaoke_results: List[dict]) -> List[dict]:

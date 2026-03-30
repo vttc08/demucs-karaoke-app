@@ -76,6 +76,7 @@ This is applied at command build time, so new operations use updated proxy setti
   - `GET /api/settings/`
   - `PATCH /api/settings/`
 - In `services/youtube_service.py`, search behavior is:
+  - Query looks like YouTube URL or 11-char video id: single metadata fetch (`yt-dlp --dump-single-json`) and return one addable result
   - Disabled: single yt-dlp search for original query
   - Enabled + query contains `karaoke` (case-insensitive substring): single search
   - Enabled + query without `karaoke`: two concurrent searches (`query` and `query + " karaoke"`)

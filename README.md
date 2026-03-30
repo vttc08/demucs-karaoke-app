@@ -79,6 +79,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
 
 1. **Queue Page** (Mobile): Open `http://<server-ip>:8000/queue`
    - Search for songs
+   - Or paste a YouTube link / video id directly to add external search results
    - Toggle "Karaoke mode" checkbox
    - Optionally toggle "Burn lyrics" (enabled only in karaoke mode)
    - Add to queue

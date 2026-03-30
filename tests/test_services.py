@@ -288,6 +288,51 @@ def test_youtube_service_search_uses_thumbnail_fallback(mock_ytdlp):
 
 
 @patch("services.youtube_service.YtDlpAdapter")
+def test_youtube_service_search_detects_youtube_url(mock_ytdlp):
+    """YouTube URL query should resolve via single-video metadata fetch."""
+    mock_instance = Mock()
+    mock_instance.get_video_info.return_value = {
+        "video_id": "dQw4w9WgXcQ",
+        "title": "Never Gonna Give You Up",
+        "channel": "RickAstleyVEVO",
+        "duration": "3:33",
+        "thumbnail": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+    }
+    mock_ytdlp.return_value = mock_instance
+
+    service = YouTubeService()
+    results = service.search("https://youtu.be/dQw4w9WgXcQ")
+
+    assert len(results) == 1
+    assert results[0].video_id == "dQw4w9WgXcQ"
+    mock_instance.get_video_info.assert_called_once()
+    mock_instance.search.assert_not_called()
+
+
+@patch("services.youtube_service.YtDlpAdapter")
+def test_youtube_service_search_detects_raw_youtube_id(mock_ytdlp):
+    """11-char YouTube IDs should be treated as direct video input."""
+    mock_instance = Mock()
+    mock_instance.get_video_info.return_value = {
+        "video_id": "dQw4w9WgXcQ",
+        "title": "Direct ID",
+        "channel": "Channel",
+        "duration": "1:00",
+        "thumbnail": None,
+    }
+    mock_ytdlp.return_value = mock_instance
+
+    service = YouTubeService()
+    results = service.search("dQw4w9WgXcQ")
+
+    assert len(results) == 1
+    assert results[0].video_id == "dQw4w9WgXcQ"
+    called_url = mock_instance.get_video_info.call_args[0][0]
+    assert called_url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    mock_instance.search.assert_not_called()
+
+
+@patch("services.youtube_service.YtDlpAdapter")
 def test_youtube_service_download_video_with_audio(mock_ytdlp):
     """Test progressive video+audio download delegation."""
     mock_instance = Mock()
