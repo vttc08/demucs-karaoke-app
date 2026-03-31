@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+
+{% block title %}Stage View - Karaoke{% endblock %}
+{% block header_icon %}live_tv{% endblock %}
+{% block header_title %}Stage View{% endblock %}
+{% block header_subtitle %}Presentation Output{% endblock %}
+
+{% block head %}
+<style>
+    #stage-page:fullscreen,
+    #stage-page:-webkit-full-screen {
+        background: #000;
+        overflow: hidden;
+        padding-top: 0;
+    }
+
+    .stage-media:fullscreen,
+    .stage-media:-webkit-full-screen {
+        background: #000;
+        width: 100vw;
+        height: 100vh;
+        min-height: 100vh;
+        border-radius: 0;
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+        cursor: none;
+    }
+
+    .stage-media:fullscreen .stage-topbar,
+    .stage-media:-webkit-full-screen .stage-topbar,
+    .stage-media:fullscreen .stage-chrome--upnext,
+    .stage-media:-webkit-full-screen .stage-chrome--upnext {
+        display: none !important;
+    }
+
+    .stage-media:fullscreen #stage-video-player,
+    .stage-media:-webkit-full-screen #stage-video-player {
+        height: 100vh;
+        min-height: 100vh;
+        width: 100vw;
+    }
+
+    .stage-controls-shell {
+        transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .stage-media.is-fullscreen .stage-controls-shell {
+        opacity: 0;
+        transform: translateY(12px);
+        pointer-events: none;
+    }
+
+    .stage-media.is-fullscreen.is-controls-visible .stage-controls-shell {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+
+    .stage-media.is-fullscreen.is-controls-visible {
+        cursor: default;
+    }
+
+    .stage-media.is-fullscreen .stage-topbar {
+        opacity: 0;
+        transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .stage-media.is-fullscreen.is-controls-visible .stage-topbar {
+        opacity: 1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="stage-page" class="min-h-screen bg-surface pt-20">
+    <main class="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[1800px] flex-col gap-4 px-3 pb-3 sm:px-4 sm:pb-4">
+        {% if current %}
+        <section class="stage-media relative flex-1 overflow-hidden rounded-xl bg-black">
+            <video
+                id="stage-video-player"
+                class="block h-full min-h-[50vh] w-full object-contain bg-black"
+                autoplay
+                playsinline
+            >
+                <source src="{{ current.media_path }}" type="video/mp4">
+                Your browser does not support video playback.
+            </video>
+
+            <div class="stage-topbar pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-4 py-3 sm:px-5">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Now Playing</p>
+                        <h2 class="mt-1 truncate text-lg font-semibold text-on-surface sm:text-2xl">{{ current.title }}</h2>
+                        {% if current.artist %}
+                        <p class="truncate text-sm text-on-surface-variant">{{ current.artist }}</p>
+                        {% endif %}
+                    </div>
+                    <span class="inline-flex shrink-0 items-center rounded-full bg-black/50 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-on-surface">
+                        {{ "Karaoke" if current.is_karaoke else "Original" }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="stage-controls-shell pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-3 pb-3 sm:px-5 sm:pb-5">
+                <div id="stage-controls" class="stage-chrome pointer-events-auto flex w-full max-w-5xl items-center justify-between gap-3 rounded-full border border-white/10 bg-black/55 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur-xl sm:px-4 sm:py-3">
+                    <div class="inline-flex items-center gap-2">
+                        <button
+                            id="play-pause-btn"
+                            class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                        >
+                            <span id="play-pause-icon" class="material-symbols-outlined text-base">pause</span>
+                            <span id="play-pause-label">Pause</span>
+                        </button>
+                        <button
+                            id="skip-btn"
+                            class="inline-flex items-center gap-2 rounded-full bg-primary/85 px-3 py-2 text-sm font-semibold text-on-primary transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                        >
+                            <span class="material-symbols-outlined text-base">skip_next</span>
+                            Skip
+                        </button>
+                    </div>
+                    <button
+                        id="fullscreen-btn"
+                        class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                    >
+                        <span id="fullscreen-icon" class="material-symbols-outlined text-base">fullscreen</span>
+                        <span id="fullscreen-label">Fullscreen</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <aside class="stage-chrome stage-chrome--upnext rounded-xl bg-surface-container-low px-4 py-3 sm:px-5">
+            <div class="flex items-center justify-between gap-3">
+                <h3 class="text-sm font-semibold uppercase tracking-[0.15em] text-on-surface-variant">Up Next</h3>
+                <span id="up-next-count" class="text-xs text-on-surface-variant"></span>
+            </div>
+            <div id="queue-preview" class="mt-2 flex flex-wrap gap-2.5">
+                {% set upcoming = queue | rejectattr('status', 'equalto', 'playing') | list %}
+                {% if upcoming %}
+                    {% for item in upcoming[:5] %}
+                    <div class="min-w-0 grow rounded-full bg-surface-container-high px-3 py-2 sm:grow-0">
+                        <p class="truncate text-sm font-medium text-on-surface">{{ item.title }}</p>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-sm text-on-surface-variant">No upcoming songs</p>
+                {% endif %}
+            </div>
+        </aside>
+        {% else %}
+        <section class="stage-chrome flex flex-1 flex-col items-center justify-center rounded-xl bg-surface-container-low p-8 text-center">
+            <span class="material-symbols-outlined mb-4 text-6xl text-on-surface-variant/80">queue_music</span>
+            <h2 class="text-2xl font-semibold text-on-surface sm:text-3xl">Queue Empty</h2>
+            <p class="mt-2 max-w-xl text-on-surface-variant">No songs are ready for stage playback. Add songs from the queue page.</p>
+        </section>
+        {% endif %}
+    </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const API_BASE = window.location.origin;
+const currentItemId = {{ (current.id if current else None) | tojson }};
+const video = document.getElementById("stage-video-player");
+const queuePreview = document.getElementById("queue-preview");
+const upNextCount = document.getElementById("up-next-count");
+const playPauseBtn = document.getElementById("play-pause-btn");
+const playPauseIcon = document.getElementById("play-pause-icon");
+const playPauseLabel = document.getElementById("play-pause-label");
+const skipBtn = document.getElementById("skip-btn");
+const fullscreenBtn = document.getElementById("fullscreen-btn");
+const fullscreenIcon = document.getElementById("fullscreen-icon");
+const fullscreenLabel = document.getElementById("fullscreen-label");
+const stageMedia = document.querySelector(".stage-media");
+let isReloading = false;
+let controlsHideTimer = null;
+
+function safeReload() {
+    if (isReloading) return;
+    isReloading = true;
+    window.location.reload();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text || "";
+    return div.innerHTML;
+}
+
+function updatePlayPauseUi() {
+    if (!video || !playPauseIcon || !playPauseLabel) return;
+    const isPaused = video.paused;
+    playPauseIcon.textContent = isPaused ? "play_arrow" : "pause";
+    playPauseLabel.textContent = isPaused ? "Play" : "Pause";
+}
+
+function updateFullscreenUi() {
+    if (!fullscreenIcon || !fullscreenLabel) return;
+    const inFullscreen = !!document.fullscreenElement;
+    fullscreenIcon.textContent = inFullscreen ? "fullscreen_exit" : "fullscreen";
+    fullscreenLabel.textContent = inFullscreen ? "Exit Fullscreen" : "Fullscreen";
+}
+
+function isFullscreenActive() {
+    return !!document.fullscreenElement;
+}
+
+function showStageControls() {
+    if (!stageMedia) return;
+
+    stageMedia.classList.add("is-controls-visible");
+
+    if (controlsHideTimer) {
+        window.clearTimeout(controlsHideTimer);
+        controlsHideTimer = null;
+    }
+
+    if (isFullscreenActive() && video && !video.paused) {
+        controlsHideTimer = window.setTimeout(() => {
+            stageMedia.classList.remove("is-controls-visible");
+        }, 1000);
+    }
+}
+
+function scheduleHideStageControls() {
+    if (!stageMedia || !isFullscreenActive() || !video || video.paused) {
+        return;
+    }
+
+    showStageControls();
+}
+
+function syncFullscreenState() {
+    if (!stageMedia) return;
+
+    const active = isFullscreenActive();
+    stageMedia.classList.toggle("is-fullscreen", active);
+
+    if (active) {
+        showStageControls();
+    } else {
+        if (controlsHideTimer) {
+            window.clearTimeout(controlsHideTimer);
+            controlsHideTimer = null;
+        }
+        stageMedia.classList.remove("is-controls-visible", "is-fullscreen");
+    }
+}
+
+function renderQueuePreview(queue) {
+    if (!queuePreview || !upNextCount) return;
+
+    const upcoming = queue.filter((item) => item.status !== "playing").slice(0, 5);
+    upNextCount.textContent = upcoming.length ? `${upcoming.length} queued` : "";
+
+    if (upcoming.length === 0) {
+        queuePreview.innerHTML = '<p class="text-sm text-on-surface-variant">No upcoming songs</p>';
+        return;
+    }
+
+    queuePreview.innerHTML = upcoming
+        .map((item) => `
+            <div class="min-w-0 grow rounded-full bg-surface-container-high px-3 py-2 sm:grow-0">
+                <p class="truncate text-sm font-medium text-on-surface">${escapeHtml(item.title)}</p>
+            </div>
+        `)
+        .join("");
+}
+
+async function completeCurrentSong() {
+    const response = await fetch(`${API_BASE}/api/queue/complete-current`, { method: "POST" });
+    if (!response.ok) {
+        throw new Error("Failed to complete current song");
+    }
+}
+
+async function skipCurrentSong() {
+    const response = await fetch(`${API_BASE}/api/queue/skip`, { method: "POST" });
+    if (!response.ok) {
+        throw new Error("Skip failed");
+    }
+}
+
+if (video) {
+    video.addEventListener("ended", async () => {
+        try {
+            await completeCurrentSong();
+        } catch (error) {
+            console.error("Failed to advance after playback ended:", error);
+        } finally {
+            safeReload();
+        }
+    });
+
+    video.addEventListener("play", updatePlayPauseUi);
+    video.addEventListener("pause", updatePlayPauseUi);
+    video.addEventListener("play", showStageControls);
+    video.addEventListener("pause", showStageControls);
+    updatePlayPauseUi();
+}
+
+if (playPauseBtn && video) {
+    playPauseBtn.addEventListener("click", async () => {
+        if (video.paused) {
+            try {
+                await video.play();
+            } catch (error) {
+                console.error("Play failed:", error);
+            }
+        } else {
+            video.pause();
+        }
+        updatePlayPauseUi();
+    });
+}
+
+if (skipBtn) {
+    skipBtn.addEventListener("click", async () => {
+        skipBtn.disabled = true;
+        try {
+            await skipCurrentSong();
+            safeReload();
+        } catch (error) {
+            console.error("Skip failed:", error);
+            skipBtn.disabled = false;
+        }
+    });
+}
+
+if (fullscreenBtn) {
+    fullscreenBtn.addEventListener("click", async () => {
+        try {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+            } else {
+                if (stageMedia && stageMedia.requestFullscreen) {
+                    await stageMedia.requestFullscreen({
+                        navigationUI: "hide",
+                    });
+                }
+            }
+        } catch (error) {
+            console.error("Fullscreen toggle failed:", error);
+        } finally {
+            updateFullscreenUi();
+        }
+    });
+}
+
+if (stageMedia) {
+    stageMedia.addEventListener("mousemove", showStageControls);
+    stageMedia.addEventListener("mouseenter", showStageControls);
+    stageMedia.addEventListener("touchstart", showStageControls, { passive: true });
+    stageMedia.addEventListener("focusin", showStageControls);
+    stageMedia.addEventListener("mouseleave", scheduleHideStageControls);
+}
+
+window.addEventListener("keydown", async (event) => {
+    const target = event.target;
+    const isTypingTarget = target instanceof HTMLElement && (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.tagName === "SELECT" ||
+        target.isContentEditable
+    );
+
+    if (isTypingTarget || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+    }
+
+    if (event.code === "Space") {
+        event.preventDefault();
+        if (video) {
+            if (video.paused) {
+                await video.play();
+            } else {
+                video.pause();
+            }
+            showStageControls();
+        }
+        return;
+    }
+
+    if (event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        if (document.fullscreenElement) {
+            await document.exitFullscreen();
+        } else if (stageMedia && stageMedia.requestFullscreen) {
+            await stageMedia.requestFullscreen({ navigationUI: "hide" });
+        }
+        return;
+    }
+
+    if (event.key === "Escape" && document.fullscreenElement) {
+        event.preventDefault();
+        await document.exitFullscreen();
+    }
+});
+
+document.addEventListener("fullscreenchange", () => {
+    syncFullscreenState();
+    updateFullscreenUi();
+});
+syncFullscreenState();
+updateFullscreenUi();
+
+async function pollStageState() {
+    try {
+        const [currentResponse, queueResponse] = await Promise.all([
+            fetch(`${API_BASE}/api/queue/current`),
+            fetch(`${API_BASE}/api/queue/`)
+        ]);
+
+        if (!currentResponse.ok || !queueResponse.ok) return;
+
+        const serverCurrent = await currentResponse.json();
+        const queue = await queueResponse.json();
+        const serverCurrentId = serverCurrent ? serverCurrent.id : null;
+
+        if (serverCurrentId !== currentItemId) {
+            safeReload();
+            return;
+        }
+
+        renderQueuePreview(queue);
+    } catch (error) {
+        console.error("Stage poll failed:", error);
+    }
+}
+
+setInterval(pollStageState, 5000);
+</script>
+{% endblock %}

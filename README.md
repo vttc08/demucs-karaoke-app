@@ -90,10 +90,16 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
    - Shows upcoming queue
     - Auto-advances when song ends
 
-3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
-     - View current runtime settings
-     - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and yt-dlp proxy URL
-     - Enable/disable concurrent yt-dlp search mode
+3. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
+   - Presentation-first stage output with fullscreen-optimized player
+   - Minimal controls overlay (play/pause, skip, fullscreen)
+   - Compact "up next" chips without queue-management actions
+   - Auto-advances when song ends
+
+4. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
+      - View current runtime settings
+      - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and yt-dlp proxy URL
+      - Enable/disable concurrent yt-dlp search mode
      - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
      - Apply settings immediately without restarting the app (for processing/runtime behavior)
      - If media/cache paths are changed, restart the app so static file mounts use the new paths

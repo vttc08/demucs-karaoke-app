@@ -354,6 +354,14 @@ GET /playback
 
 TV display page for auto-playing queue.
 
+### Stage View Page (Presentation Output)
+```
+GET /stage
+```
+
+Presentation-first stage player optimized for fullscreen output on desktop and mobile desktop mode.
+Uses minimal overlay controls (play/pause, skip, fullscreen) and compact up-next context.
+
 ### Settings Page (Mobile/Desktop)
 ```
 GET /settings

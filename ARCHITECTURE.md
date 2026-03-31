@@ -5,12 +5,22 @@ This project currently uses two services:
 
 1. Main app
 - serves mobile queue page and TV playback page
+- serves stage-focused presentation page
 - manages queue state
 - searches YouTube
 - downloads video/audio
 - fetches lyrics
 - calls Demucs service
 - generates output karaoke video
+
+## Playback surfaces
+
+- `/playback`: legacy TV playback page with fuller playback context.
+- `/stage`: presentation-first stage output page for fullscreen display, minimal controls,
+  and compact "up next" context.
+- Both pages currently use the same queue lifecycle endpoints (`/api/queue/current`,
+  `/api/queue/`, `/api/queue/complete-current`, `/api/queue/skip`) so behavior remains
+  deterministic while remote-control and websocket-first stage controls are added later.
 
 2. Demucs service
 - receives audio processing request

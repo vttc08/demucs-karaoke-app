@@ -172,6 +172,14 @@ def test_playback_page_loads(client):
     assert b"Queue Empty" in response.content or b"Now Playing" in response.content
 
 
+def test_stage_page_loads(client):
+    """Test stage page renders."""
+    response = client.get("/stage")
+    assert response.status_code == 200
+    assert b"Stage View" in response.content
+    assert b"Queue Empty" in response.content or b"Now Playing" in response.content
+
+
 def test_settings_page_loads(client):
     """Test settings page renders."""
     response = client.get("/settings")
