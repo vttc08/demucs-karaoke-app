@@ -124,6 +124,21 @@ under a stable `/cache/...` URL prefix.
 
 ---
 
+### Generate QR Code
+```
+GET /api/qr?data=<text>&size=<pixels>
+```
+
+**Parameters:**
+- `data` (string, required): Payload to encode inside the QR code (max 1024 characters).
+- `size` (number, optional): Approximate width/height of the resulting PNG (defaults to `256`, accepted range `64-1024`).
+
+**Response:**
+- Returns a binary `image/png` payload containing the QR code.
+- Uses the bundled `segno` library with a fixed dark-on-light palette so no external QR service is required.
+
+---
+
 ### Get Current Item
 ```
 GET /api/queue/current

@@ -553,3 +553,11 @@ def test_websocket_broadcasts_queue_cleared(client):
             websocket.send_json({"type": "pong"})
             event = websocket.receive_json()
         assert event["type"] == "queue_cleared"
+
+
+def test_qr_endpoint_returns_png(client):
+    """QR endpoint should respond with PNG data."""
+    response = client.get("/api/qr", params={"data": "stage-karaoke", "size": 256})
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert len(response.content) > 0

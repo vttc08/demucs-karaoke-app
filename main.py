@@ -12,7 +12,7 @@ if __name__ == "__main__":
     os.environ["KARAOKE_RELOAD_ACTIVE"] = "1"
 
 from logging_config import configure_logging
-from routes import media_files, pages, queue, search, settings as settings_routes
+from routes import media_files, pages, queue, qr as qr_routes, search, settings as settings_routes
 import logging
 
 configure_logging()
@@ -59,6 +59,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(media_files.router)
 app.include_router(pages.router)
 app.include_router(queue.router)
+app.include_router(qr_routes.router)
 app.include_router(search.router)
 app.include_router(settings_routes.router)
 
