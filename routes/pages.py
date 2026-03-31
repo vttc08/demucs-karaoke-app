@@ -5,10 +5,12 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from database import get_db
 from services.queue_service import QueueService
+from services.runtime_settings_service import RuntimeSettingsService
 
 router = APIRouter(tags=["pages"])
 templates = Jinja2Templates(directory="templates")
 queue_service = QueueService()
+runtime_settings_service = RuntimeSettingsService()
 
 
 @router.get("/")
@@ -42,9 +44,15 @@ async def stage_page(request: Request, db: Session = Depends(get_db)):
     """Presentation-first stage player page."""
     current_item = queue_service.get_current_or_promote_next(db)
     queue_items = queue_service.get_queue(db)
+    runtime_settings = runtime_settings_service.get_settings()
     return templates.TemplateResponse(
         "stage.html",
-        {"request": request, "current": current_item, "queue": queue_items},
+        {
+            "request": request,
+            "current": current_item,
+            "queue": queue_items,
+            "stage_qr_url": runtime_settings.stage_qr_url,
+        },
     )
 
 

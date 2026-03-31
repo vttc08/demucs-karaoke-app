@@ -97,6 +97,7 @@ class RuntimeSettingsResponse(BaseModel):
     ffmpeg_path: str
     media_path: str
     cache_path: str
+    stage_qr_url: str
 
 
 class RuntimeSettingsUpdateRequest(BaseModel):
@@ -115,6 +116,7 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     ffmpeg_path: Optional[str] = None
     media_path: Optional[str] = None
     cache_path: Optional[str] = None
+    stage_qr_url: Optional[str] = None
 
 
 class YtDlpVersionResponse(BaseModel):

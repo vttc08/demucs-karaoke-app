@@ -45,6 +45,7 @@ def client():
     original_ffmpeg_path = settings.ffmpeg_path
     original_media_path = settings.media_path
     original_cache_path = settings.cache_path
+    original_stage_qr_url = settings.stage_qr_url
 
     Base.metadata.create_all(bind=engine)
     yield TestClient(app)
@@ -60,6 +61,7 @@ def client():
     settings.ffmpeg_path = original_ffmpeg_path
     settings.media_path = original_media_path
     settings.cache_path = original_cache_path
+    settings.stage_qr_url = original_stage_qr_url
     Base.metadata.drop_all(bind=engine)
 
 
@@ -207,6 +209,7 @@ def test_get_runtime_settings(client):
     assert "cache_path" in data
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
+    assert "stage_qr_url" in data
 
 
 def test_update_runtime_settings(client):
@@ -227,6 +230,7 @@ def test_update_runtime_settings(client):
             "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
             "concurrent_ytdlp_search_enabled": True,
             "ffmpeg_path": "ffmpeg",
+            "stage_qr_url": "https://karaoke.test/queue",
         },
     )
     assert response.status_code == 200
@@ -242,6 +246,7 @@ def test_update_runtime_settings(client):
     assert data["cache_path"] == "/tmp/karaoke_cache_test"
     assert data["ytdlp_proxy_url"] == "socks5://127.0.0.1:1080"
     assert data["concurrent_ytdlp_search_enabled"] is True
+    assert data["stage_qr_url"] == "https://karaoke.test/queue"
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
 

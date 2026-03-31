@@ -63,6 +63,7 @@ class RuntimeSettingsService:
             ffmpeg_path=settings.ffmpeg_path,
             media_path=str(settings.media_path),
             cache_path=str(settings.cache_path),
+            stage_qr_url=settings.stage_qr_url,
         )
 
     def get_settings(self) -> RuntimeSettingsResponse:
@@ -165,6 +166,9 @@ class RuntimeSettingsService:
             if not cache_path_input:
                 raise ValueError("cache_path cannot be empty")
             settings.cache_path = Path(cache_path_input)
+
+        if payload.stage_qr_url is not None:
+            settings.stage_qr_url = payload.stage_qr_url.strip()
 
         settings.ensure_paths()
         demucs_health = self.get_demucs_health()

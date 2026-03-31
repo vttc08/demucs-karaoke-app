@@ -187,6 +187,7 @@
 {% block scripts %}
 <script>
 const API_BASE = window.location.origin;
+const SERVER_STAGE_QR_URL = {{ (stage_qr_url or "") | tojson }};
 const currentItemId = {{ (current.id if current else None) | tojson }};
 const video = document.getElementById("stage-video-player");
 const queuePreview = document.getElementById("queue-preview");
@@ -203,7 +204,6 @@ const qrOverlay = document.getElementById("stage-qr-overlay");
 const qrImage = document.getElementById("stage-qr-image");
 const qrLabel = document.getElementById("stage-qr-label");
 const stageMedia = document.querySelector(".stage-media");
-const STAGE_QR_URL_STORAGE_KEY = "karaoke.stageQrUrl";
 const QR_CODE_ENDPOINT = `${API_BASE}/api/qr`;
 const QR_IMAGE_SIZE = 320;
 let isReloading = false;
@@ -237,13 +237,7 @@ function updateFullscreenUi() {
 }
 
 function resolveStageQrUrl() {
-    let configured = "";
-    try {
-        configured = (localStorage.getItem(STAGE_QR_URL_STORAGE_KEY) || "").trim();
-    } catch (_) {
-        configured = "";
-    }
-
+    const configured = (SERVER_STAGE_QR_URL || "").trim();
     if (configured) {
         return configured;
     }

@@ -2,7 +2,6 @@ const SETTINGS_API = `${window.location.origin}/api/settings/`;
 const DEMUCS_HEALTH_API = `${window.location.origin}/api/settings/demucs-health`;
 const YTDLP_VERSION_API = `${window.location.origin}/api/settings/ytdlp/version`;
 const YTDLP_UPDATE_API = `${window.location.origin}/api/settings/ytdlp/update`;
-
 const form = document.getElementById("settings-form");
 const saveBtn = document.getElementById("save-settings-btn");
 const reloadBtn = document.getElementById("reload-settings-btn");
@@ -35,6 +34,7 @@ const fields = {
     ytdlp_proxy_url: document.getElementById("ytdlp_proxy_url"),
     concurrent_ytdlp_search_enabled: document.getElementById("concurrent_ytdlp_search_enabled"),
     ffmpeg_path: document.getElementById("ffmpeg_path"),
+    stage_qr_url: document.getElementById("stage_qr_url"),
 };
 
 function setStatus(message, isError = false) {
@@ -218,6 +218,9 @@ function applySettingsToForm(data) {
     fields.ytdlp_proxy_url.value = data.ytdlp_proxy_url || "";
     fields.concurrent_ytdlp_search_enabled.checked = Boolean(data.concurrent_ytdlp_search_enabled);
     fields.ffmpeg_path.value = data.ffmpeg_path || "";
+    if (fields.stage_qr_url) {
+        fields.stage_qr_url.value = data.stage_qr_url || "";
+    }
     updateDemucsOutputUi();
 }
 
@@ -273,6 +276,7 @@ async function saveSettings() {
         ytdlp_proxy_url: fields.ytdlp_proxy_url.value.trim(),
         concurrent_ytdlp_search_enabled: fields.concurrent_ytdlp_search_enabled.checked,
         ffmpeg_path: fields.ffmpeg_path.value.trim(),
+        stage_qr_url: fields.stage_qr_url ? fields.stage_qr_url.value.trim() : "",
     };
     if (fields.demucs_output_format.value === "mp3") {
         payload.demucs_mp3_bitrate = Number(fields.demucs_mp3_bitrate.value);
