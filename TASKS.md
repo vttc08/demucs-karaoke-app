@@ -35,7 +35,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] manage playback on other devices
 - [ ] database improvement, periodic and manual cleanup of failed songs and already played/skipped
 - [ ] fulltext and file search existing media
-- [ ] persist settings in database
+- [x] persist settings in database
 - [ ] integrate whisper (lang detect, word by word transcription), align lyrics if lyrics file present
 - [ ] explore client side lyrics compositing
 - [ ] explore client side multi-track playback and toggle vocals

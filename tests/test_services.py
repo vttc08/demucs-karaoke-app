@@ -10,12 +10,13 @@ from services.lyrics_service import LyricsService
 from services.demucs_client import DemucsClient
 from services.runtime_settings_service import RuntimeSettingsService
 from services.websocket_manager import ConnectionManager
-from config import settings
+from config import EXPLICIT_SETTINGS_FIELDS, settings
 from models import (
     Base,
     DemucsHealthResponse,
     QueueItem,
     QueueItemCreate,
+    RuntimeSetting,
     QueueStatus,
     RuntimeSettingsUpdateRequest,
 )
@@ -915,6 +916,81 @@ def test_runtime_settings_update_settings_accepts_concurrent_search_toggle():
         assert result.concurrent_ytdlp_search_enabled is True
     finally:
         settings.concurrent_ytdlp_search_enabled = original_value
+
+
+def test_runtime_settings_update_settings_persists_to_database(db_session):
+    """Updating settings with a DB session should persist selected values."""
+    service = RuntimeSettingsService()
+    original_stage_qr_url = settings.stage_qr_url
+    original_concurrent = settings.concurrent_ytdlp_search_enabled
+    try:
+        with patch.object(
+            RuntimeSettingsService,
+            "get_demucs_health",
+            return_value=DemucsHealthResponse(
+                api_url="http://127.0.0.1:8001",
+                healthy=True,
+                detail="Demucs service is healthy",
+            ),
+        ):
+            result = service.update_settings(
+                RuntimeSettingsUpdateRequest(
+                    concurrent_ytdlp_search_enabled=True,
+                    stage_qr_url="https://karaoke.test/stage",
+                ),
+                db_session,
+            )
+
+        assert result.concurrent_ytdlp_search_enabled is True
+        assert result.stage_qr_url == "https://karaoke.test/stage"
+
+        stored = {
+            row.key: row.value
+            for row in db_session.query(RuntimeSetting).all()
+        }
+        assert stored["concurrent_ytdlp_search_enabled"] == "true"
+        assert stored["stage_qr_url"] == "https://karaoke.test/stage"
+    finally:
+        settings.stage_qr_url = original_stage_qr_url
+        settings.concurrent_ytdlp_search_enabled = original_concurrent
+
+
+def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
+    """Persisted settings should be applied on startup when env does not override them."""
+    service = RuntimeSettingsService()
+    original_values = {
+        field: getattr(settings, field)
+        for field in RuntimeSettingsService.PERSISTED_SETTING_FIELDS
+    }
+    try:
+        db_session.add_all(
+            [
+                RuntimeSetting(key="demucs_model", value="persisted-model"),
+                RuntimeSetting(key="stage_qr_url", value="https://karaoke.test/stage"),
+                RuntimeSetting(key="ffmpeg_preset", value="veryslow"),
+            ]
+        )
+        db_session.commit()
+
+        settings.demucs_model = "temporary-model"
+        settings.stage_qr_url = ""
+
+        applied = service.load_persisted_settings(db_session)
+
+        assert "demucs_model" in applied
+        assert "stage_qr_url" in applied
+        assert settings.demucs_model == "persisted-model"
+        assert settings.stage_qr_url == "https://karaoke.test/stage"
+
+        explicit_field = next(
+            field
+            for field in RuntimeSettingsService.PERSISTED_SETTING_FIELDS
+            if field in EXPLICIT_SETTINGS_FIELDS
+        )
+        assert getattr(settings, explicit_field) == original_values[explicit_field]
+    finally:
+        for field, value in original_values.items():
+            setattr(settings, field, value)
 
 
 @patch("services.youtube_service.YtDlpAdapter")

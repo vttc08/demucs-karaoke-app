@@ -94,6 +94,28 @@ The stage page uses a websocket-first model:
 
 This is applied at command build time, so new operations use updated proxy settings immediately without app restart.
 
+## Runtime settings persistence
+
+- Runtime settings editable from the web UI are stored in the `runtime_settings` table as key/value rows.
+- The application loads those persisted values during startup after database initialization.
+- Explicit `.env` / environment values remain authoritative and are not overwritten by database values.
+- The settings update route writes validated UI changes back to the database and the in-memory `settings` object in the same request.
+- The persisted settings currently include:
+  - `demucs_api_url`
+  - `demucs_model`
+  - `demucs_device`
+  - `demucs_output_format`
+  - `demucs_mp3_bitrate`
+  - `ffmpeg_preset`
+  - `ffmpeg_crf`
+  - `ytdlp_path`
+  - `ytdlp_proxy_url`
+  - `concurrent_ytdlp_search_enabled`
+  - `ffmpeg_path`
+  - `media_path`
+  - `cache_path`
+  - `stage_qr_url`
+
 ## Concurrent search mode
 
 - Runtime settings expose `concurrent_ytdlp_search_enabled` through:

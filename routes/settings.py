@@ -1,5 +1,8 @@
 """API routes for runtime settings."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from database import get_db
 
 from models import (
     DemucsHealthResponse,
@@ -21,10 +24,12 @@ def get_runtime_settings():
 
 
 @router.patch("/", response_model=RuntimeSettingsResponse)
-def update_runtime_settings(payload: RuntimeSettingsUpdateRequest):
+def update_runtime_settings(
+    payload: RuntimeSettingsUpdateRequest, db: Session = Depends(get_db)
+):
     """Update runtime settings and apply immediately in-process."""
     try:
-        return runtime_settings_service.update_settings(payload)
+        return runtime_settings_service.update_settings(payload, db)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
 

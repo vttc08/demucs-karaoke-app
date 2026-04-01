@@ -252,6 +252,8 @@ Returns current in-memory runtime settings used by the application.
 This endpoint is optimized for fast page load and does not perform a live Demucs network probe.
 It returns cached/pending health indicators and the UI should call `/api/settings/demucs-health`
 for a real-time status refresh.
+Persisted runtime settings are loaded from the database during application startup, so this
+endpoint reflects the latest saved UI configuration after the app has booted.
 
 **Response:**
 ```json
@@ -282,6 +284,8 @@ PATCH /api/settings/
 ```
 
 Updates runtime settings immediately for new requests while the app is running.
+The validated values are also persisted to the `runtime_settings` table so they survive reloads
+and restarts when no explicit `.env` override is present.
 
 **Request Body (partial update supported):**
 ```json

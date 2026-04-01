@@ -4,16 +4,16 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
-from database import init_db
+from database import SessionLocal, init_db
 from config import settings
 
 # Must be set before logging configuration is imported/executed.
 if __name__ == "__main__":
     os.environ["KARAOKE_RELOAD_ACTIVE"] = "1"
 
+import logging
 from logging_config import configure_logging
 from routes import media_files, pages, queue, qr as qr_routes, search, settings as settings_routes
-import logging
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -36,6 +36,17 @@ async def lifespan(app: FastAPI):
 
     init_db()
     logger.info("Database initialized")
+
+    db = SessionLocal()
+    try:
+        applied_fields = settings_routes.runtime_settings_service.load_persisted_settings(db)
+    finally:
+        db.close()
+
+    if applied_fields:
+        logger.info("Loaded persisted runtime settings: %s", ", ".join(applied_fields))
+    else:
+        logger.info("No persisted runtime settings found")
 
     yield
     # Shutdown (cleanup if needed)

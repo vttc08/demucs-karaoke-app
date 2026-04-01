@@ -42,6 +42,7 @@ Current sprint goal:
 - Do not log secrets, credentials, or full sensitive payloads.
 - Prefer `logger.exception(...)` when handling unexpected exceptions to preserve stack traces.
 - Keep logs actionable and concise; avoid noisy per-line debug logging in normal flows.
+- Runtime-configurable settings must be persisted in the database as well as applied in-memory. When adding a new configurable setting, update the runtime settings table/model, startup load path, and save path together so reloads keep the latest UI changes.
 
 ## Required behavior for agents
 Before making changes, read:

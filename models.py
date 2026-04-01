@@ -41,6 +41,16 @@ class QueueItem(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class RuntimeSetting(Base):
+    """Persisted runtime setting stored as a key/value pair."""
+
+    __tablename__ = "runtime_settings"
+
+    key = Column(String, primary_key=True, index=True)
+    value = Column(String, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 # Pydantic models for API
 class YouTubeSearchResult(BaseModel):
     """YouTube search result."""

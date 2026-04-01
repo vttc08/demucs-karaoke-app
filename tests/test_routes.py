@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from main import app
 from database import get_db
-from models import Base, QueueItem, QueueStatus
+from models import Base, DemucsHealthResponse, QueueItem, QueueStatus, RuntimeSetting
 from config import settings
 
 # Test database
@@ -249,6 +249,39 @@ def test_update_runtime_settings(client):
     assert data["stage_qr_url"] == "https://karaoke.test/queue"
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
+
+
+def test_update_runtime_settings_persists_to_database(client):
+    """Runtime settings updates should be written to the database."""
+    with patch(
+        "routes.settings.runtime_settings_service.get_demucs_health",
+        return_value=DemucsHealthResponse(
+            api_url="http://127.0.0.1:9001",
+            healthy=True,
+            detail="Demucs service is healthy",
+        ),
+    ):
+        response = client.patch(
+            "/api/settings/",
+            json={
+                "stage_qr_url": "https://karaoke.test/queue",
+                "concurrent_ytdlp_search_enabled": True,
+            },
+        )
+    assert response.status_code == 200
+
+    db = TestingSessionLocal()
+    try:
+        stage_qr = db.query(RuntimeSetting).filter(RuntimeSetting.key == "stage_qr_url").first()
+        concurrent = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "concurrent_ytdlp_search_enabled"
+        ).first()
+        assert stage_qr is not None
+        assert stage_qr.value == "https://karaoke.test/queue"
+        assert concurrent is not None
+        assert concurrent.value == "true"
+    finally:
+        db.close()
 
 
 def test_get_demucs_health(client):

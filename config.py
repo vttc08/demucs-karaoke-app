@@ -88,3 +88,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+EXPLICIT_SETTINGS_FIELDS = frozenset(settings.model_fields_set)
