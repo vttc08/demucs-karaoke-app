@@ -18,9 +18,8 @@ This project currently uses two services:
 - `/playback`: legacy TV playback page with fuller playback context.
 - `/stage`: presentation-first stage output page for fullscreen display, minimal controls,
   and compact "up next" context.
-- Both pages currently use the same queue lifecycle endpoints (`/api/queue/current`,
-  `/api/queue/`, `/api/queue/complete-current`, `/api/queue/skip`) so behavior remains
-  deterministic while remote-control and websocket-first stage controls are added later.
+- `/playback` still uses polling-based queue/current synchronization.
+- `/stage` now uses websocket-first synchronization and control commands via `/api/queue/ws`.
 
 2. Demucs service
 - receives audio processing request
@@ -34,10 +33,23 @@ The queue page uses a hybrid update model:
 - Primary: WebSocket push at `/api/queue/ws`
 - Fallback: periodic polling from `static/queue.js` when WebSocket reconnect attempts are exhausted
 
+The stage page uses a websocket-first model:
+
+- Primary: WebSocket push and control commands at `/api/queue/ws`
+- Reconnect behavior: automatic reconnect loop from page script
+- No periodic polling loop on `/stage`
+
 ### WebSocket server flow
 
 - `routes/queue.py` hosts the WebSocket endpoint and heartbeat loop (server `ping`, client `pong`).
 - `services/websocket_manager.py` tracks active connections and broadcasts queue events.
+- `routes/queue.py` also accepts client `stage_command` messages (`play`, `pause`, `skip`).
+- For `play`/`pause`, the server broadcasts:
+  - `stage_control_command`
+  - `stage_state_update`
+- For `skip`, server-side queue skip logic runs and then broadcasts:
+  - `stage_control_command`
+  - `current_item_changed`
 - Queue REST routes broadcast immediate state changes:
   - `queue_item_added`
   - `queue_item_removed`
@@ -53,6 +65,8 @@ The queue page uses a hybrid update model:
 - On disconnect, it retries with exponential backoff (1s, 2s, 4s, 8s up to max attempts).
 - If retries fail, it falls back to polling every 15s.
 - Queue actions no longer rely on full-page reloads; UI updates are driven by pushed events.
+- Queue page now includes stage remote controls that send websocket `stage_command` messages.
+- Stage page consumes websocket queue events and stage-control events to stay in sync without polling.
 
 ## Software Stack
 

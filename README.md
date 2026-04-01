@@ -95,6 +95,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
    - Minimal controls overlay (play/pause, skip, fullscreen)
    - Compact "up next" chips without queue-management actions
    - Auto-advances when song ends
+   - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling
 
 4. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
       - View current runtime settings
@@ -125,6 +126,8 @@ See [docs/API.md](docs/API.md) for full API documentation.
   - Server heartbeat: `ping`
   - Client response: `pong`
   - Queue events: `queue_item_added`, `queue_item_updated`, `queue_item_removed`, `queue_cleared`, `current_item_changed`, `queue_item_failed`
+  - Stage control events: `stage_control_command`, `stage_state_update`
+  - Client command message: `stage_command` (`play`, `pause`, `skip`)
 
 ## Architecture
 
@@ -257,6 +260,7 @@ Karaoke mode requires Demucs service running. Configure `DEMUCS_API_URL` in `.en
 ### WebSocket troubleshooting
 
 - If real-time updates are unavailable, the queue page automatically falls back to periodic polling.
+- Stage view (`/stage`) is WebSocket-first and reconnects automatically for real-time updates/control.
 - Verify reverse proxy/network path allows WebSocket upgrade requests to `/api/queue/ws`.
 
 ### Remote Demucs (Windows + NVIDIA)

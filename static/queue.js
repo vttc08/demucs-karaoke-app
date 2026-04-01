@@ -6,6 +6,12 @@ const searchInput = document.getElementById('search-input');
 const searchBtn = document.getElementById('search-btn');
 const searchResults = document.getElementById('search-results');
 const queueList = document.getElementById('queue-list');
+const stageRemoteStatus = document.getElementById('stage-remote-status');
+const stageRemotePlayPauseBtn = document.getElementById('stage-remote-play-pause-btn');
+const stageRemotePlayPauseIcon = document.getElementById('stage-remote-play-pause-icon');
+const stageRemotePlayPauseLabel = document.getElementById('stage-remote-play-pause-label');
+const stageRemoteSkipBtn = document.getElementById('stage-remote-skip-btn');
+let stageRemotePaused = false;
 let demucsHealth = { healthy: true, detail: 'Health unknown' };
 
 searchBtn.addEventListener('click', performSearch);
@@ -471,6 +477,16 @@ class QueueWebSocket {
                 this.statusIndicator.style.display = 'inline-flex';
                 break;
         }
+        this.updateRemoteControlsState();
+    }
+
+    updateRemoteControlsState() {
+        const connected = this.ws && this.ws.readyState === WebSocket.OPEN;
+        if (stageRemotePlayPauseBtn) stageRemotePlayPauseBtn.disabled = !connected;
+        if (stageRemoteSkipBtn) stageRemoteSkipBtn.disabled = !connected;
+        if (stageRemoteStatus) {
+            stageRemoteStatus.textContent = connected ? 'Connected' : 'Offline';
+        }
     }
     
     connect() {
@@ -597,6 +613,9 @@ class QueueWebSocket {
             case 'queue_item_failed':
                 window.dispatchEvent(new CustomEvent('queue_item_failed', { detail: message.data }));
                 break;
+            case 'stage_state_update':
+                window.dispatchEvent(new CustomEvent('stage_state_update', { detail: message.data }));
+                break;
             default:
                 console.log('[WebSocket] Unknown message type:', message.type);
         }
@@ -605,7 +624,9 @@ class QueueWebSocket {
     send(data) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(data));
+            return true;
         }
+        return false;
     }
     
     disconnect() {
@@ -620,10 +641,54 @@ class QueueWebSocket {
     }
 }
 
+function updateStageRemotePlayPauseUi() {
+    if (!stageRemotePlayPauseIcon || !stageRemotePlayPauseLabel) return;
+    stageRemotePlayPauseIcon.textContent = stageRemotePaused ? 'play_arrow' : 'pause';
+    stageRemotePlayPauseLabel.textContent = stageRemotePaused ? 'Play' : 'Pause';
+}
+
 // Initialize WebSocket connection
 let queueWebSocket = null;
 if (window.location.pathname === '/queue' || window.location.pathname === '/') {
     queueWebSocket = new QueueWebSocket();
+}
+
+if (stageRemotePlayPauseBtn) {
+    stageRemotePlayPauseBtn.addEventListener('click', () => {
+        if (!queueWebSocket) return;
+        const command = stageRemotePaused ? 'play' : 'pause';
+        const sent = queueWebSocket.send({
+            type: 'stage_command',
+            data: {
+                command,
+                source: 'queue',
+            },
+            timestamp: Date.now(),
+        });
+        if (!sent) {
+            alert('Stage control is offline');
+            return;
+        }
+        stageRemotePaused = !stageRemotePaused;
+        updateStageRemotePlayPauseUi();
+    });
+}
+
+if (stageRemoteSkipBtn) {
+    stageRemoteSkipBtn.addEventListener('click', () => {
+        if (!queueWebSocket) return;
+        const sent = queueWebSocket.send({
+            type: 'stage_command',
+            data: {
+                command: 'skip',
+                source: 'queue',
+            },
+            timestamp: Date.now(),
+        });
+        if (!sent) {
+            alert('Stage control is offline');
+        }
+    });
 }
 
 // WebSocket event handlers
@@ -755,6 +820,14 @@ window.addEventListener('queue_item_failed', (event) => {
     refreshQueue(true);
 });
 
+window.addEventListener('stage_state_update', (event) => {
+    const isPaused = event.detail?.is_paused;
+    if (typeof isPaused === 'boolean') {
+        stageRemotePaused = isPaused;
+        updateStageRemotePlayPauseUi();
+    }
+});
+
 // Much gentler auto-refresh - only when user is not actively using search
 // Note: This is primarily for fallback mode when WebSocket is unavailable
 let refreshInterval;
@@ -773,6 +846,7 @@ if (!queueWebSocket) {
     startQueueRefresh();
 }
 refreshDemucsHealth();
+updateStageRemotePlayPauseUi();
 
 // Pause refresh during search interactions
 searchInput.addEventListener('focus', () => {

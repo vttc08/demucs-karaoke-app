@@ -161,7 +161,7 @@ def process_item(
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)):
     """WebSocket endpoint for real-time queue updates."""
     await manager.connect(websocket)
     
@@ -198,6 +198,49 @@ async def websocket_endpoint(websocket: WebSocket):
             # Handle pong response
             if data.get("type") == "pong":
                 logger.debug("Received pong from client")
+                continue
+
+            if data.get("type") == "stage_command":
+                payload = data.get("data")
+                if not isinstance(payload, dict):
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "data": {"detail": "Invalid stage_command payload"},
+                            "timestamp": asyncio.get_event_loop().time(),
+                        },
+                        websocket,
+                    )
+                    continue
+
+                command = payload.get("command")
+                source = payload.get("source", "unknown")
+                if command not in {"play", "pause", "skip"}:
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "data": {"detail": f"Unsupported stage command: {command}"},
+                            "timestamp": asyncio.get_event_loop().time(),
+                        },
+                        websocket,
+                    )
+                    continue
+
+                if command == "skip":
+                    current = queue_service.get_current_item(db)
+                    result = queue_service.skip_current_item(db)
+
+                    await manager.broadcast_stage_control_command(command=command, source=source)
+                    if result:
+                        await manager.broadcast_current_item_changed(
+                            result.id, current.id if current else None
+                        )
+                else:
+                    await manager.broadcast_stage_control_command(command=command, source=source)
+                    await manager.broadcast_stage_state_update(
+                        is_paused=(command == "pause"),
+                        source=source,
+                    )
                 continue
             
             # Handle other message types as needed

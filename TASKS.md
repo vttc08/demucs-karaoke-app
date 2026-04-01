@@ -31,8 +31,8 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] support direct YouTube link/id input in search box
 - [ ] ~~ffmpeg microservice~~
 - [x] custom playback engine 
-- [ ] background splash, show qrcode
-- [ ] manage playback on other devices
+- [x] background splash, show qrcode
+- [x] manage playback on other devices
 - [ ] database improvement, periodic and manual cleanup of failed songs and already played/skipped
 - [ ] fulltext and file search existing media
 - [ ] persist settings in database

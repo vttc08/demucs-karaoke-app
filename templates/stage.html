@@ -209,6 +209,7 @@ const QR_IMAGE_SIZE = 320;
 let isReloading = false;
 let controlsHideTimer = null;
 let isQrVisible = false;
+let stageSocket = null;
 
 function safeReload() {
     if (isReloading) return;
@@ -345,6 +346,94 @@ async function skipCurrentSong() {
     }
 }
 
+function connectStageWebSocket() {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/api/queue/ws`;
+    stageSocket = new WebSocket(wsUrl);
+
+    stageSocket.onmessage = async (event) => {
+        try {
+            const message = JSON.parse(event.data);
+            const messageType = message?.type;
+            if (messageType === "ping") {
+                sendStageCommandRaw({ type: "pong", timestamp: Date.now() });
+                return;
+            }
+            if (messageType === "current_item_changed") {
+                safeReload();
+                return;
+            }
+            if (messageType === "queue_item_added" || messageType === "queue_item_removed" || messageType === "queue_cleared") {
+                const queueResponse = await fetch(`${API_BASE}/api/queue/`);
+                if (queueResponse.ok) {
+                    const queue = await queueResponse.json();
+                    renderQueuePreview(queue);
+                }
+                return;
+            }
+            if (messageType === "queue_item_updated" || messageType === "queue_item_failed") {
+                const queueResponse = await fetch(`${API_BASE}/api/queue/`);
+                if (queueResponse.ok) {
+                    const queue = await queueResponse.json();
+                    renderQueuePreview(queue);
+                }
+                return;
+            }
+            if (messageType === "stage_control_command") {
+                const command = message?.data?.command;
+                if (!video) return;
+                if (command === "play" && video.paused) {
+                    await video.play();
+                } else if (command === "pause" && !video.paused) {
+                    video.pause();
+                } else if (command === "skip") {
+                    safeReload();
+                }
+                updatePlayPauseUi();
+                showStageControls();
+                return;
+            }
+            if (messageType === "stage_state_update") {
+                const isPaused = message?.data?.is_paused;
+                if (!video || typeof isPaused !== "boolean") return;
+                if (isPaused && !video.paused) {
+                    video.pause();
+                }
+                if (!isPaused && video.paused) {
+                    await video.play();
+                }
+                updatePlayPauseUi();
+            }
+        } catch (error) {
+            console.error("Failed to process stage websocket message:", error);
+        }
+    };
+
+    stageSocket.onclose = () => {
+        window.setTimeout(connectStageWebSocket, 1500);
+    };
+}
+
+function sendStageCommandRaw(payload) {
+    if (!stageSocket || stageSocket.readyState !== WebSocket.OPEN) {
+        return false;
+    }
+    stageSocket.send(JSON.stringify(payload));
+    return true;
+}
+
+function sendStageCommand(command) {
+    const sent = sendStageCommandRaw({
+        type: "stage_command",
+        data: {
+            command,
+            source: "stage",
+        },
+        timestamp: Date.now(),
+    });
+    return sent;
+}
+
 if (video) {
     video.addEventListener("ended", async () => {
         try {
@@ -365,14 +454,19 @@ if (video) {
 
 if (playPauseBtn && video) {
     playPauseBtn.addEventListener("click", async () => {
-        if (video.paused) {
-            try {
-                await video.play();
-            } catch (error) {
-                console.error("Play failed:", error);
+        const command = video.paused ? "play" : "pause";
+        if (!sendStageCommand(command)) {
+            if (video.paused) {
+                try {
+                    await video.play();
+                } catch (error) {
+                    console.error("Play failed:", error);
+                }
+            } else {
+                video.pause();
             }
         } else {
-            video.pause();
+            showStageControls();
         }
         updatePlayPauseUi();
     });
@@ -382,8 +476,10 @@ if (skipBtn) {
     skipBtn.addEventListener("click", async () => {
         skipBtn.disabled = true;
         try {
-            await skipCurrentSong();
-            safeReload();
+            if (!sendStageCommand("skip")) {
+                await skipCurrentSong();
+                safeReload();
+            }
         } catch (error) {
             console.error("Skip failed:", error);
             skipBtn.disabled = false;
@@ -478,31 +574,6 @@ document.addEventListener("fullscreenchange", () => {
 syncFullscreenState();
 updateFullscreenUi();
 updateQrOverlayContent();
-
-async function pollStageState() {
-    try {
-        const [currentResponse, queueResponse] = await Promise.all([
-            fetch(`${API_BASE}/api/queue/current`),
-            fetch(`${API_BASE}/api/queue/`)
-        ]);
-
-        if (!currentResponse.ok || !queueResponse.ok) return;
-
-        const serverCurrent = await currentResponse.json();
-        const queue = await queueResponse.json();
-        const serverCurrentId = serverCurrent ? serverCurrent.id : null;
-
-        if (serverCurrentId !== currentItemId) {
-            safeReload();
-            return;
-        }
-
-        renderQueuePreview(queue);
-    } catch (error) {
-        console.error("Stage poll failed:", error);
-    }
-}
-
-setInterval(pollStageState, 5000);
+connectStageWebSocket();
 </script>
 {% endblock %}

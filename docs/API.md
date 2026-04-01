@@ -7,6 +7,48 @@ http://localhost:8000
 
 ## Endpoints
 
+### Queue/Stage WebSocket
+```
+GET /api/queue/ws
+```
+
+WebSocket endpoint for real-time queue updates and stage control.
+
+**Server heartbeat:**
+- Server sends: `{"type":"ping","timestamp":...}`
+- Client responds: `{"type":"pong","timestamp":...}`
+
+**Client → server command message:**
+```json
+{
+  "type": "stage_command",
+  "data": {
+    "command": "play",
+    "source": "queue"
+  },
+  "timestamp": 1712345678901
+}
+```
+
+Allowed `command` values:
+- `play`
+- `pause`
+- `skip`
+
+**Server → client events (selected):**
+- Queue lifecycle:
+  - `queue_item_added`
+  - `queue_item_updated`
+  - `queue_item_removed`
+  - `queue_cleared`
+  - `current_item_changed`
+  - `queue_item_failed`
+- Stage control:
+  - `stage_control_command` with `{command, source}`
+  - `stage_state_update` with `{is_paused, source}`
+
+---
+
 ### Health Check
 ```
 GET /health

@@ -119,6 +119,28 @@ class ConnectionManager:
             },
             "timestamp": datetime.utcnow().isoformat()
         })
+
+    async def broadcast_stage_control_command(self, command: str, source: str = "unknown"):
+        """Broadcast a stage control command to all connected clients."""
+        await self.broadcast({
+            "type": "stage_control_command",
+            "data": {
+                "command": command,
+                "source": source,
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+    async def broadcast_stage_state_update(self, is_paused: bool, source: str = "unknown"):
+        """Broadcast stage playback state update to all connected clients."""
+        await self.broadcast({
+            "type": "stage_state_update",
+            "data": {
+                "is_paused": is_paused,
+                "source": source,
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        })
     
     def get_connection_count(self) -> int:
         """Get the number of active connections."""

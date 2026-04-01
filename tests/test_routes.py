@@ -560,6 +560,98 @@ def test_websocket_broadcasts_queue_cleared(client):
         assert event["type"] == "queue_cleared"
 
 
+def test_websocket_stage_command_pause_broadcasts_control_and_state(client):
+    """Pause stage command should broadcast control command and paused state."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {"command": "pause", "source": "queue"},
+                    "timestamp": 123,
+                }
+            )
+
+            control_event = receiver.receive_json()
+            if control_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                control_event = receiver.receive_json()
+            assert control_event["type"] == "stage_control_command"
+            assert control_event["data"]["command"] == "pause"
+            assert control_event["data"]["source"] == "queue"
+
+            state_event = receiver.receive_json()
+            if state_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                state_event = receiver.receive_json()
+            assert state_event["type"] == "stage_state_update"
+            assert state_event["data"]["is_paused"] is True
+
+
+def test_websocket_stage_command_skip_broadcasts_and_changes_current(client):
+    """Skip stage command should advance queue and broadcast item change."""
+    first = client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-stage-skip-1", "title": "WS Stage Skip 1", "is_karaoke": False},
+    ).json()
+    second = client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-stage-skip-2", "title": "WS Stage Skip 2", "is_karaoke": False},
+    ).json()
+
+    db = TestingSessionLocal()
+    try:
+        first_row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        second_row = db.query(QueueItem).filter(QueueItem.id == second["id"]).first()
+        first_row.status = QueueStatus.PLAYING
+        second_row.status = QueueStatus.READY
+        db.commit()
+    finally:
+        db.close()
+
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {"command": "skip", "source": "queue"},
+                    "timestamp": 123,
+                }
+            )
+
+            stage_control_event = None
+            current_changed_event = None
+            for _ in range(4):
+                event = receiver.receive_json()
+                if event["type"] == "ping":
+                    receiver.send_json({"type": "pong"})
+                    continue
+                if event["type"] == "stage_control_command":
+                    stage_control_event = event
+                if event["type"] == "current_item_changed":
+                    current_changed_event = event
+                if stage_control_event and current_changed_event:
+                    break
+
+            assert stage_control_event is not None
+            assert stage_control_event["data"]["command"] == "skip"
+            assert stage_control_event["data"]["source"] == "queue"
+            assert current_changed_event is not None
+            assert current_changed_event["data"]["id"] == second["id"]
+            assert current_changed_event["data"]["previous_id"] == first["id"]
+
+    current = client.get("/api/queue/current")
+    assert current.status_code == 200
+    current_payload = current.json()
+    assert current_payload is not None
+    assert current_payload["id"] == second["id"]
+
+
 def test_qr_endpoint_returns_png(client):
     """QR endpoint should respond with PNG data."""
     response = client.get("/api/qr", params={"data": "stage-karaoke", "size": 256})
