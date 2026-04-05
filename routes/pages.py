@@ -28,17 +28,6 @@ async def queue_page(request: Request, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/playback", response_class=HTMLResponse)
-async def playback_page(request: Request, db: Session = Depends(get_db)):
-    """TV playback page."""
-    current_item = queue_service.get_current_or_promote_next(db)
-    queue_items = queue_service.get_queue(db)
-    return templates.TemplateResponse(
-        "playback.html",
-        {"request": request, "current": current_item, "queue": queue_items},
-    )
-
-
 @router.get("/stage", response_class=HTMLResponse)
 async def stage_page(request: Request, db: Session = Depends(get_db)):
     """Presentation-first stage player page."""

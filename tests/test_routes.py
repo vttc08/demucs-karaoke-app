@@ -167,19 +167,18 @@ def test_queue_page_loads(client):
     assert b"Karaoke Queue" in response.content
 
 
-def test_playback_page_loads(client):
-    """Test playback page renders."""
-    response = client.get("/playback")
-    assert response.status_code == 200
-    assert b"Queue Empty" in response.content or b"Now Playing" in response.content
-
-
 def test_stage_page_loads(client):
     """Test stage page renders."""
     response = client.get("/stage")
     assert response.status_code == 200
     assert b"Stage View" in response.content
     assert b"Queue Empty" in response.content or b"Now Playing" in response.content
+
+
+def test_playback_page_is_removed(client):
+    """Legacy playback page should no longer be exposed."""
+    response = client.get("/playback")
+    assert response.status_code == 404
 
 
 def test_settings_page_loads(client):

@@ -415,13 +415,6 @@ GET /queue
 
 Mobile-friendly page for searching and queueing songs.
 
-### Playback Page (TV)
-```
-GET /playback
-```
-
-TV display page for auto-playing queue.
-
 ### Stage View Page (Presentation Output)
 ```
 GET /stage

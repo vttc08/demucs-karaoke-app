@@ -5,7 +5,7 @@ Lightweight AI-powered karaoke application for home use.
 ## Features
 
 - **Mobile Queue Page**: Search YouTube, add songs to queue
-- **TV Playback Page**: Auto-play queue with karaoke mode
+- **Stage Page**: Auto-play queue with karaoke mode
 - **Karaoke Mode**: Vocal removal + burned-in lyrics
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
@@ -85,19 +85,14 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
    - Add to queue
    - Queue status updates in real time (downloading, processing, ready, playing, failed)
    
-2. **Playback Page** (TV): Open `http://<server-ip>:8000/playback`
-   - Auto-plays current song
-   - Shows upcoming queue
-    - Auto-advances when song ends
-
-3. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
+2. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
    - Presentation-first stage output with fullscreen-optimized player
    - Minimal controls overlay (play/pause, skip, fullscreen)
    - Compact "up next" chips without queue-management actions
    - Auto-advances when song ends
    - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling
 
-4. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
+3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
       - View current runtime settings
       - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and yt-dlp proxy URL
       - Enable/disable concurrent yt-dlp search mode

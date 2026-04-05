@@ -4,7 +4,7 @@
 This project currently uses two services:
 
 1. Main app
-- serves mobile queue page and TV playback page
+- serves mobile queue page, stage page, and settings page
 - serves stage-focused presentation page
 - manages queue state
 - searches YouTube
@@ -12,14 +12,6 @@ This project currently uses two services:
 - fetches lyrics
 - calls Demucs service
 - generates output karaoke video
-
-## Playback surfaces
-
-- `/playback`: legacy TV playback page with fuller playback context.
-- `/stage`: presentation-first stage output page for fullscreen display, minimal controls,
-  and compact "up next" context.
-- `/playback` still uses polling-based queue/current synchronization.
-- `/stage` now uses websocket-first synchronization and control commands via `/api/queue/ws`.
 
 2. Demucs service
 - receives audio processing request

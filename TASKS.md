@@ -6,7 +6,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 ## Completed tasks ✓
 - [x] Create base FastAPI app structure
 - [x] Add mobile queue page
-- [x] Add TV playback page
+- [x] Add stage page
 - [x] Implement YouTube search endpoint
 - [x] Implement queue add/list/current endpoints
 - [x] Implement yt-dlp download adapter
@@ -33,7 +33,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] custom playback engine 
 - [x] background splash, show qrcode
 - [x] manage playback on other devices
-- [ ] database improvement, periodic and manual cleanup of failed songs and already played/skipped
+- [] database improvement, periodic and manual cleanup of failed songs and already played/skipped
 - [ ] fulltext and file search existing media
 - [x] persist settings in database
 - [ ] integrate whisper (lang detect, word by word transcription), align lyrics if lyrics file present
@@ -48,7 +48,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [ ] login page for device identification only, stored in local storage
 - [ ] real time join and enqueue feature
 - [ ] admin has ability to remove, skip or reorder queue
-- [ ] oidc authelia support
+- [] oidc authelia support
 
 ## Next steps (future sprints)
 - [x] Integrate real lyrics API (Genius/MusixMatch)
