@@ -98,7 +98,7 @@ class ConnectionManager:
             "timestamp": datetime.utcnow().isoformat()
         })
     
-    async def broadcast_current_item_changed(self, current_id: int, previous_id: int = None):
+    async def broadcast_current_item_changed(self, current_id: int | None, previous_id: int | None = None):
         """Broadcast when the currently playing item changes."""
         await self.broadcast({
             "type": "current_item_changed",

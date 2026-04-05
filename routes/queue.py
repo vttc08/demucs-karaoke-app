@@ -61,11 +61,12 @@ async def skip_current(db: Session = Depends(get_db)):
     """Skip current item and promote next ready item to playing."""
     current = queue_service.get_current_item(db)
     result = queue_service.skip_current_item(db)
-    
-    if result:
-        # Broadcast the change
-        await manager.broadcast_current_item_changed(result.id, current.id if current else None)
-    
+
+    await manager.broadcast_current_item_changed(
+        result.id if result else None,
+        current.id if current else None,
+    )
+
     return result
 
 
@@ -74,11 +75,12 @@ async def complete_current(db: Session = Depends(get_db)):
     """Complete current item and promote next ready item to playing."""
     current = queue_service.get_current_item(db)
     result = queue_service.complete_current_item(db)
-    
-    if result:
-        # Broadcast the change
-        await manager.broadcast_current_item_changed(result.id, current.id if current else None)
-    
+
+    await manager.broadcast_current_item_changed(
+        result.id if result else None,
+        current.id if current else None,
+    )
+
     return result
 
 
@@ -92,22 +94,22 @@ async def skip_to_item(item_id: int, db: Session = Depends(get_db)):
     if item.status != "ready":
         raise HTTPException(status_code=400, detail="Item is not ready for playback")
     
-    # Complete current item and set the target item as playing
     current = queue_service.get_current_item(db)
     previous_id = current.id if current else None
-    
-    if current:
-        queue_service.complete_current_item(db)
-    
-    # Set target item as playing
-    item.status = "playing"
+
+    if previous_id is not None and previous_id != item_id:
+        db.query(QueueItem).filter(QueueItem.id == previous_id).delete()
+
+    db.query(QueueItem).filter(
+        QueueItem.id != item_id, QueueItem.status == QueueStatus.PLAYING
+    ).update({QueueItem.status: QueueStatus.READY}, synchronize_session=False)
+    item.status = QueueStatus.PLAYING
     db.commit()
     db.refresh(item)
-    
-    # Broadcast the change
+
     await manager.broadcast_current_item_changed(item_id, previous_id)
-    
-    return QueueItemResponse.from_orm(item)
+
+    return queue_service._to_response(item)
 
 
 @router.delete("/{item_id}")
@@ -231,10 +233,10 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                     result = queue_service.skip_current_item(db)
 
                     await manager.broadcast_stage_control_command(command=command, source=source)
-                    if result:
-                        await manager.broadcast_current_item_changed(
-                            result.id, current.id if current else None
-                        )
+                    await manager.broadcast_current_item_changed(
+                        result.id if result else None,
+                        current.id if current else None,
+                    )
                 else:
                     await manager.broadcast_stage_control_command(command=command, source=source)
                     await manager.broadcast_stage_state_update(

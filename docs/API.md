@@ -109,13 +109,17 @@ If omitted, it defaults to `true`. For non-karaoke items, it is normalized to `f
 ```json
 {
   "id": 1,
+  "media_id": 1,
+  "position": 1000,
   "youtube_id": "dQw4w9WgXcQ",
   "title": "Song Title",
   "artist": "Artist Name",
   "is_karaoke": true,
   "burn_lyrics": true,
   "status": "pending",
-  "media_path": null,
+  "media_path": "/media/dQw4w9WgXcQ.mp4",
+  "lyrics_path": null,
+  "vocals_path": null,
   "error": null,
   "created_at": "2024-01-01T00:00:00"
 }
@@ -133,6 +137,8 @@ GET /api/queue/
 [
   {
     "id": 1,
+    "media_id": 1,
+    "position": 1000,
     "youtube_id": "dQw4w9WgXcQ",
     "title": "Song Title",
     "artist": "Artist Name",
@@ -140,6 +146,8 @@ GET /api/queue/
     "burn_lyrics": true,
     "status": "ready",
     "media_path": "/media/dQw4w9WgXcQ.mp4",
+    "lyrics_path": null,
+    "vocals_path": null,
     "error": null,
     "created_at": "2024-01-01T00:00:00"
   }
@@ -223,7 +231,7 @@ Triggers background processing of a queue item.
 POST /api/queue/skip
 ```
 
-Marks the currently playing item as `completed` and promotes the next `ready` item to `playing`.
+Removes the currently playing item from the active queue and promotes the next `ready` item to `playing`.
 
 **Response:**
 - Queue item object for the newly playing item, or `null` if no next item is available.
@@ -235,7 +243,7 @@ Marks the currently playing item as `completed` and promotes the next `ready` it
 POST /api/queue/complete-current
 ```
 
-Marks the currently playing item as `completed` and promotes the next `ready` item to `playing`.
+Removes the currently playing item from the active queue and promotes the next `ready` item to `playing`.
 This endpoint is used by playback `ended` handling for automatic queue advance.
 
 **Response:**
@@ -394,7 +402,6 @@ If already current:
 - `processing`: Processing (vocal removal, subtitle burn)
 - `ready`: Ready to play
 - `playing`: Currently playing
-- `completed`: Finished playing
 - `failed`: Processing failed (check `error` field)
 
 ---

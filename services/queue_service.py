@@ -1,13 +1,18 @@
 """Queue service for managing the karaoke queue."""
+import logging
 from pathlib import Path
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from models import QueueItem, QueueItemCreate, QueueItemResponse, QueueStatus
+from sqlalchemy import func
+from models import MediaItem, QueueItem, QueueItemCreate, QueueItemResponse, QueueStatus
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class QueueService:
     """Service for queue operations."""
+    POSITION_STEP = 1000
 
     def add_to_queue(
         self, db: Session, item: QueueItemCreate
@@ -22,19 +27,39 @@ class QueueService:
         Returns:
             Created queue item
         """
+        media_item = (
+            db.query(MediaItem)
+            .filter(MediaItem.youtube_id == item.youtube_id)
+            .first()
+        )
+        if media_item is None:
+            media_item = MediaItem(
+                youtube_id=item.youtube_id,
+                title=item.title,
+                artist=item.artist,
+                media_path=f"/media/{item.youtube_id}.mp4",
+                missing=True,
+            )
+            db.add(media_item)
+            db.flush()
+
+        if not media_item.title and item.title:
+            media_item.title = item.title
+        if not media_item.artist and item.artist:
+            media_item.artist = item.artist
+
         db_item = QueueItem(
-            youtube_id=item.youtube_id,
-            title=item.title,
-            artist=item.artist,
-            is_karaoke=item.is_karaoke,
-            burn_lyrics=(item.burn_lyrics if item.is_karaoke else False),
+            media_id=media_item.id,
+            position=self.append_to_end(db),
+            requested_karaoke=item.is_karaoke,
+            requested_burn_lyrics=(item.burn_lyrics if item.is_karaoke else False),
             status=QueueStatus.PENDING,
         )
         db.add(db_item)
         db.commit()
         db.refresh(db_item)
-        
-        return QueueItemResponse.model_validate(db_item)
+
+        return self._to_response(db_item)
 
     def get_queue(
         self, db: Session, limit: int = 50
@@ -59,14 +84,15 @@ class QueueService:
                         QueueStatus.PROCESSING,
                         QueueStatus.READY,
                         QueueStatus.PLAYING,
+                        QueueStatus.FAILED,
                     ]
                 )
             )
-            .order_by(QueueItem.id)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
             .limit(limit)
             .all()
         )
-        return [QueueItemResponse.model_validate(item) for item in items]
+        return [self._to_response(item) for item in items]
 
     def get_current_item(self, db: Session) -> Optional[QueueItemResponse]:
         """
@@ -81,9 +107,10 @@ class QueueService:
         item = (
             db.query(QueueItem)
             .filter(QueueItem.status == QueueStatus.PLAYING)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
             .first()
         )
-        return QueueItemResponse.model_validate(item) if item else None
+        return self._to_response(item) if item else None
 
     def get_current_or_promote_next(self, db: Session) -> Optional[QueueItemResponse]:
         """
@@ -92,16 +119,16 @@ class QueueService:
         current = (
             db.query(QueueItem)
             .filter(QueueItem.status == QueueStatus.PLAYING)
-            .order_by(QueueItem.id)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
             .first()
         )
         if current:
-            return QueueItemResponse.model_validate(current)
+            return self._to_response(current)
 
         next_ready = (
             db.query(QueueItem)
             .filter(QueueItem.status == QueueStatus.READY)
-            .order_by(QueueItem.id)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
             .first()
         )
         if not next_ready:
@@ -110,8 +137,8 @@ class QueueService:
         next_ready.status = QueueStatus.PLAYING
         db.commit()
         db.refresh(next_ready)
-        
-        return QueueItemResponse.model_validate(next_ready)
+
+        return self._to_response(next_ready)
 
     def get_next_item(self, db: Session) -> Optional[QueueItemResponse]:
         """
@@ -126,10 +153,10 @@ class QueueService:
         item = (
             db.query(QueueItem)
             .filter(QueueItem.status == QueueStatus.READY)
-            .order_by(QueueItem.id)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
             .first()
         )
-        return QueueItemResponse.model_validate(item) if item else None
+        return self._to_response(item) if item else None
 
     def skip_current_item(self, db: Session) -> Optional[QueueItemResponse]:
         """
@@ -141,22 +168,22 @@ class QueueService:
         current = (
             db.query(QueueItem)
             .filter(QueueItem.status == QueueStatus.PLAYING)
-            .order_by(QueueItem.id)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
             .first()
         )
-
-        if current:
-            current.status = QueueStatus.COMPLETED
 
         next_ready = (
             db.query(QueueItem)
             .filter(QueueItem.status == QueueStatus.READY)
-            .order_by(QueueItem.id)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
             .first()
         )
 
         if next_ready:
             next_ready.status = QueueStatus.PLAYING
+
+        if current:
+            db.delete(current)
 
         if current or next_ready:
             db.commit()
@@ -165,8 +192,8 @@ class QueueService:
             return None
 
         db.refresh(next_ready)
-        
-        return QueueItemResponse.model_validate(next_ready)
+
+        return self._to_response(next_ready)
 
     def complete_current_item(self, db: Session) -> Optional[QueueItemResponse]:
         """
@@ -178,21 +205,21 @@ class QueueService:
         current = (
             db.query(QueueItem)
             .filter(QueueItem.status == QueueStatus.PLAYING)
-            .order_by(QueueItem.id)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
             .first()
         )
-        
-        if current:
-            current.status = QueueStatus.COMPLETED
 
         next_ready = (
             db.query(QueueItem)
             .filter(QueueItem.status == QueueStatus.READY)
-            .order_by(QueueItem.id)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
             .first()
         )
         if next_ready:
             next_ready.status = QueueStatus.PLAYING
+
+        if current:
+            db.delete(current)
 
         if current or next_ready:
             db.commit()
@@ -201,8 +228,8 @@ class QueueService:
             return None
 
         db.refresh(next_ready)
-        
-        return QueueItemResponse.model_validate(next_ready)
+
+        return self._to_response(next_ready)
 
     async def update_status_async(
         self, db: Session, item_id: int, status: QueueStatus, error: str = None
@@ -223,11 +250,11 @@ class QueueService:
                 item.error = error
             db.commit()
             db.refresh(item)
-            
+
             # Broadcast the status update
             from services.websocket_manager import manager
-            response = QueueItemResponse.model_validate(item)
-            
+            response = self._to_response(item)
+
             if status == QueueStatus.FAILED and error:
                 await manager.broadcast_queue_item_failed(item_id, error)
             else:
@@ -265,23 +292,104 @@ class QueueService:
             media_path: Path to processed media file
         """
         item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
-        if item:
-            item.media_path = self.build_media_url(Path(media_path))
+        if item and item.media:
+            item.media.media_path = self.build_media_url(Path(media_path))
+            item.media.missing = False
             db.commit()
 
-    def set_lyrics(self, db: Session, item_id: int, lyrics: str):
-        """
-        Set lyrics for queue item.
-
-        Args:
-            db: Database session
-            item_id: Queue item ID
-            lyrics: Lyrics text
-        """
+    def set_lyrics_path(self, db: Session, item_id: int, lyrics_path: str):
+        """Set lyrics sidecar path for media item."""
         item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
-        if item:
-            item.lyrics = lyrics
+        if item and item.media:
+            try:
+                item.media.lyrics_path = self.build_media_url(Path(lyrics_path))
+            except ValueError:
+                logger.warning("Skipping non-local lyrics path item_id=%s path=%s", item_id, lyrics_path)
             db.commit()
+
+    def set_vocals_path(self, db: Session, item_id: int, vocals_path: str):
+        """Set vocals sidecar path for media item."""
+        item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
+        if item and item.media:
+            try:
+                item.media.vocals_path = self.build_media_url(Path(vocals_path))
+            except ValueError:
+                logger.warning("Skipping non-local vocals path item_id=%s path=%s", item_id, vocals_path)
+            db.commit()
+
+    def append_to_end(self, db: Session) -> int:
+        """Return a sparse position value at queue tail."""
+        max_position = db.query(func.max(QueueItem.position)).scalar()
+        if max_position is None:
+            return self.POSITION_STEP
+        return int(max_position) + self.POSITION_STEP
+
+    def add_to_front(self, db: Session) -> int:
+        """Return a sparse position value at queue head."""
+        min_position = db.query(func.min(QueueItem.position)).scalar()
+        if min_position is None:
+            return self.POSITION_STEP
+        if int(min_position) <= self.POSITION_STEP:
+            self.renumber_queue_if_needed(db, force=True)
+            return self.POSITION_STEP // 2
+        new_position = int(min_position) - self.POSITION_STEP
+        return new_position
+
+    def insert_between(self, db: Session, before_position: int, after_position: int) -> int:
+        """Return a position value between two sparse positions."""
+        if before_position >= after_position:
+            raise ValueError("before_position must be less than after_position")
+        gap = after_position - before_position
+        if gap <= 1:
+            self.renumber_queue_if_needed(db, force=True)
+            raise ValueError("No insert gap available; queue renumbered")
+        return before_position + (gap // 2)
+
+    def renumber_queue_if_needed(self, db: Session, force: bool = False):
+        """Renumber queue positions when gaps are exhausted."""
+        items = (
+            db.query(QueueItem)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
+            .all()
+        )
+        if not items:
+            return
+
+        should_renumber = force
+        if not force:
+            for index in range(1, len(items)):
+                if (items[index].position - items[index - 1].position) <= 1:
+                    should_renumber = True
+                    break
+
+        if not should_renumber:
+            return
+
+        for index, item in enumerate(items, start=1):
+            item.position = index * self.POSITION_STEP
+        db.commit()
+
+    def _to_response(self, item: QueueItem) -> QueueItemResponse:
+        """Map queue row + related media row into API response."""
+        media = item.media
+        if media is None:
+            raise RuntimeError(f"Queue item {item.id} is missing media relationship")
+        return QueueItemResponse(
+            id=item.id,
+            media_id=media.id,
+            position=item.position,
+            youtube_id=media.youtube_id or "",
+            title=media.title,
+            artist=media.artist,
+            is_karaoke=bool(item.requested_karaoke),
+            burn_lyrics=bool(item.requested_burn_lyrics),
+            status=QueueStatus(item.status),
+            media_path=media.media_path,
+            lyrics_path=media.lyrics_path,
+            vocals_path=media.vocals_path,
+            error=item.error,
+            created_at=item.created_at,
+        )
     @staticmethod
     def build_media_url(file_path: Path) -> str:
         """Build a stable API URL for files under configured media/cache roots."""

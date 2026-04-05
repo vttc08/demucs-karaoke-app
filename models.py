@@ -3,9 +3,16 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, create_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
-from config import settings
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
@@ -28,17 +35,44 @@ class QueueItem(Base):
     __tablename__ = "queue_items"
 
     id = Column(Integer, primary_key=True, index=True)
-    youtube_id = Column(String, nullable=False, index=True)
-    title = Column(String, nullable=False)
-    artist = Column(String, nullable=True)
-    is_karaoke = Column(Boolean, default=False)
-    burn_lyrics = Column(Boolean, default=False)
+    media_id = Column(
+        Integer,
+        ForeignKey("media_items.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    position = Column(Integer, nullable=False, index=True)
+    requested_karaoke = Column(Boolean, default=False, nullable=False)
+    requested_burn_lyrics = Column(Boolean, default=False, nullable=False)
+    user_id = Column(String, nullable=True)
+    session_id = Column(String, nullable=True)
     status = Column(String, default=QueueStatus.PENDING)
-    media_path = Column(String, nullable=True)
-    lyrics = Column(String, nullable=True)
     error = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    media = relationship("MediaItem", back_populates="queue_items")
+
+
+class MediaItem(Base):
+    """Durable media/library item."""
+
+    __tablename__ = "media_items"
+    __table_args__ = (UniqueConstraint("youtube_id", name="uq_media_items_youtube_id"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    youtube_id = Column(String, nullable=True)
+    title = Column(String, nullable=False, index=True)
+    artist = Column(String, nullable=True, index=True)
+    media_path = Column(String, nullable=False, unique=True)
+    lyrics_path = Column(String, nullable=True)
+    vocals_path = Column(String, nullable=True)
+    missing = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    last_scanned_at = Column(DateTime, nullable=True)
+    queue_items = relationship("QueueItem", back_populates="media")
 
 
 class RuntimeSetting(Base):
@@ -78,6 +112,8 @@ class QueueItemResponse(BaseModel):
     model_config = {"from_attributes": True}
 
     id: int
+    media_id: int
+    position: int
     youtube_id: str
     title: str
     artist: Optional[str] = None
@@ -85,6 +121,8 @@ class QueueItemResponse(BaseModel):
     burn_lyrics: bool
     status: QueueStatus
     media_path: Optional[str] = None
+    lyrics_path: Optional[str] = None
+    vocals_path: Optional[str] = None
     error: Optional[str] = None
     created_at: datetime
 
