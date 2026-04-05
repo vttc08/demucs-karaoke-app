@@ -356,7 +356,7 @@ def test_update_runtime_settings_rejects_invalid_crf(client):
 
 
 def test_skip_current_promotes_next_ready(client):
-    """Test skip endpoint marks current complete and promotes next."""
+    """Test skip endpoint removes current item and promotes next."""
     first = client.post(
         "/api/queue/",
         json={"youtube_id": "first", "title": "First", "is_karaoke": False},
@@ -383,6 +383,12 @@ def test_skip_current_promotes_next_ready(client):
     assert data["id"] == second["id"]
     assert data["status"] == "playing"
 
+    db = TestingSessionLocal()
+    try:
+        assert db.query(QueueItem).filter(QueueItem.id == first["id"]).first() is None
+    finally:
+        db.close()
+
 
 def test_skip_current_without_next_returns_none(client):
     """Test skip endpoint when only current playing exists."""
@@ -405,7 +411,7 @@ def test_skip_current_without_next_returns_none(client):
 
 
 def test_complete_current_promotes_next_ready(client):
-    """Test complete-current endpoint marks current complete and promotes next."""
+    """Test complete-current endpoint removes current item and promotes next."""
     first = client.post(
         "/api/queue/",
         json={"youtube_id": "first-c", "title": "First C", "is_karaoke": False},
@@ -431,6 +437,12 @@ def test_complete_current_promotes_next_ready(client):
     assert data is not None
     assert data["id"] == second["id"]
     assert data["status"] == "playing"
+
+    db = TestingSessionLocal()
+    try:
+        assert db.query(QueueItem).filter(QueueItem.id == first["id"]).first() is None
+    finally:
+        db.close()
 
 
 def test_complete_current_without_next_returns_none(client):
