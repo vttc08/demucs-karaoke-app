@@ -153,8 +153,7 @@ def test_queue_service_skip_current_item_promotes_next_ready(db_session):
     current_after = (
         db_session.query(QueueItem).filter(QueueItem.id == current.id).first()
     )
-    assert current_after is not None
-    assert current_after.status == QueueStatus.COMPLETED
+    assert current_after is None
 
 
 def test_queue_service_skip_current_item_without_next_returns_none(db_session):
@@ -172,8 +171,7 @@ def test_queue_service_skip_current_item_without_next_returns_none(db_session):
     current_after = (
         db_session.query(QueueItem).filter(QueueItem.id == current.id).first()
     )
-    assert current_after is not None
-    assert current_after.status == QueueStatus.COMPLETED
+    assert current_after is None
 
 
 def test_queue_service_complete_current_promotes_next_ready(db_session):
@@ -199,8 +197,7 @@ def test_queue_service_complete_current_promotes_next_ready(db_session):
     current_after = (
         db_session.query(QueueItem).filter(QueueItem.id == current.id).first()
     )
-    assert current_after is not None
-    assert current_after.status == QueueStatus.COMPLETED
+    assert current_after is None
 
 
 def test_queue_service_complete_current_without_next_returns_none(db_session):
@@ -218,8 +215,7 @@ def test_queue_service_complete_current_without_next_returns_none(db_session):
     current_after = (
         db_session.query(QueueItem).filter(QueueItem.id == current.id).first()
     )
-    assert current_after is not None
-    assert current_after.status == QueueStatus.COMPLETED
+    assert current_after is None
 
 
 def test_queue_service_complete_current_promotes_when_none_playing(db_session):
@@ -396,7 +392,8 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session)
     updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
     assert updated_item is not None
     assert updated_item.status == QueueStatus.READY
-    assert updated_item.media_path == "/media/plain123.mp4"
+    assert updated_item.media is not None
+    assert updated_item.media.media_path == "/media/plain123.mp4"
 
 
 @pytest.mark.asyncio
@@ -554,6 +551,46 @@ async def test_karaoke_service_fails_fast_when_demucs_unhealthy(db_session):
     assert updated_item is not None
     assert updated_item.status == QueueStatus.FAILED
     assert "Demucs unavailable" in (updated_item.error or "")
+
+
+def test_queue_service_ordering_helpers(db_session):
+    """Queue ordering helpers should support sparse insertion and renumbering."""
+    service = QueueService()
+    first = service.add_to_queue(
+        db_session, QueueItemCreate(youtube_id="o1", title="One", is_karaoke=False)
+    )
+    second = service.add_to_queue(
+        db_session, QueueItemCreate(youtube_id="o2", title="Two", is_karaoke=False)
+    )
+    assert first.position == 1000
+    assert second.position == 2000
+
+    front_position = service.add_to_front(db_session)
+    front_item = QueueItem(
+        media_id=(
+            db_session.query(QueueItem).filter(QueueItem.id == first.id).first().media_id
+        ),
+        position=front_position,
+        requested_karaoke=False,
+        requested_burn_lyrics=False,
+        status=QueueStatus.PENDING,
+    )
+    db_session.add(front_item)
+    db_session.commit()
+    assert front_item.position < first.position
+
+    between = service.insert_between(db_session, first.position, second.position)
+    assert first.position < between < second.position
+
+    first_row = db_session.query(QueueItem).filter(QueueItem.id == first.id).first()
+    second_row = db_session.query(QueueItem).filter(QueueItem.id == second.id).first()
+    first_row.position = 1000
+    second_row.position = 1001
+    db_session.commit()
+    service.renumber_queue_if_needed(db_session)
+    first_row = db_session.query(QueueItem).filter(QueueItem.id == first.id).first()
+    second_row = db_session.query(QueueItem).filter(QueueItem.id == second.id).first()
+    assert second_row.position - first_row.position == 1000
 
 
 def test_lyrics_service_parse():

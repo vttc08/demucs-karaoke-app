@@ -40,19 +40,21 @@ class KaraokeService:
             return
 
         try:
+            if item.media is None:
+                raise RuntimeError(f"Queue item missing media for id={item.id}")
             logger.info(
                 "Processing queue item item_id=%s youtube_id=%s karaoke=%s burn_lyrics=%s",
                 item.id,
-                item.youtube_id,
-                item.is_karaoke,
-                item.burn_lyrics,
+                item.media.youtube_id,
+                item.requested_karaoke,
+                item.requested_burn_lyrics,
             )
             # Update status to downloading
             await self.queue_service.update_status_async(
                 db, item_id, QueueStatus.DOWNLOADING
             )
 
-            if item.is_karaoke:
+            if item.requested_karaoke:
                 demucs_health = self.demucs_client.health_check()
                 if not demucs_health.healthy:
                     logger.warning(
@@ -73,18 +75,18 @@ class KaraokeService:
                     return
                 # Karaoke flow prefers separate tracks for processing.
                 video_path = await asyncio.to_thread(
-                    self.youtube_service.download_video, item.youtube_id
+                    self.youtube_service.download_video, item.media.youtube_id
                 )
                 # Download audio only for karaoke flow
                 audio_path = await asyncio.to_thread(
-                    self.youtube_service.download_audio, item.youtube_id
+                    self.youtube_service.download_audio, item.media.youtube_id
                 )
                 # Karaoke flow
                 await self._process_karaoke(db, item, video_path, audio_path)
             else:
                 # Non-karaoke flow: prefer single file with built-in audio.
                 video_path = await asyncio.to_thread(
-                    self.youtube_service.download_video_with_audio, item.youtube_id
+                    self.youtube_service.download_video_with_audio, item.media.youtube_id
                 )
                 self.queue_service.set_media_path(db, item_id, str(video_path))
                 await self.queue_service.update_status_async(
@@ -123,12 +125,17 @@ class KaraokeService:
             item.id,
             no_vocals_path,
         )
+        self.queue_service.set_vocals_path(db, item.id, str(no_vocals_path))
 
-        output_path = settings.cache_path / f"{item.youtube_id}_karaoke.mp4"
-        if item.burn_lyrics:
-            lyrics = await self.lyrics_service.fetch_lyrics(item.title, item.artist)
+        output_path = settings.cache_path / f"{item.media.youtube_id}_karaoke.mp4"
+        if item.requested_burn_lyrics:
+            lyrics = await self.lyrics_service.fetch_lyrics(item.media.title, item.media.artist)
             if lyrics:
-                self.queue_service.set_lyrics(db, item.id, lyrics)
+                lyrics_dir = settings.cache_path / "lyrics"
+                lyrics_dir.mkdir(parents=True, exist_ok=True)
+                lyrics_path = lyrics_dir / f"{item.media.youtube_id}.lrc"
+                lyrics_path.write_text(lyrics, encoding="utf-8")
+                self.queue_service.set_lyrics_path(db, item.id, str(lyrics_path))
             await asyncio.to_thread(
                 self.ffmpeg.burn_subtitles,
                 video_path=video_path,

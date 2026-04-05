@@ -78,6 +78,20 @@ The stage page uses a websocket-first model:
 
 **Other Services**: yt-dlp, ffmpeg, [Demucs](https://github.com/facebookresearch/demucs)
 
+## Queue + media data model
+
+- `media_items` is the durable catalog record:
+  - `youtube_id` (nullable, unique when present)
+  - `title`, `artist`
+  - filesystem-relative `media_path`
+  - optional sidecars: `lyrics_path`, `vocals_path`
+  - `missing` flag for future filesystem reconciliation
+- `queue_items` is active queue state only:
+  - `media_id` FK (`ON DELETE RESTRICT`)
+  - sparse `position` ordering (`1000` step)
+  - runtime queue state (`requested_karaoke`, `requested_burn_lyrics`, `status`, `error`)
+  - rows are removed when songs are skipped/completed (active queue persists across crashes)
+
 ## Runtime yt-dlp proxy flow
 
 - Runtime settings expose `ytdlp_proxy_url` through:
