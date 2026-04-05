@@ -14,6 +14,22 @@ const stageRemoteSkipBtn = document.getElementById('stage-remote-skip-btn');
 let stageRemotePaused = false;
 let demucsHealth = { healthy: true, detail: 'Health unknown' };
 
+searchResults.addEventListener('click', async (event) => {
+    const button = event.target.closest('.add-to-queue-btn');
+    if (!button || button.disabled) return;
+
+    const resultElement = button.closest('[data-video-id]');
+    if (!resultElement) return;
+
+    await addToQueue(
+        resultElement.dataset.videoId,
+        resultElement.dataset.title || '',
+        resultElement.dataset.channel || '',
+        button,
+        resultElement,
+    );
+});
+
 searchBtn.addEventListener('click', performSearch);
 searchInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
@@ -92,7 +108,7 @@ function displaySearchResults(results) {
     }
 
     searchResults.innerHTML = results.map(result => `
-        <div class="bg-surface-container-low hover:bg-surface-container p-4 rounded-lg transition-all" data-video-id="${result.video_id}">
+        <div class="bg-surface-container-low hover:bg-surface-container p-4 rounded-lg transition-all" data-video-id="${escapeHtml(result.video_id)}" data-title="${escapeHtml(result.title)}" data-channel="${escapeHtml(result.channel)}">
             <div class="flex items-center gap-4">
                 <div class="relative w-20 h-14 rounded-md overflow-hidden shrink-0">
                     <img 
@@ -125,7 +141,7 @@ function displaySearchResults(results) {
                     </div>
                 </div>
                 <button class="add-to-queue-btn bg-primary text-on-primary px-4 py-2 rounded-full text-sm font-bold hover:brightness-110 active:scale-95 transition-all shrink-0" 
-                        onclick="addToQueue('${result.video_id}', '${escapeHtml(result.title)}', '${escapeHtml(result.channel)}')">
+                        type="button">
                     Add
                 </button>
             </div>
@@ -192,18 +208,22 @@ function displaySearchResults(results) {
     });
 }
 
-async function addToQueue(videoId, title, channel) {
-    const resultElement = document.querySelector(`[data-video-id="${videoId}"]`);
-    const isKaraoke = resultElement.querySelector('.karaoke-checkbox').checked;
-    const burnLyrics = isKaraoke ? resultElement.querySelector('.burn-lyrics-checkbox').checked : false;
-    const button = resultElement.querySelector('.add-to-queue-btn');
+async function addToQueue(videoId, title, channel, buttonElement = null, resultElement = null) {
+    const targetElement = resultElement || document.querySelector(`[data-video-id="${CSS.escape(videoId)}"]`);
+    if (!targetElement) {
+        throw new Error('Search result no longer exists');
+    }
 
-        if (isKaraoke && !demucsHealth.healthy) {
-            alert(`Karaoke mode is unavailable: ${demucsHealth.detail}`);
-            return;
-        }
+    const button = buttonElement || targetElement.querySelector('.add-to-queue-btn');
+    const isKaraoke = targetElement.querySelector('.karaoke-checkbox').checked;
+    const burnLyrics = isKaraoke ? targetElement.querySelector('.burn-lyrics-checkbox').checked : false;
 
-        button.disabled = true;
+    if (isKaraoke && !demucsHealth.healthy) {
+        alert(`Karaoke mode is unavailable: ${demucsHealth.detail}`);
+        return;
+    }
+
+    button.disabled = true;
     button.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span>';
 
     try {
