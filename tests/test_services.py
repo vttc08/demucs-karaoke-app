@@ -114,6 +114,49 @@ def test_queue_service_response_includes_vocals_sidecar(db_session):
     assert created.lyrics_path == "/media/sidecar001.lrc"
 
 
+def test_queue_service_repairs_swapped_vocals_and_infers_sidecar(db_session, tmp_path):
+    """If vocals_path stores lyrics, service should recover lyrics and infer *.vocals sidecar."""
+    service = QueueService()
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "repair-song.mp4"
+        vocals_file = settings.media_path / "repair-song.vocals.mp3"
+        lyrics_file = settings.media_path / "repair-song.lrc"
+        media_file.write_text("video", encoding="utf-8")
+        vocals_file.write_text("audio", encoding="utf-8")
+        lyrics_file.write_text("[00:00.00]hello", encoding="utf-8")
+
+        media = MediaItem(
+            youtube_id="repair001",
+            title="Repair Song",
+            artist="Singer",
+            media_path="/media/repair-song.mp4",
+            vocals_path="/media/repair-song.lrc",
+            lyrics_path=None,
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.flush()
+
+        created = service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id="repair001",
+                title="Repair Song",
+                artist="Singer",
+                is_karaoke=False,
+            ),
+        )
+
+        assert created.vocals_path == "/media/repair-song.vocals.mp3"
+        assert created.lyrics_path == "/media/repair-song.lrc"
+    finally:
+        settings.media_path = original_media
+
+
 def test_queue_service_update_status(db_session):
     """Test updating item status."""
     service = QueueService()

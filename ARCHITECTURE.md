@@ -74,6 +74,9 @@ The stage page uses a websocket-first model:
 - The durable media row (`media_items`) carries:
   - `media_path` (primary stage video/audio)
   - `vocals_path` (optional sidecar vocals file)
+- Queue/API mapping normalizes persisted filesystem paths into app-served URLs (`/media/...` or `/cache/...`)
+  and attempts sidecar recovery when vocals metadata is misassigned (e.g. lyrics accidentally saved into
+  `vocals_path`).
 - Stage playback is sidecar-first (not browser multi-audio-track MP4 selection):
   - `<video>` plays `media_path`
   - optional hidden `<audio>` plays `vocals_path`

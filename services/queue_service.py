@@ -8,6 +8,8 @@ from models import MediaItem, QueueItem, QueueItemCreate, QueueItemResponse, Que
 from config import settings
 
 logger = logging.getLogger(__name__)
+_AUDIO_SUFFIXES = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm"}
+_LYRICS_SUFFIXES = {".lrc", ".srt", ".txt"}
 
 
 class QueueService:
@@ -374,6 +376,15 @@ class QueueService:
         media = item.media
         if media is None:
             raise RuntimeError(f"Queue item {item.id} is missing media relationship")
+
+        media_path = self._normalize_media_field(media.media_path)
+        vocals_path = self._normalize_media_field(media.vocals_path)
+        lyrics_path = self._normalize_media_field(media.lyrics_path)
+        vocals_path, lyrics_path = self._repair_sidecar_fields(
+            media_path=media_path,
+            vocals_path=vocals_path,
+            lyrics_path=lyrics_path,
+        )
         return QueueItemResponse(
             id=item.id,
             media_id=media.id,
@@ -384,12 +395,115 @@ class QueueService:
             is_karaoke=bool(item.requested_karaoke),
             burn_lyrics=bool(item.requested_burn_lyrics),
             status=QueueStatus(item.status),
-            media_path=media.media_path,
-            lyrics_path=media.lyrics_path,
-            vocals_path=media.vocals_path,
+            media_path=media_path,
+            lyrics_path=lyrics_path,
+            vocals_path=vocals_path,
             error=item.error,
             created_at=item.created_at,
         )
+
+    def _normalize_media_field(self, raw_path: str | None) -> str | None:
+        """Normalize persisted path values into URLs the app can actually serve."""
+        if raw_path is None:
+            return None
+
+        value = raw_path.strip()
+        if not value:
+            return None
+
+        if value.startswith(("http://", "https://", "/media/", "/cache/")):
+            return value
+
+        try:
+            return self.build_media_url(Path(value))
+        except ValueError:
+            logger.warning("Unservable media field path=%s", value)
+            return None
+
+    def _repair_sidecar_fields(
+        self, media_path: str | None, vocals_path: str | None, lyrics_path: str | None
+    ) -> tuple[str | None, str | None]:
+        """
+        Normalize common sidecar mistakes and infer vocals sidecar when possible.
+
+        - If vocals_path points to a lyrics file, move it to lyrics_path.
+        - If vocals_path is missing, probe sibling *.vocals.<audio_ext> files.
+        """
+        def classify(path_value: str | None) -> str:
+            if not path_value:
+                return "missing"
+            suffix = Path(path_value).suffix.lower()
+            if suffix in _AUDIO_SUFFIXES:
+                return "audio"
+            if suffix in _LYRICS_SUFFIXES:
+                return "lyrics"
+            return "other"
+
+        vocals_kind = classify(vocals_path)
+        lyrics_kind = classify(lyrics_path)
+
+        if vocals_kind == "lyrics" and lyrics_kind == "audio":
+            vocals_path, lyrics_path = lyrics_path, vocals_path
+            vocals_kind, lyrics_kind = "audio", "lyrics"
+        elif vocals_kind == "lyrics":
+            if lyrics_kind == "missing":
+                lyrics_path = vocals_path
+                lyrics_kind = "lyrics"
+            vocals_path = None
+            vocals_kind = "missing"
+
+        if lyrics_kind == "audio":
+            if vocals_kind in {"missing", "other"}:
+                vocals_path = lyrics_path
+                vocals_kind = "audio"
+            lyrics_path = None
+            lyrics_kind = "missing"
+
+        if vocals_kind == "other":
+            vocals_path = None
+
+        if vocals_path:
+            return vocals_path, lyrics_path
+
+        media_file = self._media_url_to_file(media_path)
+        if media_file is None:
+            return vocals_path, lyrics_path
+
+        stem = media_file.stem
+        for ext in (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm"):
+            candidate = media_file.with_name(f"{stem}.vocals{ext}")
+            if candidate.exists():
+                try:
+                    vocals_path = self.build_media_url(candidate)
+                    break
+                except ValueError:
+                    logger.warning("Found vocals sidecar outside served roots path=%s", candidate)
+                    break
+
+        if not lyrics_path:
+            for ext in (".lrc", ".srt", ".txt"):
+                candidate = media_file.with_suffix(ext)
+                if candidate.exists():
+                    try:
+                        lyrics_path = self.build_media_url(candidate)
+                    except ValueError:
+                        logger.warning("Found lyrics sidecar outside served roots path=%s", candidate)
+                    break
+
+        return vocals_path, lyrics_path
+
+    @staticmethod
+    def _media_url_to_file(media_url: str | None) -> Path | None:
+        """Map a /media or /cache URL back to local filesystem path."""
+        if not media_url:
+            return None
+        if media_url.startswith("/media/"):
+            relative = media_url.removeprefix("/media/")
+            return settings.media_path / relative
+        if media_url.startswith("/cache/"):
+            relative = media_url.removeprefix("/cache/")
+            return settings.cache_path / relative
+        return None
     @staticmethod
     def build_media_url(file_path: Path) -> str:
         """Build a stable API URL for files under configured media/cache roots."""

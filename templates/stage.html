@@ -100,7 +100,7 @@
             </video>
             {% if current.vocals_path %}
             <audio id="stage-vocals-player" preload="auto" crossorigin="anonymous">
-                <source src="{{ current.vocals_path }}" type="audio/mpeg">
+                <source src="{{ current.vocals_path }}">
             </audio>
             {% endif %}
 
@@ -347,6 +347,13 @@ function applyStageStateFromServer(data) {
     }
     updateVocalsUi();
     applyVocalsMix();
+    if (video && vocalsAvailable && !video.paused) {
+        ensureAudioGraph()
+            .then(() => syncVocalsToVideo(false))
+            .catch((error) => {
+                console.warn("Failed applying remote vocals state:", error);
+            });
+    }
 }
 
 function updateFullscreenUi() {
@@ -767,5 +774,16 @@ updateFullscreenUi();
 updateVocalsUi();
 updateQrOverlayContent();
 connectStageWebSocket();
+
+if (video && vocalsAvailable && !video.paused) {
+    ensureAudioGraph()
+        .then(() => {
+            syncVocalsToVideo(true);
+            startSyncTimer();
+        })
+        .catch((error) => {
+            console.warn("Failed to bootstrap vocals playback:", error);
+        });
+}
 </script>
 {% endblock %}
