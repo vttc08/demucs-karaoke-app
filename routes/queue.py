@@ -172,7 +172,10 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
         await manager.send_personal_message(
             {
                 "type": "connected",
-                "data": {"connection_count": manager.get_connection_count()},
+                "data": {
+                    "connection_count": manager.get_connection_count(),
+                    "stage_state": manager.get_stage_state(),
+                },
                 "timestamp": asyncio.get_event_loop().time()
             },
             websocket
@@ -217,7 +220,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
 
                 command = payload.get("command")
                 source = payload.get("source", "unknown")
-                if command not in {"play", "pause", "skip"}:
+                if command not in {"play", "pause", "skip", "set_vocals_enabled", "set_vocals_volume"}:
                     await manager.send_personal_message(
                         {
                             "type": "error",
@@ -237,12 +240,46 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         result.id if result else None,
                         current.id if current else None,
                     )
+                elif command == "set_vocals_enabled":
+                    vocals_enabled = payload.get("vocals_enabled")
+                    if not isinstance(vocals_enabled, bool):
+                        await manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "data": {"detail": "set_vocals_enabled requires boolean vocals_enabled"},
+                                "timestamp": asyncio.get_event_loop().time(),
+                            },
+                            websocket,
+                        )
+                        continue
+                    await manager.set_stage_vocals_enabled(vocals_enabled=vocals_enabled, source=source)
+                elif command == "set_vocals_volume":
+                    raw_volume = payload.get("vocals_volume")
+                    if not isinstance(raw_volume, (int, float)):
+                        await manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "data": {"detail": "set_vocals_volume requires numeric vocals_volume"},
+                                "timestamp": asyncio.get_event_loop().time(),
+                            },
+                            websocket,
+                        )
+                        continue
+                    volume = float(raw_volume)
+                    if volume < 0.0 or volume > 1.0:
+                        await manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "data": {"detail": "vocals_volume must be between 0.0 and 1.0"},
+                                "timestamp": asyncio.get_event_loop().time(),
+                            },
+                            websocket,
+                        )
+                        continue
+                    await manager.set_stage_vocals_volume(vocals_volume=volume, source=source)
                 else:
                     await manager.broadcast_stage_control_command(command=command, source=source)
-                    await manager.broadcast_stage_state_update(
-                        is_paused=(command == "pause"),
-                        source=source,
-                    )
+                    await manager.set_stage_paused(is_paused=(command == "pause"), source=source)
                 continue
             
             # Handle other message types as needed

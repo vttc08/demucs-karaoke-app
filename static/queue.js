@@ -11,7 +11,14 @@ const stageRemotePlayPauseBtn = document.getElementById('stage-remote-play-pause
 const stageRemotePlayPauseIcon = document.getElementById('stage-remote-play-pause-icon');
 const stageRemotePlayPauseLabel = document.getElementById('stage-remote-play-pause-label');
 const stageRemoteSkipBtn = document.getElementById('stage-remote-skip-btn');
+const stageRemoteVocalsToggleBtn = document.getElementById('stage-remote-vocals-toggle-btn');
+const stageRemoteVocalsToggleIcon = document.getElementById('stage-remote-vocals-toggle-icon');
+const stageRemoteVocalsToggleLabel = document.getElementById('stage-remote-vocals-toggle-label');
+const stageRemoteVocalsVolumeSlider = document.getElementById('stage-remote-vocals-volume-slider');
 let stageRemotePaused = false;
+let stageRemoteVocalsEnabled = true;
+let stageRemoteVocalsVolume = 1.0;
+let stageRemoteVocalsAvailable = false;
 let demucsHealth = { healthy: true, detail: 'Health unknown' };
 
 searchResults.addEventListener('click', async (event) => {
@@ -298,6 +305,7 @@ async function refreshQueue(force = false) {
     try {
         const response = await fetch(`${API_BASE}/api/queue/`);
         const serverQueue = await response.json();
+        syncStageVocalsAvailability(serverQueue);
         
         // Get current queue from DOM
         const currentQueueElements = document.querySelectorAll('#queue-list .queue-item');
@@ -504,6 +512,7 @@ class QueueWebSocket {
         const connected = this.ws && this.ws.readyState === WebSocket.OPEN;
         if (stageRemotePlayPauseBtn) stageRemotePlayPauseBtn.disabled = !connected;
         if (stageRemoteSkipBtn) stageRemoteSkipBtn.disabled = !connected;
+        updateStageRemoteVocalsUi();
         if (stageRemoteStatus) {
             stageRemoteStatus.textContent = connected ? 'Connected' : 'Offline';
         }
@@ -610,6 +619,9 @@ class QueueWebSocket {
         switch (message.type) {
             case 'connected':
                 console.log('[WebSocket] Connection confirmed, active connections:', message.data.connection_count);
+                if (message.data && message.data.stage_state) {
+                    window.dispatchEvent(new CustomEvent('stage_state_update', { detail: message.data.stage_state }));
+                }
                 break;
             case 'ping':
                 // Respond to server ping
@@ -667,6 +679,35 @@ function updateStageRemotePlayPauseUi() {
     stageRemotePlayPauseLabel.textContent = stageRemotePaused ? 'Play' : 'Pause';
 }
 
+function updateStageRemoteVocalsUi() {
+    if (stageRemoteVocalsToggleBtn) {
+        stageRemoteVocalsToggleBtn.disabled = !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
+    }
+    if (stageRemoteVocalsVolumeSlider) {
+        stageRemoteVocalsVolumeSlider.disabled = !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
+        stageRemoteVocalsVolumeSlider.value = String(Math.round(stageRemoteVocalsVolume * 100));
+    }
+    if (stageRemoteVocalsToggleIcon) {
+        stageRemoteVocalsToggleIcon.textContent = stageRemoteVocalsEnabled ? 'mic' : 'mic_off';
+    }
+    if (stageRemoteVocalsToggleLabel) {
+        stageRemoteVocalsToggleLabel.textContent = stageRemoteVocalsEnabled ? 'Vocals On' : 'Vocals Off';
+    }
+}
+
+function syncStageVocalsAvailability(queue) {
+    const playingItem = Array.isArray(queue) ? queue.find((item) => item.status === 'playing') : null;
+    stageRemoteVocalsAvailable = Boolean(playingItem && playingItem.vocals_path);
+    if (!stageRemoteVocalsAvailable) {
+        stageRemoteVocalsEnabled = false;
+        stageRemoteVocalsVolume = 0;
+    } else if (stageRemoteVocalsVolume <= 0) {
+        stageRemoteVocalsEnabled = true;
+        stageRemoteVocalsVolume = 1.0;
+    }
+    updateStageRemoteVocalsUi();
+}
+
 // Initialize WebSocket connection
 let queueWebSocket = null;
 if (window.location.pathname === '/queue' || window.location.pathname === '/') {
@@ -708,6 +749,56 @@ if (stageRemoteSkipBtn) {
         if (!sent) {
             alert('Stage control is offline');
         }
+    });
+}
+
+if (stageRemoteVocalsToggleBtn) {
+    stageRemoteVocalsToggleBtn.addEventListener('click', () => {
+        if (!queueWebSocket) return;
+        if (!stageRemoteVocalsAvailable) {
+            alert('Current song has no vocals sidecar track');
+            return;
+        }
+        const nextEnabled = !stageRemoteVocalsEnabled;
+        const sent = queueWebSocket.send({
+            type: 'stage_command',
+            data: {
+                command: 'set_vocals_enabled',
+                source: 'queue',
+                vocals_enabled: nextEnabled,
+            },
+            timestamp: Date.now(),
+        });
+        if (!sent) {
+            alert('Stage control is offline');
+            return;
+        }
+        stageRemoteVocalsEnabled = nextEnabled;
+        updateStageRemoteVocalsUi();
+    });
+}
+
+if (stageRemoteVocalsVolumeSlider) {
+    stageRemoteVocalsVolumeSlider.addEventListener('input', () => {
+        if (!queueWebSocket) return;
+        if (!stageRemoteVocalsAvailable) {
+            return;
+        }
+        const nextVolume = Number(stageRemoteVocalsVolumeSlider.value) / 100;
+        const sent = queueWebSocket.send({
+            type: 'stage_command',
+            data: {
+                command: 'set_vocals_volume',
+                source: 'queue',
+                vocals_volume: nextVolume,
+            },
+            timestamp: Date.now(),
+        });
+        if (!sent) {
+            return;
+        }
+        stageRemoteVocalsVolume = Math.max(0, Math.min(1, nextVolume));
+        updateStageRemoteVocalsUi();
     });
 }
 
@@ -846,6 +937,15 @@ window.addEventListener('stage_state_update', (event) => {
         stageRemotePaused = isPaused;
         updateStageRemotePlayPauseUi();
     }
+    const vocalsEnabled = event.detail?.vocals_enabled;
+    if (typeof vocalsEnabled === 'boolean') {
+        stageRemoteVocalsEnabled = vocalsEnabled;
+    }
+    const vocalsVolume = event.detail?.vocals_volume;
+    if (typeof vocalsVolume === 'number' && Number.isFinite(vocalsVolume)) {
+        stageRemoteVocalsVolume = Math.max(0, Math.min(1, vocalsVolume));
+    }
+    updateStageRemoteVocalsUi();
 });
 
 // Much gentler auto-refresh - only when user is not actively using search
@@ -867,6 +967,8 @@ if (!queueWebSocket) {
 }
 refreshDemucsHealth();
 updateStageRemotePlayPauseUi();
+updateStageRemoteVocalsUi();
+refreshQueue(true);
 
 // Pause refresh during search interactions
 searchInput.addEventListener('focus', () => {

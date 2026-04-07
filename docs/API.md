@@ -34,6 +34,8 @@ Allowed `command` values:
 - `play`
 - `pause`
 - `skip`
+- `set_vocals_enabled` (requires boolean `vocals_enabled`)
+- `set_vocals_volume` (requires numeric `vocals_volume` between `0.0` and `1.0`)
 
 **Server → client events (selected):**
 - Queue lifecycle:
@@ -45,7 +47,7 @@ Allowed `command` values:
   - `queue_item_failed`
 - Stage control:
   - `stage_control_command` with `{command, source}`
-  - `stage_state_update` with `{is_paused, source}`
+  - `stage_state_update` with `{is_paused, vocals_enabled, vocals_volume, source}`
 
 ---
 
@@ -422,6 +424,11 @@ GET /stage
 
 Presentation-first stage player optimized for fullscreen output on desktop and mobile desktop mode.
 Uses minimal overlay controls (play/pause, skip, fullscreen) and compact up-next context.
+
+When the current item includes `vocals_path`, stage playback uses sidecar dual-track mixing:
+- base media from `media_path`
+- optional guide vocals from `vocals_path`
+- real-time vocals on/off + volume control synchronized over websocket
 
 ### Settings Page (Mobile/Desktop)
 ```

@@ -633,6 +633,86 @@ def test_websocket_stage_command_pause_broadcasts_control_and_state(client):
                 state_event = receiver.receive_json()
             assert state_event["type"] == "stage_state_update"
             assert state_event["data"]["is_paused"] is True
+            assert state_event["data"]["vocals_enabled"] is True
+            assert state_event["data"]["vocals_volume"] == 1.0
+
+
+def test_websocket_stage_command_set_vocals_enabled_broadcasts_state(client):
+    """Vocals enabled command should broadcast updated stage mix state."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {"command": "set_vocals_enabled", "source": "queue", "vocals_enabled": False},
+                    "timestamp": 123,
+                }
+            )
+
+            state_event = receiver.receive_json()
+            if state_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                state_event = receiver.receive_json()
+            assert state_event["type"] == "stage_state_update"
+            assert state_event["data"]["vocals_enabled"] is False
+            assert state_event["data"]["vocals_volume"] == 1.0
+
+
+def test_websocket_stage_command_set_vocals_volume_broadcasts_state(client):
+    """Vocals volume command should broadcast updated stage mix state."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {"command": "set_vocals_enabled", "source": "queue", "vocals_enabled": True},
+                    "timestamp": 122,
+                }
+            )
+            bootstrap_event = receiver.receive_json()
+            if bootstrap_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                bootstrap_event = receiver.receive_json()
+            assert bootstrap_event["type"] == "stage_state_update"
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {"command": "set_vocals_volume", "source": "queue", "vocals_volume": 0.35},
+                    "timestamp": 123,
+                }
+            )
+
+            state_event = receiver.receive_json()
+            if state_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                state_event = receiver.receive_json()
+            assert state_event["type"] == "stage_state_update"
+            assert state_event["data"]["vocals_enabled"] is True
+            assert state_event["data"]["vocals_volume"] == 0.35
+
+
+def test_websocket_stage_command_set_vocals_volume_rejects_out_of_bounds(client):
+    """Out-of-range vocals volume should return websocket error and not broadcast state."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        sender.send_json(
+            {
+                "type": "stage_command",
+                "data": {"command": "set_vocals_volume", "source": "queue", "vocals_volume": 2.0},
+                "timestamp": 123,
+            }
+        )
+
+        response = sender.receive_json()
+        if response["type"] == "ping":
+            sender.send_json({"type": "pong"})
+            response = sender.receive_json()
+        assert response["type"] == "error"
+        assert "vocals_volume must be between 0.0 and 1.0" in response["data"]["detail"]
 
 
 def test_websocket_stage_command_skip_broadcasts_and_changes_current(client):
@@ -670,7 +750,7 @@ def test_websocket_stage_command_skip_broadcasts_and_changes_current(client):
 
             stage_control_event = None
             current_changed_event = None
-            for _ in range(4):
+            for _ in range(6):
                 event = receiver.receive_json()
                 if event["type"] == "ping":
                     receiver.send_json({"type": "pong"})

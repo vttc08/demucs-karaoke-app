@@ -36,12 +36,19 @@ The stage page uses a websocket-first model:
 - `routes/queue.py` hosts the WebSocket endpoint and heartbeat loop (server `ping`, client `pong`).
 - `services/websocket_manager.py` tracks active connections and broadcasts queue events.
 - `routes/queue.py` also accepts client `stage_command` messages (`play`, `pause`, `skip`).
+- `routes/queue.py` also accepts stage mix commands (`set_vocals_enabled`, `set_vocals_volume`)
+  for runtime-only vocal assist control.
 - For `play`/`pause`, the server broadcasts:
   - `stage_control_command`
   - `stage_state_update`
 - For `skip`, server-side queue skip logic runs and then broadcasts:
   - `stage_control_command`
   - `current_item_changed`
+- `services/websocket_manager.py` stores in-memory stage state:
+  - `is_paused`
+  - `vocals_enabled`
+  - `vocals_volume` (`0.0` to `1.0`)
+  and includes it in `stage_state_update` broadcasts.
 - Queue REST routes broadcast immediate state changes:
   - `queue_item_added`
   - `queue_item_removed`
@@ -58,7 +65,20 @@ The stage page uses a websocket-first model:
 - If retries fail, it falls back to polling every 15s.
 - Queue actions no longer rely on full-page reloads; UI updates are driven by pushed events.
 - Queue page now includes stage remote controls that send websocket `stage_command` messages.
+- Queue page includes stage vocal-assist controls (toggle + volume slider) that send websocket
+  mix commands and mirror live `stage_state_update` broadcasts.
 - Stage page consumes websocket queue events and stage-control events to stay in sync without polling.
+
+## Sidecar multi-track playback
+
+- The durable media row (`media_items`) carries:
+  - `media_path` (primary stage video/audio)
+  - `vocals_path` (optional sidecar vocals file)
+- Stage playback is sidecar-first (not browser multi-audio-track MP4 selection):
+  - `<video>` plays `media_path`
+  - optional hidden `<audio>` plays `vocals_path`
+  - vocals are routed through Web Audio `GainNode` for real-time mix control.
+- Vocal mix state is runtime-only and resets when the current queue item changes.
 
 ## Software Stack
 

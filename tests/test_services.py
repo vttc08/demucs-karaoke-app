@@ -14,6 +14,7 @@ from config import EXPLICIT_SETTINGS_FIELDS, settings
 from models import (
     Base,
     DemucsHealthResponse,
+    MediaItem,
     QueueItem,
     QueueItemCreate,
     RuntimeSetting,
@@ -82,6 +83,35 @@ def test_queue_service_get_queue(db_session):
     assert queue[0].burn_lyrics is False
     assert queue[1].title == "Song 2"
     assert queue[1].burn_lyrics is True
+
+
+def test_queue_service_response_includes_vocals_sidecar(db_session):
+    """Queue responses should expose existing vocals sidecar paths from media items."""
+    media = MediaItem(
+        youtube_id="sidecar001",
+        title="Sidecar Song",
+        artist="Singer",
+        media_path="/media/sidecar001.mp4",
+        vocals_path="/media/sidecar001.vocals.mp3",
+        lyrics_path="/media/sidecar001.lrc",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.flush()
+
+    service = QueueService()
+    created = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="sidecar001",
+            title="Sidecar Song",
+            artist="Singer",
+            is_karaoke=False,
+        ),
+    )
+
+    assert created.vocals_path == "/media/sidecar001.vocals.mp3"
+    assert created.lyrics_path == "/media/sidecar001.lrc"
 
 
 def test_queue_service_update_status(db_session):
@@ -379,9 +409,7 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session)
     service = KaraokeService()
     service.youtube_service = Mock()
     service.queue_service = queue_service
-    service.youtube_service.download_video_with_audio.return_value = Path(
-        "/tmp/karaoke_media/plain123.mp4"
-    )
+    service.youtube_service.download_video_with_audio.return_value = settings.media_path / "plain123.mp4"
 
     await service.process_queue_item(db_session, item.id)
 

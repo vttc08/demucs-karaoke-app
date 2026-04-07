@@ -13,6 +13,11 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self._lock = asyncio.Lock()
+        self._stage_state = {
+            "is_paused": False,
+            "vocals_enabled": True,
+            "vocals_volume": 1.0,
+        }
     
     async def connect(self, websocket: WebSocket):
         """Accept and register a new WebSocket connection."""
@@ -108,6 +113,7 @@ class ConnectionManager:
             },
             "timestamp": datetime.utcnow().isoformat()
         })
+        await self.reset_stage_state(source="queue")
     
     async def broadcast_queue_item_failed(self, item_id: int, error: str):
         """Broadcast when a queue item fails."""
@@ -131,16 +137,46 @@ class ConnectionManager:
             "timestamp": datetime.utcnow().isoformat()
         })
 
-    async def broadcast_stage_state_update(self, is_paused: bool, source: str = "unknown"):
-        """Broadcast stage playback state update to all connected clients."""
+    async def broadcast_stage_state_update(self, source: str = "unknown"):
+        """Broadcast stage playback + mix state update to all connected clients."""
+        state = self.get_stage_state()
         await self.broadcast({
             "type": "stage_state_update",
             "data": {
-                "is_paused": is_paused,
+                "is_paused": state["is_paused"],
+                "vocals_enabled": state["vocals_enabled"],
+                "vocals_volume": state["vocals_volume"],
                 "source": source,
             },
             "timestamp": datetime.utcnow().isoformat()
         })
+
+    def get_stage_state(self) -> dict:
+        """Return a copy of current in-memory stage state."""
+        return dict(self._stage_state)
+
+    async def set_stage_paused(self, is_paused: bool, source: str = "unknown"):
+        """Set paused flag and broadcast full stage state."""
+        self._stage_state["is_paused"] = bool(is_paused)
+        await self.broadcast_stage_state_update(source=source)
+
+    async def set_stage_vocals_enabled(self, vocals_enabled: bool, source: str = "unknown"):
+        """Set vocals enabled flag and broadcast full stage state."""
+        self._stage_state["vocals_enabled"] = bool(vocals_enabled)
+        await self.broadcast_stage_state_update(source=source)
+
+    async def set_stage_vocals_volume(self, vocals_volume: float, source: str = "unknown"):
+        """Set vocals volume (0..1) and broadcast full stage state."""
+        clamped = max(0.0, min(1.0, float(vocals_volume)))
+        self._stage_state["vocals_volume"] = clamped
+        await self.broadcast_stage_state_update(source=source)
+
+    async def reset_stage_state(self, source: str = "unknown"):
+        """Reset stage state defaults for a newly playing item."""
+        self._stage_state["is_paused"] = False
+        self._stage_state["vocals_enabled"] = True
+        self._stage_state["vocals_volume"] = 1.0
+        await self.broadcast_stage_state_update(source=source)
     
     def get_connection_count(self) -> int:
         """Get the number of active connections."""
