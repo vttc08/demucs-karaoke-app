@@ -1,6 +1,6 @@
 ---
 name: git_operations
-description: Git workflow skill for large code changes: write meaningful commit messages, stage safely, and commit so users can easily revert when needed. Use only when making large multi-file changes.
+description: Git workflow skill for large code changes, write meaningful commit messages, stage safely, and commit so users can easily revert when needed. Use only when making large multi-file changes.
 ---
 
 ## Purpose
