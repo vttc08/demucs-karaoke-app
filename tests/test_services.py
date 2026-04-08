@@ -677,6 +677,48 @@ def test_lyrics_service_parse():
     assert lines[2] == "Line 3"
 
 
+def test_lyrics_service_parse_lrc_to_cues_with_offset_and_multi_timestamps():
+    """LRC parser should support offsets and multiple timestamps per line."""
+    service = LyricsService()
+    lyrics = "\n".join(
+        [
+            "[offset:500]",
+            "[00:00.00][00:02.00]Hello line",
+            "[00:04.50]Next line",
+        ]
+    )
+
+    cues = service.parse_lrc_to_cues(lyrics)
+
+    assert cues == [
+        {"time": 0.5, "text": "Hello line"},
+        {"time": 2.5, "text": "Hello line"},
+        {"time": 5.0, "text": "Next line"},
+    ]
+
+
+def test_lyrics_service_parse_json_to_cues_normalizes_shape():
+    """JSON parser should accept alternate time/text keys and sort cues."""
+    service = LyricsService()
+    payload = """
+    {
+        "cues": [
+            {"start": 5.2, "line": "Later line"},
+            {"time": 1.0, "text": "First line"},
+            {"timestamp": 3.4, "lyric": "Middle line"}
+        ]
+    }
+    """
+
+    cues = service.parse_json_to_cues(payload)
+
+    assert cues == [
+        {"time": 1.0, "text": "First line"},
+        {"time": 3.4, "text": "Middle line"},
+        {"time": 5.2, "text": "Later line"},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_demucs_client_upload_and_save(tmp_path):
     """Demucs client should upload source audio and save returned no_vocals wav."""

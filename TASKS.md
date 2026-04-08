@@ -1,0 +1,70 @@
+# TASKS.md
+
+## Sprint 01 goal
+Build a working end-to-end MVP for mobile queueing, TV playback, YouTube download, Demucs offload, and basic subtitle-burned karaoke generation.
+
+## Completed tasks ✓
+- [x] Create base FastAPI app structure
+- [x] Add mobile queue page
+- [x] Add stage page
+- [x] Implement YouTube search endpoint
+- [x] Implement queue add/list/current endpoints
+- [x] Implement yt-dlp download adapter
+- [x] Implement lyrics lookup service (placeholder)
+- [x] Implement Demucs API client
+- [x] Implement ffmpeg subtitle-burn video generation
+- [x] Add SQLite queue persistence
+- [x] Add API tests
+- [x] Document setup and sprint behavior
+
+## New Todos
+- [x] settings page and checking the health status of demucs backend
+- [x] disable karaoke mode if demucs is determined unhealthy
+- [x] customize file behavior of karaoke cache and media and configure it to be served from different location
+- [x] implement logging
+- [x] demucs API microservice as configurable options for cpu, cuda, demucs model and mp3 output
+- [x] real time application push instead of polling
+- [x] yt-dlp refinement, fix bugs with video downloading and less errors
+- [x] check/update yt-dlp version from settings UI
+- [x] concurrent ytdlp search for karaoke phrase and settings page and filter for results
+- [x] configure proxy settings for YTDLP
+- [x] support direct YouTube link/id input in search box
+- [ ] ~~ffmpeg microservice~~
+- [x] custom playback engine 
+- [x] background splash, show qrcode
+- [x] manage playback on other devices
+- [] database improvement, periodic and manual cleanup of failed songs and already played/skipped
+- [ ] fulltext and file search existing media
+- [x] persist settings in database
+- [ ] integrate whisper (lang detect, word by word transcription), align lyrics if lyrics file present
+- [ ] explore client side lyrics compositing
+- [ ] explore client side multi-track playback and toggle vocals
+- [ ] user can upload mp3 and mp4 videos
+- [ ] queue page with users
+- [ ] frontend settings page polish
+- [ ] blueprints for subfolder custom path support
+- [ ] consistent themed restriction page for outside network and splash screen
+- [ ] admin login page for settings and splash
+- [ ] login page for device identification only, stored in local storage
+- [ ] real time join and enqueue feature
+- [ ] admin has ability to remove, skip or reorder queue
+- [ ] fix multi track audio sync issues
+- [ ] customize lyric tracks behavior
+- [ ] oidc authelia support
+- [ ] batching demucs using load balancer and split file into small segments for batch processing
+
+## Next steps (future sprints)
+- [x] Integrate real lyrics API (Genius/MusixMatch)
+- [ ] Add Whisper for lyrics alignment
+- [ ] Add file upload support
+- [ ] Implement background job queue (Redis + RQ)
+- [ ] Add authentication
+- [ ] Add real-time streaming optimization
+- [ ] Add user profiles
+
+## Out of scope for this sprint
+- [ ] file upload
+- [ ] Whisper transcription
+- [ ] advanced lyric alignment
+- [ ] real-time streaming optimization
+- [ ] auth and user profiles

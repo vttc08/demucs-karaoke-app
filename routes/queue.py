@@ -1,5 +1,6 @@
 """API routes for queue management."""
 import asyncio
+import json
 import logging
 import math
 from typing import List
@@ -7,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, WebSocke
 from sqlalchemy.orm import Session
 from database import SessionLocal, get_db
 from models import QueueItemCreate, QueueItemResponse, QueueStatus
+from services.lyrics_service import LyricsService
 from services.queue_service import QueueService
 from services.websocket_manager import manager
 from models import QueueItem
@@ -15,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/queue", tags=["queue"])
 queue_service = QueueService()
+lyrics_service = LyricsService()
 
 
 def _process_item_background(item_id: int):
@@ -55,6 +58,36 @@ def get_current(db: Session = Depends(get_db)):
 def get_next(db: Session = Depends(get_db)):
     """Get next item in queue."""
     return queue_service.get_next_item(db)
+
+
+@router.get("/{item_id}/lyrics-cues")
+def get_lyrics_cues(item_id: int, db: Session = Depends(get_db)):
+    """Get normalized timed lyric cues for a queue item."""
+    item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found")
+
+    item_response = queue_service._to_response(item)
+    lyrics_path = item_response.lyrics_path
+    if not lyrics_path:
+        raise HTTPException(status_code=404, detail="Lyrics not available for queue item")
+
+    try:
+        source_format, cues = lyrics_service.load_cues_from_media_url(lyrics_path)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid lyrics JSON: {exc}") from exc
+
+    return {
+        "item_id": item.id,
+        "media_id": item.media_id,
+        "lyrics_path": lyrics_path,
+        "source_format": source_format,
+        "cues": cues,
+    }
 
 
 @router.post("/skip", response_model=QueueItemResponse | None)
@@ -221,7 +254,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
 
                 command = payload.get("command")
                 source = payload.get("source", "unknown")
-                if command not in {"play", "pause", "skip", "seek", "resync", "set_vocals_enabled", "set_vocals_volume"}:
+                if command not in {"play", "pause", "skip", "seek", "resync", "set_vocals_enabled", "set_vocals_volume", "set_lyrics_enabled"}:
                     await manager.send_personal_message(
                         {
                             "type": "error",
@@ -314,6 +347,19 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         )
                         continue
                     await manager.set_stage_vocals_volume(vocals_volume=volume, source=source)
+                elif command == "set_lyrics_enabled":
+                    lyrics_enabled = payload.get("lyrics_enabled")
+                    if not isinstance(lyrics_enabled, bool):
+                        await manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "data": {"detail": "set_lyrics_enabled requires boolean lyrics_enabled"},
+                                "timestamp": asyncio.get_event_loop().time(),
+                            },
+                            websocket,
+                        )
+                        continue
+                    await manager.set_stage_lyrics_enabled(lyrics_enabled=lyrics_enabled, source=source)
                 else:
                     await manager.broadcast_stage_control_command(command=command, source=source)
                     await manager.set_stage_paused(is_paused=(command == "pause"), source=source)

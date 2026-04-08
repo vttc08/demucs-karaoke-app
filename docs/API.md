@@ -38,6 +38,7 @@ Allowed `command` values:
 - `seek` (requires numeric `seek_time` in seconds; optional boolean `is_paused`)
 - `set_vocals_enabled` (requires boolean `vocals_enabled`)
 - `set_vocals_volume` (requires numeric `vocals_volume` between `0.0` and `1.0`)
+- `set_lyrics_enabled` (requires boolean `lyrics_enabled`)
 
 **Server → client events (selected):**
 - Queue lifecycle:
@@ -49,7 +50,7 @@ Allowed `command` values:
   - `queue_item_failed`
 - Stage control:
   - `stage_control_command` with `{command, source}` and optional seek payload (`seek_time`, `is_paused`)
-  - `stage_state_update` with `{is_paused, vocals_enabled, vocals_volume, source}`
+  - `stage_state_update` with `{is_paused, vocals_enabled, vocals_volume, lyrics_enabled, source}`
 
 ---
 
@@ -212,6 +213,40 @@ GET /api/queue/next
 
 **Response:**
 Same as queue item, or `null` if no items ready.
+
+---
+
+### Get Queue Item Lyrics Cues
+```
+GET /api/queue/{item_id}/lyrics-cues
+```
+
+Returns normalized, time-sorted lyric cues for stage overlay rendering.
+
+Behavior:
+- Reads queue item media sidecar `lyrics_path` (after server-side normalization/repair).
+- Supports `.lrc` files (parsed to cues) and `.json` files (validated/normalized cue payloads).
+- Uses configured media/cache roots for `/media/...` and `/cache/...` paths.
+
+**Success response:**
+```json
+{
+  "item_id": 12,
+  "media_id": 45,
+  "lyrics_path": "/media/song123.lrc",
+  "source_format": "lrc",
+  "cues": [
+    {"time": 1.2, "text": "First line"},
+    {"time": 4.8, "text": "Second line"}
+  ]
+}
+```
+
+**Error responses:**
+- `404` queue item not found
+- `404` lyrics not available for queue item
+- `404` sidecar file missing on disk
+- `422` unsupported or invalid lyrics format/payload
 
 ---
 

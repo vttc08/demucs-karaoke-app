@@ -490,12 +490,96 @@ def test_cache_file_served_from_cache_route(client):
             cache_file.unlink()
 
 
+def test_get_queue_item_lyrics_cues_from_lrc(client):
+    """Lyrics cues endpoint should parse LRC sidecar files."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "lyric-lrc-1", "title": "Lyric LRC", "is_karaoke": False},
+    ).json()
+
+    lyrics_file = Path(settings.media_path) / "route-lyrics.lrc"
+    lyrics_file.write_text("[00:00.00]Line one\n[00:03.00]Line two\n", encoding="utf-8")
+
+    db = TestingSessionLocal()
+    try:
+        row = db.query(QueueItem).filter(QueueItem.id == created["id"]).first()
+        assert row is not None
+        assert row.media is not None
+        row.media.lyrics_path = "/media/route-lyrics.lrc"
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        response = client.get(f"/api/queue/{created['id']}/lyrics-cues")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["item_id"] == created["id"]
+        assert payload["source_format"] == "lrc"
+        assert payload["cues"][0] == {"time": 0.0, "text": "Line one"}
+        assert payload["cues"][1] == {"time": 3.0, "text": "Line two"}
+    finally:
+        if lyrics_file.exists():
+            lyrics_file.unlink()
+
+
+def test_get_queue_item_lyrics_cues_from_json(client):
+    """Lyrics cues endpoint should read JSON sidecar files."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "lyric-json-1", "title": "Lyric JSON", "is_karaoke": False},
+    ).json()
+
+    lyrics_file = Path(settings.cache_path) / "route-lyrics.json"
+    lyrics_file.write_text(
+        '{"cues":[{"start":4.0,"line":"Fourth"},{"time":1.5,"text":"First"}]}',
+        encoding="utf-8",
+    )
+
+    db = TestingSessionLocal()
+    try:
+        row = db.query(QueueItem).filter(QueueItem.id == created["id"]).first()
+        assert row is not None
+        assert row.media is not None
+        row.media.lyrics_path = "/cache/route-lyrics.json"
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        response = client.get(f"/api/queue/{created['id']}/lyrics-cues")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["source_format"] == "json"
+        assert payload["cues"] == [
+            {"time": 1.5, "text": "First"},
+            {"time": 4.0, "text": "Fourth"},
+        ]
+    finally:
+        if lyrics_file.exists():
+            lyrics_file.unlink()
+
+
+def test_get_queue_item_lyrics_cues_returns_404_without_lyrics(client):
+    """Lyrics cues endpoint should return 404 when no lyrics sidecar exists."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "lyric-none-1", "title": "Lyric None", "is_karaoke": False},
+    ).json()
+
+    response = client.get(f"/api/queue/{created['id']}/lyrics-cues")
+    assert response.status_code == 404
+    assert "Lyrics not available" in response.json()["detail"]
+
+
 def test_websocket_connect_and_receive_connected_message(client):
     """WebSocket endpoint should accept connections and send initial connected payload."""
     with client.websocket_connect("/api/queue/ws") as websocket:
         message = websocket.receive_json()
         assert message["type"] == "connected"
         assert "connection_count" in message["data"]
+        assert "stage_state" in message["data"]
+        assert message["data"]["stage_state"]["lyrics_enabled"] is True
 
 
 def test_websocket_broadcasts_queue_item_added_event(client):
@@ -635,6 +719,35 @@ def test_websocket_stage_command_pause_broadcasts_control_and_state(client):
             assert state_event["data"]["is_paused"] is True
             assert state_event["data"]["vocals_enabled"] is True
             assert state_event["data"]["vocals_volume"] == 1.0
+            assert state_event["data"]["lyrics_enabled"] is True
+
+
+def test_websocket_stage_command_set_lyrics_enabled_broadcasts_state(client):
+    """Lyrics toggle should broadcast a stage state update."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "set_lyrics_enabled",
+                        "source": "queue",
+                        "lyrics_enabled": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            state_event = receiver.receive_json()
+            if state_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                state_event = receiver.receive_json()
+            assert state_event["type"] == "stage_state_update"
+            assert state_event["data"]["lyrics_enabled"] is False
+            assert state_event["data"]["vocals_enabled"] is True
 
 
 def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
