@@ -254,7 +254,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
 
                 command = payload.get("command")
                 source = payload.get("source", "unknown")
-                if command not in {"play", "pause", "skip", "seek", "resync", "set_vocals_enabled", "set_vocals_volume"}:
+                if command not in {"play", "pause", "skip", "seek", "resync", "set_vocals_enabled", "set_vocals_volume", "set_lyrics_enabled"}:
                     await manager.send_personal_message(
                         {
                             "type": "error",
@@ -347,6 +347,19 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         )
                         continue
                     await manager.set_stage_vocals_volume(vocals_volume=volume, source=source)
+                elif command == "set_lyrics_enabled":
+                    lyrics_enabled = payload.get("lyrics_enabled")
+                    if not isinstance(lyrics_enabled, bool):
+                        await manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "data": {"detail": "set_lyrics_enabled requires boolean lyrics_enabled"},
+                                "timestamp": asyncio.get_event_loop().time(),
+                            },
+                            websocket,
+                        )
+                        continue
+                    await manager.set_stage_lyrics_enabled(lyrics_enabled=lyrics_enabled, source=source)
                 else:
                     await manager.broadcast_stage_control_command(command=command, source=source)
                     await manager.set_stage_paused(is_paused=(command == "pause"), source=source)

@@ -17,6 +17,7 @@ class ConnectionManager:
             "is_paused": False,
             "vocals_enabled": True,
             "vocals_volume": 1.0,
+            "lyrics_enabled": True,
         }
     
     async def connect(self, websocket: WebSocket):
@@ -154,6 +155,7 @@ class ConnectionManager:
                 "is_paused": state["is_paused"],
                 "vocals_enabled": state["vocals_enabled"],
                 "vocals_volume": state["vocals_volume"],
+                "lyrics_enabled": state["lyrics_enabled"],
                 "source": source,
             },
             "timestamp": datetime.utcnow().isoformat()
@@ -179,11 +181,17 @@ class ConnectionManager:
         self._stage_state["vocals_volume"] = clamped
         await self.broadcast_stage_state_update(source=source)
 
+    async def set_stage_lyrics_enabled(self, lyrics_enabled: bool, source: str = "unknown"):
+        """Set lyrics overlay visibility and broadcast full stage state."""
+        self._stage_state["lyrics_enabled"] = bool(lyrics_enabled)
+        await self.broadcast_stage_state_update(source=source)
+
     async def reset_stage_state(self, source: str = "unknown"):
         """Reset stage state defaults for a newly playing item."""
         self._stage_state["is_paused"] = False
         self._stage_state["vocals_enabled"] = True
         self._stage_state["vocals_volume"] = 1.0
+        self._stage_state["lyrics_enabled"] = True
         await self.broadcast_stage_state_update(source=source)
     
     def get_connection_count(self) -> int:

@@ -183,6 +183,15 @@
                             Resync
                         </button>
                         <button
+                            id="lyrics-toggle-btn"
+                            class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Toggle lyrics overlay"
+                            {% if not current.lyrics_path %}disabled{% endif %}
+                        >
+                            <span id="lyrics-toggle-icon" class="material-symbols-outlined text-base">subtitles</span>
+                            <span id="lyrics-toggle-label">Lyrics On</span>
+                        </button>
+                        <button
                             id="qr-toggle-btn"
                             class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
                         >
@@ -277,6 +286,9 @@ const vocalsToggleLabel = document.getElementById("stage-vocals-toggle-label");
 const vocalsVolumeSlider = document.getElementById("stage-vocals-volume-slider");
 const skipBtn = document.getElementById("skip-btn");
 const forceResyncBtn = document.getElementById("force-resync-btn");
+const lyricsToggleBtn = document.getElementById("lyrics-toggle-btn");
+const lyricsToggleIcon = document.getElementById("lyrics-toggle-icon");
+const lyricsToggleLabel = document.getElementById("lyrics-toggle-label");
 const qrToggleBtn = document.getElementById("qr-toggle-btn");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const fullscreenIcon = document.getElementById("fullscreen-icon");
@@ -296,6 +308,10 @@ let stageSocket = null;
 let mixState = {
     vocals_enabled: true,
     vocals_volume: 1.0,
+};
+let lyricsState = {
+    enabled: true,
+    available: false,
 };
 let vocalsAvailable = Boolean(vocalsAudio);
 let audioContext = null;
@@ -318,6 +334,14 @@ function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text || "";
     return div.innerHTML;
+}
+
+function updateLyricsUi() {
+    if (!lyricsToggleBtn || !lyricsToggleLabel || !lyricsToggleIcon) return;
+    const connected = !!stageSocket && stageSocket.readyState === WebSocket.OPEN;
+    lyricsToggleBtn.disabled = !lyricsState.available || !connected;
+    lyricsToggleIcon.textContent = lyricsState.enabled ? "subtitles" : "subtitles_off";
+    lyricsToggleLabel.textContent = lyricsState.available ? (lyricsState.enabled ? "Lyrics On" : "Lyrics Off") : "No Lyrics";
 }
 
 function setLyricsOverlayVisible(visible) {
@@ -370,6 +394,10 @@ function renderLyricsWindow(activeIndex) {
     if (!lyricsLines) {
         return;
     }
+    if (!lyricsState.enabled) {
+        setLyricsOverlayVisible(false);
+        return;
+    }
     if (!lyricCues.length) {
         lyricsLines.innerHTML = "";
         setLyricsOverlayVisible(false);
@@ -398,6 +426,17 @@ function renderLyricsWindow(activeIndex) {
         `)
         .join("");
     setLyricsOverlayVisible(linesToRender.length > 0);
+}
+
+function setLyricsEnabled(enabled) {
+    lyricsState.enabled = Boolean(enabled);
+    updateLyricsUi();
+    if (lyricsState.enabled) {
+        activeLyricCueIndex = null;
+        updateLyricsForTime(video ? (video.currentTime || 0) : 0);
+    } else {
+        setLyricsOverlayVisible(false);
+    }
 }
 
 function updateLyricsForTime(currentTime) {
@@ -447,6 +486,10 @@ async function loadLyricsCues() {
     if (!currentItemId) {
         lyricCues = [];
         activeLyricCueIndex = null;
+        lyricsState.available = false;
+        lyricsState.enabled = false;
+        setLyricsOverlayVisible(false);
+        updateLyricsUi();
         renderLyricsWindow(null);
         return;
     }
@@ -456,6 +499,9 @@ async function loadLyricsCues() {
         if (!response.ok) {
             lyricCues = [];
             activeLyricCueIndex = null;
+            lyricsState.available = false;
+            lyricsState.enabled = false;
+            updateLyricsUi();
             renderLyricsWindow(null);
             return;
         }
@@ -466,12 +512,20 @@ async function loadLyricsCues() {
             .map(normalizeCue)
             .filter((cue) => cue !== null)
             .sort((a, b) => a.time - b.time);
+        lyricsState.available = lyricCues.length > 0;
+        if (!lyricsState.available) {
+            lyricsState.enabled = false;
+        }
         activeLyricCueIndex = null;
+        updateLyricsUi();
         updateLyricsForTime(video ? (video.currentTime || 0) : 0);
     } catch (error) {
         console.warn("Failed to load lyrics cues:", error);
         lyricCues = [];
         activeLyricCueIndex = null;
+        lyricsState.available = false;
+        lyricsState.enabled = false;
+        updateLyricsUi();
         renderLyricsWindow(null);
     }
 }
@@ -650,6 +704,11 @@ function applyStageStateFromServer(data) {
     }
     if (typeof data.vocals_volume === "number" && Number.isFinite(data.vocals_volume)) {
         mixState.vocals_volume = Math.max(0, Math.min(1, data.vocals_volume));
+    }
+    if (typeof data.lyrics_enabled === "boolean") {
+        setLyricsEnabled(data.lyrics_enabled);
+    } else {
+        updateLyricsUi();
     }
     updateVocalsUi();
     applyVocalsMix();
@@ -1021,6 +1080,26 @@ if (forceResyncBtn) {
     });
 }
 
+if (lyricsToggleBtn) {
+    lyricsToggleBtn.addEventListener("click", () => {
+        if (!lyricsState.available) {
+            return;
+        }
+        const nextEnabled = !lyricsState.enabled;
+        const sent = sendStageCommand("set_lyrics_enabled", { lyrics_enabled: nextEnabled });
+        if (!sent) {
+            lyricsState.enabled = nextEnabled;
+            updateLyricsUi();
+            if (lyricsState.enabled) {
+                activeLyricCueIndex = null;
+                updateLyricsForTime(video ? (video.currentTime || 0) : 0);
+            } else {
+                setLyricsOverlayVisible(false);
+            }
+        }
+    });
+}
+
 if (qrToggleBtn) {
     qrToggleBtn.addEventListener("click", () => {
         if (!isQrVisible) {
@@ -1119,6 +1198,7 @@ document.addEventListener("fullscreenchange", () => {
 syncFullscreenState();
 updateFullscreenUi();
 updateVocalsUi();
+updateLyricsUi();
 updateQrOverlayContent();
 loadLyricsCues();
 connectStageWebSocket();

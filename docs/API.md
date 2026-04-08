@@ -38,6 +38,7 @@ Allowed `command` values:
 - `seek` (requires numeric `seek_time` in seconds; optional boolean `is_paused`)
 - `set_vocals_enabled` (requires boolean `vocals_enabled`)
 - `set_vocals_volume` (requires numeric `vocals_volume` between `0.0` and `1.0`)
+- `set_lyrics_enabled` (requires boolean `lyrics_enabled`)
 
 **Server → client events (selected):**
 - Queue lifecycle:
@@ -49,7 +50,7 @@ Allowed `command` values:
   - `queue_item_failed`
 - Stage control:
   - `stage_control_command` with `{command, source}` and optional seek payload (`seek_time`, `is_paused`)
-  - `stage_state_update` with `{is_paused, vocals_enabled, vocals_volume, source}`
+  - `stage_state_update` with `{is_paused, vocals_enabled, vocals_volume, lyrics_enabled, source}`
 
 ---
 

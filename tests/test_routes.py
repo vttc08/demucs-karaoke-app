@@ -578,6 +578,8 @@ def test_websocket_connect_and_receive_connected_message(client):
         message = websocket.receive_json()
         assert message["type"] == "connected"
         assert "connection_count" in message["data"]
+        assert "stage_state" in message["data"]
+        assert message["data"]["stage_state"]["lyrics_enabled"] is True
 
 
 def test_websocket_broadcasts_queue_item_added_event(client):
@@ -717,6 +719,35 @@ def test_websocket_stage_command_pause_broadcasts_control_and_state(client):
             assert state_event["data"]["is_paused"] is True
             assert state_event["data"]["vocals_enabled"] is True
             assert state_event["data"]["vocals_volume"] == 1.0
+            assert state_event["data"]["lyrics_enabled"] is True
+
+
+def test_websocket_stage_command_set_lyrics_enabled_broadcasts_state(client):
+    """Lyrics toggle should broadcast a stage state update."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "set_lyrics_enabled",
+                        "source": "queue",
+                        "lyrics_enabled": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            state_event = receiver.receive_json()
+            if state_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                state_event = receiver.receive_json()
+            assert state_event["type"] == "stage_state_update"
+            assert state_event["data"]["lyrics_enabled"] is False
+            assert state_event["data"]["vocals_enabled"] is True
 
 
 def test_websocket_stage_command_seek_broadcasts_control_and_state(client):

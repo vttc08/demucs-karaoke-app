@@ -41,6 +41,7 @@ The stage page uses a websocket-first model:
   video/vocals realignment on stage clients.
 - `routes/queue.py` also accepts stage mix commands (`set_vocals_enabled`, `set_vocals_volume`)
   for runtime-only vocal assist control.
+- `routes/queue.py` also accepts `set_lyrics_enabled` for runtime-only lyrics overlay visibility.
 - For `play`/`pause`, the server broadcasts:
   - `stage_control_command`
   - `stage_state_update`
@@ -54,6 +55,7 @@ The stage page uses a websocket-first model:
   - `is_paused`
   - `vocals_enabled`
   - `vocals_volume` (`0.0` to `1.0`)
+  - `lyrics_enabled`
   and includes it in `stage_state_update` broadcasts.
 - Queue REST routes broadcast immediate state changes:
   - `queue_item_added`
@@ -73,6 +75,7 @@ The stage page uses a websocket-first model:
 - Queue page now includes stage remote controls that send websocket `stage_command` messages.
 - Queue page includes stage vocal-assist controls (toggle + volume slider) that send websocket
   mix commands and mirror live `stage_state_update` broadcasts.
+- Queue page includes a lyrics overlay toggle that mirrors the stage lyrics visibility state.
 - Stage page consumes websocket queue events and stage-control events to stay in sync without polling.
 
 ## Sidecar multi-track playback
