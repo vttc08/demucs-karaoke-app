@@ -1,6 +1,7 @@
 """API routes for queue management."""
 import asyncio
 import logging
+import math
 from typing import List
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
@@ -220,7 +221,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
 
                 command = payload.get("command")
                 source = payload.get("source", "unknown")
-                if command not in {"play", "pause", "skip", "set_vocals_enabled", "set_vocals_volume"}:
+                if command not in {"play", "pause", "skip", "seek", "resync", "set_vocals_enabled", "set_vocals_volume"}:
                     await manager.send_personal_message(
                         {
                             "type": "error",
@@ -240,6 +241,42 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         result.id if result else None,
                         current.id if current else None,
                     )
+                elif command == "seek":
+                    raw_seek_time = payload.get("seek_time")
+                    if not isinstance(raw_seek_time, (int, float)):
+                        await manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "data": {"detail": "seek requires numeric seek_time"},
+                                "timestamp": asyncio.get_event_loop().time(),
+                            },
+                            websocket,
+                        )
+                        continue
+                    seek_time = float(raw_seek_time)
+                    if seek_time < 0.0 or not math.isfinite(seek_time):
+                        await manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "data": {"detail": "seek_time must be a non-negative finite number"},
+                                "timestamp": asyncio.get_event_loop().time(),
+                            },
+                            websocket,
+                        )
+                        continue
+                    is_paused = payload.get("is_paused")
+                    extra_data = {"seek_time": seek_time}
+                    if isinstance(is_paused, bool):
+                        extra_data["is_paused"] = is_paused
+                    await manager.broadcast_stage_control_command(
+                        command=command,
+                        source=source,
+                        extra_data=extra_data,
+                    )
+                    if isinstance(is_paused, bool):
+                        await manager.set_stage_paused(is_paused=is_paused, source=source)
+                elif command == "resync":
+                    await manager.broadcast_stage_control_command(command=command, source=source)
                 elif command == "set_vocals_enabled":
                     vocals_enabled = payload.get("vocals_enabled")
                     if not isinstance(vocals_enabled, bool):

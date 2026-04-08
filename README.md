@@ -86,8 +86,8 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
    - Queue status updates in real time (downloading, processing, ready, playing, failed)
    
 2. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
-   - Presentation-first stage output with fullscreen-optimized player
-   - Minimal controls overlay (play/pause, skip, fullscreen)
+    - Presentation-first stage output with fullscreen-optimized player
+    - Minimal controls overlay (play/pause, skip, resync, fullscreen)
    - Compact "up next" chips without queue-management actions
    - Auto-advances when song ends
    - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling

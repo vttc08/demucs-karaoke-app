@@ -11,6 +11,7 @@ const stageRemotePlayPauseBtn = document.getElementById('stage-remote-play-pause
 const stageRemotePlayPauseIcon = document.getElementById('stage-remote-play-pause-icon');
 const stageRemotePlayPauseLabel = document.getElementById('stage-remote-play-pause-label');
 const stageRemoteSkipBtn = document.getElementById('stage-remote-skip-btn');
+const stageRemoteResyncBtn = document.getElementById('stage-remote-resync-btn');
 const stageRemoteVocalsToggleBtn = document.getElementById('stage-remote-vocals-toggle-btn');
 const stageRemoteVocalsToggleIcon = document.getElementById('stage-remote-vocals-toggle-icon');
 const stageRemoteVocalsToggleLabel = document.getElementById('stage-remote-vocals-toggle-label');
@@ -512,6 +513,7 @@ class QueueWebSocket {
         const connected = this.ws && this.ws.readyState === WebSocket.OPEN;
         if (stageRemotePlayPauseBtn) stageRemotePlayPauseBtn.disabled = !connected;
         if (stageRemoteSkipBtn) stageRemoteSkipBtn.disabled = !connected;
+        if (stageRemoteResyncBtn) stageRemoteResyncBtn.disabled = !connected;
         updateStageRemoteVocalsUi();
         if (stageRemoteStatus) {
             stageRemoteStatus.textContent = connected ? 'Connected' : 'Offline';
@@ -742,6 +744,23 @@ if (stageRemoteSkipBtn) {
             type: 'stage_command',
             data: {
                 command: 'skip',
+                source: 'queue',
+            },
+            timestamp: Date.now(),
+        });
+        if (!sent) {
+            alert('Stage control is offline');
+        }
+    });
+}
+
+if (stageRemoteResyncBtn) {
+    stageRemoteResyncBtn.addEventListener('click', () => {
+        if (!queueWebSocket) return;
+        const sent = queueWebSocket.send({
+            type: 'stage_command',
+            data: {
+                command: 'resync',
                 source: 'queue',
             },
             timestamp: Date.now(),

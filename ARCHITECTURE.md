@@ -36,11 +36,17 @@ The stage page uses a websocket-first model:
 - `routes/queue.py` hosts the WebSocket endpoint and heartbeat loop (server `ping`, client `pong`).
 - `services/websocket_manager.py` tracks active connections and broadcasts queue events.
 - `routes/queue.py` also accepts client `stage_command` messages (`play`, `pause`, `skip`).
+- `routes/queue.py` also accepts `seek` stage commands for synchronized timeline jumps across stage clients.
+- `routes/queue.py` also accepts `resync` stage commands so remote controls can force local
+  video/vocals realignment on stage clients.
 - `routes/queue.py` also accepts stage mix commands (`set_vocals_enabled`, `set_vocals_volume`)
   for runtime-only vocal assist control.
 - For `play`/`pause`, the server broadcasts:
   - `stage_control_command`
   - `stage_state_update`
+- For `seek`, the server validates `seek_time` and broadcasts:
+  - `stage_control_command` with `seek_time` (+ optional `is_paused`)
+  - `stage_state_update` when paused state is included
 - For `skip`, server-side queue skip logic runs and then broadcasts:
   - `stage_control_command`
   - `current_item_changed`

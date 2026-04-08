@@ -126,14 +126,22 @@ class ConnectionManager:
             "timestamp": datetime.utcnow().isoformat()
         })
 
-    async def broadcast_stage_control_command(self, command: str, source: str = "unknown"):
+    async def broadcast_stage_control_command(
+        self,
+        command: str,
+        source: str = "unknown",
+        extra_data: dict | None = None,
+    ):
         """Broadcast a stage control command to all connected clients."""
+        payload = {
+            "command": command,
+            "source": source,
+        }
+        if extra_data:
+            payload.update(extra_data)
         await self.broadcast({
             "type": "stage_control_command",
-            "data": {
-                "command": command,
-                "source": source,
-            },
+            "data": payload,
             "timestamp": datetime.utcnow().isoformat()
         })
 

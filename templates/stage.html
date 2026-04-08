@@ -137,6 +137,14 @@
                             Skip
                         </button>
                         <button
+                            id="force-resync-btn"
+                            class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            title="Force video and vocals back to the same timestamp"
+                        >
+                            <span class="material-symbols-outlined text-base">sync</span>
+                            Resync
+                        </button>
+                        <button
                             id="qr-toggle-btn"
                             class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
                         >
@@ -230,6 +238,7 @@ const vocalsToggleIcon = document.getElementById("stage-vocals-toggle-icon");
 const vocalsToggleLabel = document.getElementById("stage-vocals-toggle-label");
 const vocalsVolumeSlider = document.getElementById("stage-vocals-volume-slider");
 const skipBtn = document.getElementById("skip-btn");
+const forceResyncBtn = document.getElementById("force-resync-btn");
 const qrToggleBtn = document.getElementById("qr-toggle-btn");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const fullscreenIcon = document.getElementById("fullscreen-icon");
@@ -253,6 +262,8 @@ let audioContext = null;
 let vocalsSourceNode = null;
 let vocalsGainNode = null;
 let syncTimer = null;
+let suppressSeekBroadcast = false;
+let seekBroadcastUnlockTimer = null;
 
 function safeReload() {
     if (isReloading) return;
@@ -335,6 +346,100 @@ function stopSyncTimer() {
     if (!syncTimer) return;
     window.clearInterval(syncTimer);
     syncTimer = null;
+}
+
+function suppressSeekBroadcastTemporarily() {
+    suppressSeekBroadcast = true;
+    if (seekBroadcastUnlockTimer) {
+        window.clearTimeout(seekBroadcastUnlockTimer);
+    }
+    seekBroadcastUnlockTimer = window.setTimeout(() => {
+        suppressSeekBroadcast = false;
+        seekBroadcastUnlockTimer = null;
+    }, 500);
+}
+
+function seekMediaElement(mediaElement, seekTime) {
+    return new Promise((resolve) => {
+        if (!mediaElement) {
+            resolve();
+            return;
+        }
+        const targetTime = Math.max(0, Number.isFinite(seekTime) ? seekTime : 0);
+        const currentTime = Number.isFinite(mediaElement.currentTime) ? mediaElement.currentTime : 0;
+        if (Math.abs(currentTime - targetTime) < 0.01) {
+            resolve();
+            return;
+        }
+        let settled = false;
+        const settle = () => {
+            if (settled) return;
+            settled = true;
+            mediaElement.removeEventListener("seeked", settle);
+            mediaElement.removeEventListener("error", settle);
+            resolve();
+        };
+        mediaElement.addEventListener("seeked", settle, { once: true });
+        mediaElement.addEventListener("error", settle, { once: true });
+        window.setTimeout(settle, 350);
+        try {
+            mediaElement.currentTime = targetTime;
+        } catch (_) {
+            settle();
+        }
+    });
+}
+
+async function seekAndResyncPlayback(targetTime, shouldPausePlayback) {
+    if (!video) return;
+    const seekTime = Math.max(0, Number.isFinite(targetTime) ? targetTime : 0);
+    suppressSeekBroadcastTemporarily();
+    video.pause();
+    stopSyncTimer();
+    if (vocalsAudio && !vocalsAudio.paused) {
+        vocalsAudio.pause();
+    }
+    const seeks = [seekMediaElement(video, seekTime)];
+    if (vocalsAvailable && vocalsAudio) {
+        seeks.push(seekMediaElement(vocalsAudio, seekTime));
+    }
+    await Promise.all(seeks);
+    if (shouldPausePlayback) {
+        updatePlayPauseUi();
+        showStageControls();
+        return;
+    }
+    try {
+        await ensureAudioGraph();
+        await video.play();
+        syncVocalsToVideo(true);
+        startSyncTimer();
+    } catch (error) {
+        console.error("Seek/resync playback failed:", error);
+    } finally {
+        updatePlayPauseUi();
+        showStageControls();
+    }
+}
+
+async function forceResyncPlayback(broadcast = true) {
+    if (!video) return;
+    const shouldPausePlayback = video.paused;
+    if (!shouldPausePlayback) {
+        video.pause();
+        if (vocalsAudio && !vocalsAudio.paused) {
+            vocalsAudio.pause();
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 80));
+    }
+    const seekTime = Math.max(0, Math.floor(video.currentTime || 0));
+    await seekAndResyncPlayback(seekTime, shouldPausePlayback);
+    if (broadcast) {
+        sendStageCommand("seek", {
+            seek_time: seekTime,
+            is_paused: shouldPausePlayback,
+        });
+    }
 }
 
 function applyStageStateFromServer(data) {
@@ -513,7 +618,16 @@ function connectStageWebSocket() {
             if (messageType === "stage_control_command") {
                 const command = message?.data?.command;
                 if (!video) return;
-                if (command === "play" && video.paused) {
+                if (command === "resync") {
+                    await forceResyncPlayback(false);
+                } else if (command === "seek") {
+                    const seekTime = message?.data?.seek_time;
+                    const remotePaused = message?.data?.is_paused;
+                    if (typeof seekTime === "number" && Number.isFinite(seekTime)) {
+                        const shouldPausePlayback = typeof remotePaused === "boolean" ? remotePaused : video.paused;
+                        await seekAndResyncPlayback(seekTime, shouldPausePlayback);
+                    }
+                } else if (command === "play" && video.paused) {
                     await ensureAudioGraph();
                     await video.play();
                     syncVocalsToVideo(true);
@@ -604,7 +718,21 @@ if (video) {
         }
     });
     video.addEventListener("seeking", () => {
-        syncVocalsToVideo(true);
+        if (vocalsAvailable && vocalsAudio) {
+            vocalsAudio.currentTime = video.currentTime || 0;
+            if (video.paused && !vocalsAudio.paused) {
+                vocalsAudio.pause();
+            }
+        }
+        if (!video.paused) {
+            syncVocalsToVideo(true);
+        }
+        if (!suppressSeekBroadcast) {
+            sendStageCommand("seek", {
+                seek_time: video.currentTime || 0,
+                is_paused: video.paused,
+            });
+        }
     });
     updatePlayPauseUi();
 }
@@ -670,6 +798,17 @@ if (skipBtn) {
         } catch (error) {
             console.error("Skip failed:", error);
             skipBtn.disabled = false;
+        }
+    });
+}
+
+if (forceResyncBtn) {
+    forceResyncBtn.addEventListener("click", async () => {
+        forceResyncBtn.disabled = true;
+        try {
+            await forceResyncPlayback();
+        } finally {
+            forceResyncBtn.disabled = false;
         }
     });
 }

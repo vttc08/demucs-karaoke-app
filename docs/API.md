@@ -34,6 +34,8 @@ Allowed `command` values:
 - `play`
 - `pause`
 - `skip`
+- `resync` (force stage client(s) to re-align local video/vocals at current playback timestamp)
+- `seek` (requires numeric `seek_time` in seconds; optional boolean `is_paused`)
 - `set_vocals_enabled` (requires boolean `vocals_enabled`)
 - `set_vocals_volume` (requires numeric `vocals_volume` between `0.0` and `1.0`)
 
@@ -46,7 +48,7 @@ Allowed `command` values:
   - `current_item_changed`
   - `queue_item_failed`
 - Stage control:
-  - `stage_control_command` with `{command, source}`
+  - `stage_control_command` with `{command, source}` and optional seek payload (`seek_time`, `is_paused`)
   - `stage_state_update` with `{is_paused, vocals_enabled, vocals_volume, source}`
 
 ---
@@ -85,6 +87,8 @@ GET /api/search/?q=<query>
   }
 ]
 ```
+
+`media_path`, `vocals_path`, and `lyrics_path` are normalized to app-served URL prefixes (`/media/...`, `/cache/...`) when possible so browser playback requests always target backend-served file routes.
 
 ---
 

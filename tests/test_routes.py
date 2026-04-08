@@ -637,6 +637,87 @@ def test_websocket_stage_command_pause_broadcasts_control_and_state(client):
             assert state_event["data"]["vocals_volume"] == 1.0
 
 
+def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
+    """Seek stage command should broadcast target timestamp and paused state."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "seek",
+                        "source": "queue",
+                        "seek_time": 42.5,
+                        "is_paused": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            control_event = receiver.receive_json()
+            if control_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                control_event = receiver.receive_json()
+            assert control_event["type"] == "stage_control_command"
+            assert control_event["data"]["command"] == "seek"
+            assert control_event["data"]["source"] == "queue"
+            assert control_event["data"]["seek_time"] == 42.5
+            assert control_event["data"]["is_paused"] is False
+
+            state_event = receiver.receive_json()
+            if state_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                state_event = receiver.receive_json()
+            assert state_event["type"] == "stage_state_update"
+            assert state_event["data"]["is_paused"] is False
+
+
+def test_websocket_stage_command_seek_rejects_invalid_time(client):
+    """Invalid seek_time values should return websocket error."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        sender.send_json(
+            {
+                "type": "stage_command",
+                "data": {"command": "seek", "source": "queue", "seek_time": -1},
+                "timestamp": 123,
+            }
+        )
+
+        response = sender.receive_json()
+        if response["type"] == "ping":
+            sender.send_json({"type": "pong"})
+            response = sender.receive_json()
+        assert response["type"] == "error"
+        assert "seek_time must be a non-negative finite number" in response["data"]["detail"]
+
+
+def test_websocket_stage_command_resync_broadcasts_control(client):
+    """Resync stage command should broadcast control command."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {"command": "resync", "source": "queue"},
+                    "timestamp": 123,
+                }
+            )
+
+            control_event = receiver.receive_json()
+            if control_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                control_event = receiver.receive_json()
+            assert control_event["type"] == "stage_control_command"
+            assert control_event["data"]["command"] == "resync"
+            assert control_event["data"]["source"] == "queue"
+
+
 def test_websocket_stage_command_set_vocals_enabled_broadcasts_state(client):
     """Vocals enabled command should broadcast updated stage mix state."""
     with client.websocket_connect("/api/queue/ws") as sender:
