@@ -33,12 +33,12 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] custom playback engine 
 - [x] background splash, show qrcode
 - [x] manage playback on other devices
-- [] database improvement, periodic and manual cleanup of failed songs and already played/skipped
+- [x] database improvement, periodic and manual cleanup of failed songs and already played/skipped
 - [ ] fulltext and file search existing media
 - [x] persist settings in database
 - [ ] integrate whisper (lang detect, word by word transcription), align lyrics if lyrics file present
-- [ ] explore client side lyrics compositing
-- [ ] explore client side multi-track playback and toggle vocals
+- [x] explore client side lyrics compositing
+- [x] explore client side multi-track playback and toggle vocals
 - [ ] user can upload mp3 and mp4 videos
 - [ ] queue page with users
 - [ ] frontend settings page polish
