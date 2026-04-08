@@ -42,6 +42,8 @@ class KaraokeService:
         try:
             if item.media is None:
                 raise RuntimeError(f"Queue item missing media for id={item.id}")
+            existing_media_path = self._existing_media_file(item)
+            existing_vocals_path = self._existing_local_file(item.media.vocals_path)
             logger.info(
                 "Processing queue item item_id=%s youtube_id=%s karaoke=%s burn_lyrics=%s",
                 item.id,
@@ -55,6 +57,16 @@ class KaraokeService:
             )
 
             if item.requested_karaoke:
+                if existing_media_path and existing_vocals_path:
+                    logger.info(
+                        "Reusing existing karaoke media item_id=%s media=%s",
+                        item.id,
+                        existing_media_path,
+                    )
+                    await self.queue_service.update_status_async(
+                        db, item_id, QueueStatus.READY
+                    )
+                    return
                 demucs_health = self.demucs_client.health_check()
                 if not demucs_health.healthy:
                     logger.warning(
@@ -73,17 +85,45 @@ class KaraokeService:
                         ),
                     )
                     return
-                # Karaoke flow prefers separate tracks for processing.
-                video_path = await asyncio.to_thread(
-                    self.youtube_service.download_video, item.media.youtube_id
-                )
-                # Download audio only for karaoke flow
-                audio_path = await asyncio.to_thread(
-                    self.youtube_service.download_audio, item.media.youtube_id
-                )
+                if existing_media_path:
+                    logger.info(
+                        "Reusing existing media for karaoke item_id=%s media=%s",
+                        item.id,
+                        existing_media_path,
+                    )
+                    extracted_audio_path = (
+                        settings.cache_path
+                        / "audio"
+                        / f"{item.media.youtube_id}.wav"
+                    )
+                    audio_path = await asyncio.to_thread(
+                        self.ffmpeg.extract_audio,
+                        existing_media_path,
+                        extracted_audio_path,
+                    )
+                    video_path = existing_media_path
+                else:
+                    # Karaoke flow prefers separate tracks for processing.
+                    video_path = await asyncio.to_thread(
+                        self.youtube_service.download_video, item.media.youtube_id
+                    )
+                    # Download audio only for karaoke flow
+                    audio_path = await asyncio.to_thread(
+                        self.youtube_service.download_audio, item.media.youtube_id
+                    )
                 # Karaoke flow
                 await self._process_karaoke(db, item, video_path, audio_path)
             else:
+                if existing_media_path:
+                    logger.info(
+                        "Reusing existing media for non-karaoke item_id=%s media=%s",
+                        item.id,
+                        existing_media_path,
+                    )
+                    await self.queue_service.update_status_async(
+                        db, item_id, QueueStatus.READY
+                    )
+                    return
                 # Non-karaoke flow: prefer single file with built-in audio.
                 video_path = await asyncio.to_thread(
                     self.youtube_service.download_video_with_audio, item.media.youtube_id
@@ -99,6 +139,24 @@ class KaraokeService:
             await self.queue_service.update_status_async(
                 db, item_id, QueueStatus.FAILED, error=str(e)
             )
+
+    @staticmethod
+    def _existing_media_file(item: QueueItem) -> Path | None:
+        """Return a local filesystem path when the queue item already has usable media."""
+        if item.media is None or item.media.missing:
+            return None
+        return KaraokeService._existing_local_file(item.media.media_path)
+
+    @staticmethod
+    def _existing_local_file(media_url: str | None) -> Path | None:
+        """Map an app media URL to a local file when it exists on disk."""
+        if not media_url:
+            return None
+
+        media_file = QueueService._media_url_to_file(media_url)
+        if media_file is None:
+            return None
+        return media_file if media_file.exists() else None
 
     async def _process_karaoke(
         self, db: Session, item, video_path: Path, audio_path: Path

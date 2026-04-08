@@ -29,6 +29,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] concurrent ytdlp search for karaoke phrase and settings page and filter for results
 - [x] configure proxy settings for YTDLP
 - [x] support direct YouTube link/id input in search box
+- [x] mark already-downloaded search results and reuse existing media on queue add
 - [ ] ~~ffmpeg microservice~~
 - [x] custom playback engine 
 - [x] background splash, show qrcode

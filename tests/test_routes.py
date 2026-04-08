@@ -72,6 +72,28 @@ def test_health_check(client):
     assert response.json() == {"status": "healthy"}
 
 
+def test_search_youtube_marks_downloaded_results(client):
+    """Search API should include downloaded markers when library rows exist."""
+    with patch("routes.search.youtube_service.search") as mock_search:
+        mock_search.return_value = [
+            {
+                "video_id": "saved123",
+                "title": "Already Saved",
+                "channel": "Library",
+                "duration": "2:00",
+                "thumbnail": "https://i.ytimg.com/vi/saved123/hqdefault.jpg",
+                "downloaded": True,
+            }
+        ]
+        response = client.get("/api/search/?q=saved123")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["downloaded"] is True
+    mock_search.assert_called_once()
+    assert "db" in mock_search.call_args.kwargs
+
+
 def test_add_to_queue(client):
     """Test adding item to queue."""
     response = client.post(

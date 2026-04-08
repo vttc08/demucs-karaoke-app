@@ -88,6 +88,22 @@ class FFmpegAdapter:
         subprocess.run(cmd, check=True, capture_output=True)
         return output_path
 
+    def extract_audio(self, source_path: Path, output_path: Path) -> Path:
+        """Extract a WAV audio track from a local media file."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            self.ffmpeg_path,
+            "-i",
+            str(source_path),
+            "-vn",
+            "-acodec",
+            "pcm_s16le",
+            "-y",
+            str(output_path),
+        ]
+        subprocess.run(cmd, check=True, capture_output=True)
+        return output_path
+
     def _create_srt_file(self, lyrics: str, output_path: Path):
         """Create a simple SRT subtitle file from lyrics."""
         lrc_entries = self._parse_lrc(lyrics)

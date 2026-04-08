@@ -3,8 +3,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
 from typing import List
+from sqlalchemy.orm import Session
 from adapters.ytdlp import YtDlpAdapter
-from models import YouTubeSearchResult
+from models import MediaItem, YouTubeSearchResult
 from config import settings
 
 
@@ -24,7 +25,9 @@ class YouTubeService:
     def _media_path() -> Path:
         return settings.media_path
 
-    def search(self, query: str, max_results: int = 10) -> List[YouTubeSearchResult]:
+    def search(
+        self, query: str, max_results: int = 10, db: Session | None = None
+    ) -> List[YouTubeSearchResult]:
         """
         Search YouTube for videos.
 
@@ -36,6 +39,7 @@ class YouTubeService:
             List of search results
         """
         results = self._search_results(query, max_results)
+        downloaded_ids = self._downloaded_video_ids(db, results)
         normalized = []
         for result in results:
             if not result.get("thumbnail") and result.get("video_id"):
@@ -45,8 +49,34 @@ class YouTubeService:
                         f"https://i.ytimg.com/vi/{result['video_id']}/hqdefault.jpg"
                     ),
                 }
+            if result.get("video_id") in downloaded_ids:
+                result = {**result, "downloaded": True}
             normalized.append(result)
         return [YouTubeSearchResult(**result) for result in normalized]
+
+    @staticmethod
+    def _downloaded_video_ids(db: Session | None, results: List[dict]) -> set[str]:
+        if db is None:
+            return set()
+
+        video_ids = [
+            result.get("video_id")
+            for result in results
+            if isinstance(result.get("video_id"), str) and result.get("video_id")
+        ]
+        if not video_ids:
+            return set()
+
+        rows = (
+            db.query(MediaItem.youtube_id, MediaItem.missing)
+            .filter(MediaItem.youtube_id.in_(video_ids))
+            .all()
+        )
+        return {
+            youtube_id
+            for youtube_id, missing in rows
+            if youtube_id and not missing
+        }
 
     def _search_results(self, query: str, max_results: int) -> List[dict]:
         """Search with optional concurrent karaoke query strategy."""

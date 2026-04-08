@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base, relationship
@@ -57,7 +58,10 @@ class MediaItem(Base):
     """Durable media/library item."""
 
     __tablename__ = "media_items"
-    __table_args__ = (UniqueConstraint("youtube_id", name="uq_media_items_youtube_id"),)
+    __table_args__ = (
+        UniqueConstraint("youtube_id", name="uq_media_items_youtube_id"),
+        Index("ix_media_items_youtube_id", "youtube_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     youtube_id = Column(String, nullable=True)
@@ -94,6 +98,7 @@ class YouTubeSearchResult(BaseModel):
     channel: str
     duration: Optional[str] = None
     thumbnail: Optional[str] = None
+    downloaded: bool = False
 
 
 class QueueItemCreate(BaseModel):

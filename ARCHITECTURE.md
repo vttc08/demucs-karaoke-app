@@ -123,6 +123,7 @@ The stage page uses a websocket-first model:
   - filesystem-relative `media_path`
   - optional sidecars: `lyrics_path`, `vocals_path`
   - `missing` flag for future filesystem reconciliation
+  - indexed `youtube_id` lookup for fast reuse checks
 - `queue_items` is active queue state only:
   - `media_id` FK (`ON DELETE RESTRICT`)
   - sparse `position` ordering (`1000` step)
@@ -179,6 +180,15 @@ This is applied at command build time, so new operations use updated proxy setti
   - Enabled + query without `karaoke`: two concurrent searches (`query` and `query + " karaoke"`)
 - Results are merged as interleaved/staggered entries (normal, karaoke, normal, ...),
   de-duplicated by `video_id`, then capped to requested `max_results`.
+- Search results are annotated with a `downloaded` flag when the `video_id` already exists in
+  `media_items` with a usable local media file.
+
+## Existing media reuse
+
+- Queue processing checks whether the queue item already points at a usable local media file.
+- If usable media already exists, non-karaoke items skip yt-dlp downloads entirely.
+- Karaoke items reuse existing media as the video source and only fall back to yt-dlp when no local
+  media file is available.
 
 ## Design principles
 - Keep the MVP CLI-friendly and easy to run locally

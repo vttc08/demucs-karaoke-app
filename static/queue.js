@@ -135,6 +135,12 @@ function displaySearchResults(results) {
                     <h4 class="font-bold text-on-surface truncate text-sm">${escapeHtml(result.title)}</h4>
                     <p class="text-xs text-on-surface-variant truncate">${escapeHtml(result.channel)}</p>
                     ${result.duration ? `<p class="text-xs text-on-surface-variant/60">${result.duration}</p>` : ''}
+                    ${result.downloaded ? `
+                        <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
+                            <span class="material-symbols-outlined text-[10px] text-secondary">download_done</span>
+                            <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">Downloaded</span>
+                        </div>
+                    ` : ''}
                     
                     <div class="flex items-center gap-3 mt-2">
                         <label class="flex items-center gap-2 text-xs cursor-pointer ${demucsHealth.healthy ? '' : 'opacity-40 cursor-not-allowed'}" title="${demucsHealth.healthy ? '' : escapeHtml(demucsHealth.detail)}">

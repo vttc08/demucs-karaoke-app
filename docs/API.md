@@ -84,12 +84,14 @@ GET /api/search/?q=<query>
     "title": "Video Title",
     "channel": "Channel Name",
     "duration": "3:32",
-    "thumbnail": "https://..."
+    "thumbnail": "https://...",
+    "downloaded": false
   }
 ]
 ```
 
 `media_path`, `vocals_path`, and `lyrics_path` are normalized to app-served URL prefixes (`/media/...`, `/cache/...`) when possible so browser playback requests always target backend-served file routes.
+`downloaded` is true when the returned video id already exists in `media_items` with a usable local media file.
 
 ---
 
@@ -111,6 +113,7 @@ POST /api/queue/
 
 `burn_lyrics` is optional and only applies when `is_karaoke` is true.
 If omitted, it defaults to `true`. For non-karaoke items, it is normalized to `false`.
+If the `youtube_id` already exists in `media_items` with a usable local media file, the queue item is created against that existing media row and processing reuses the stored file instead of re-downloading the video again.
 
 **Response:**
 ```json

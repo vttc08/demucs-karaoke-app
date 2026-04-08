@@ -132,6 +132,11 @@ def _ensure_indexes():
         )
         conn.execute(
             text(
+                "CREATE INDEX IF NOT EXISTS ix_media_items_youtube_id ON media_items(youtube_id)"
+            )
+        )
+        conn.execute(
+            text(
                 "CREATE INDEX IF NOT EXISTS idx_queue_position ON queue_items(position)"
             )
         )

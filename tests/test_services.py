@@ -21,7 +21,7 @@ from models import (
     QueueStatus,
     RuntimeSettingsUpdateRequest,
 )
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
 # Test database
@@ -59,6 +59,12 @@ def test_queue_service_add_to_queue(db_session):
     assert result.title == "Test Song"
     assert result.burn_lyrics is True
     assert result.status == QueueStatus.PENDING
+
+
+def test_media_items_has_youtube_id_index(db_session):
+    """Media item youtube_id lookups should be backed by an index."""
+    indexes = inspect(db_session.get_bind()).get_indexes("media_items")
+    assert any("youtube_id" in index["name"] for index in indexes)
 
 
 def test_queue_service_get_queue(db_session):
@@ -358,6 +364,39 @@ def test_youtube_service_search_uses_thumbnail_fallback(mock_ytdlp):
 
 
 @patch("services.youtube_service.YtDlpAdapter")
+def test_youtube_service_search_marks_downloaded_results(mock_ytdlp, db_session):
+    """Search results should be flagged when the video already exists locally."""
+    mock_instance = Mock()
+    mock_instance.search.return_value = [
+        {
+            "video_id": "saved123",
+            "title": "Already Saved",
+            "channel": "Library",
+            "duration": "2:00",
+            "thumbnail": None,
+        }
+    ]
+    mock_ytdlp.return_value = mock_instance
+    db_session.add(
+        MediaItem(
+            youtube_id="saved123",
+            title="Already Saved",
+            artist="Library",
+            media_path="/media/saved123.mp4",
+            missing=False,
+        )
+    )
+    db_session.commit()
+
+    service = YouTubeService()
+    results = service.search("saved", db=db_session)
+
+    assert len(results) == 1
+    assert results[0].downloaded is True
+    assert results[0].thumbnail == "https://i.ytimg.com/vi/saved123/hqdefault.jpg"
+
+
+@patch("services.youtube_service.YtDlpAdapter")
 def test_youtube_service_search_detects_youtube_url(mock_ytdlp):
     """YouTube URL query should resolve via single-video metadata fetch."""
     mock_instance = Mock()
@@ -587,6 +626,92 @@ async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session):
 
     service.ffmpeg.combine_audio_video.assert_called_once()
     service.ffmpeg.burn_subtitles.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_karaoke_service_reuses_existing_media_without_redownload(db_session, tmp_path):
+    """Existing downloaded media should skip yt-dlp download work for non-karaoke items."""
+    service = KaraokeService()
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.media_path / "reuse001.mp4").write_text("video", encoding="utf-8")
+
+        db_session.add(
+            MediaItem(
+                youtube_id="reuse001",
+                title="Reuse Song",
+                artist="Singer",
+                media_path="/media/reuse001.mp4",
+                missing=False,
+            )
+        )
+        db_session.flush()
+
+        item = service.queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(youtube_id="reuse001", title="Reuse Song", is_karaoke=False),
+        )
+
+        service.youtube_service = Mock()
+        service.ffmpeg = Mock()
+
+        await service.process_queue_item(db_session, item.id)
+
+        service.youtube_service.download_video_with_audio.assert_not_called()
+        updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
+        assert updated_item is not None
+        assert updated_item.status == QueueStatus.READY
+    finally:
+        settings.media_path = original_media
+
+
+@pytest.mark.asyncio
+async def test_karaoke_service_reuses_existing_karaoke_media_without_redownload(
+    db_session, tmp_path
+):
+    """Previously processed karaoke media should be reused without re-downloading."""
+    service = KaraokeService()
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.media_path / "kara-reuse.mp4").write_text("video", encoding="utf-8")
+        (settings.media_path / "kara-reuse.vocals.mp3").write_text("vocals", encoding="utf-8")
+
+        db_session.add(
+            MediaItem(
+                youtube_id="kara-reuse",
+                title="Karaoke Reuse",
+                artist="Singer",
+                media_path="/media/kara-reuse.mp4",
+                vocals_path="/media/kara-reuse.vocals.mp3",
+                missing=False,
+            )
+        )
+        db_session.flush()
+
+        item = service.queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id="kara-reuse", title="Karaoke Reuse", is_karaoke=True
+            ),
+        )
+
+        service.youtube_service = Mock()
+        service.ffmpeg = Mock()
+
+        await service.process_queue_item(db_session, item.id)
+
+        service.youtube_service.download_video.assert_not_called()
+        service.youtube_service.download_audio.assert_not_called()
+        service.ffmpeg.extract_audio.assert_not_called()
+        updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
+        assert updated_item is not None
+        assert updated_item.status == QueueStatus.READY
+    finally:
+        settings.media_path = original_media
 
 
 @pytest.mark.asyncio
