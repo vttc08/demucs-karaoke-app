@@ -5,6 +5,7 @@ This project currently uses two services:
 
 1. Main app
 - serves mobile queue page, stage page, and settings page
+- serves media library management page (`/media`) with placeholder-first UI interactions
 - serves stage-focused presentation page
 - manages queue state
 - searches YouTube

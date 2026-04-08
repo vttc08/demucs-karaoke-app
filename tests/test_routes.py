@@ -210,6 +210,14 @@ def test_settings_page_loads(client):
     assert b"Engine Settings" in response.content
 
 
+def test_media_management_page_loads(client):
+    """Test media management page renders."""
+    response = client.get("/media")
+    assert response.status_code == 200
+    assert b"Media Library" in response.content
+    assert b"Manage Existing Media" in response.content
+
+
 def test_get_runtime_settings(client):
     """Runtime settings endpoint should return current values."""
     response = client.get("/api/settings/")

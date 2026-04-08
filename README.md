@@ -96,13 +96,18 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
    - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling
 
 3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
-      - View current runtime settings
-      - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and yt-dlp proxy URL
+       - View current runtime settings
+       - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and yt-dlp proxy URL
       - Enable/disable concurrent yt-dlp search mode
       - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
       - Apply settings immediately without restarting the app (for processing/runtime behavior)
-      - Persist changes to the database so settings survive app reloads and restarts
-      - View real-time Demucs engine health (online/offline with detail)
+       - Persist changes to the database so settings survive app reloads and restarts
+       - View real-time Demucs engine health (online/offline with detail)
+
+4. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
+      - Browse existing media entries in responsive card/table layouts
+      - View title, artist, and capability badges (multi-track, lyrics)
+      - Use placeholder UI actions for rename, delete, and add-to-queue flows (integration-ready template variables)
 
 When concurrent yt-dlp search is enabled:
 - Query without `karaoke` triggers two parallel searches: `<query>` and `<query> karaoke`
