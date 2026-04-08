@@ -89,6 +89,19 @@ The stage page uses a websocket-first model:
   - vocals are routed through Web Audio `GainNode` for real-time mix control.
 - Vocal mix state is runtime-only and resets when the current queue item changes.
 
+## Stage lyrics overlay flow
+
+- Stage uses a custom HTML/CSS/JS overlay (not native WebVTT rendering) on top of the
+  `#stage-video-player`.
+- Lyrics cues are fetched from `GET /api/queue/{item_id}/lyrics-cues`.
+- Backend cue source is media sidecar `lyrics_path` and supports:
+  - `.lrc` sidecars parsed into timestamped cues
+  - `.json` sidecars validated and normalized into cue objects
+- Overlay highlight logic is driven by the video timeline:
+  - current line highlighted in red
+  - nearby lines shown in white
+- This custom pipeline keeps room for future per-user appearance/animation customization.
+
 ## Software Stack
 
 **Backend**: FastAPI

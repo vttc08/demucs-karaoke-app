@@ -215,6 +215,40 @@ Same as queue item, or `null` if no items ready.
 
 ---
 
+### Get Queue Item Lyrics Cues
+```
+GET /api/queue/{item_id}/lyrics-cues
+```
+
+Returns normalized, time-sorted lyric cues for stage overlay rendering.
+
+Behavior:
+- Reads queue item media sidecar `lyrics_path` (after server-side normalization/repair).
+- Supports `.lrc` files (parsed to cues) and `.json` files (validated/normalized cue payloads).
+- Uses configured media/cache roots for `/media/...` and `/cache/...` paths.
+
+**Success response:**
+```json
+{
+  "item_id": 12,
+  "media_id": 45,
+  "lyrics_path": "/media/song123.lrc",
+  "source_format": "lrc",
+  "cues": [
+    {"time": 1.2, "text": "First line"},
+    {"time": 4.8, "text": "Second line"}
+  ]
+}
+```
+
+**Error responses:**
+- `404` queue item not found
+- `404` lyrics not available for queue item
+- `404` sidecar file missing on disk
+- `422` unsupported or invalid lyrics format/payload
+
+---
+
 ### Process Queue Item
 ```
 POST /api/queue/{item_id}/process

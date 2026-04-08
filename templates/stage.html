@@ -81,6 +81,40 @@
         opacity: 1;
         transform: translateY(0) scale(1);
     }
+
+    .stage-lyrics-overlay {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 5.75rem;
+        z-index: 15;
+        pointer-events: none;
+        display: flex;
+        justify-content: center;
+        padding: 0 1rem;
+    }
+
+    .stage-lyrics-lines {
+        width: min(100%, 58rem);
+        display: grid;
+        gap: 0.2rem;
+        text-align: center;
+    }
+
+    .stage-lyric-line {
+        margin: 0;
+        font-size: clamp(1.05rem, 1.35vw, 1.65rem);
+        font-weight: 600;
+        line-height: 1.35;
+        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+        color: rgba(255, 255, 255, 0.9);
+        opacity: 0.9;
+    }
+
+    .stage-lyric-line--current {
+        color: #ef4444;
+        opacity: 1;
+    }
 </style>
 {% endblock %}
 
@@ -103,6 +137,10 @@
                 <source src="{{ current.vocals_path }}">
             </audio>
             {% endif %}
+
+            <div id="stage-lyrics-overlay" class="stage-lyrics-overlay hidden" aria-live="polite">
+                <div id="stage-lyrics-lines" class="stage-lyrics-lines"></div>
+            </div>
 
             <div class="stage-topbar pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent px-4 py-3 sm:px-5">
                 <div class="flex items-start justify-between gap-3">
@@ -247,6 +285,8 @@ const qrOverlay = document.getElementById("stage-qr-overlay");
 const qrImage = document.getElementById("stage-qr-image");
 const qrLabel = document.getElementById("stage-qr-label");
 const stageMedia = document.querySelector(".stage-media");
+const lyricsOverlay = document.getElementById("stage-lyrics-overlay");
+const lyricsLines = document.getElementById("stage-lyrics-lines");
 const QR_CODE_ENDPOINT = `${API_BASE}/api/qr`;
 const QR_IMAGE_SIZE = 320;
 let isReloading = false;
@@ -264,6 +304,9 @@ let vocalsGainNode = null;
 let syncTimer = null;
 let suppressSeekBroadcast = false;
 let seekBroadcastUnlockTimer = null;
+let lyricCues = [];
+let activeLyricCueIndex = null;
+let lyricsAnimationFrame = null;
 
 function safeReload() {
     if (isReloading) return;
@@ -275,6 +318,162 @@ function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text || "";
     return div.innerHTML;
+}
+
+function setLyricsOverlayVisible(visible) {
+    if (!lyricsOverlay) return;
+    lyricsOverlay.classList.toggle("hidden", !visible);
+}
+
+function normalizeCue(rawCue) {
+    if (!rawCue || typeof rawCue !== "object") {
+        return null;
+    }
+    const rawTime = Number(rawCue.time);
+    if (!Number.isFinite(rawTime)) {
+        return null;
+    }
+    const text = typeof rawCue.text === "string" ? rawCue.text.trim() : "";
+    if (!text) {
+        return null;
+    }
+    return {
+        time: Math.max(0, rawTime),
+        text,
+    };
+}
+
+function findActiveLyricCueIndex(currentTime) {
+    if (!lyricCues.length) {
+        return null;
+    }
+    if (currentTime < lyricCues[0].time) {
+        return -1;
+    }
+
+    let left = 0;
+    let right = lyricCues.length - 1;
+    let best = 0;
+    while (left <= right) {
+        const mid = Math.floor((left + right) / 2);
+        if (lyricCues[mid].time <= currentTime) {
+            best = mid;
+            left = mid + 1;
+        } else {
+            right = mid - 1;
+        }
+    }
+    return best;
+}
+
+function renderLyricsWindow(activeIndex) {
+    if (!lyricsLines) {
+        return;
+    }
+    if (!lyricCues.length) {
+        lyricsLines.innerHTML = "";
+        setLyricsOverlayVisible(false);
+        return;
+    }
+
+    let linesToRender;
+    if (activeIndex === -1) {
+        linesToRender = lyricCues.slice(0, 3).map((cue) => ({ cue, isCurrent: false }));
+    } else if (typeof activeIndex === "number") {
+        const start = Math.max(0, activeIndex - 2);
+        const end = Math.min(lyricCues.length, activeIndex + 3);
+        linesToRender = [];
+        for (let index = start; index < end; index += 1) {
+            linesToRender.push({ cue: lyricCues[index], isCurrent: index === activeIndex });
+        }
+    } else {
+        linesToRender = [];
+    }
+
+    lyricsLines.innerHTML = linesToRender
+        .map(({ cue, isCurrent }) => `
+            <p class="stage-lyric-line${isCurrent ? " stage-lyric-line--current" : ""}">
+                ${escapeHtml(cue.text)}
+            </p>
+        `)
+        .join("");
+    setLyricsOverlayVisible(linesToRender.length > 0);
+}
+
+function updateLyricsForTime(currentTime) {
+    if (!lyricCues.length) {
+        if (activeLyricCueIndex !== null) {
+            activeLyricCueIndex = null;
+            renderLyricsWindow(null);
+        }
+        return;
+    }
+
+    const nextIndex = findActiveLyricCueIndex(currentTime);
+    if (nextIndex === activeLyricCueIndex) {
+        return;
+    }
+
+    activeLyricCueIndex = nextIndex;
+    renderLyricsWindow(activeLyricCueIndex);
+}
+
+function startLyricsTicker() {
+    if (!video || lyricsAnimationFrame !== null) {
+        return;
+    }
+
+    const tick = () => {
+        updateLyricsForTime(video.currentTime || 0);
+        if (!video.paused) {
+            lyricsAnimationFrame = window.requestAnimationFrame(tick);
+        } else {
+            lyricsAnimationFrame = null;
+        }
+    };
+
+    lyricsAnimationFrame = window.requestAnimationFrame(tick);
+}
+
+function stopLyricsTicker() {
+    if (lyricsAnimationFrame === null) {
+        return;
+    }
+    window.cancelAnimationFrame(lyricsAnimationFrame);
+    lyricsAnimationFrame = null;
+}
+
+async function loadLyricsCues() {
+    if (!currentItemId) {
+        lyricCues = [];
+        activeLyricCueIndex = null;
+        renderLyricsWindow(null);
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/queue/${currentItemId}/lyrics-cues`);
+        if (!response.ok) {
+            lyricCues = [];
+            activeLyricCueIndex = null;
+            renderLyricsWindow(null);
+            return;
+        }
+
+        const payload = await response.json();
+        const cues = Array.isArray(payload?.cues) ? payload.cues : [];
+        lyricCues = cues
+            .map(normalizeCue)
+            .filter((cue) => cue !== null)
+            .sort((a, b) => a.time - b.time);
+        activeLyricCueIndex = null;
+        updateLyricsForTime(video ? (video.currentTime || 0) : 0);
+    } catch (error) {
+        console.warn("Failed to load lyrics cues:", error);
+        lyricCues = [];
+        activeLyricCueIndex = null;
+        renderLyricsWindow(null);
+    }
 }
 
 function updatePlayPauseUi() {
@@ -404,6 +603,7 @@ async function seekAndResyncPlayback(targetTime, shouldPausePlayback) {
         seeks.push(seekMediaElement(vocalsAudio, seekTime));
     }
     await Promise.all(seeks);
+    updateLyricsForTime(seekTime);
     if (shouldPausePlayback) {
         updatePlayPauseUi();
         showStageControls();
@@ -414,6 +614,7 @@ async function seekAndResyncPlayback(targetTime, shouldPausePlayback) {
         await video.play();
         syncVocalsToVideo(true);
         startSyncTimer();
+        startLyricsTicker();
     } catch (error) {
         console.error("Seek/resync playback failed:", error);
     } finally {
@@ -689,6 +890,7 @@ function sendStageCommand(command, extraData = {}) {
 if (video) {
     video.addEventListener("ended", async () => {
         stopSyncTimer();
+        stopLyricsTicker();
         if (vocalsAudio) {
             vocalsAudio.pause();
             vocalsAudio.currentTime = 0;
@@ -710,12 +912,17 @@ if (video) {
         await ensureAudioGraph();
         syncVocalsToVideo(true);
         startSyncTimer();
+        startLyricsTicker();
     });
     video.addEventListener("pause", () => {
         stopSyncTimer();
+        stopLyricsTicker();
         if (vocalsAudio && !vocalsAudio.paused) {
             vocalsAudio.pause();
         }
+    });
+    video.addEventListener("timeupdate", () => {
+        updateLyricsForTime(video.currentTime || 0);
     });
     video.addEventListener("seeking", () => {
         if (vocalsAvailable && vocalsAudio) {
@@ -724,6 +931,7 @@ if (video) {
                 vocalsAudio.pause();
             }
         }
+        updateLyricsForTime(video.currentTime || 0);
         if (!video.paused) {
             syncVocalsToVideo(true);
         }
@@ -912,17 +1120,26 @@ syncFullscreenState();
 updateFullscreenUi();
 updateVocalsUi();
 updateQrOverlayContent();
+loadLyricsCues();
 connectStageWebSocket();
 
-if (video && vocalsAvailable && !video.paused) {
-    ensureAudioGraph()
-        .then(() => {
-            syncVocalsToVideo(true);
-            startSyncTimer();
-        })
-        .catch((error) => {
-            console.warn("Failed to bootstrap vocals playback:", error);
-        });
+if (video && !video.paused) {
+    if (vocalsAvailable) {
+        ensureAudioGraph()
+            .then(() => {
+                syncVocalsToVideo(true);
+                startSyncTimer();
+                startLyricsTicker();
+            })
+            .catch((error) => {
+                console.warn("Failed to bootstrap vocals playback:", error);
+                startLyricsTicker();
+            });
+    } else {
+        startLyricsTicker();
+    }
+} else if (video) {
+    updateLyricsForTime(video.currentTime || 0);
 }
 </script>
 {% endblock %}
