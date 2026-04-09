@@ -22,9 +22,6 @@ Current sprint goal:
 
 ## Constraints
 - Do not implement future sprints unless explicitly requested.
-- Do not add Whisper yet.
-- Do not add file upload yet.
-- Do not add authentication yet.
 - Do not add a complex frontend framework unless explicitly requested.
 - Demucs runs on a separate machine and must be accessed through a simple API client.
 - Most development happens over SSH/tmux/mobile, so keep workflows CLI-friendly.

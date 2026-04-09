@@ -17,7 +17,7 @@ This project currently uses two services:
 2. Demucs service
 - receives audio processing request
 - runs demucs two-stem vocals separation
-- returns path or metadata for generated `no_vocals.wav`
+- returns a ZIP payload containing both `no_vocals` and `vocals` stems
 
 ## Real-time queue update architecture
 
@@ -83,7 +83,7 @@ The stage page uses a websocket-first model:
 
 - The durable media row (`media_items`) carries:
   - `media_path` (primary stage video/audio)
-  - `vocals_path` (optional sidecar vocals file)
+  - `vocals_path` (optional sidecar vocals-only guide track, canonical `*.vocals.<ext>`)
 - Queue/API mapping normalizes persisted filesystem paths into app-served URLs (`/media/...` or `/cache/...`)
   and attempts sidecar recovery when vocals metadata is misassigned (e.g. lyrics accidentally saved into
   `vocals_path`).
@@ -91,6 +91,9 @@ The stage page uses a websocket-first model:
   - `<video>` plays `media_path`
   - optional hidden `<audio>` plays `vocals_path`
   - vocals are routed through Web Audio `GainNode` for real-time mix control.
+- Karaoke processing persists stems with explicit mapping:
+  - `no_vocals` is muxed into the final `media_path` video
+  - `vocals` is persisted separately to `vocals_path`
 - Vocal mix state is runtime-only and resets when the current queue item changes.
 
 ## Stage lyrics overlay flow

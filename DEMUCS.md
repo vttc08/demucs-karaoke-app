@@ -63,8 +63,13 @@ Optional multipart form fields for per-request stateless config:
 - `output_format` (`wav|mp3`, default `wav`)
 - `mp3_bitrate` (int 64-320, used only when `output_format=mp3`, default `320`)
 
-Behavior: runs Demucs and returns `no_vocals` as binary file response (`wav` by default, `mp3` when requested).  
-Important: this avoids Linux/Windows shared path issues.
+Behavior: runs Demucs and returns an `application/zip` payload that includes both stems:
+- `no_vocals.<ext>`
+- `vocals.<ext>`
+- `metadata.json` (job/config summary and file names)
+
+Important: Linux app consumes this ZIP, persists stems locally, muxes non-vocals into stage video,
+and stores vocals as a sidecar track for multitrack playback.
 
 Compatibility: existing clients that send only `file` continue to work unchanged.
 
@@ -75,15 +80,17 @@ Response headers include:
 - `X-Output-Format`
 - `X-Mp3-Bitrate` (mp3 only)
 - `X-Duration-Ms`
+- `X-Response-Format` (`zip`)
 - `X-Vocals-Path` (Windows-side debug path)
 
 ### `POST /separate-meta` (optional debug)
 Runs the same process but returns JSON metadata with Windows output paths plus effective runtime config (`model`, `device`, `output_format`, `mp3_bitrate`).
 
-#### Example (default WAV, backward-compatible)
+#### Example (default WAV stems ZIP)
 ```bash
 curl -X POST http://<demucs-host>:8001/separate \
-  -F "file=@track.wav"
+  -F "file=@track.wav" \
+  -o stems.zip
 ```
 
 #### Example (request MP3 output)
