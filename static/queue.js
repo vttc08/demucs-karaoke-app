@@ -235,6 +235,30 @@ function getResultKey(result) {
     return null;
 }
 
+function getYouTubeWatchUrl(videoId) {
+    return videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}` : null;
+}
+
+function renderSearchResultTitle(result, sizeClass) {
+    const classes = `font-bold text-on-surface truncate ${sizeClass}`.trim();
+    const previewUrl = result.source !== 'local' ? getYouTubeWatchUrl(result.video_id) : null;
+
+    if (previewUrl) {
+        return `
+            <a
+                href="${escapeHtml(previewUrl)}"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="block ${classes} hover:underline underline-offset-2"
+            >
+                ${escapeHtml(result.title)}
+            </a>
+        `;
+    }
+
+    return `<h4 class="${classes}">${escapeHtml(result.title)}</h4>`;
+}
+
 async function refreshDemucsHealth() {
     try {
         const response = await fetch(`${API_BASE}/api/settings/demucs-health`);
@@ -282,7 +306,7 @@ function displaySearchResults(results) {
                             >
                         </div>
                         <div class="flex-1 min-w-0">
-                            <h4 class="font-bold text-on-surface truncate text-xs">${escapeHtml(result.title)}</h4>
+                            ${renderSearchResultTitle(result, 'text-xs')}
                             <p class="text-[11px] text-on-surface-variant truncate">${escapeHtml(result.channel)}</p>
                             <div class="mt-1 flex items-center gap-1.5">
                                 ${result.source === 'local' ? `
@@ -326,7 +350,7 @@ function displaySearchResults(results) {
                         >
                     </div>
                     <div class="flex-1 min-w-0">
-                        <h4 class="font-bold text-on-surface truncate text-sm">${escapeHtml(result.title)}</h4>
+                        ${renderSearchResultTitle(result, 'text-sm')}
                         <p class="text-xs text-on-surface-variant truncate">${escapeHtml(result.channel)}</p>
                         ${result.duration ? `<p class="text-xs text-on-surface-variant/60">${result.duration}</p>` : ''}
                         ${result.source === 'local' ? `
