@@ -1,6 +1,8 @@
 """Karaoke service for orchestrating karaoke video generation."""
 import asyncio
 import logging
+import re
+import shutil
 from pathlib import Path
 from sqlalchemy.orm import Session
 from models import QueueItem
@@ -158,6 +160,26 @@ class KaraokeService:
             return None
         return media_file if media_file.exists() else None
 
+    @staticmethod
+    def _canonical_vocals_stem(item: QueueItem) -> str:
+        """Build a stable basename for persisted vocals sidecars."""
+        if item.media and item.media.youtube_id:
+            return item.media.youtube_id
+        base = (item.media.title if item.media and item.media.title else f"queue-{item.id}").strip()
+        cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", base).strip("-")
+        return cleaned or f"queue-{item.id}"
+
+    def _persist_vocals_sidecar(self, item: QueueItem, source_path: Path) -> Path:
+        """Persist vocals guide track with canonical *.vocals.<ext> naming."""
+        extension = source_path.suffix.lower() or ".wav"
+        canonical_name = f"{self._canonical_vocals_stem(item)}.vocals{extension}"
+        target_path = settings.cache_path / canonical_name
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if source_path.resolve() == target_path.resolve():
+            return target_path
+        shutil.copy2(source_path, target_path)
+        return target_path
+
     async def _process_karaoke(
         self, db: Session, item, video_path: Path, audio_path: Path
     ):
@@ -178,12 +200,21 @@ class KaraokeService:
         # Remove vocals using Demucs
         demucs_response = await self.demucs_client.separate_vocals(audio_path)
         no_vocals_path = Path(demucs_response.no_vocals_path)
+        vocals_raw_path = Path(demucs_response.vocals_path) if demucs_response.vocals_path else None
+        if vocals_raw_path is None or not vocals_raw_path.exists():
+            raise RuntimeError("Demucs response missing vocals output path")
+        vocals_sidecar_path = await asyncio.to_thread(
+            self._persist_vocals_sidecar,
+            item,
+            vocals_raw_path,
+        )
         logger.info(
-            "Demucs separation completed item_id=%s no_vocals=%s",
+            "Demucs separation completed item_id=%s no_vocals=%s vocals=%s",
             item.id,
             no_vocals_path,
+            vocals_sidecar_path,
         )
-        self.queue_service.set_vocals_path(db, item.id, str(no_vocals_path))
+        self.queue_service.set_vocals_path(db, item.id, str(vocals_sidecar_path))
 
         output_path = settings.cache_path / f"{item.media.youtube_id}_karaoke.mp4"
         if item.requested_burn_lyrics:

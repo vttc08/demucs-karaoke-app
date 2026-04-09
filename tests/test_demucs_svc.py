@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import zipfile
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -114,7 +116,13 @@ def test_separate_endpoint_defaults_to_wav(monkeypatch, tmp_path):
 
     assert response.status_code == 200
     assert response.headers["x-output-format"] == "wav"
-    assert response.headers["content-type"].startswith("audio/wav")
+    assert response.headers["x-response-format"] == "zip"
+    assert response.headers["content-type"].startswith("application/zip")
+    with zipfile.ZipFile(BytesIO(response.content)) as archive:
+        names = set(archive.namelist())
+        assert "no_vocals.wav" in names
+        assert "vocals.wav" in names
+        assert "metadata.json" in names
 
 
 def test_separate_endpoint_mp3_request_sets_headers(monkeypatch, tmp_path):
@@ -151,7 +159,12 @@ def test_separate_endpoint_mp3_request_sets_headers(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert response.headers["x-output-format"] == "mp3"
     assert response.headers["x-mp3-bitrate"] == "256"
-    assert response.headers["content-type"].startswith("audio/mpeg")
+    assert response.headers["x-response-format"] == "zip"
+    assert response.headers["content-type"].startswith("application/zip")
+    with zipfile.ZipFile(BytesIO(response.content)) as archive:
+        names = set(archive.namelist())
+        assert "no_vocals.mp3" in names
+        assert "vocals.mp3" in names
 
 
 def test_separate_endpoint_cuda_unavailable_fails_fast(monkeypatch):

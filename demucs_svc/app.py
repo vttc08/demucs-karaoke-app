@@ -1,8 +1,11 @@
 import subprocess
 import sys
+from io import BytesIO
+import json
+import zipfile
 from typing import Literal
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import ValidationError
 
 try:
@@ -44,6 +47,30 @@ def _cuda_available() -> bool:
         check=False,
     )
     return probe.returncode == 0 and probe.stdout.strip() == "1"
+
+
+def _build_stems_zip(result) -> bytes:
+    """Create an in-memory ZIP payload containing both separated stems."""
+    stem_ext = "mp3" if result.output_format == "mp3" else "wav"
+    metadata = {
+        "job_id": result.job_id,
+        "model": result.model,
+        "device": result.device,
+        "output_format": result.output_format,
+        "mp3_bitrate": result.mp3_bitrate,
+        "duration_ms": result.duration_ms,
+        "files": {
+            "no_vocals": f"no_vocals.{stem_ext}",
+            "vocals": f"vocals.{stem_ext}",
+        },
+    }
+
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.write(result.no_vocals_path, arcname=f"no_vocals.{stem_ext}")
+        archive.write(result.vocals_path, arcname=f"vocals.{stem_ext}")
+        archive.writestr("metadata.json", json.dumps(metadata, separators=(",", ":")))
+    return buffer.getvalue()
 
 
 @app.get("/health")
@@ -123,12 +150,12 @@ async def separate(
     if result.mp3_bitrate is not None:
         headers["X-Mp3-Bitrate"] = str(result.mp3_bitrate)
 
-    media_type = "audio/mpeg" if result.output_format == "mp3" else "audio/wav"
-    filename = f"{result.job_id}_no_vocals.{result.output_format}"
-    return FileResponse(
-        path=result.no_vocals_path,
-        media_type=media_type,
-        filename=filename,
+    zip_payload = _build_stems_zip(result)
+    headers["X-Response-Format"] = "zip"
+
+    return Response(
+        content=zip_payload,
+        media_type="application/zip",
         headers=headers,
     )
 

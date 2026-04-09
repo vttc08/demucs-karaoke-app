@@ -1,6 +1,8 @@
 """Tests for service layer."""
 import pytest
 import httpx
+import zipfile
+from io import BytesIO
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from pathlib import Path
 from services.queue_service import QueueService
@@ -701,7 +703,7 @@ async def test_lyrics_service_fetch_falls_back_to_plain():
 
 
 @pytest.mark.asyncio
-async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session):
+async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_path):
     """Karaoke processing without burn_lyrics should remux instead of burning."""
     queue_service = QueueService()
     item = queue_service.add_to_queue(
@@ -722,14 +724,26 @@ async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session):
     service.ffmpeg = Mock()
     service.youtube_service.download_video.return_value = Path("/tmp/video.mp4")
     service.youtube_service.download_audio.return_value = Path("/tmp/audio.wav")
-    service.demucs_client.separate_vocals = AsyncMock(return_value=Mock(
-        no_vocals_path="/tmp/no_vocals.wav"
-    ))
+    no_vocals_file = tmp_path / "no_vocals.wav"
+    vocals_file = tmp_path / "vocals.wav"
+    no_vocals_file.write_bytes(b"no-vocals")
+    vocals_file.write_bytes(b"vocals")
+    service.demucs_client.separate_vocals = AsyncMock(
+        return_value=Mock(no_vocals_path=str(no_vocals_file), vocals_path=str(vocals_file))
+    )
+    original_cache = settings.cache_path
+    settings.cache_path = tmp_path
 
-    await service.process_queue_item(db_session, item.id)
+    try:
+        await service.process_queue_item(db_session, item.id)
+    finally:
+        settings.cache_path = original_cache
 
     service.ffmpeg.combine_audio_video.assert_called_once()
     service.ffmpeg.burn_subtitles.assert_not_called()
+    updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
+    assert updated_item is not None
+    assert updated_item.media.vocals_path == "/cache/kara123.vocals.wav"
 
 
 @pytest.mark.asyncio
@@ -957,8 +971,17 @@ async def test_demucs_client_upload_and_save(tmp_path):
     class FakeResponse:
         def __init__(self):
             self.status_code = 200
-            self.content = b"no-vocals-wav"
-            self.headers = {"X-Job-Id": "job123", "X-Vocals-Path": "C:\\\\vocals.wav"}
+            buffer = BytesIO()
+            with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("no_vocals.wav", b"no-vocals-wav")
+                archive.writestr("vocals.wav", b"vocals-wav")
+            self.content = buffer.getvalue()
+            self.headers = {
+                "X-Job-Id": "job123",
+                "X-Output-Format": "wav",
+                "X-Response-Format": "zip",
+                "content-type": "application/zip",
+            }
 
         def raise_for_status(self):
             return None
@@ -1007,9 +1030,13 @@ async def test_demucs_client_upload_and_save(tmp_path):
         dc_module.settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
 
     assert result.no_vocals_path.endswith("_job123_no_vocals.wav")
+    assert result.vocals_path and result.vocals_path.endswith("_job123_vocals.wav")
     saved = Path(result.no_vocals_path)
     assert saved.exists()
     assert saved.read_bytes() == b"no-vocals-wav"
+    vocals_saved = Path(result.vocals_path)
+    assert vocals_saved.exists()
+    assert vocals_saved.read_bytes() == b"vocals-wav"
 
 
 def test_demucs_client_health_check_reports_degraded_payload():
