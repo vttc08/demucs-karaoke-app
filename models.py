@@ -1,8 +1,8 @@
 """Data models and database schemas."""
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-from pydantic import BaseModel
+from typing import Literal, Optional
+from pydantic import BaseModel, model_validator
 from sqlalchemy import (
     Column,
     Integer,
@@ -93,7 +93,9 @@ class RuntimeSetting(Base):
 class YouTubeSearchResult(BaseModel):
     """YouTube search result."""
 
-    video_id: str
+    source: Literal["youtube", "local"] = "youtube"
+    media_item_id: Optional[int] = None
+    video_id: Optional[str] = None
     title: str
     channel: str
     duration: Optional[str] = None
@@ -104,11 +106,21 @@ class YouTubeSearchResult(BaseModel):
 class QueueItemCreate(BaseModel):
     """Request to add item to queue."""
 
-    youtube_id: str
+    youtube_id: Optional[str] = None
+    media_item_id: Optional[int] = None
     title: str
     artist: Optional[str] = None
     is_karaoke: bool = False
     burn_lyrics: bool = True
+
+    @model_validator(mode="after")
+    def validate_source(self):
+        """Require at least one media source identifier."""
+        if isinstance(self.youtube_id, str):
+            self.youtube_id = self.youtube_id.strip() or None
+        if self.youtube_id is None and self.media_item_id is None:
+            raise ValueError("Either youtube_id or media_item_id is required")
+        return self
 
 
 class QueueItemResponse(BaseModel):

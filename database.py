@@ -15,7 +15,7 @@ def init_db():
     """Initialize database tables."""
     _migrate_legacy_queue_items_if_needed()
     Base.metadata.create_all(bind=engine)
-    _ensure_indexes()
+    ensure_auxiliary_schema()
 
 
 def _migrate_legacy_queue_items_if_needed():
@@ -117,9 +117,16 @@ def _migrate_legacy_queue_items_if_needed():
         conn.execute(text("ALTER TABLE queue_items_new RENAME TO queue_items"))
 
 
-def _ensure_indexes():
+def ensure_auxiliary_schema(bind_engine=None):
+    """Ensure non-ORM schema objects (indexes/FTS/triggers) exist."""
+    target_engine = bind_engine or engine
+    _ensure_indexes(target_engine)
+    _ensure_media_items_fts(target_engine)
+
+
+def _ensure_indexes(bind_engine):
     """Ensure schema indexes exist for both fresh and migrated databases."""
-    with engine.begin() as conn:
+    with bind_engine.begin() as conn:
         conn.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS idx_media_items_title ON media_items(title)"
@@ -145,6 +152,63 @@ def _ensure_indexes():
                 "CREATE INDEX IF NOT EXISTS idx_queue_items_media_id ON queue_items(media_id)"
             )
         )
+
+
+def _ensure_media_items_fts(bind_engine):
+    """Ensure media_items full-text index exists and stays in sync."""
+    with bind_engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS media_items_fts
+                USING fts5(
+                    title,
+                    artist,
+                    content='media_items',
+                    content_rowid='id'
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TRIGGER IF NOT EXISTS media_items_ai
+                AFTER INSERT ON media_items
+                BEGIN
+                    INSERT INTO media_items_fts(rowid, title, artist)
+                    VALUES (new.id, COALESCE(new.title, ''), COALESCE(new.artist, ''));
+                END
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TRIGGER IF NOT EXISTS media_items_ad
+                AFTER DELETE ON media_items
+                BEGIN
+                    INSERT INTO media_items_fts(media_items_fts, rowid, title, artist)
+                    VALUES ('delete', old.id, COALESCE(old.title, ''), COALESCE(old.artist, ''));
+                END
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
+                CREATE TRIGGER IF NOT EXISTS media_items_au
+                AFTER UPDATE ON media_items
+                BEGIN
+                    INSERT INTO media_items_fts(media_items_fts, rowid, title, artist)
+                    VALUES ('delete', old.id, COALESCE(old.title, ''), COALESCE(old.artist, ''));
+                    INSERT INTO media_items_fts(rowid, title, artist)
+                    VALUES (new.id, COALESCE(new.title, ''), COALESCE(new.artist, ''));
+                END
+                """
+            )
+        )
+        conn.execute(text("INSERT INTO media_items_fts(media_items_fts) VALUES('rebuild')"))
 
 
 def get_db() -> Session:

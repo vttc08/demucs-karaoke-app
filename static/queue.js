@@ -31,11 +31,15 @@ searchResults.addEventListener('click', async (event) => {
     const button = event.target.closest('.add-to-queue-btn');
     if (!button || button.disabled) return;
 
-    const resultElement = button.closest('[data-video-id]');
+    const resultElement = button.closest('[data-result-source]');
     if (!resultElement) return;
 
     await addToQueue(
-        resultElement.dataset.videoId,
+        {
+            source: resultElement.dataset.resultSource || 'youtube',
+            videoId: resultElement.dataset.videoId || null,
+            mediaItemId: resultElement.dataset.mediaItemId || null,
+        },
         resultElement.dataset.title || '',
         resultElement.dataset.channel || '',
         button,
@@ -65,7 +69,7 @@ async function performSearch() {
     searchResults.innerHTML = `
         <div class="glass-card p-6 rounded-lg text-center">
             <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3"></div>
-            <p class="text-on-surface-variant">Searching YouTube...</p>
+            <p class="text-on-surface-variant">Searching local library + YouTube...</p>
         </div>
     `;
 
@@ -121,7 +125,14 @@ function displaySearchResults(results) {
     }
 
     searchResults.innerHTML = results.map(result => `
-        <div class="bg-surface-container-low hover:bg-surface-container p-4 rounded-lg transition-all" data-video-id="${escapeHtml(result.video_id)}" data-title="${escapeHtml(result.title)}" data-channel="${escapeHtml(result.channel)}">
+        <div
+            class="bg-surface-container-low hover:bg-surface-container p-4 rounded-lg transition-all"
+            data-result-source="${escapeHtml(result.source || 'youtube')}"
+            data-video-id="${escapeHtml(result.video_id || '')}"
+            data-media-item-id="${result.media_item_id ?? ''}"
+            data-title="${escapeHtml(result.title)}"
+            data-channel="${escapeHtml(result.channel || '')}"
+        >
             <div class="flex items-center gap-4">
                 <div class="relative w-20 h-14 rounded-md overflow-hidden shrink-0">
                     <img 
@@ -135,6 +146,12 @@ function displaySearchResults(results) {
                     <h4 class="font-bold text-on-surface truncate text-sm">${escapeHtml(result.title)}</h4>
                     <p class="text-xs text-on-surface-variant truncate">${escapeHtml(result.channel)}</p>
                     ${result.duration ? `<p class="text-xs text-on-surface-variant/60">${result.duration}</p>` : ''}
+                    ${result.source === 'local' ? `
+                        <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                            <span class="material-symbols-outlined text-[10px] text-primary">library_music</span>
+                            <span class="text-[8px] font-bold uppercase tracking-tighter text-primary">Local</span>
+                        </div>
+                    ` : ''}
                     ${result.downloaded ? `
                         <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
                             <span class="material-symbols-outlined text-[10px] text-secondary">download_done</span>
@@ -169,7 +186,7 @@ function displaySearchResults(results) {
 
     // Setup checkbox interactions
     document.querySelectorAll('.karaoke-checkbox').forEach(checkbox => {
-        const container = checkbox.closest('[data-video-id]');
+        const container = checkbox.closest('[data-result-source]');
         const toggle = container.querySelector('.karaoke-toggle');
         const burnContainer = container.querySelector('.burn-lyrics-label');
         const burnCheckbox = container.querySelector('.burn-lyrics-checkbox');
@@ -227,8 +244,11 @@ function displaySearchResults(results) {
     });
 }
 
-async function addToQueue(videoId, title, channel, buttonElement = null, resultElement = null) {
-    const targetElement = resultElement || document.querySelector(`[data-video-id="${CSS.escape(videoId)}"]`);
+async function addToQueue(searchResult, title, channel, buttonElement = null, resultElement = null) {
+    const source = searchResult?.source || 'youtube';
+    const videoId = searchResult?.videoId || null;
+    const mediaItemId = searchResult?.mediaItemId || null;
+    const targetElement = resultElement;
     if (!targetElement) {
         throw new Error('Search result no longer exists');
     }
@@ -246,18 +266,26 @@ async function addToQueue(videoId, title, channel, buttonElement = null, resultE
     button.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span>';
 
     try {
+        const payload = {
+            title: title,
+            artist: channel,
+            is_karaoke: isKaraoke,
+            burn_lyrics: burnLyrics,
+        };
+        if (source === 'local' && mediaItemId) {
+            payload.media_item_id = Number(mediaItemId);
+        } else if (videoId) {
+            payload.youtube_id = videoId;
+        } else {
+            throw new Error('Missing media source identifier');
+        }
+
         const response = await fetch(`${API_BASE}/api/queue/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                youtube_id: videoId,
-                title: title,
-                artist: channel,
-                is_karaoke: isKaraoke,
-                burn_lyrics: burnLyrics,
-            }),
+            body: JSON.stringify(payload),
         });
 
         if (!response.ok) {

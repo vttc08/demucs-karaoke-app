@@ -61,6 +61,34 @@ CREATE INDEX idx_queue_position ON queue_items(position);
 CREATE INDEX idx_queue_items_media_id ON queue_items(media_id);
 ```
 
+### Full-text search (local library search)
+```sql
+CREATE VIRTUAL TABLE media_items_fts
+USING fts5(
+    title,
+    artist,
+    content='media_items',
+    content_rowid='id'
+);
+
+CREATE TRIGGER media_items_ai AFTER INSERT ON media_items BEGIN
+    INSERT INTO media_items_fts(rowid, title, artist)
+    VALUES (new.id, COALESCE(new.title, ''), COALESCE(new.artist, ''));
+END;
+
+CREATE TRIGGER media_items_ad AFTER DELETE ON media_items BEGIN
+    INSERT INTO media_items_fts(media_items_fts, rowid, title, artist)
+    VALUES ('delete', old.id, COALESCE(old.title, ''), COALESCE(old.artist, ''));
+END;
+
+CREATE TRIGGER media_items_au AFTER UPDATE ON media_items BEGIN
+    INSERT INTO media_items_fts(media_items_fts, rowid, title, artist)
+    VALUES ('delete', old.id, COALESCE(old.title, ''), COALESCE(old.artist, ''));
+    INSERT INTO media_items_fts(rowid, title, artist)
+    VALUES (new.id, COALESCE(new.title, ''), COALESCE(new.artist, ''));
+END;
+```
+
 ### Queue ordering
 - Use sparse integer positions: 1000, 2000, 3000...
 - Helpers:

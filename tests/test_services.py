@@ -23,6 +23,7 @@ from models import (
 )
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
+from database import ensure_auxiliary_schema
 
 # Test database
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_services.db"
@@ -36,6 +37,7 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 def db_session():
     """Create test database session."""
     Base.metadata.create_all(bind=engine)
+    ensure_auxiliary_schema(engine)
     db = TestingSessionLocal()
     yield db
     db.close()
@@ -389,11 +391,113 @@ def test_youtube_service_search_marks_downloaded_results(mock_ytdlp, db_session)
     db_session.commit()
 
     service = YouTubeService()
-    results = service.search("saved", db=db_session)
+    results = service.search("totally-unrelated-query", db=db_session)
 
     assert len(results) == 1
     assert results[0].downloaded is True
     assert results[0].thumbnail == "https://i.ytimg.com/vi/saved123/hqdefault.jpg"
+    assert results[0].source == "youtube"
+
+
+@patch("services.youtube_service.YtDlpAdapter")
+def test_youtube_service_search_prefers_local_and_hides_youtube_duplicates(
+    mock_ytdlp, db_session
+):
+    """Local DB matches should be ordered first and suppress duplicate YouTube hits."""
+    local_media = MediaItem(
+        youtube_id="dup123",
+        title="Bohemian Rhapsody",
+        artist="Queen",
+        media_path="/media/dup123.mp4",
+        missing=False,
+    )
+    db_session.add(local_media)
+    db_session.commit()
+
+    mock_instance = Mock()
+    mock_instance.search.return_value = [
+        {
+            "video_id": "dup123",
+            "title": "Bohemian Rhapsody",
+            "channel": "Queen Official",
+            "duration": "5:55",
+            "thumbnail": None,
+        },
+        {
+            "video_id": "yt999",
+            "title": "Another Song",
+            "channel": "Other Channel",
+            "duration": "3:00",
+            "thumbnail": None,
+        },
+    ]
+    mock_ytdlp.return_value = mock_instance
+
+    service = YouTubeService()
+    results = service.search("bohemian queen", db=db_session)
+
+    assert len(results) == 2
+    assert results[0].source == "local"
+    assert results[0].media_item_id == local_media.id
+    assert results[0].video_id == "dup123"
+    assert results[1].source == "youtube"
+    assert results[1].video_id == "yt999"
+
+
+@patch("services.youtube_service.YtDlpAdapter")
+def test_youtube_service_search_returns_local_items_without_youtube_id(
+    mock_ytdlp, db_session
+):
+    """Local results should still be searchable/queueable when youtube_id is null."""
+    db_session.add(
+        MediaItem(
+            youtube_id=None,
+            title="Custom Local Track",
+            artist="Home Rip",
+            media_path="/media/custom-local-track.mp4",
+            missing=False,
+        )
+    )
+    db_session.commit()
+
+    mock_instance = Mock()
+    mock_instance.search.return_value = []
+    mock_ytdlp.return_value = mock_instance
+
+    service = YouTubeService()
+    results = service.search("custom local", db=db_session)
+
+    assert len(results) == 1
+    assert results[0].source == "local"
+    assert results[0].media_item_id is not None
+    assert results[0].video_id is None
+
+
+def test_queue_service_add_to_queue_by_media_item_id(db_session):
+    """Queue service should support enqueue by existing media_item id."""
+    media = MediaItem(
+        youtube_id="existing123",
+        title="Existing Local",
+        artist="Artist",
+        media_path="/media/existing123.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+
+    service = QueueService()
+    result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            media_item_id=media.id,
+            title="Existing Local",
+            artist="Artist",
+            is_karaoke=False,
+        ),
+    )
+
+    assert result.media_id == media.id
+    assert result.youtube_id == "existing123"
 
 
 @patch("services.youtube_service.YtDlpAdapter")

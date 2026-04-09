@@ -78,9 +78,9 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ## Usage
 
 1. **Queue Page** (Mobile): Open `http://<server-ip>:8000/queue`
-   - Search for songs
+   - Search for songs (local library full-text on title/artist + YouTube in parallel)
    - Or paste a YouTube link / video id directly to add external search results
-   - Search results mark videos that are already downloaded in the local library
+   - Local matches are preferred in results; duplicate YouTube matches are hidden
    - Toggle "Karaoke mode" checkbox
    - Optionally toggle "Burn lyrics" (enabled only in karaoke mode)
    - Add to queue

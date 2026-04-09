@@ -36,7 +36,10 @@ def _process_item_background(item_id: int):
 @router.post("/", response_model=QueueItemResponse)
 async def add_to_queue(item: QueueItemCreate, db: Session = Depends(get_db)):
     """Add item to queue."""
-    response = queue_service.add_to_queue(db, item)
+    try:
+        response = queue_service.add_to_queue(db, item)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Broadcast immediately after adding
     await manager.broadcast_queue_item_added(response.model_dump(mode="json"))
     return response

@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
 from typing import List
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from adapters.ytdlp import YtDlpAdapter
 from models import MediaItem, YouTubeSearchResult
@@ -38,21 +40,34 @@ class YouTubeService:
         Returns:
             List of search results
         """
-        results = self._search_results(query, max_results)
-        downloaded_ids = self._downloaded_video_ids(db, results)
-        normalized = []
-        for result in results:
-            if not result.get("thumbnail") and result.get("video_id"):
-                result = {
-                    **result,
-                    "thumbnail": (
-                        f"https://i.ytimg.com/vi/{result['video_id']}/hqdefault.jpg"
-                    ),
+        if db is None:
+            youtube_results = self._search_results(query, max_results)
+            local_results: List[dict] = []
+        else:
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                youtube_future = executor.submit(self._search_results, query, max_results)
+                local_results = self._local_search(query, max_results, db)
+                youtube_results = youtube_future.result()
+
+        downloaded_ids = self._downloaded_video_ids(db, youtube_results)
+        normalized_youtube = []
+        for result in youtube_results:
+            video_id = result.get("video_id")
+            normalized_youtube.append(
+                {
+                    "source": "youtube",
+                    "media_item_id": None,
+                    "video_id": video_id,
+                    "title": result.get("title") or "",
+                    "channel": result.get("channel") or "",
+                    "duration": result.get("duration"),
+                    "thumbnail": result.get("thumbnail") or self._thumbnail_for_video_id(video_id),
+                    "downloaded": bool(video_id and video_id in downloaded_ids),
                 }
-            if result.get("video_id") in downloaded_ids:
-                result = {**result, "downloaded": True}
-            normalized.append(result)
-        return [YouTubeSearchResult(**result) for result in normalized]
+            )
+
+        merged = self._merge_local_and_youtube(local_results, normalized_youtube)
+        return [YouTubeSearchResult(**result) for result in merged[:max_results]]
 
     @staticmethod
     def _downloaded_video_ids(db: Session | None, results: List[dict]) -> set[str]:
@@ -97,6 +112,96 @@ class YouTubeService:
             karaoke_results = karaoke_future.result()
         merged = self._stagger_and_dedupe(base_results, karaoke_results)
         return merged[:max_results]
+
+    @staticmethod
+    def _thumbnail_for_video_id(video_id: str | None) -> str | None:
+        if not video_id:
+            return None
+        return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
+    @staticmethod
+    def _normalize_match_terms(query: str) -> List[str]:
+        tokens = re.findall(r"[A-Za-z0-9]+", query.lower())
+        return [token for token in tokens if token]
+
+    def _local_search(self, query: str, max_results: int, db: Session) -> List[dict]:
+        terms = self._normalize_match_terms(query)
+        if not terms:
+            return []
+
+        match_query = " ".join(f"{term}*" for term in terms)
+        try:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT
+                        m.id,
+                        m.youtube_id,
+                        m.title,
+                        m.artist,
+                        bm25(media_items_fts) AS rank
+                    FROM media_items_fts
+                    JOIN media_items AS m
+                      ON m.id = media_items_fts.rowid
+                    WHERE media_items_fts MATCH :match_query
+                      AND m.missing = 0
+                    ORDER BY rank ASC, m.updated_at DESC
+                    LIMIT :limit
+                    """
+                ),
+                {"match_query": match_query, "limit": max_results},
+            ).all()
+        except OperationalError:
+            return []
+
+        local_results: List[dict] = []
+        for row in rows:
+            youtube_id = row.youtube_id or None
+            local_results.append(
+                {
+                    "source": "local",
+                    "media_item_id": int(row.id),
+                    "video_id": youtube_id,
+                    "title": row.title or "",
+                    "channel": row.artist or "",
+                    "duration": None,
+                    "thumbnail": self._thumbnail_for_video_id(youtube_id),
+                    "downloaded": True,
+                }
+            )
+        return local_results
+
+    @staticmethod
+    def _result_identity_key(result: dict) -> tuple[str, str]:
+        video_id = result.get("video_id")
+        if isinstance(video_id, str) and video_id:
+            return ("video_id", video_id.lower())
+
+        title = " ".join(str(result.get("title") or "").lower().split())
+        channel = " ".join(str(result.get("channel") or "").lower().split())
+        return ("title_artist", f"{title}|{channel}")
+
+    def _merge_local_and_youtube(
+        self, local_results: List[dict], youtube_results: List[dict]
+    ) -> List[dict]:
+        merged: List[dict] = []
+        seen_keys: set[tuple[str, str]] = set()
+
+        for local_result in local_results:
+            key = self._result_identity_key(local_result)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            merged.append(local_result)
+
+        for youtube_result in youtube_results:
+            key = self._result_identity_key(youtube_result)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            merged.append(youtube_result)
+
+        return merged
 
     @classmethod
     def _extract_youtube_url(cls, query: str) -> str | None:

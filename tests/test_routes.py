@@ -6,8 +6,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from main import app
-from database import get_db
-from models import Base, DemucsHealthResponse, QueueItem, QueueStatus, RuntimeSetting
+from database import ensure_auxiliary_schema, get_db
+from models import (
+    Base,
+    DemucsHealthResponse,
+    MediaItem,
+    QueueItem,
+    QueueStatus,
+    RuntimeSetting,
+)
 from config import settings
 
 # Test database
@@ -48,6 +55,7 @@ def client():
     original_stage_qr_url = settings.stage_qr_url
 
     Base.metadata.create_all(bind=engine)
+    ensure_auxiliary_schema(engine)
     yield TestClient(app)
     settings.demucs_api_url = original_demucs_api_url
     settings.demucs_model = original_demucs_model
@@ -130,6 +138,36 @@ def test_add_to_queue_non_karaoke_forces_burn_lyrics_false(client):
     data = response.json()
     assert data["is_karaoke"] is False
     assert data["burn_lyrics"] is False
+
+
+def test_add_to_queue_with_media_item_id(client):
+    """Queue endpoint should enqueue existing local media by media_item_id."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="local-abc",
+            title="Local Track",
+            artist="Local Artist",
+            media_path="/media/local-abc.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.post(
+        "/api/queue/",
+        json={
+            "media_item_id": media_id,
+            "title": "Local Track",
+            "artist": "Local Artist",
+            "is_karaoke": False,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["media_id"] == media_id
+    assert data["youtube_id"] == "local-abc"
 
 
 def test_get_empty_queue(client):

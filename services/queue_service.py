@@ -29,21 +29,33 @@ class QueueService:
         Returns:
             Created queue item
         """
-        media_item = (
-            db.query(MediaItem)
-            .filter(MediaItem.youtube_id == item.youtube_id)
-            .first()
-        )
-        if media_item is None:
-            media_item = MediaItem(
-                youtube_id=item.youtube_id,
-                title=item.title,
-                artist=item.artist,
-                media_path=f"/media/{item.youtube_id}.mp4",
-                missing=True,
+        media_item = None
+        if item.media_item_id is not None:
+            media_item = (
+                db.query(MediaItem)
+                .filter(MediaItem.id == item.media_item_id)
+                .first()
             )
-            db.add(media_item)
-            db.flush()
+            if media_item is None:
+                raise ValueError(f"Media item not found: {item.media_item_id}")
+        elif item.youtube_id:
+            media_item = (
+                db.query(MediaItem)
+                .filter(MediaItem.youtube_id == item.youtube_id)
+                .first()
+            )
+            if media_item is None:
+                media_item = MediaItem(
+                    youtube_id=item.youtube_id,
+                    title=item.title,
+                    artist=item.artist,
+                    media_path=f"/media/{item.youtube_id}.mp4",
+                    missing=True,
+                )
+                db.add(media_item)
+                db.flush()
+        else:
+            raise ValueError("Either youtube_id or media_item_id is required")
 
         if not media_item.title and item.title:
             media_item.title = item.title

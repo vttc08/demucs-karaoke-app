@@ -80,6 +80,18 @@ GET /api/search/?q=<query>
 ```json
 [
   {
+    "source": "local",
+    "media_item_id": 42,
+    "video_id": "dQw4w9WgXcQ",
+    "title": "Song Title",
+    "channel": "Artist Name",
+    "duration": null,
+    "thumbnail": "https://...",
+    "downloaded": true
+  },
+  {
+    "source": "youtube",
+    "media_item_id": null,
     "video_id": "dQw4w9WgXcQ",
     "title": "Video Title",
     "channel": "Channel Name",
@@ -91,7 +103,7 @@ GET /api/search/?q=<query>
 ```
 
 `media_path`, `vocals_path`, and `lyrics_path` are normalized to app-served URL prefixes (`/media/...`, `/cache/...`) when possible so browser playback requests always target backend-served file routes.
-`downloaded` is true when the returned video id already exists in `media_items` with a usable local media file.
+`downloaded` is true when the returned item already exists in local media. Local matches are returned before YouTube matches and duplicate YouTube hits are suppressed.
 
 ---
 
@@ -104,12 +116,17 @@ POST /api/queue/
 ```json
 {
   "youtube_id": "dQw4w9WgXcQ",
+  "media_item_id": null,
   "title": "Song Title",
   "artist": "Artist Name",
   "is_karaoke": true,
   "burn_lyrics": true
 }
 ```
+
+Queue payload can identify the target with either:
+- `youtube_id` (existing behavior), or
+- `media_item_id` (for direct enqueue of local library search matches).
 
 `burn_lyrics` is optional and only applies when `is_karaoke` is true.
 If omitted, it defaults to `true`. For non-karaoke items, it is normalized to `false`.

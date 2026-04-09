@@ -174,7 +174,16 @@ This is applied at command build time, so new operations use updated proxy setti
 - Runtime settings expose `concurrent_ytdlp_search_enabled` through:
   - `GET /api/settings/`
   - `PATCH /api/settings/`
-- In `services/youtube_service.py`, search behavior is:
+- In `services/youtube_service.py`, each `GET /api/search` request now runs:
+  - local SQLite FTS search (`media_items.title`, `media_items.artist`)
+  - YouTube search flow
+  concurrently, then merges outputs.
+- Merge behavior is:
+  - local matches first (preferred),
+  - YouTube matches next,
+  - duplicate YouTube entries hidden when they match local items.
+- Local queueing uses `media_item_id` for direct enqueue of existing library entries.
+- YouTube search behavior remains:
   - Query looks like YouTube URL or 11-char video id: single metadata fetch (`yt-dlp --dump-single-json`) and return one addable result
   - Disabled: single yt-dlp search for original query
   - Enabled + query contains `karaoke` (case-insensitive substring): single search
