@@ -1,6 +1,13 @@
 // Queue page JavaScript
 const API_BASE = window.location.origin;
 
+// Simple logger for frontend debugging
+const logger = {
+    log: (...args) => console.log(...args),
+    warn: (...args) => console.warn(...args),
+    error: (...args) => console.error(...args),
+};
+
 // Search functionality
 const searchInput = document.getElementById('search-input');
 const searchBtn = document.getElementById('search-btn');
@@ -69,21 +76,128 @@ async function performSearch() {
     searchResults.innerHTML = `
         <div class="glass-card p-6 rounded-lg text-center">
             <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3"></div>
-            <p class="text-on-surface-variant">Searching local library + YouTube...</p>
+            <p class="text-on-surface-variant">Searching local library...</p>
         </div>
     `;
 
     try {
-        const response = await fetch(`${API_BASE}/api/search/?q=${encodeURIComponent(query)}`);
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Search failed');
+        // Phase 1: Fetch local results (fast)
+        let localResults = [];
+        try {
+            const localResponse = await fetch(`${API_BASE}/api/search/?q=${encodeURIComponent(query)}&source=local`);
+            if (localResponse.ok) {
+                localResults = await localResponse.json();
+            }
+        } catch (error) {
+            logger.warn('Local search failed:', error);
+            // Continue to YouTube even if local search fails
         }
-        
-        const results = await response.json();
-        await refreshDemucsHealth();
-        displaySearchResults(results);
+
+        // Display local results immediately
+        if (localResults.length > 0) {
+            await refreshDemucsHealth();
+            displaySearchResults(localResults);
+            
+            // Update UI to show YouTube is searching
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'glass-card p-4 rounded-lg text-center';
+            loadingDiv.innerHTML = `
+                <div class="flex items-center justify-center gap-2">
+                    <div class="animate-spin w-4 h-4 border border-primary border-t-transparent rounded-full"></div>
+                    <p class="text-xs text-on-surface-variant">Also searching YouTube...</p>
+                </div>
+            `;
+            searchResults.appendChild(loadingDiv);
+        } else {
+            // No local results, show YouTube loading message
+            searchResults.innerHTML = `
+                <div class="glass-card p-6 rounded-lg text-center">
+                    <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3"></div>
+                    <p class="text-on-surface-variant">Searching YouTube...</p>
+                </div>
+            `;
+        }
+
+        // Phase 2: Fetch YouTube results in background
+        let youtubeResults = [];
+        try {
+            const youtubeResponse = await fetch(`${API_BASE}/api/search/?q=${encodeURIComponent(query)}&source=youtube`);
+            if (youtubeResponse.ok) {
+                youtubeResults = await youtubeResponse.json();
+            }
+        } catch (error) {
+            logger.error('YouTube search failed:', error);
+            // Show just local results if YouTube fails
+            if (localResults.length > 0) {
+                // Remove the loading indicator
+                const loadingDiv = searchResults.querySelector('.glass-card:last-child');
+                if (loadingDiv && loadingDiv.querySelector('.animate-spin')) {
+                    loadingDiv.remove();
+                }
+                // Show error message
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'bg-tertiary/10 border border-tertiary/20 p-3 rounded-lg text-center';
+                errorDiv.innerHTML = `
+                    <p class="text-[12px] text-tertiary font-medium">YouTube search unavailable</p>
+                `;
+                searchResults.appendChild(errorDiv);
+                return;
+            } else {
+                // No local results and YouTube failed
+                throw error;
+            }
+        }
+
+        // Phase 3: Deduplicate and append YouTube results
+        if (youtubeResults.length > 0) {
+            // Build set of already-shown result keys
+            const shownKeys = new Set();
+            localResults.forEach(result => {
+                const key = getResultKey(result);
+                if (key) shownKeys.add(key);
+            });
+
+            // Filter out duplicates from YouTube results
+            const uniqueYoutubeResults = youtubeResults.filter(result => {
+                const key = getResultKey(result);
+                return !key || !shownKeys.has(key);
+            });
+
+            if (uniqueYoutubeResults.length > 0) {
+                // Remove the loading indicator
+                const loadingDiv = searchResults.querySelector('.glass-card:last-child');
+                if (loadingDiv && loadingDiv.querySelector('.animate-spin')) {
+                    loadingDiv.remove();
+                }
+
+                // Append YouTube results
+                const combinedResults = [...localResults, ...uniqueYoutubeResults];
+                displaySearchResults(combinedResults);
+            } else {
+                // All YouTube results were duplicates, remove loading indicator
+                const loadingDiv = searchResults.querySelector('.glass-card:last-child');
+                if (loadingDiv && loadingDiv.querySelector('.animate-spin')) {
+                    loadingDiv.remove();
+                }
+            }
+        } else {
+            // No YouTube results
+            if (localResults.length === 0) {
+                // No results from either source
+                searchResults.innerHTML = `
+                    <div class="text-center py-8">
+                        <span class="material-symbols-outlined text-4xl text-on-surface-variant mb-3 block">search_off</span>
+                        <p class="text-on-surface-variant">No results found</p>
+                    </div>
+                `;
+            } else {
+                // Just remove loading indicator for local-only display
+                const loadingDiv = searchResults.querySelector('.glass-card:last-child');
+                if (loadingDiv && loadingDiv.querySelector('.animate-spin')) {
+                    loadingDiv.remove();
+                }
+            }
+        }
     } catch (error) {
         searchResults.innerHTML = `
             <div class="bg-error/10 border border-error/20 p-4 rounded-lg text-center">
@@ -99,6 +213,26 @@ async function performSearch() {
         searchBtn.disabled = false;
         searchBtn.textContent = 'Search';
     }
+}
+
+/**
+ * Generate a unique key for deduplication based on result properties.
+ * Prioritizes video_id (for YouTube links), falls back to normalized title+channel.
+ */
+function getResultKey(result) {
+    if (result.video_id) {
+        return `yt:${result.video_id}`;
+    }
+    if (result.media_item_id) {
+        return `local:${result.media_item_id}`;
+    }
+    // Fallback: normalize title and channel for comparison
+    const normalizedTitle = (result.title || '').toLowerCase().trim();
+    const normalizedChannel = (result.channel || '').toLowerCase().trim();
+    if (normalizedTitle && normalizedChannel) {
+        return `title:${normalizedTitle}|${normalizedChannel}`;
+    }
+    return null;
 }
 
 async function refreshDemucsHealth() {
@@ -124,67 +258,111 @@ function displaySearchResults(results) {
         return;
     }
 
-    searchResults.innerHTML = results.map(result => `
-        <div
-            class="bg-surface-container-low hover:bg-surface-container p-4 rounded-lg transition-all"
-            data-result-source="${escapeHtml(result.source || 'youtube')}"
-            data-video-id="${escapeHtml(result.video_id || '')}"
-            data-media-item-id="${result.media_item_id ?? ''}"
-            data-title="${escapeHtml(result.title)}"
-            data-channel="${escapeHtml(result.channel || '')}"
-        >
-            <div class="flex items-center gap-4">
-                <div class="relative w-20 h-14 rounded-md overflow-hidden shrink-0">
-                    <img 
-                        src="${result.thumbnail || '/static/placeholder.png'}" 
-                        alt="${escapeHtml(result.title)}"
-                        class="w-full h-full object-cover"
-                        onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'"
-                    >
-                </div>
-                <div class="flex-1 min-w-0">
-                    <h4 class="font-bold text-on-surface truncate text-sm">${escapeHtml(result.title)}</h4>
-                    <p class="text-xs text-on-surface-variant truncate">${escapeHtml(result.channel)}</p>
-                    ${result.duration ? `<p class="text-xs text-on-surface-variant/60">${result.duration}</p>` : ''}
-                    ${result.source === 'local' ? `
-                        <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
-                            <span class="material-symbols-outlined text-[10px] text-primary">library_music</span>
-                            <span class="text-[8px] font-bold uppercase tracking-tighter text-primary">Local</span>
+    searchResults.innerHTML = results.map(result => {
+        const isDownloaded = result.source === 'local' || result.downloaded;
+        
+        // Compact layout for downloaded items
+        if (isDownloaded) {
+            return `
+                <div
+                    class="bg-surface-container-lowest hover:bg-surface-container-low p-3 rounded-lg transition-all border border-outline-variant/10"
+                    data-result-source="${escapeHtml(result.source || 'youtube')}"
+                    data-video-id="${escapeHtml(result.video_id || '')}"
+                    data-media-item-id="${result.media_item_id ?? ''}"
+                    data-title="${escapeHtml(result.title)}"
+                    data-channel="${escapeHtml(result.channel || '')}"
+                >
+                    <div class="flex items-center gap-3">
+                        <div class="relative w-12 h-12 rounded-md overflow-hidden shrink-0">
+                            <img 
+                                src="${result.thumbnail || '/static/placeholder.png'}" 
+                                alt="${escapeHtml(result.title)}"
+                                class="w-full h-full object-cover"
+                                onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'"
+                            >
                         </div>
-                    ` : ''}
-                    ${result.downloaded ? `
-                        <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
-                            <span class="material-symbols-outlined text-[10px] text-secondary">download_done</span>
-                            <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">Downloaded</span>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="font-bold text-on-surface truncate text-xs">${escapeHtml(result.title)}</h4>
+                            <p class="text-[11px] text-on-surface-variant truncate">${escapeHtml(result.channel)}</p>
+                            <div class="mt-1 flex items-center gap-1.5">
+                                ${result.source === 'local' ? `
+                                    <div class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                                        <span class="material-symbols-outlined text-[9px] text-primary">library_music</span>
+                                        <span class="text-[7px] font-bold uppercase tracking-tighter text-primary">Local</span>
+                                    </div>
+                                ` : ''}
+                                <div class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
+                                    <span class="material-symbols-outlined text-[9px] text-secondary">download_done</span>
+                                    <span class="text-[7px] font-bold uppercase tracking-tighter text-secondary">Ready</span>
+                                </div>
+                            </div>
                         </div>
-                    ` : ''}
-                    
-                    <div class="flex items-center gap-3 mt-2">
-                        <label class="flex items-center gap-2 text-xs cursor-pointer ${demucsHealth.healthy ? '' : 'opacity-40 cursor-not-allowed'}" title="${demucsHealth.healthy ? '' : escapeHtml(demucsHealth.detail)}">
-                            <input type="checkbox" class="karaoke-checkbox sr-only" ${demucsHealth.healthy ? '' : 'disabled'}>
-                            <div class="karaoke-toggle w-4 h-4 rounded border border-outline-variant flex items-center justify-center transition-all ${demucsHealth.healthy ? '' : 'border-error/60'}">
-                                <span class="material-symbols-outlined text-[12px] text-transparent">check</span>
-                            </div>
-                            <span class="text-on-surface-variant">${demucsHealth.healthy ? 'Karaoke mode' : 'Karaoke mode (Demucs offline)'}</span>
-                        </label>
-                        <label class="flex items-center gap-2 text-xs cursor-pointer burn-lyrics-label opacity-50">
-                            <input type="checkbox" class="burn-lyrics-checkbox sr-only" checked disabled>
-                            <div class="burn-lyrics-toggle w-4 h-4 rounded border border-outline-variant flex items-center justify-center transition-all">
-                                <span class="material-symbols-outlined text-[12px] text-transparent">check</span>
-                            </div>
-                            <span class="text-on-surface-variant">Burn lyrics</span>
-                        </label>
+                        <button class="add-to-queue-btn bg-primary text-on-primary px-3 py-1.5 rounded-full text-xs font-bold hover:brightness-110 active:scale-95 transition-all shrink-0" 
+                                type="button">
+                            Add
+                        </button>
                     </div>
                 </div>
-                <button class="add-to-queue-btn bg-primary text-on-primary px-4 py-2 rounded-full text-sm font-bold hover:brightness-110 active:scale-95 transition-all shrink-0" 
-                        type="button">
-                    Add
-                </button>
+            `;
+        }
+        
+        // Full layout for YouTube results
+        return `
+            <div
+                class="bg-surface-container-low hover:bg-surface-container p-4 rounded-lg transition-all"
+                data-result-source="${escapeHtml(result.source || 'youtube')}"
+                data-video-id="${escapeHtml(result.video_id || '')}"
+                data-media-item-id="${result.media_item_id ?? ''}"
+                data-title="${escapeHtml(result.title)}"
+                data-channel="${escapeHtml(result.channel || '')}"
+            >
+                <div class="flex items-center gap-4">
+                    <div class="relative w-20 h-14 rounded-md overflow-hidden shrink-0">
+                        <img 
+                            src="${result.thumbnail || '/static/placeholder.png'}" 
+                            alt="${escapeHtml(result.title)}"
+                            class="w-full h-full object-cover"
+                            onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'"
+                        >
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <h4 class="font-bold text-on-surface truncate text-sm">${escapeHtml(result.title)}</h4>
+                        <p class="text-xs text-on-surface-variant truncate">${escapeHtml(result.channel)}</p>
+                        ${result.duration ? `<p class="text-xs text-on-surface-variant/60">${result.duration}</p>` : ''}
+                        ${result.source === 'local' ? `
+                            <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                                <span class="material-symbols-outlined text-[10px] text-primary">library_music</span>
+                                <span class="text-[8px] font-bold uppercase tracking-tighter text-primary">Local</span>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="flex items-center gap-3 mt-2">
+                            <label class="flex items-center gap-2 text-xs cursor-pointer ${demucsHealth.healthy ? '' : 'opacity-40 cursor-not-allowed'}" title="${demucsHealth.healthy ? '' : escapeHtml(demucsHealth.detail)}">
+                                <input type="checkbox" class="karaoke-checkbox sr-only" ${demucsHealth.healthy ? '' : 'disabled'}>
+                                <div class="karaoke-toggle w-4 h-4 rounded border border-outline-variant flex items-center justify-center transition-all ${demucsHealth.healthy ? '' : 'border-error/60'}">
+                                    <span class="material-symbols-outlined text-[12px] text-transparent">check</span>
+                                </div>
+                                <span class="text-on-surface-variant">${demucsHealth.healthy ? 'Karaoke mode' : 'Karaoke mode (Demucs offline)'}</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-xs cursor-pointer burn-lyrics-label opacity-50">
+                                <input type="checkbox" class="burn-lyrics-checkbox sr-only" checked disabled>
+                                <div class="burn-lyrics-toggle w-4 h-4 rounded border border-outline-variant flex items-center justify-center transition-all">
+                                    <span class="material-symbols-outlined text-[12px] text-transparent">check</span>
+                                </div>
+                                <span class="text-on-surface-variant">Burn lyrics</span>
+                            </label>
+                        </div>
+                    </div>
+                    <button class="add-to-queue-btn bg-primary text-on-primary px-4 py-2 rounded-full text-sm font-bold hover:brightness-110 active:scale-95 transition-all shrink-0" 
+                            type="button">
+                        Add
+                    </button>
+                </div>
             </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 
-    // Setup checkbox interactions
+    // Setup checkbox interactions only for YouTube results (non-downloaded)
     document.querySelectorAll('.karaoke-checkbox').forEach(checkbox => {
         const container = checkbox.closest('[data-result-source]');
         const toggle = container.querySelector('.karaoke-toggle');
@@ -254,8 +432,10 @@ async function addToQueue(searchResult, title, channel, buttonElement = null, re
     }
 
     const button = buttonElement || targetElement.querySelector('.add-to-queue-btn');
-    const isKaraoke = targetElement.querySelector('.karaoke-checkbox').checked;
-    const burnLyrics = isKaraoke ? targetElement.querySelector('.burn-lyrics-checkbox').checked : false;
+    const karaokeCheckbox = targetElement.querySelector('.karaoke-checkbox');
+    const burnLyricsCheckbox = targetElement.querySelector('.burn-lyrics-checkbox');
+    const isKaraoke = karaokeCheckbox ? karaokeCheckbox.checked : false;
+    const burnLyrics = isKaraoke && burnLyricsCheckbox ? burnLyricsCheckbox.checked : false;
 
     if (isKaraoke && !demucsHealth.healthy) {
         alert(`Karaoke mode is unavailable: ${demucsHealth.detail}`);

@@ -28,18 +28,49 @@ class YouTubeService:
         return settings.media_path
 
     def search(
-        self, query: str, max_results: int = 10, db: Session | None = None
+        self, query: str, max_results: int = 10, db: Session | None = None, source: str | None = None
     ) -> List[YouTubeSearchResult]:
         """
-        Search YouTube for videos.
+        Search YouTube and/or local library.
 
         Args:
             query: Search query
             max_results: Maximum results to return
+            db: Database session (required for local search)
+            source: Filter by source - "local", "youtube", or None for both
 
         Returns:
             List of search results
         """
+        # Handle local-only search
+        if source == "local":
+            if db is None:
+                return []
+            local_results = self._local_search(query, max_results, db)
+            return [YouTubeSearchResult(**result) for result in local_results[:max_results]]
+        
+        # Handle YouTube-only search
+        if source == "youtube":
+            youtube_results = self._search_results(query, max_results)
+            downloaded_ids = self._downloaded_video_ids(db, youtube_results) if db else set()
+            normalized_youtube = []
+            for result in youtube_results:
+                video_id = result.get("video_id")
+                normalized_youtube.append(
+                    {
+                        "source": "youtube",
+                        "media_item_id": None,
+                        "video_id": video_id,
+                        "title": result.get("title") or "",
+                        "channel": result.get("channel") or "",
+                        "duration": result.get("duration"),
+                        "thumbnail": result.get("thumbnail") or self._thumbnail_for_video_id(video_id),
+                        "downloaded": bool(video_id and video_id in downloaded_ids),
+                    }
+                )
+            return [YouTubeSearchResult(**result) for result in normalized_youtube[:max_results]]
+        
+        # Default: both sources (concurrent search with merge)
         if db is None:
             youtube_results = self._search_results(query, max_results)
             local_results: List[dict] = []

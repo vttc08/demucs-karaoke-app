@@ -102,6 +102,108 @@ def test_search_youtube_marks_downloaded_results(client):
     assert "db" in mock_search.call_args.kwargs
 
 
+def test_search_with_source_local_filter(client):
+    """Search with source=local should only call search with source filter."""
+    with patch("routes.search.youtube_service.search") as mock_search:
+        mock_search.return_value = [
+            {
+                "source": "local",
+                "media_item_id": 1,
+                "video_id": None,
+                "title": "Local Song",
+                "channel": "Local Artist",
+                "duration": None,
+                "thumbnail": None,
+                "downloaded": True,
+            }
+        ]
+        response = client.get("/api/search/?q=test&source=local")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["source"] == "local"
+    assert data[0]["media_item_id"] == 1
+    mock_search.assert_called_once()
+    # Verify source parameter was passed
+    call_kwargs = mock_search.call_args.kwargs
+    assert call_kwargs.get("source") == "local"
+
+
+def test_search_with_source_youtube_filter(client):
+    """Search with source=youtube should only call search with source filter."""
+    with patch("routes.search.youtube_service.search") as mock_search:
+        mock_search.return_value = [
+            {
+                "source": "youtube",
+                "media_item_id": None,
+                "video_id": "yt123",
+                "title": "YouTube Song",
+                "channel": "YouTube Channel",
+                "duration": "3:45",
+                "thumbnail": "https://example.com/thumb.jpg",
+                "downloaded": False,
+            }
+        ]
+        response = client.get("/api/search/?q=test&source=youtube")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["source"] == "youtube"
+    assert data[0]["video_id"] == "yt123"
+    mock_search.assert_called_once()
+    # Verify source parameter was passed
+    call_kwargs = mock_search.call_args.kwargs
+    assert call_kwargs.get("source") == "youtube"
+
+
+def test_search_with_invalid_source_returns_error(client):
+    """Search with invalid source parameter should return 400 error."""
+    response = client.get("/api/search/?q=test&source=invalid")
+    assert response.status_code == 400
+    data = response.json()
+    assert "source must be" in data["detail"].lower()
+
+
+def test_search_without_source_returns_mixed(client):
+    """Search without source parameter should return mixed results (default behavior)."""
+    with patch("routes.search.youtube_service.search") as mock_search:
+        mock_search.return_value = [
+            {
+                "source": "local",
+                "media_item_id": 1,
+                "video_id": None,
+                "title": "Local Song",
+                "channel": "Local Artist",
+                "duration": None,
+                "thumbnail": None,
+                "downloaded": True,
+            },
+            {
+                "source": "youtube",
+                "media_item_id": None,
+                "video_id": "yt123",
+                "title": "YouTube Song",
+                "channel": "YouTube Channel",
+                "duration": "4:00",
+                "thumbnail": "https://example.com/thumb.jpg",
+                "downloaded": False,
+            },
+        ]
+        response = client.get("/api/search/?q=test")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    assert data[0]["source"] == "local"
+    assert data[1]["source"] == "youtube"
+    mock_search.assert_called_once()
+    # Verify source parameter was None (default)
+    call_kwargs = mock_search.call_args.kwargs
+    assert call_kwargs.get("source") is None
+
+
 def test_add_to_queue(client):
     """Test adding item to queue."""
     response = client.post(
