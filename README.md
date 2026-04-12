@@ -81,9 +81,9 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
    - Search for songs (local library full-text on title/artist + YouTube in parallel)
    - Or paste a YouTube link / video id directly to add external search results
    - Local matches are preferred in results; duplicate YouTube matches are hidden
-   - Toggle "Karaoke mode" checkbox
-   - Optionally toggle "Burn lyrics" (enabled only in karaoke mode)
-   - Add to queue
+   - Tap **Add** on a result to open the queue configuration interaction
+   - Choose **AI Karaoke Processing** and optional **Lyrics** toggle in the configuration panel
+   - Confirm to add to queue
    - Use remote stage controls, including lyrics on/off, for the currently playing item
     - Queue status updates in real time (downloading, processing, ready, playing, failed)
    

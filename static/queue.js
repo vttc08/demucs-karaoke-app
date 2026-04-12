@@ -26,6 +26,18 @@ const stageRemoteVocalsToggleBtn = document.getElementById('stage-remote-vocals-
 const stageRemoteVocalsToggleIcon = document.getElementById('stage-remote-vocals-toggle-icon');
 const stageRemoteVocalsToggleLabel = document.getElementById('stage-remote-vocals-toggle-label');
 const stageRemoteVocalsVolumeSlider = document.getElementById('stage-remote-vocals-volume-slider');
+const queueConfigModal = document.getElementById('queue-config-modal');
+const queueConfigModalBackdrop = document.getElementById('queue-config-modal-backdrop');
+const queueConfigCloseBtn = document.getElementById('queue-config-close-btn');
+const queueConfigCancelBtn = document.getElementById('queue-config-cancel-btn');
+const queueConfigConfirmBtn = document.getElementById('queue-config-confirm-btn');
+const queueConfigSongThumb = document.getElementById('queue-config-song-thumb');
+const queueConfigSongTitle = document.getElementById('queue-config-song-title');
+const queueConfigSongChannel = document.getElementById('queue-config-song-channel');
+const queueConfigKaraokeToggle = document.getElementById('queue-config-karaoke-toggle');
+const queueConfigKaraokeStatus = document.getElementById('queue-config-karaoke-status');
+const queueConfigKaraokeDetail = document.getElementById('queue-config-karaoke-detail');
+const queueConfigLyricsToggle = document.getElementById('queue-config-lyrics-toggle');
 let stageRemotePaused = false;
 let stageRemoteLyricsEnabled = true;
 let stageRemoteLyricsAvailable = false;
@@ -33,6 +45,9 @@ let stageRemoteVocalsEnabled = true;
 let stageRemoteVocalsVolume = 1.0;
 let stageRemoteVocalsAvailable = false;
 let demucsHealth = { healthy: true, detail: 'Health unknown' };
+let modalSelection = null;
+let modalKaraokeEnabled = false;
+let modalLyricsEnabled = false;
 
 searchResults.addEventListener('click', async (event) => {
     const button = event.target.closest('.add-to-queue-btn');
@@ -41,17 +56,7 @@ searchResults.addEventListener('click', async (event) => {
     const resultElement = button.closest('[data-result-source]');
     if (!resultElement) return;
 
-    await addToQueue(
-        {
-            source: resultElement.dataset.resultSource || 'youtube',
-            videoId: resultElement.dataset.videoId || null,
-            mediaItemId: resultElement.dataset.mediaItemId || null,
-        },
-        resultElement.dataset.title || '',
-        resultElement.dataset.channel || '',
-        button,
-        resultElement,
-    );
+    openQueueConfigModal(resultElement, button);
 });
 
 searchBtn.addEventListener('click', performSearch);
@@ -271,6 +276,117 @@ async function refreshDemucsHealth() {
     }
 }
 
+function updateModalToggleAppearance(toggleButton, enabled, accentClass = 'bg-primary') {
+    if (!toggleButton) return;
+    const knob = toggleButton.querySelector('span');
+    toggleButton.setAttribute('aria-checked', enabled ? 'true' : 'false');
+    toggleButton.classList.toggle(accentClass, enabled);
+    toggleButton.classList.toggle('bg-surface-container-highest', !enabled);
+    if (knob) {
+        knob.classList.toggle('translate-x-5', enabled);
+        knob.classList.toggle('bg-white', enabled);
+        knob.classList.toggle('bg-on-surface-variant', !enabled);
+    }
+}
+
+function syncQueueConfigModalUi() {
+    const karaokeAvailable = demucsHealth.healthy;
+    if (!karaokeAvailable) {
+        modalKaraokeEnabled = false;
+    }
+
+    if (queueConfigKaraokeToggle) {
+        queueConfigKaraokeToggle.disabled = !karaokeAvailable;
+        queueConfigKaraokeToggle.classList.toggle('opacity-50', !karaokeAvailable);
+        queueConfigKaraokeToggle.classList.toggle('cursor-not-allowed', !karaokeAvailable);
+    }
+    if (queueConfigKaraokeStatus) {
+        queueConfigKaraokeStatus.classList.toggle('hidden', karaokeAvailable);
+    }
+    if (queueConfigKaraokeDetail) {
+        queueConfigKaraokeDetail.textContent = karaokeAvailable
+            ? 'Remove lead vocals using Demucs AI processing.'
+            : `Demucs offline: ${demucsHealth.detail}`;
+    }
+
+    updateModalToggleAppearance(queueConfigKaraokeToggle, modalKaraokeEnabled, 'bg-tertiary');
+
+    const lyricsEnabled = modalKaraokeEnabled;
+    if (!lyricsEnabled) {
+        modalLyricsEnabled = false;
+    }
+    if (queueConfigLyricsToggle) {
+        queueConfigLyricsToggle.disabled = !lyricsEnabled;
+        queueConfigLyricsToggle.classList.toggle('opacity-50', !lyricsEnabled);
+        queueConfigLyricsToggle.classList.toggle('cursor-not-allowed', !lyricsEnabled);
+    }
+    updateModalToggleAppearance(queueConfigLyricsToggle, modalLyricsEnabled, 'bg-secondary');
+}
+
+async function openQueueConfigModal(resultElement, triggerButton) {
+    if (!queueConfigModal || !queueConfigConfirmBtn) {
+        await addToQueueFromModal(
+            {
+                source: resultElement.dataset.resultSource || 'youtube',
+                videoId: resultElement.dataset.videoId || null,
+                mediaItemId: resultElement.dataset.mediaItemId || null,
+                title: resultElement.dataset.title || '',
+                channel: resultElement.dataset.channel || '',
+                thumbnail: resultElement.dataset.thumbnail || '/static/placeholder.png',
+            },
+            triggerButton,
+        );
+        return;
+    }
+
+    modalSelection = {
+        source: resultElement.dataset.resultSource || 'youtube',
+        videoId: resultElement.dataset.videoId || null,
+        mediaItemId: resultElement.dataset.mediaItemId || null,
+        title: resultElement.dataset.title || '',
+        channel: resultElement.dataset.channel || '',
+        thumbnail: resultElement.dataset.thumbnail || '/static/placeholder.png',
+        triggerButton,
+    };
+
+    modalKaraokeEnabled = false;
+    modalLyricsEnabled = false;
+
+    if (queueConfigSongTitle) queueConfigSongTitle.textContent = modalSelection.title || 'Unknown title';
+    if (queueConfigSongChannel) queueConfigSongChannel.textContent = modalSelection.channel || '';
+    if (queueConfigSongThumb) {
+        queueConfigSongThumb.src = modalSelection.thumbnail;
+        queueConfigSongThumb.onerror = () => {
+            queueConfigSongThumb.src = '/static/placeholder.png';
+        };
+    }
+
+    queueConfigConfirmBtn.disabled = false;
+    queueConfigConfirmBtn.classList.remove('bg-secondary', 'text-white', 'bg-error');
+    queueConfigConfirmBtn.classList.add('bg-primary', 'text-on-primary');
+    queueConfigConfirmBtn.innerHTML = '<span class="material-symbols-outlined text-base" style="font-variation-settings: \'FILL\' 1">add_circle</span>Add to Queue';
+    queueConfigModal.classList.remove('hidden');
+    queueConfigModal.classList.add('flex');
+    document.body.classList.add('overflow-hidden');
+
+    syncQueueConfigModalUi();
+    refreshDemucsHealth().then(() => {
+        if (modalSelection) {
+            syncQueueConfigModalUi();
+        }
+    });
+}
+
+function closeQueueConfigModal() {
+    if (!queueConfigModal) return;
+    queueConfigModal.classList.add('hidden');
+    queueConfigModal.classList.remove('flex');
+    document.body.classList.remove('overflow-hidden');
+    modalSelection = null;
+    modalKaraokeEnabled = false;
+    modalLyricsEnabled = false;
+}
+
 function displaySearchResults(results) {
     if (results.length === 0) {
         searchResults.innerHTML = `
@@ -295,6 +411,7 @@ function displaySearchResults(results) {
                     data-media-item-id="${result.media_item_id ?? ''}"
                     data-title="${escapeHtml(result.title)}"
                     data-channel="${escapeHtml(result.channel || '')}"
+                    data-thumbnail="${escapeHtml(result.thumbnail || '/static/placeholder.png')}"
                 >
                     <div class="flex items-center gap-3">
                         <div class="relative w-12 h-12 rounded-md overflow-hidden shrink-0">
@@ -339,6 +456,7 @@ function displaySearchResults(results) {
                 data-media-item-id="${result.media_item_id ?? ''}"
                 data-title="${escapeHtml(result.title)}"
                 data-channel="${escapeHtml(result.channel || '')}"
+                data-thumbnail="${escapeHtml(result.thumbnail || '/static/placeholder.png')}"
             >
                 <div class="flex items-center gap-4">
                     <div class="relative w-20 h-14 rounded-md overflow-hidden shrink-0">
@@ -359,23 +477,6 @@ function displaySearchResults(results) {
                                 <span class="text-[8px] font-bold uppercase tracking-tighter text-primary">Local</span>
                             </div>
                         ` : ''}
-                        
-                        <div class="flex items-center gap-3 mt-2">
-                            <label class="flex items-center gap-2 text-xs cursor-pointer ${demucsHealth.healthy ? '' : 'opacity-40 cursor-not-allowed'}" title="${demucsHealth.healthy ? '' : escapeHtml(demucsHealth.detail)}">
-                                <input type="checkbox" class="karaoke-checkbox sr-only" ${demucsHealth.healthy ? '' : 'disabled'}>
-                                <div class="karaoke-toggle w-4 h-4 rounded border border-outline-variant flex items-center justify-center transition-all ${demucsHealth.healthy ? '' : 'border-error/60'}">
-                                    <span class="material-symbols-outlined text-[12px] text-transparent">check</span>
-                                </div>
-                                <span class="text-on-surface-variant">${demucsHealth.healthy ? 'Karaoke mode' : 'Karaoke mode (Demucs offline)'}</span>
-                            </label>
-                            <label class="flex items-center gap-2 text-xs cursor-pointer burn-lyrics-label opacity-50">
-                                <input type="checkbox" class="burn-lyrics-checkbox sr-only" checked disabled>
-                                <div class="burn-lyrics-toggle w-4 h-4 rounded border border-outline-variant flex items-center justify-center transition-all">
-                                    <span class="material-symbols-outlined text-[12px] text-transparent">check</span>
-                                </div>
-                                <span class="text-on-surface-variant">Burn lyrics</span>
-                            </label>
-                        </div>
                     </div>
                     <button class="add-to-queue-btn bg-primary text-on-primary px-4 py-2 rounded-full text-sm font-bold hover:brightness-110 active:scale-95 transition-all shrink-0" 
                             type="button">
@@ -385,81 +486,20 @@ function displaySearchResults(results) {
             </div>
         `;
     }).join('');
-
-    // Setup checkbox interactions only for YouTube results (non-downloaded)
-    document.querySelectorAll('.karaoke-checkbox').forEach(checkbox => {
-        const container = checkbox.closest('[data-result-source]');
-        const toggle = container.querySelector('.karaoke-toggle');
-        const burnContainer = container.querySelector('.burn-lyrics-label');
-        const burnCheckbox = container.querySelector('.burn-lyrics-checkbox');
-        const burnToggle = container.querySelector('.burn-lyrics-toggle');
-        
-        function updateUI() {
-            if (checkbox.checked) {
-                toggle.classList.add('bg-primary', 'border-primary');
-                toggle.querySelector('.material-symbols-outlined').classList.remove('text-transparent');
-                toggle.querySelector('.material-symbols-outlined').classList.add('text-on-primary');
-                burnContainer.classList.remove('opacity-50');
-                burnCheckbox.disabled = false;
-                burnCheckbox.checked = true;
-                updateBurnLyricsUI();
-            } else {
-                toggle.classList.remove('bg-primary', 'border-primary');
-                toggle.querySelector('.material-symbols-outlined').classList.add('text-transparent');
-                toggle.querySelector('.material-symbols-outlined').classList.remove('text-on-primary');
-                burnContainer.classList.add('opacity-50');
-                burnCheckbox.disabled = true;
-                burnCheckbox.checked = false;
-                updateBurnLyricsUI();
-            }
-        }
-        
-        function updateBurnLyricsUI() {
-            if (burnCheckbox.checked && !burnCheckbox.disabled) {
-                burnToggle.classList.add('bg-secondary', 'border-secondary');
-                burnToggle.querySelector('.material-symbols-outlined').classList.remove('text-transparent');
-                burnToggle.querySelector('.material-symbols-outlined').classList.add('text-white');
-            } else {
-                burnToggle.classList.remove('bg-secondary', 'border-secondary');
-                burnToggle.querySelector('.material-symbols-outlined').classList.add('text-transparent');
-                burnToggle.querySelector('.material-symbols-outlined').classList.remove('text-white');
-            }
-        }
-        
-        checkbox.addEventListener('change', updateUI);
-        burnCheckbox.addEventListener('change', updateBurnLyricsUI);
-        toggle.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            checkbox.checked = !checkbox.checked;
-            checkbox.dispatchEvent(new Event('change'));
-        });
-        burnToggle.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (!burnCheckbox.disabled) {
-                burnCheckbox.checked = !burnCheckbox.checked;
-                burnCheckbox.dispatchEvent(new Event('change'));
-            }
-        });
-        updateUI();
-    });
 }
 
-async function addToQueue(searchResult, title, channel, buttonElement = null, resultElement = null) {
-    const source = searchResult?.source || 'youtube';
-    const videoId = searchResult?.videoId || null;
-    const mediaItemId = searchResult?.mediaItemId || null;
-    const targetElement = resultElement;
-    if (!targetElement) {
-        throw new Error('Search result no longer exists');
+async function addToQueueFromModal(selection, buttonElement) {
+    const source = selection?.source || 'youtube';
+    const videoId = selection?.videoId || null;
+    const mediaItemId = selection?.mediaItemId || null;
+    const title = selection?.title || '';
+    const channel = selection?.channel || '';
+    const isKaraoke = modalKaraokeEnabled;
+    const burnLyrics = isKaraoke && modalLyricsEnabled;
+    const button = buttonElement || queueConfigConfirmBtn;
+    if (!button) {
+        throw new Error('Missing add-to-queue trigger button');
     }
-
-    const button = buttonElement || targetElement.querySelector('.add-to-queue-btn');
-    const karaokeCheckbox = targetElement.querySelector('.karaoke-checkbox');
-    const burnLyricsCheckbox = targetElement.querySelector('.burn-lyrics-checkbox');
-    const isKaraoke = karaokeCheckbox ? karaokeCheckbox.checked : false;
-    const burnLyrics = isKaraoke && burnLyricsCheckbox ? burnLyricsCheckbox.checked : false;
 
     if (isKaraoke && !demucsHealth.healthy) {
         alert(`Karaoke mode is unavailable: ${demucsHealth.detail}`);
@@ -518,6 +558,7 @@ async function addToQueue(searchResult, title, channel, buttonElement = null, re
             // Clear search results after successful add
             searchInput.value = '';
             searchResults.innerHTML = '';
+            closeQueueConfigModal();
         }, 1000);
     } catch (error) {
         button.innerHTML = '<span class="material-symbols-outlined text-sm">error</span>';
@@ -530,13 +571,54 @@ async function addToQueue(searchResult, title, channel, buttonElement = null, re
         
         // Reset button after 2 seconds
         setTimeout(() => {
-            button.innerHTML = 'Add';
+            button.innerHTML = '<span class="material-symbols-outlined text-base" style="font-variation-settings: \'FILL\' 1">add_circle</span>Add to Queue';
             button.disabled = false;
             button.classList.remove('bg-error', 'text-white');
             button.classList.add('bg-primary', 'text-on-primary');
         }, 2000);
     }
 }
+
+if (queueConfigKaraokeToggle) {
+    queueConfigKaraokeToggle.addEventListener('click', () => {
+        if (queueConfigKaraokeToggle.disabled) return;
+        modalKaraokeEnabled = !modalKaraokeEnabled;
+        syncQueueConfigModalUi();
+    });
+}
+
+if (queueConfigLyricsToggle) {
+    queueConfigLyricsToggle.addEventListener('click', () => {
+        if (queueConfigLyricsToggle.disabled) return;
+        modalLyricsEnabled = !modalLyricsEnabled;
+        syncQueueConfigModalUi();
+    });
+}
+
+if (queueConfigConfirmBtn) {
+    queueConfigConfirmBtn.addEventListener('click', async () => {
+        if (!modalSelection) return;
+        await addToQueueFromModal(modalSelection, queueConfigConfirmBtn);
+    });
+}
+
+if (queueConfigCloseBtn) {
+    queueConfigCloseBtn.addEventListener('click', closeQueueConfigModal);
+}
+
+if (queueConfigCancelBtn) {
+    queueConfigCancelBtn.addEventListener('click', closeQueueConfigModal);
+}
+
+if (queueConfigModalBackdrop) {
+    queueConfigModalBackdrop.addEventListener('click', closeQueueConfigModal);
+}
+
+window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && queueConfigModal && !queueConfigModal.classList.contains('hidden')) {
+        closeQueueConfigModal();
+    }
+});
 
 async function refreshQueue(force = false) {
     // Don't refresh if user is actively searching or typing

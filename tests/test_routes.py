@@ -327,6 +327,8 @@ def test_queue_page_loads(client):
     response = client.get("/queue")
     assert response.status_code == 200
     assert b"Karaoke Queue" in response.content
+    assert b"queue-config-modal" in response.content
+    assert b"Configure Queue" in response.content
 
 
 def test_stage_page_loads(client):

@@ -191,6 +191,74 @@
         </div>
     </section>
 
+    <div id="queue-config-modal" class="fixed inset-0 z-[80] hidden items-end justify-center bg-background/80 p-0 backdrop-blur-sm sm:items-center sm:p-6">
+        <div id="queue-config-modal-backdrop" class="absolute inset-0"></div>
+        <div class="relative w-full max-w-2xl overflow-hidden rounded-t-2xl border border-outline-variant/20 bg-surface-container-high shadow-[0_-10px_60px_rgba(143,67,251,0.2)] sm:rounded-2xl">
+            <div class="flex items-center justify-between border-b border-outline-variant/20 px-5 py-4">
+                <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">Configure Queue</h3>
+                <button
+                    id="queue-config-close-btn"
+                    type="button"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-on-surface"
+                    aria-label="Close configuration"
+                >
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+            <div class="space-y-5 px-5 py-5">
+                <div class="flex items-center gap-3 rounded-xl bg-surface-container-highest/60 p-3">
+                    <div class="h-14 w-14 overflow-hidden rounded-md bg-surface-container-lowest">
+                        <img id="queue-config-song-thumb" src="/static/placeholder.png" alt="Selected song" class="h-full w-full object-cover" />
+                    </div>
+                    <div class="min-w-0">
+                        <p id="queue-config-song-title" class="truncate text-sm font-bold text-on-surface">Selected song</p>
+                        <p id="queue-config-song-channel" class="truncate text-xs text-on-surface-variant"></p>
+                    </div>
+                </div>
+
+                <div class="space-y-3 rounded-xl bg-surface-container p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-tertiary text-base">psychology</span>
+                                <span class="text-sm font-bold text-on-surface">AI Karaoke Processing</span>
+                                <span id="queue-config-karaoke-status" class="hidden rounded-full border border-error/20 bg-error/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-error">Offline</span>
+                            </div>
+                            <p id="queue-config-karaoke-detail" class="mt-1 text-xs text-on-surface-variant">Remove lead vocals using Demucs AI processing.</p>
+                        </div>
+                        <button id="queue-config-karaoke-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-6 w-11 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
+                            <span class="h-4 w-4 rounded-full bg-on-surface-variant transition-transform"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="space-y-3 rounded-xl bg-surface-container p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-secondary text-base">lyrics</span>
+                                <span class="text-sm font-bold text-on-surface">Lyrics</span>
+                            </div>
+                            <p class="mt-1 text-xs text-on-surface-variant">Placeholder toggle for lyrics behavior.</p>
+                        </div>
+                        <button id="queue-config-lyrics-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-6 w-11 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
+                            <span class="h-4 w-4 rounded-full bg-on-surface-variant transition-transform"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="flex flex-col gap-2 border-t border-outline-variant/20 px-5 py-4 sm:flex-row sm:justify-end">
+                <button id="queue-config-cancel-btn" type="button" class="rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface-variant transition-colors hover:text-on-surface">
+                    Cancel
+                </button>
+                <button id="queue-config-confirm-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black uppercase tracking-tight text-on-primary transition-all hover:brightness-110 active:scale-95">
+                    <span class="material-symbols-outlined text-base" style="font-variation-settings: 'FILL' 1">add_circle</span>
+                    Add to Queue
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Navigation hint -->
     <div class="text-center mt-8">
         <div class="flex justify-center gap-4">
