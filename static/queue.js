@@ -56,6 +56,12 @@ searchResults.addEventListener('click', async (event) => {
     const resultElement = button.closest('[data-result-source]');
     if (!resultElement) return;
 
+    const source = resultElement.dataset.resultSource || 'youtube';
+    if (source === 'local') {
+        await addToQueueDirect(resultElement, button);
+        return;
+    }
+
     openQueueConfigModal(resultElement, button);
 });
 
@@ -289,6 +295,18 @@ function updateModalToggleAppearance(toggleButton, enabled, accentClass = 'bg-pr
     }
 }
 
+function buildQueueSelection(resultElement, triggerButton) {
+    return {
+        source: resultElement.dataset.resultSource || 'youtube',
+        videoId: resultElement.dataset.videoId || null,
+        mediaItemId: resultElement.dataset.mediaItemId || null,
+        title: resultElement.dataset.title || '',
+        channel: resultElement.dataset.channel || '',
+        thumbnail: resultElement.dataset.thumbnail || '/static/placeholder.png',
+        triggerButton,
+    };
+}
+
 function syncQueueConfigModalUi() {
     const karaokeAvailable = demucsHealth.healthy;
     if (!karaokeAvailable) {
@@ -325,29 +343,14 @@ function syncQueueConfigModalUi() {
 
 async function openQueueConfigModal(resultElement, triggerButton) {
     if (!queueConfigModal || !queueConfigConfirmBtn) {
-        await addToQueueFromModal(
-            {
-                source: resultElement.dataset.resultSource || 'youtube',
-                videoId: resultElement.dataset.videoId || null,
-                mediaItemId: resultElement.dataset.mediaItemId || null,
-                title: resultElement.dataset.title || '',
-                channel: resultElement.dataset.channel || '',
-                thumbnail: resultElement.dataset.thumbnail || '/static/placeholder.png',
-            },
-            triggerButton,
-        );
+        await submitQueueItem(buildQueueSelection(resultElement, triggerButton), triggerButton, {
+            isKaraoke: false,
+            burnLyrics: false,
+        });
         return;
     }
 
-    modalSelection = {
-        source: resultElement.dataset.resultSource || 'youtube',
-        videoId: resultElement.dataset.videoId || null,
-        mediaItemId: resultElement.dataset.mediaItemId || null,
-        title: resultElement.dataset.title || '',
-        channel: resultElement.dataset.channel || '',
-        thumbnail: resultElement.dataset.thumbnail || '/static/placeholder.png',
-        triggerButton,
-    };
+    modalSelection = buildQueueSelection(resultElement, triggerButton);
 
     modalKaraokeEnabled = false;
     modalLyricsEnabled = false;
@@ -489,13 +492,27 @@ function displaySearchResults(results) {
 }
 
 async function addToQueueFromModal(selection, buttonElement) {
+    return submitQueueItem(selection, buttonElement, {
+        isKaraoke: modalKaraokeEnabled,
+        burnLyrics: modalLyricsEnabled,
+    });
+}
+
+async function addToQueueDirect(resultElement, buttonElement) {
+    return submitQueueItem(buildQueueSelection(resultElement, buttonElement), buttonElement, {
+        isKaraoke: false,
+        burnLyrics: false,
+    });
+}
+
+async function submitQueueItem(selection, buttonElement, options = {}) {
     const source = selection?.source || 'youtube';
     const videoId = selection?.videoId || null;
     const mediaItemId = selection?.mediaItemId || null;
     const title = selection?.title || '';
     const channel = selection?.channel || '';
-    const isKaraoke = modalKaraokeEnabled;
-    const burnLyrics = isKaraoke && modalLyricsEnabled;
+    const isKaraoke = Boolean(options.isKaraoke);
+    const burnLyrics = Boolean(options.burnLyrics && isKaraoke);
     const button = buttonElement || queueConfigConfirmBtn;
     if (!button) {
         throw new Error('Missing add-to-queue trigger button');
