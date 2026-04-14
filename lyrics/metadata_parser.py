@@ -1,7 +1,10 @@
 """Song metadata parsing: Last.fm lookup, regex tidying, and search scoring.
 
-Pure library module — no Flask imports. Extracted from batch_song_renamer.py
-to enable reuse in the SQLite enrichment pipeline.
+This file contains reference code derived from PiKaraoke metadata parsing:
+https://github.com/vicwomg/pikaraoke/blob/c406a10f2fd154e2d4f5c75b39f57f511f6772f3/pikaraoke/lib/metadata_parser.py
+
+It is retained under ``lyrics/`` as research/example material and is not used
+by production services under ``services/``.
 """
 
 import logging

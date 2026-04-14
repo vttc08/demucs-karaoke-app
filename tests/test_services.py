@@ -615,7 +615,9 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session)
 @pytest.mark.asyncio
 async def test_lyrics_service_fetch():
     """Lyrics service should prefer syncedLyrics from LRCLIB results."""
-    service = LyricsService()
+    from services import lyrics_service as ls_module
+
+    service = LyricsService(metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key=""))
 
     class FakeResponse:
         def raise_for_status(self):
@@ -646,8 +648,6 @@ async def test_lyrics_service_fetch():
             assert "Test Song" in params["q"]
             return FakeResponse()
 
-    from services import lyrics_service as ls_module
-
     original_client = ls_module.httpx.AsyncClient
     try:
         ls_module.httpx.AsyncClient = FakeAsyncClient
@@ -661,7 +661,9 @@ async def test_lyrics_service_fetch():
 @pytest.mark.asyncio
 async def test_lyrics_service_infers_artist_and_title_from_youtube_title():
     """Metadata inferrer should split cleaned YouTube-style titles."""
-    service = LyricsService()
+    from services import lyrics_service as ls_module
+
+    service = LyricsService(metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key=""))
 
     inferred = await service.infer_song_metadata(
         title="Taylor Swift - Enchanted (Taylor's Version) (Lyric Video)",
@@ -674,9 +676,121 @@ async def test_lyrics_service_infers_artist_and_title_from_youtube_title():
 
 
 @pytest.mark.asyncio
+async def test_lyrics_service_prefers_lastfm_when_configured():
+    """Inferrer should use Last.fm match scoring when an API key is configured."""
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "results": {
+                    "trackmatches": {
+                        "track": [
+                            {"name": "Wrong Song (Live)", "artist": "Random Artist"},
+                            {"name": "Enchanted", "artist": "Taylor Swift", "mbid": "x"},
+                        ]
+                    }
+                }
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params):
+            assert "audioscrobbler" in url
+            assert params["method"] == "track.search"
+            return FakeResponse()
+
+    from services import lyrics_service as ls_module
+
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        service = LyricsService(
+            metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key="test-key")
+        )
+        inferred = await service.infer_song_metadata(
+            title="Taylor Swift - Enchanted (Taylor's Version) (Lyric Video)",
+            artist=None,
+        )
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+
+    assert inferred.artist == "Taylor Swift"
+    assert inferred.title == "Enchanted"
+    assert inferred.source == "lastfm"
+
+
+@pytest.mark.asyncio
+async def test_lyrics_service_strips_artist_prefix_from_lastfm_track_name():
+    """Last.fm track names that already include the artist should not duplicate it."""
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "results": {
+                    "trackmatches": {
+                        "track": [
+                            {
+                                "name": "Miley Cyrus - Party in the U.S.A.",
+                                "artist": "Miley Cyrus",
+                            }
+                        ]
+                    }
+                }
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params):
+            return FakeResponse()
+
+    from services import lyrics_service as ls_module
+
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        service = LyricsService(
+            metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key="test-key")
+        )
+        inferred = await service.infer_song_metadata(
+            title="Miley Cyrus - Party In The U.S.A (Lyrics)",
+            artist=None,
+        )
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+
+    assert inferred.title == "Party in the U.S.A."
+    assert inferred.artist == "Miley Cyrus"
+    assert inferred.source == "lastfm"
+
+
+@pytest.mark.asyncio
 async def test_lyrics_service_fetch_uses_inferred_metadata_query():
     """Fetch should derive artist/title from title-only input before provider lookup."""
-    service = LyricsService()
+    from services import lyrics_service as ls_module
+
+    service = LyricsService(metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key=""))
     observed_queries = []
 
     class FakeResponse:
@@ -705,8 +819,6 @@ async def test_lyrics_service_fetch_uses_inferred_metadata_query():
         async def get(self, url, params):
             observed_queries.append(params.get("q"))
             return FakeResponse()
-
-    from services import lyrics_service as ls_module
 
     original_client = ls_module.httpx.AsyncClient
     try:
