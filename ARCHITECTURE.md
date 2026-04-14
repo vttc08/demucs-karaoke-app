@@ -109,6 +109,16 @@ The stage page uses a websocket-first model:
   - nearby lines shown in white
 - This custom pipeline keeps room for future per-user appearance/animation customization.
 
+## Lyrics inference and provider flow
+
+- `services/lyrics_service.py` is structured into three layers:
+  - metadata inference (`YouTubeTitleInferrer`) to normalize noisy YouTube titles into title/artist pairs
+  - provider contract (`LyricsProvider`) with provider implementations (Phase 1: `LRCLibLyricsProvider`)
+  - orchestration (`LyricsService.resolve_lyrics`) to select the best available payload (synced preferred, plain fallback)
+- `services/karaoke_service.py` calls the orchestrator during karaoke processing when `requested_burn_lyrics` is enabled.
+- Synced lyrics are persisted as `.lrc` sidecars for stage overlay cue parsing.
+- Unsynced lyrics are still usable for burned subtitle rendering via ffmpeg text fallback.
+
 ## Software Stack
 
 **Backend**: FastAPI

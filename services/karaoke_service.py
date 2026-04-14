@@ -218,8 +218,13 @@ class KaraokeService:
 
         output_path = settings.cache_path / f"{item.media.youtube_id}_karaoke.mp4"
         if item.requested_burn_lyrics:
-            lyrics = await self.lyrics_service.fetch_lyrics(item.media.title, item.media.artist)
-            if lyrics:
+            lyrics_payload = await self.lyrics_service.resolve_lyrics(
+                title=item.media.title,
+                artist=item.media.artist,
+                youtube_title=item.media.title,
+            )
+            lyrics = lyrics_payload.lyrics if lyrics_payload else None
+            if lyrics and lyrics_payload and lyrics_payload.is_synced:
                 lyrics_dir = settings.cache_path / "lyrics"
                 lyrics_dir.mkdir(parents=True, exist_ok=True)
                 lyrics_path = lyrics_dir / f"{item.media.youtube_id}.lrc"

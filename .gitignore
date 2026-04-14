@@ -35,6 +35,8 @@ env/
 
 # Environment
 .env
+.mcp.json
+.mcp.jso
 
 # Database
 *.db

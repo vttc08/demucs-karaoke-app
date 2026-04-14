@@ -659,6 +659,68 @@ async def test_lyrics_service_fetch():
 
 
 @pytest.mark.asyncio
+async def test_lyrics_service_infers_artist_and_title_from_youtube_title():
+    """Metadata inferrer should split cleaned YouTube-style titles."""
+    service = LyricsService()
+
+    inferred = await service.infer_song_metadata(
+        title="Taylor Swift - Enchanted (Taylor's Version) (Lyric Video)",
+        artist=None,
+    )
+
+    assert inferred.artist == "Taylor Swift"
+    assert inferred.title == "Enchanted (Taylor's Version)"
+    assert inferred.source == "regex"
+
+
+@pytest.mark.asyncio
+async def test_lyrics_service_fetch_uses_inferred_metadata_query():
+    """Fetch should derive artist/title from title-only input before provider lookup."""
+    service = LyricsService()
+    observed_queries = []
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return [
+                {
+                    "trackName": "Enchanted",
+                    "artistName": "Taylor Swift",
+                    "syncedLyrics": "[00:01.00]Inferred line",
+                }
+            ]
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params):
+            observed_queries.append(params.get("q"))
+            return FakeResponse()
+
+    from services import lyrics_service as ls_module
+
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        lyrics = await service.fetch_lyrics("Taylor Swift - Enchanted (Lyric Video)")
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+
+    assert lyrics == "[00:01.00]Inferred line"
+    assert observed_queries
+    assert observed_queries[0] == "Enchanted Taylor Swift"
+
+
+@pytest.mark.asyncio
 async def test_lyrics_service_fetch_falls_back_to_plain():
     """Lyrics service should fall back to plain lyrics when synced lyrics is missing."""
     service = LyricsService()
