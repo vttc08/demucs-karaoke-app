@@ -1,5 +1,9 @@
 Implement a lyrics resolution pipeline for the karaoke app.
 
+Important: files in this `lyrics/` folder are research/reference examples only.
+Production code should be implemented under application modules (for example,
+`services/`) and should not import these example files directly at runtime.
+
 Goal:
 Infer artist and title from messy YouTube titles and fetch synced lyrics using multiple providers.
 

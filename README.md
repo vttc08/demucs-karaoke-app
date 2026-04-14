@@ -143,6 +143,20 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for system design details.
 uv run pytest
 ```
 
+### Test title inference from CLI
+```bash
+# Run against sample titles in lyrics/karaoke_titles.py
+uv run scripts/lyrics_inference_cli.py --samples
+# or: uv run python scripts/lyrics_inference_cli.py --samples
+
+# Add custom titles
+uv run scripts/lyrics_inference_cli.py --title "JAY CHOU (周杰伦) - PIAO YI (飄移)"
+
+# Interactive mode
+uv run scripts/lyrics_inference_cli.py --interactive
+```
+Set `LASTFM_API_KEY` in `.env` to enable online Last.fm-assisted inference; otherwise the CLI uses regex-only local inference.
+
 ### With coverage
 ```bash
 uv run pytest --cov=. --cov-report=html
