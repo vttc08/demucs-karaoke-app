@@ -1,87 +1,327 @@
-"""Lyrics lookup and parsing service."""
+"""Lyrics metadata inference, provider orchestration, and cue parsing."""
+from __future__ import annotations
+
 import json
+import logging
 import math
 import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Protocol
+
 import httpx
+
 from config import settings
+
+try:
+    from lyrics.metadata_parser import regex_tidy
+except ImportError:
+    regex_tidy = None
+
+logger = logging.getLogger(__name__)
 
 _TIMESTAMP_PATTERN = re.compile(r"\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]")
 _OFFSET_TAG_PATTERN = re.compile(r"^\[offset:([+-]?\d+)\]\s*$", re.IGNORECASE)
+_ARTIST_TITLE_SPLIT = re.compile(r"\s+(?:-|–|—|\|)\s+", re.UNICODE)
 
 
-class LyricsService:
-    """Service for fetching lyrics from external sources."""
+@dataclass(frozen=True)
+class InferredSong:
+    """Best-effort normalized metadata used for lyrics lookup."""
 
-    def __init__(self):
-        self.base_url = "https://lrclib.net"
+    title: str
+    artist: Optional[str]
+    source: str
 
-    async def fetch_lyrics(self, title: str, artist: Optional[str] = None) -> Optional[str]:
-        """
-        Fetch lyrics for a song.
 
-        Args:
-            title: Song title
-            artist: Artist name (optional)
+@dataclass(frozen=True)
+class LyricsPayload:
+    """Lyrics text plus source metadata."""
 
-        Returns:
-            Lyrics text or None if not found
-        """
-        query = title.strip()
-        if artist and artist.strip():
-            query = f"{title.strip()} {artist.strip()}"
+    lyrics: str
+    is_synced: bool
+    provider: str
+    inferred_song: InferredSong
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                f"{self.base_url}/api/search",
-                params={"q": query},
+
+class SongMetadataInferrer(Protocol):
+    """Infers normalized title/artist from noisy YouTube metadata."""
+
+    async def infer(self, title: str, artist: Optional[str] = None) -> InferredSong:
+        """Return normalized title/artist inference."""
+
+
+class LyricsProvider(Protocol):
+    """Provider contract for fetching lyrics."""
+
+    name: str
+
+    async def fetch(self, inferred_song: InferredSong) -> Optional[LyricsPayload]:
+        """Fetch lyrics for inferred metadata."""
+
+
+class YouTubeTitleInferrer:
+    """Infer artist/title from noisy YouTube-style titles."""
+
+    def __init__(self, lastfm_api_key: str | None = None):
+        self.lastfm_api_key = (lastfm_api_key or "").strip()
+
+    async def infer(self, title: str, artist: Optional[str] = None) -> InferredSong:
+        base_title = title.strip()
+        if not base_title:
+            return InferredSong(title="", artist=artist, source="input")
+
+        cleaned_title = self._clean_title(base_title)
+        split_title, split_artist = self._split_artist_title(cleaned_title)
+        if split_title:
+            return InferredSong(
+                title=split_title,
+                artist=split_artist or self._normalize_artist(artist),
+                source="regex",
             )
-            response.raise_for_status()
-            results = response.json()
 
-        if not isinstance(results, list):
+        if self.lastfm_api_key:
+            lastfm_match = await self._lookup_lastfm(cleaned_title)
+            if lastfm_match is not None:
+                return lastfm_match
+
+        return InferredSong(
+            title=self._normalize_title(cleaned_title),
+            artist=self._normalize_artist(artist),
+            source="input",
+        )
+
+    @staticmethod
+    def _clean_title(raw_title: str) -> str:
+        if regex_tidy is None:
+            return " ".join(raw_title.split()).strip()
+        cleaned = regex_tidy(raw_title)
+        return " ".join(cleaned.split()).strip()
+
+    @staticmethod
+    def _normalize_title(raw_title: str) -> str:
+        return " ".join(raw_title.split()).strip()
+
+    @staticmethod
+    def _normalize_artist(raw_artist: Optional[str]) -> Optional[str]:
+        if raw_artist is None:
+            return None
+        value = " ".join(raw_artist.split()).strip()
+        return value or None
+
+    @staticmethod
+    def _split_artist_title(raw_title: str) -> tuple[str, Optional[str]]:
+        pieces = [piece.strip() for piece in _ARTIST_TITLE_SPLIT.split(raw_title) if piece.strip()]
+        if len(pieces) >= 2:
+            return pieces[1], pieces[0]
+        return raw_title.strip(), None
+
+    async def _lookup_lastfm(self, query: str) -> Optional[InferredSong]:
+        params = {
+            "method": "track.search",
+            "track": query,
+            "api_key": self.lastfm_api_key,
+            "format": "json",
+            "limit": 5,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get("https://ws.audioscrobbler.com/2.0/", params=params)
+                response.raise_for_status()
+                payload = response.json()
+        except httpx.HTTPError as exc:
+            logger.warning("LastFM lookup failed query=%r error=%s", query, exc)
             return None
 
-        normalized_title = title.lower().strip()
-        normalized_artist = (artist or "").lower().strip()
-        best_entry = None
+        tracks = (
+            payload.get("results", {})
+            .get("trackmatches", {})
+            .get("track", [])
+        )
+        if isinstance(tracks, dict):
+            tracks = [tracks]
+        if not isinstance(tracks, list) or not tracks:
+            return None
 
-        for entry in results:
-            if not isinstance(entry, dict):
-                continue
-            track_name = str(entry.get("trackName", "")).lower().strip()
-            artist_name = str(entry.get("artistName", "")).lower().strip()
-            if normalized_title and normalized_title in track_name:
-                if not normalized_artist or normalized_artist in artist_name:
-                    best_entry = entry
-                    break
-            if best_entry is None:
-                best_entry = entry
+        best = tracks[0]
+        track_name = str(best.get("name", "")).strip()
+        artist_name = str(best.get("artist", "")).strip()
+        if not track_name:
+            return None
+        return InferredSong(
+            title=self._normalize_title(track_name),
+            artist=self._normalize_artist(artist_name),
+            source="lastfm",
+        )
+
+
+class LRCLibLyricsProvider:
+    """LRCLib-backed lyrics fetch provider."""
+
+    name = "lrclib"
+
+    def __init__(self, base_url: Optional[str] = None):
+        self.base_url = (base_url or settings.lrclib_api_url).rstrip("/")
+
+    async def fetch(self, inferred_song: InferredSong) -> Optional[LyricsPayload]:
+        queries = self._build_queries(inferred_song)
+        best_entry: dict | None = None
+        best_score: int | None = None
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                for query in queries:
+                    response = await client.get(
+                        f"{self.base_url}/api/search",
+                        params={"q": query},
+                    )
+                    response.raise_for_status()
+                    rows = response.json()
+                    if not isinstance(rows, list):
+                        continue
+
+                    for row in rows:
+                        if not isinstance(row, dict):
+                            continue
+                        score = self._score_entry(row, inferred_song)
+                        if best_score is None or score > best_score:
+                            best_score = score
+                            best_entry = row
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "LRCLib request failed title=%r artist=%r error=%s",
+                inferred_song.title,
+                inferred_song.artist,
+                exc,
+            )
+            return None
 
         if not best_entry:
             return None
 
         synced = best_entry.get("syncedLyrics")
         if isinstance(synced, str) and synced.strip():
-            return synced
+            return LyricsPayload(
+                lyrics=synced,
+                is_synced=True,
+                provider=self.name,
+                inferred_song=inferred_song,
+            )
 
         plain = best_entry.get("plainLyrics")
         if isinstance(plain, str) and plain.strip():
-            return plain
+            return LyricsPayload(
+                lyrics=plain,
+                is_synced=False,
+                provider=self.name,
+                inferred_song=inferred_song,
+            )
 
         return None
 
-    def parse_lyrics_to_lines(self, lyrics: str) -> list[str]:
+    @staticmethod
+    def _build_queries(inferred_song: InferredSong) -> list[str]:
+        queries = [inferred_song.title]
+        if inferred_song.artist:
+            queries.insert(0, f"{inferred_song.title} {inferred_song.artist}")
+            queries.append(f"{inferred_song.artist} - {inferred_song.title}")
+        return [query for query in queries if query.strip()]
+
+    @staticmethod
+    def _score_entry(entry: dict, inferred_song: InferredSong) -> int:
+        normalized_title = inferred_song.title.lower().strip()
+        normalized_artist = (inferred_song.artist or "").lower().strip()
+        entry_title = str(entry.get("trackName", "")).lower().strip()
+        entry_artist = str(entry.get("artistName", "")).lower().strip()
+
+        score = 0
+        if normalized_title and entry_title == normalized_title:
+            score += 100
+        elif normalized_title and normalized_title in entry_title:
+            score += 60
+        if normalized_artist and entry_artist == normalized_artist:
+            score += 40
+        elif normalized_artist and normalized_artist in entry_artist:
+            score += 20
+        if isinstance(entry.get("syncedLyrics"), str) and entry["syncedLyrics"].strip():
+            score += 10
+        if isinstance(entry.get("plainLyrics"), str) and entry["plainLyrics"].strip():
+            score += 2
+        return score
+
+
+class LyricsService:
+    """Service for lyrics metadata inference, retrieval, and cue parsing."""
+
+    def __init__(
+        self,
+        metadata_inferrer: Optional[SongMetadataInferrer] = None,
+        providers: Optional[list[LyricsProvider]] = None,
+    ):
+        self.metadata_inferrer = metadata_inferrer or YouTubeTitleInferrer(
+            lastfm_api_key=settings.lastfm_api_key
+        )
+        self.providers = providers or [LRCLibLyricsProvider()]
+
+    async def infer_song_metadata(self, title: str, artist: Optional[str] = None) -> InferredSong:
+        """Infer normalized metadata for downstream lyrics providers."""
+        return await self.metadata_inferrer.infer(title=title, artist=artist)
+
+    async def resolve_lyrics(
+        self,
+        title: str,
+        artist: Optional[str] = None,
+        youtube_title: Optional[str] = None,
+    ) -> Optional[LyricsPayload]:
+        """Resolve lyrics payload with provider fallback behavior."""
+        lookup_title = (youtube_title or title).strip()
+        inferred_song = await self.infer_song_metadata(title=lookup_title, artist=artist)
+        if not inferred_song.title:
+            return None
+
+        for provider in self.providers:
+            payload = await provider.fetch(inferred_song)
+            if payload:
+                logger.info(
+                    "Lyrics resolved provider=%s source=%s title=%r artist=%r synced=%s",
+                    payload.provider,
+                    inferred_song.source,
+                    inferred_song.title,
+                    inferred_song.artist,
+                    payload.is_synced,
+                )
+                return payload
+
+        logger.info(
+            "Lyrics not found title=%r artist=%r inferred_source=%s",
+            inferred_song.title,
+            inferred_song.artist,
+            inferred_song.source,
+        )
+        return None
+
+    async def fetch_lyrics(
+        self,
+        title: str,
+        artist: Optional[str] = None,
+        youtube_title: Optional[str] = None,
+    ) -> Optional[str]:
         """
-        Parse lyrics text into individual lines.
+        Fetch lyrics text for a song.
 
         Args:
-            lyrics: Raw lyrics text
+            title: Song title
+            artist: Artist name (optional)
+            youtube_title: Raw YouTube title to infer metadata from (optional)
 
         Returns:
-            List of lyric lines
+            Lyrics text or None if not found
         """
+        payload = await self.resolve_lyrics(title=title, artist=artist, youtube_title=youtube_title)
+        return payload.lyrics if payload else None
+
+    def parse_lyrics_to_lines(self, lyrics: str) -> list[str]:
+        """Parse lyrics text into individual lines."""
         return [line.strip() for line in lyrics.split("\n") if line.strip()]
 
     def parse_lrc_to_cues(self, lyrics: str) -> list[dict[str, float | str]]:
@@ -132,7 +372,7 @@ class LyricsService:
         data = json.loads(payload)
         rows = data.get("cues") if isinstance(data, dict) else data
         if not isinstance(rows, list):
-            raise ValueError("JSON lyrics payload must be a list or {\"cues\": [...]} object")
+            raise ValueError('JSON lyrics payload must be a list or {"cues": [...]} object')
 
         cues: list[dict[str, float | str]] = []
         for row in rows:

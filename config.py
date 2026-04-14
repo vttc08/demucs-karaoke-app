@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     demucs_device: str = "cuda"
     demucs_output_format: str = "wav"
     demucs_mp3_bitrate: int = 320
+    lrclib_api_url: str = "https://lrclib.net"
+    lastfm_api_key: str = ""
 
     # Database
     database_url: str = "sqlite:///./karaoke.db"

@@ -115,7 +115,7 @@ When concurrent yt-dlp search is enabled:
 - Combined results are staggered/interleaved and de-duplicated by video id
 
 When karaoke mode is enabled:
-- `Burn lyrics` ON: app fetches real lyrics from LRCLIB and burns subtitles.
+- `Burn lyrics` ON: app infers artist/title from the YouTube-style song title, fetches lyrics through the modular lyrics provider pipeline (LRCLib in Phase 1), and burns subtitles.
 - `Burn lyrics` OFF: app skips lyric burn and uses faster remux with vocals-removed audio.
 - If Demucs is offline/unhealthy, karaoke processing fails fast and queue UI disables karaoke toggles.
 
