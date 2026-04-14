@@ -617,7 +617,10 @@ async def test_lyrics_service_fetch():
     """Lyrics service should prefer syncedLyrics from LRCLIB results."""
     from services import lyrics_service as ls_module
 
-    service = LyricsService(metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key=""))
+    service = LyricsService(
+        metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key=""),
+        providers=[ls_module.LRCLibLyricsProvider()],
+    )
 
     class FakeResponse:
         def raise_for_status(self):
@@ -663,7 +666,10 @@ async def test_lyrics_service_infers_artist_and_title_from_youtube_title():
     """Metadata inferrer should split cleaned YouTube-style titles."""
     from services import lyrics_service as ls_module
 
-    service = LyricsService(metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key=""))
+    service = LyricsService(
+        metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key=""),
+        providers=[ls_module.LRCLibLyricsProvider()],
+    )
 
     inferred = await service.infer_song_metadata(
         title="Taylor Swift - Enchanted (Taylor's Version) (Lyric Video)",
@@ -790,7 +796,10 @@ async def test_lyrics_service_fetch_uses_inferred_metadata_query():
     """Fetch should derive artist/title from title-only input before provider lookup."""
     from services import lyrics_service as ls_module
 
-    service = LyricsService(metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key=""))
+    service = LyricsService(
+        metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key=""),
+        providers=[ls_module.LRCLibLyricsProvider()],
+    )
     observed_queries = []
 
     class FakeResponse:
@@ -835,7 +844,9 @@ async def test_lyrics_service_fetch_uses_inferred_metadata_query():
 @pytest.mark.asyncio
 async def test_lyrics_service_fetch_falls_back_to_plain():
     """Lyrics service should fall back to plain lyrics when synced lyrics is missing."""
-    service = LyricsService()
+    from services import lyrics_service as ls_module
+
+    service = LyricsService(providers=[ls_module.LRCLibLyricsProvider()])
 
     class FakeResponse:
         def raise_for_status(self):
@@ -864,8 +875,6 @@ async def test_lyrics_service_fetch_falls_back_to_plain():
         async def get(self, url, params):
             return FakeResponse()
 
-    from services import lyrics_service as ls_module
-
     original_client = ls_module.httpx.AsyncClient
     try:
         ls_module.httpx.AsyncClient = FakeAsyncClient
@@ -874,6 +883,258 @@ async def test_lyrics_service_fetch_falls_back_to_plain():
         ls_module.httpx.AsyncClient = original_client
 
     assert lyrics == "Plain only line"
+
+
+@pytest.mark.asyncio
+async def test_musixmatch_provider_prefers_synced_lrc_payload():
+    """Musixmatch provider should convert subtitle timeline payload into LRC lines."""
+    from services import lyrics_service as ls_module
+
+    provider = ls_module.MusixmatchLyricsProvider(token="token123")
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "message": {
+                    "header": {"status_code": 200},
+                    "body": {
+                        "macro_calls": {
+                            "matcher.track.get": {
+                                "message": {
+                                    "header": {"status_code": 200},
+                                    "body": {
+                                        "track": {
+                                            "track_name": "Resolved Song",
+                                            "artist_name": "Resolved Artist",
+                                            "instrumental": 0,
+                                        }
+                                    },
+                                }
+                            },
+                            "track.subtitles.get": {
+                                "message": {
+                                    "body": {
+                                        "subtitle_list": [
+                                            {
+                                                "subtitle": {
+                                                    "subtitle_body": '[{"text":"Line A","time":{"minutes":0,"seconds":1,"hundredths":20}}]'
+                                                }
+                                            }
+                                        ]
+                                    }
+                                }
+                            },
+                            "track.lyrics.get": {
+                                "message": {"body": {"lyrics": {"lyrics_body": "Fallback plain"}}}
+                            },
+                        }
+                    },
+                }
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params, headers):
+            assert "macro.subtitles.get" in url
+            assert params["q_track"] == "Input Song"
+            assert params["usertoken"] == "token123"
+            assert "cookie" in headers
+            return FakeResponse()
+
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        payload = await provider.fetch(
+            ls_module.InferredSong(title="Input Song", artist="Input Artist", source="regex")
+        )
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+
+    assert payload is not None
+    assert payload.provider == "musixmatch"
+    assert payload.is_synced is True
+    assert payload.lyrics == "[00:01.20]Line A"
+    assert payload.inferred_song.title == "Resolved Song"
+    assert payload.inferred_song.artist == "Resolved Artist"
+
+
+@pytest.mark.asyncio
+async def test_musixmatch_provider_falls_back_to_plain_and_strips_disclaimer():
+    """Musixmatch provider should return plain lyrics when synced payload is missing."""
+    from services import lyrics_service as ls_module
+
+    provider = ls_module.MusixmatchLyricsProvider(token="token123")
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "message": {
+                    "header": {"status_code": 200},
+                    "body": {
+                        "macro_calls": {
+                            "matcher.track.get": {
+                                "message": {
+                                    "header": {"status_code": 200},
+                                    "body": {"track": {"instrumental": 0}},
+                                }
+                            },
+                            "track.subtitles.get": {
+                                "message": {"body": {"subtitle_list": []}}
+                            },
+                            "track.lyrics.get": {
+                                "message": {
+                                    "body": {
+                                        "lyrics": {
+                                            "restricted": 0,
+                                            "lyrics_body": (
+                                                "Line 1\n"
+                                                "Line 2\n"
+                                                "******* This Lyrics is NOT for Commercial use *******"
+                                            ),
+                                        }
+                                    }
+                                }
+                            },
+                        }
+                    },
+                }
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params, headers):
+            return FakeResponse()
+
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        payload = await provider.fetch(
+            ls_module.InferredSong(title="Input Song", artist="Input Artist", source="regex")
+        )
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+
+    assert payload is not None
+    assert payload.is_synced is False
+    assert payload.lyrics == "Line 1\nLine 2"
+
+
+@pytest.mark.asyncio
+async def test_musixmatch_provider_returns_none_for_auth_or_match_failures():
+    """Musixmatch provider should fail gracefully on non-success matcher statuses."""
+    from services import lyrics_service as ls_module
+
+    provider = ls_module.MusixmatchLyricsProvider(token="token123")
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "message": {
+                    "header": {"status_code": 200},
+                    "body": {
+                        "macro_calls": {
+                            "matcher.track.get": {"message": {"header": {"status_code": 401}}}
+                        }
+                    },
+                }
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params, headers):
+            return FakeResponse()
+
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        payload = await provider.fetch(
+            ls_module.InferredSong(title="Input Song", artist="Input Artist", source="regex")
+        )
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+
+    assert payload is None
+
+
+@pytest.mark.asyncio
+async def test_lyrics_service_provider_fallback_uses_lrclib_after_musixmatch_miss():
+    """Orchestrator should continue to fallback providers when Musixmatch yields no payload."""
+    from services import lyrics_service as ls_module
+
+    inferred = ls_module.InferredSong(title="Song", artist="Artist", source="regex")
+
+    class FakeInferrer:
+        async def infer(self, title: str, artist: str | None = None):
+            return inferred
+
+    class FakeMusixProvider:
+        name = "musixmatch"
+
+        def __init__(self):
+            self.calls = 0
+
+        async def fetch(self, inferred_song):
+            self.calls += 1
+            return None
+
+    class FakeLrclibProvider:
+        name = "lrclib"
+
+        def __init__(self):
+            self.calls = 0
+
+        async def fetch(self, inferred_song):
+            self.calls += 1
+            return ls_module.LyricsPayload(
+                lyrics="[00:01.00]Fallback line",
+                is_synced=True,
+                provider="lrclib",
+                inferred_song=inferred_song,
+            )
+
+    musix = FakeMusixProvider()
+    lrclib = FakeLrclibProvider()
+    service = LyricsService(metadata_inferrer=FakeInferrer(), providers=[musix, lrclib])
+
+    payload = await service.resolve_lyrics(title="Song", artist="Artist")
+
+    assert payload is not None
+    assert payload.provider == "lrclib"
+    assert musix.calls == 1
+    assert lrclib.calls == 1
 
 
 @pytest.mark.asyncio
