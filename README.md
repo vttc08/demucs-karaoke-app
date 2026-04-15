@@ -157,6 +157,12 @@ uv run scripts/lyrics_inference_cli.py --interactive
 ```
 Set `LASTFM_API_KEY` in `.env` to enable online Last.fm-assisted inference; otherwise the CLI uses regex-only local inference.
 
+### Lyrics provider debug CLI
+```bash
+uv run scripts/lyrics_debug_cli.py
+```
+Use this menu-driven helper to step through the bundled karaoke titles or paste a custom YouTube title, then inspect the inferred metadata, provider, and lyrics preview.
+
 ### With coverage
 ```bash
 uv run pytest --cov=. --cov-report=html
