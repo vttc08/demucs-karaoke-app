@@ -205,10 +205,12 @@ karaoke/
 │   └── pages.py          # HTML pages
 ├── services/              # Business logic
 │   ├── queue_service.py
-│   ├── youtube_service.py
-│   ├── lyrics_service.py
-│   ├── karaoke_service.py
-│   └── demucs_client.py
+ │   ├── youtube_service.py
+ │   ├── lyrics_service.py
+ │   ├── lyrics_inference.py
+ │   ├── lyrics_providers.py
+ │   ├── karaoke_service.py
+ │   └── demucs_client.py
 ├── adapters/              # External tool wrappers
 │   ├── ytdlp.py
 │   └── ffmpeg.py
