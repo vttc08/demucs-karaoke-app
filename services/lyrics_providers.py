@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import base64
+import difflib
 import json
 import logging
 import random
 import re
 import string
+import unicodedata
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -42,6 +44,7 @@ _NETEASE_MODULUS = (
     "d813cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7"
 )
 _NETEASE_TIMESTAMP_RE = re.compile(r"\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]")
+_NETEASE_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 
 
 @dataclass(frozen=True)
@@ -612,11 +615,18 @@ class NeteaseLyricsProvider:
 
     @staticmethod
     def _build_queries(inferred_song: ls_module.InferredSong) -> list[str]:
+        title_variants = NeteaseLyricsProvider._title_variants(inferred_song.title)
+        artist_variants = NeteaseLyricsProvider._artist_variants(inferred_song.artist or "")
         queries = [inferred_song.title]
         if inferred_song.artist:
             queries.insert(0, f"{inferred_song.title} {inferred_song.artist}")
             queries.append(f"{inferred_song.artist} - {inferred_song.title}")
-        return [query.strip() for query in queries if query.strip()]
+        for title in title_variants:
+            queries.append(title)
+            for artist in artist_variants:
+                queries.append(f"{title} {artist}")
+                queries.append(f"{artist} - {title}")
+        return NeteaseLyricsProvider._unique_non_empty(queries)
 
     @staticmethod
     def _select_best_candidate(
@@ -625,38 +635,161 @@ class NeteaseLyricsProvider:
         if not candidates:
             return None
         scored = [
-            (
-                NeteaseLyricsProvider._score_candidate(candidate, inferred_song),
-                candidate.song_id,
-                candidate,
-            )
+            (NeteaseLyricsProvider._score_candidate(candidate, inferred_song), candidate.song_id, candidate)
             for candidate in candidates
         ]
         scored.sort()
-        return scored[-1][2]
+        best_score, _, best_candidate = scored[-1]
+        if best_score < 60:
+            logger.info(
+                "NetEase candidate rejected: low confidence score=%s title=%r artist=%r",
+                f"{best_score:.1f}",
+                inferred_song.title,
+                inferred_song.artist,
+            )
+            return None
+        return best_candidate
 
     @staticmethod
-    def _score_candidate(candidate: _NeteaseSongCandidate, inferred_song: ls_module.InferredSong) -> int:
-        score = 0
-        target_title = NeteaseLyricsProvider._normalize_text(inferred_song.title)
-        target_artist = NeteaseLyricsProvider._normalize_text(inferred_song.artist or "")
+    def _score_candidate(candidate: _NeteaseSongCandidate, inferred_song: ls_module.InferredSong) -> float:
+        title_variants = NeteaseLyricsProvider._title_variants(inferred_song.title)
+        artist_variants = NeteaseLyricsProvider._artist_variants(inferred_song.artist or "")
         candidate_title = NeteaseLyricsProvider._normalize_text(candidate.title)
+        candidate_title_cjk = NeteaseLyricsProvider._extract_cjk(candidate.title)
         candidate_artist = NeteaseLyricsProvider._normalize_text(", ".join(candidate.artists))
+        candidate_artist_cjk = NeteaseLyricsProvider._extract_cjk(", ".join(candidate.artists))
 
-        if target_title and candidate_title == target_title:
-            score += 120
-        elif target_title and target_title in candidate_title:
-            score += 70
-        if target_artist and candidate_artist == target_artist:
-            score += 50
-        elif target_artist and target_artist in candidate_artist:
-            score += 25
+        title_similarity = max(
+            (
+                NeteaseLyricsProvider._similarity(
+                    NeteaseLyricsProvider._normalize_text(variant), candidate_title
+                )
+                for variant in title_variants
+            ),
+            default=0.0,
+        )
+        title_cjk_similarity = max(
+            (
+                NeteaseLyricsProvider._similarity(
+                    NeteaseLyricsProvider._extract_cjk(variant), candidate_title_cjk
+                )
+                for variant in title_variants
+                if NeteaseLyricsProvider._extract_cjk(variant)
+            ),
+            default=0.0,
+        )
+        best_title_similarity = max(title_similarity, title_cjk_similarity)
+        if best_title_similarity < 0.42:
+            return 0.0
+
+        artist_similarity = max(
+            (
+                NeteaseLyricsProvider._similarity(
+                    NeteaseLyricsProvider._normalize_text(variant), candidate_artist
+                )
+                for variant in artist_variants
+            ),
+            default=0.0,
+        )
+        artist_cjk_similarity = max(
+            (
+                NeteaseLyricsProvider._similarity(
+                    NeteaseLyricsProvider._extract_cjk(variant), candidate_artist_cjk
+                )
+                for variant in artist_variants
+                if NeteaseLyricsProvider._extract_cjk(variant)
+            ),
+            default=0.0,
+        )
+        best_artist_similarity = max(artist_similarity, artist_cjk_similarity)
+
+        score = (best_title_similarity * 100.0) + (title_cjk_similarity * 30.0) + (
+            best_artist_similarity * 70.0
+        )
+        if candidate_title and any(
+            NeteaseLyricsProvider._normalize_text(variant) == candidate_title
+            for variant in title_variants
+        ):
+            score += 25.0
+        if candidate_artist and any(
+            NeteaseLyricsProvider._normalize_text(variant) == candidate_artist
+            for variant in artist_variants
+        ):
+            score += 15.0
+        if artist_variants:
+            if best_artist_similarity < 0.2:
+                score -= 50.0
+            elif best_artist_similarity < 0.35:
+                score -= 20.0
         return score
 
     @staticmethod
     def _normalize_text(value: str) -> str:
-        compact = re.sub(r"\s+", " ", value).strip().lower()
-        return re.sub(r"[^\w\s]", "", compact)
+        normalized = unicodedata.normalize("NFKC", value)
+        normalized = re.sub(r"\s+", " ", normalized).strip().lower()
+        return re.sub(r"[^\w\s\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", "", normalized)
+
+    @staticmethod
+    def _extract_cjk(value: str) -> str:
+        return "".join(_NETEASE_CJK_RE.findall(unicodedata.normalize("NFKC", value)))
+
+    @staticmethod
+    def _similarity(left: str, right: str) -> float:
+        if not left or not right:
+            return 0.0
+        return difflib.SequenceMatcher(None, left, right).ratio()
+
+    @staticmethod
+    def _title_variants(title: str) -> list[str]:
+        normalized = NeteaseLyricsProvider._normalize_whitespace(title)
+        variants = [normalized]
+
+        title_without_parentheses = re.sub(r"\([^)]*\)", " ", normalized).strip()
+        if title_without_parentheses:
+            variants.append(title_without_parentheses)
+
+        title_cjk = NeteaseLyricsProvider._extract_cjk(normalized)
+        if title_cjk:
+            variants.append(title_cjk)
+
+        title_no_latin = re.sub(r"[A-Za-z]+", " ", normalized).strip()
+        title_no_latin = NeteaseLyricsProvider._normalize_whitespace(title_no_latin)
+        if title_no_latin:
+            variants.append(title_no_latin)
+
+        return NeteaseLyricsProvider._unique_non_empty(variants)
+
+    @staticmethod
+    def _artist_variants(artist: str) -> list[str]:
+        normalized = NeteaseLyricsProvider._normalize_whitespace(artist)
+        variants = [normalized]
+
+        artist_cjk = NeteaseLyricsProvider._extract_cjk(normalized)
+        if artist_cjk:
+            variants.append(artist_cjk)
+
+        artist_no_latin = re.sub(r"[A-Za-z]+", " ", normalized).strip()
+        artist_no_latin = NeteaseLyricsProvider._normalize_whitespace(artist_no_latin)
+        if artist_no_latin:
+            variants.append(artist_no_latin)
+
+        return NeteaseLyricsProvider._unique_non_empty(variants)
+
+    @staticmethod
+    def _normalize_whitespace(value: str) -> str:
+        return re.sub(r"\s+", " ", value).strip()
+
+    @staticmethod
+    def _unique_non_empty(items: list[str]) -> list[str]:
+        seen: set[str] = set()
+        result: list[str] = []
+        for item in items:
+            cleaned = item.strip()
+            if not cleaned or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            result.append(cleaned)
+        return result
 
     @staticmethod
     def _extract_lyric_text(payload: dict[str, Any], key: str) -> Optional[str]:

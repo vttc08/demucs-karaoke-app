@@ -1303,6 +1303,42 @@ async def test_netease_provider_falls_back_to_legacy_api_when_weapi_unavailable(
     assert payload.lyrics == "Line 1\nLine 2"
 
 
+def test_netease_provider_prefers_cjk_candidate_and_rejects_low_confidence():
+    """Candidate selector should avoid unrelated songs and pick CJK-near matches."""
+    from services import lyrics_providers as lp_module
+    from services import lyrics_service as ls_module
+
+    inferred = ls_module.InferredSong(
+        title="月亮惹的禍 Troubled By The Moon",
+        artist="張宇 Phil Chang",
+        source="lastfm",
+    )
+
+    unrelated = lp_module._NeteaseSongCandidate(
+        song_id=2051231725,
+        title="Üher",
+        artists=["NaraBara"],
+        album="Other",
+        duration_ms=180000,
+    )
+    expected = lp_module._NeteaseSongCandidate(
+        song_id=190526,
+        title="月亮惹的祸",
+        artists=["张宇"],
+        album="月亮 太阳",
+        duration_ms=262466,
+    )
+
+    selected = lp_module.NeteaseLyricsProvider._select_best_candidate(
+        [unrelated, expected], inferred
+    )
+    assert selected is not None
+    assert selected.song_id == 190526
+
+    low_conf_only = lp_module.NeteaseLyricsProvider._select_best_candidate([unrelated], inferred)
+    assert low_conf_only is None
+
+
 @pytest.mark.asyncio
 async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_path):
     """Karaoke processing without burn_lyrics should remux instead of burning."""
