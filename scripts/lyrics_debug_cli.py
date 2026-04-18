@@ -33,6 +33,22 @@ def _preview_lines(lyrics: str, is_synced: bool, limit: int = PREVIEW_LINE_LIMIT
     return lines[:limit]
 
 
+def _format_provider_details(provider_details: dict[str, str | int | float] | None) -> list[str]:
+    if not provider_details:
+        return []
+    details: list[str] = []
+    song_id = provider_details.get("song_id")
+    song_title = provider_details.get("song_title")
+    song_artist = provider_details.get("song_artist")
+    if song_id is not None:
+        details.append(f"Provider song id: {song_id}")
+    if song_title:
+        details.append(f"Provider song title: {song_title}")
+    if song_artist:
+        details.append(f"Provider song artist: {song_artist}")
+    return details
+
+
 async def _debug_title(
     service: LyricsService,
     raw_title: str,
@@ -68,6 +84,8 @@ async def _debug_title(
 
     printer(f"Provider: {payload.provider} ({'synced' if payload.is_synced else 'plain'})")
     printer(f"Resolved metadata: {_format_artist_title(payload.inferred_song.title, payload.inferred_song.artist)}")
+    for line in _format_provider_details(payload.provider_details):
+        printer(line)
     printer("Lyrics preview:")
     for line in _preview_lines(payload.lyrics, payload.is_synced):
         printer(f"  {line}")
@@ -128,6 +146,8 @@ async def _main_async() -> int:
         print("No sample titles available.")
         return 1
 
+    provider_chain = ", ".join(getattr(provider, "name", provider.__class__.__name__) for provider in service.providers)
+    print(f"Provider chain: {provider_chain}")
     await _run_menu(service, sample_titles)
     return 0
 

@@ -15,6 +15,18 @@ def test_preview_lines_limits_synced_and_plain_output():
     assert plain == ["Line 1", "Line 2"]
 
 
+def test_format_provider_details_for_netease_debug():
+    """Provider details helper should surface NetEase diagnostics when present."""
+    details = cli._format_provider_details(
+        {"song_id": 12345, "song_title": "Song A", "song_artist": "Artist A"}
+    )
+    assert details == [
+        "Provider song id: 12345",
+        "Provider song title: Song A",
+        "Provider song artist: Artist A",
+    ]
+
+
 @pytest.mark.asyncio
 async def test_debug_title_prints_inference_provider_and_preview():
     """Debug output should show inferred metadata, provider, and lyric preview."""
@@ -26,6 +38,7 @@ async def test_debug_title_prints_inference_provider_and_preview():
         is_synced=True,
         provider="musixmatch",
         inferred_song=inferred,
+        provider_details={"song_id": 777, "song_title": "Debug Song", "song_artist": "Debug Artist"},
     )
 
     class FakeService:
@@ -45,6 +58,9 @@ async def test_debug_title_prints_inference_provider_and_preview():
     assert "Provider query title: Clean Title" in joined
     assert "Provider query artist: Clean Artist" in joined
     assert "Provider: musixmatch (synced)" in joined
+    assert "Provider song id: 777" in joined
+    assert "Provider song title: Debug Song" in joined
+    assert "Provider song artist: Debug Artist" in joined
     assert "Lyrics preview:" in joined
     assert "  [00:01.00]Line 1" in joined
 

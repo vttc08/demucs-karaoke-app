@@ -115,7 +115,7 @@ When concurrent yt-dlp search is enabled:
 - Combined results are staggered/interleaved and de-duplicated by video id
 
 When karaoke mode is enabled:
-- `Burn lyrics` ON: app infers artist/title from the YouTube-style song title, fetches lyrics through the modular provider pipeline (Musixmatch primary when `MUSIXMATCH_TOKEN` is set, LRCLib fallback), and burns subtitles.
+- `Burn lyrics` ON: app infers artist/title from the YouTube-style song title, fetches lyrics through the modular provider pipeline (Musixmatch primary when `MUSIXMATCH_TOKEN` is set, then NetEase, then LRCLib fallback), and burns subtitles.
 - `Burn lyrics` OFF: app skips lyric burn and uses faster remux with vocals-removed audio.
 - If Demucs is offline/unhealthy, karaoke processing fails fast and queue UI disables karaoke toggles.
 
@@ -162,6 +162,10 @@ Set `LASTFM_API_KEY` in `.env` to enable online Last.fm-assisted inference; othe
 uv run scripts/lyrics_debug_cli.py
 ```
 Use this menu-driven helper to step through the bundled karaoke titles or paste a custom YouTube title, then inspect the inferred metadata, provider, and lyrics preview.
+
+NetEase implementation notes:
+- Adapted from `cqjjjzr/MusicBee-NeteaseLyrics` (search + lyric flow) and `Gaohaoyang/netease-music-downloader` (lyrics retrieval endpoint behavior).
+- Keeps a Python-native runtime path (no Node dependency in production provider flow).
 
 ### With coverage
 ```bash
