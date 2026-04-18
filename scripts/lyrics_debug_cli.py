@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 from pathlib import Path
@@ -33,19 +34,30 @@ def _preview_lines(lyrics: str, is_synced: bool, limit: int = PREVIEW_LINE_LIMIT
     return lines[:limit]
 
 
-def _format_provider_details(provider_details: dict[str, str | int | float] | None) -> list[str]:
+def _format_provider_details(provider_details: dict[str, object] | None) -> list[str]:
     if not provider_details:
         return []
     details: list[str] = []
-    song_id = provider_details.get("song_id")
-    song_title = provider_details.get("song_title")
-    song_artist = provider_details.get("song_artist")
-    if song_id is not None:
-        details.append(f"Provider song id: {song_id}")
-    if song_title:
-        details.append(f"Provider song title: {song_title}")
-    if song_artist:
-        details.append(f"Provider song artist: {song_artist}")
+    preferred_keys = ("song_id", "song_title", "song_artist", "selected_query", "selected_score", "candidate_count")
+    for key in preferred_keys:
+        value = provider_details.get(key)
+        if value is None or value == "":
+            continue
+        if isinstance(value, (list, tuple)):
+            formatted = ", ".join(str(item) for item in value[:6])
+        elif isinstance(value, dict):
+            formatted = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        else:
+            formatted = str(value)
+        label = key.replace("_", " ")
+        details.append(f"{label}: {formatted}")
+
+    if "queries_tried" in provider_details and provider_details["queries_tried"]:
+        queries = provider_details["queries_tried"]
+        if isinstance(queries, (list, tuple)):
+            details.append("queries tried:")
+            for query in queries[:8]:
+                details.append(f"  - {query}")
     return details
 
 
@@ -87,7 +99,8 @@ async def _debug_title(
     for line in _format_provider_details(payload.provider_details):
         printer(line)
     printer("Lyrics preview:")
-    for line in _preview_lines(payload.lyrics, payload.is_synced):
+    preview_limit = 8 if payload.is_synced else 6
+    for line in _preview_lines(payload.lyrics, payload.is_synced, limit=preview_limit):
         printer(f"  {line}")
 
 

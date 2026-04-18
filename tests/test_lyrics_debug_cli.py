@@ -18,13 +18,22 @@ def test_preview_lines_limits_synced_and_plain_output():
 def test_format_provider_details_for_netease_debug():
     """Provider details helper should surface NetEase diagnostics when present."""
     details = cli._format_provider_details(
-        {"song_id": 12345, "song_title": "Song A", "song_artist": "Artist A"}
+        {
+            "song_id": 12345,
+            "song_title": "Song A",
+            "song_artist": "Artist A",
+            "selected_query": "Song A Artist A",
+            "selected_score": 123.4,
+            "candidate_count": 5,
+            "queries_tried": ["Song A Artist A", "Song A"],
+        }
     )
-    assert details == [
-        "Provider song id: 12345",
-        "Provider song title: Song A",
-        "Provider song artist: Artist A",
-    ]
+    assert details[0] == "song id: 12345"
+    assert "selected query: Song A Artist A" in details
+    assert "selected score: 123.4" in details
+    assert "candidate count: 5" in details
+    assert "queries tried:" in details
+    assert "  - Song A Artist A" in details
 
 
 @pytest.mark.asyncio
@@ -38,7 +47,14 @@ async def test_debug_title_prints_inference_provider_and_preview():
         is_synced=True,
         provider="musixmatch",
         inferred_song=inferred,
-        provider_details={"song_id": 777, "song_title": "Debug Song", "song_artist": "Debug Artist"},
+        provider_details={
+            "song_id": 777,
+            "song_title": "Debug Song",
+            "song_artist": "Debug Artist",
+            "selected_query": "Debug Song Debug Artist",
+            "selected_score": 99.9,
+            "queries_tried": ["Debug Song Debug Artist"],
+        },
     )
 
     class FakeService:
@@ -58,9 +74,10 @@ async def test_debug_title_prints_inference_provider_and_preview():
     assert "Provider query title: Clean Title" in joined
     assert "Provider query artist: Clean Artist" in joined
     assert "Provider: musixmatch (synced)" in joined
-    assert "Provider song id: 777" in joined
-    assert "Provider song title: Debug Song" in joined
-    assert "Provider song artist: Debug Artist" in joined
+    assert "song id: 777" in joined
+    assert "song title: Debug Song" in joined
+    assert "song artist: Debug Artist" in joined
+    assert "selected query: Debug Song Debug Artist" in joined
     assert "Lyrics preview:" in joined
     assert "  [00:01.00]Line 1" in joined
 

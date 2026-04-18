@@ -7,7 +7,7 @@ import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
 import httpx
 
@@ -36,7 +36,7 @@ class LyricsPayload:
     is_synced: bool
     provider: str
     inferred_song: InferredSong
-    provider_details: dict[str, str | int | float] | None = None
+    provider_details: dict[str, Any] | None = None
 
 
 class SongMetadataInferrer(Protocol):

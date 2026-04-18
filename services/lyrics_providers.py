@@ -45,6 +45,8 @@ _NETEASE_MODULUS = (
 )
 _NETEASE_TIMESTAMP_RE = re.compile(r"\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]")
 _NETEASE_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+_NETEASE_MAX_QUERIES = 6
+_NETEASE_EARLY_STOP_SCORE = 120.0
 
 
 @dataclass(frozen=True)
@@ -426,7 +428,7 @@ class NeteaseLyricsProvider:
         if not inferred_song.title.strip():
             return None
 
-        candidates = await self._search_candidates(inferred_song)
+        candidates, search_debug = await self._search_candidates(inferred_song)
         candidate = self._select_best_candidate(candidates, inferred_song)
         if candidate is None:
             return None
@@ -458,18 +460,38 @@ class NeteaseLyricsProvider:
                 "song_id": candidate.song_id,
                 "song_title": candidate.title,
                 "song_artist": ", ".join(candidate.artists),
+                "selected_query": search_debug.get("selected_query"),
+                "selected_score": search_debug.get("selected_score"),
+                "queries_tried": search_debug.get("queries_tried"),
+                "candidate_count": search_debug.get("candidate_count"),
             },
         )
 
     async def _search_candidates(
         self, inferred_song: ls_module.InferredSong
-    ) -> list[_NeteaseSongCandidate]:
+    ) -> tuple[list[_NeteaseSongCandidate], dict[str, Any]]:
         candidates_by_id: dict[int, _NeteaseSongCandidate] = {}
-        for query in self._build_queries(inferred_song):
+        search_debug: dict[str, Any] = {"queries_tried": [], "candidate_count": 0, "selected_query": None, "selected_score": None}
+        for query in self._build_queries(inferred_song)[:_NETEASE_MAX_QUERIES]:
             rows = await self._request_search(query)
+            search_debug["queries_tried"].append(query)
             for row in rows:
                 candidates_by_id[row.song_id] = row
-        return list(candidates_by_id.values())
+            if not rows:
+                continue
+            scored_rows = [(self._score_candidate(row, inferred_song), row) for row in rows]
+            scored_rows.sort(key=lambda item: item[0])
+            best_score, _ = scored_rows[-1]
+            if (
+                search_debug["selected_score"] is None
+                or best_score > float(search_debug["selected_score"])
+            ):
+                search_debug["selected_query"] = query
+                search_debug["selected_score"] = best_score
+            if best_score >= _NETEASE_EARLY_STOP_SCORE:
+                break
+        search_debug["candidate_count"] = len(candidates_by_id)
+        return list(candidates_by_id.values()), search_debug
 
     async def _request_search(self, query: str) -> list[_NeteaseSongCandidate]:
         payload = {

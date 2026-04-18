@@ -1224,6 +1224,8 @@ async def test_netease_provider_fetches_synced_and_merges_translation():
     assert payload.lyrics == "[00:01.00]Hello/你好\n[00:02.00]World/世界"
     assert payload.provider_details is not None
     assert payload.provider_details["song_id"] == 12345
+    assert payload.provider_details["selected_query"] is not None
+    assert payload.provider_details["queries_tried"]
 
 
 @pytest.mark.asyncio
@@ -1301,6 +1303,51 @@ async def test_netease_provider_falls_back_to_legacy_api_when_weapi_unavailable(
     assert payload.provider == "netease"
     assert payload.is_synced is False
     assert payload.lyrics == "Line 1\nLine 2"
+
+
+@pytest.mark.asyncio
+async def test_netease_provider_stops_after_high_confidence_match():
+    """A strong early match should avoid extra NetEase search requests."""
+    from services import lyrics_providers as lp_module
+    from services import lyrics_service as ls_module
+
+    provider = ls_module.NeteaseLyricsProvider()
+    queries_seen: list[str] = []
+    best_candidate = lp_module._NeteaseSongCandidate(
+        song_id=543798364,
+        title="月亮惹的祸",
+        artists=["张宇"],
+        album="月亮 太阳",
+        duration_ms=262466,
+    )
+
+    async def fake_request_search(query: str):
+        queries_seen.append(query)
+        return [best_candidate]
+
+    async def fake_request_lyrics(song_id: int):
+        assert song_id == 543798364
+        return {
+            "code": 200,
+            "lrc": {"lyric": "[00:01.00]Hello"},
+            "tlyric": {"lyric": "[00:01.00]你好"},
+        }
+
+    provider._request_search = fake_request_search  # type: ignore[method-assign]
+    provider._request_lyrics = fake_request_lyrics  # type: ignore[method-assign]
+
+    payload = await provider.fetch(
+        ls_module.InferredSong(
+            title="月亮惹的禍 Troubled By The Moon",
+            artist="張宇 Phil Chang",
+            source="lastfm",
+        )
+    )
+
+    assert payload is not None
+    assert payload.provider == "netease"
+    assert queries_seen == [queries_seen[0]]
+    assert len(queries_seen) == 1
 
 
 def test_netease_provider_prefers_cjk_candidate_and_rejects_low_confidence():
