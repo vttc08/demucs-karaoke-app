@@ -1137,6 +1137,172 @@ async def test_lyrics_service_provider_fallback_uses_lrclib_after_musixmatch_mis
     assert lrclib.calls == 1
 
 
+def test_lyrics_service_default_provider_order_includes_netease_between_musixmatch_and_lrclib():
+    """Default provider chain should keep NetEase between Musixmatch and LRCLib."""
+    original_token = settings.musixmatch_token
+    try:
+        settings.musixmatch_token = "token123"
+        service = LyricsService()
+    finally:
+        settings.musixmatch_token = original_token
+
+    provider_names = [provider.name for provider in service.providers]
+    assert provider_names == ["musixmatch", "netease", "lrclib"]
+
+
+@pytest.mark.asyncio
+async def test_netease_provider_fetches_synced_and_merges_translation():
+    """NetEase provider should merge translated lines when synced timestamps match."""
+    from services import lyrics_service as ls_module
+
+    provider = ls_module.NeteaseLyricsProvider()
+    provider._weapi_encrypt = lambda payload: {"params": "encrypted", "encSecKey": "key"}  # type: ignore[attr-defined]
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, data, headers):
+            if "weapi/search/get" in url:
+                return FakeResponse(
+                    {
+                        "code": 200,
+                        "result": {
+                            "songs": [
+                                {
+                                    "id": 12345,
+                                    "name": "Song A",
+                                    "duration": 123000,
+                                    "album": {"name": "Album A"},
+                                    "artists": [{"name": "Artist A"}],
+                                }
+                            ]
+                        },
+                    }
+                )
+            if "weapi/song/lyric" in url:
+                return FakeResponse(
+                    {
+                        "code": 200,
+                        "lrc": {"lyric": "[00:01.00]Hello\n[00:02.00]World"},
+                        "tlyric": {"lyric": "[00:01.00]你好\n[00:02.00]世界"},
+                    }
+                )
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        async def get(self, url, params, headers):
+            raise AssertionError(f"Legacy endpoint should not be used: {url}")
+
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        payload = await provider.fetch(
+            ls_module.InferredSong(title="Song A", artist="Artist A", source="regex")
+        )
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+
+    assert payload is not None
+    assert payload.provider == "netease"
+    assert payload.is_synced is True
+    assert payload.lyrics == "[00:01.00]Hello/你好\n[00:02.00]World/世界"
+    assert payload.provider_details is not None
+    assert payload.provider_details["song_id"] == 12345
+
+
+@pytest.mark.asyncio
+async def test_netease_provider_falls_back_to_legacy_api_when_weapi_unavailable():
+    """NetEase provider should continue via legacy endpoints when weapi encryption is unavailable."""
+    from services import lyrics_service as ls_module
+
+    provider = ls_module.NeteaseLyricsProvider()
+
+    def _raise_no_crypto(_: dict):
+        raise RuntimeError("no crypto")
+
+    provider._weapi_encrypt = _raise_no_crypto  # type: ignore[attr-defined]
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, data, headers):
+            raise AssertionError(f"weapi endpoint should not be used: {url}")
+
+        async def get(self, url, params, headers):
+            if "api/search/get" in url:
+                return FakeResponse(
+                    {
+                        "code": 200,
+                        "result": {
+                            "songs": [
+                                {
+                                    "id": 8888,
+                                    "name": "Legacy Song",
+                                    "duration": 111000,
+                                    "album": {"name": "Legacy Album"},
+                                    "artists": [{"name": "Legacy Artist"}],
+                                }
+                            ]
+                        },
+                    }
+                )
+            if "api/song/lyric" in url:
+                return FakeResponse(
+                    {
+                        "code": 200,
+                        "lrc": {"lyric": "Line 1\nLine 2"},
+                    }
+                )
+            raise AssertionError(f"Unexpected URL: {url}")
+
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        payload = await provider.fetch(
+            ls_module.InferredSong(title="Legacy Song", artist="Legacy Artist", source="regex")
+        )
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+
+    assert payload is not None
+    assert payload.provider == "netease"
+    assert payload.is_synced is False
+    assert payload.lyrics == "Line 1\nLine 2"
+
+
 @pytest.mark.asyncio
 async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_path):
     """Karaoke processing without burn_lyrics should remux instead of burning."""

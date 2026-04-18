@@ -1,10 +1,19 @@
 """Lyrics provider implementations."""
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import random
 import re
-from typing import Optional
+import string
+from dataclasses import dataclass
+from typing import Any, Optional
+
+try:
+    from Crypto.Cipher import AES as _AES
+except ImportError:  # pragma: no cover - optional dependency
+    _AES = None
 
 from config import settings
 from services import lyrics_service as ls_module
@@ -19,6 +28,29 @@ _MUSIXMATCH_PARAMS = {
     "app_id": "web-desktop-app-v1.0",
 }
 _MUSIXMATCH_DISCLAIMER_RE = re.compile(r"not\s+for\s+commercial\s+use", re.IGNORECASE)
+_NETEASE_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+_NETEASE_NONCE = "0CoJUm6Qyw8W8jud"
+_NETEASE_IV = "0102030405060708"
+_NETEASE_PUBKEY = "010001"
+_NETEASE_MODULUS = (
+    "00e0b509f6259df8642dbc35662901477df22677ec152b5ff68ace615bb7b725"
+    "152b3ab17a876aea8a5aa76d2e417629ec4ee341f56135fccf695280104e0312"
+    "ecbda92557c93870114af6c9d05c4f7f0c3685b7a46bee255932575cce10b424"
+    "d813cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7"
+)
+_NETEASE_TIMESTAMP_RE = re.compile(r"\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]")
+
+
+@dataclass(frozen=True)
+class _NeteaseSongCandidate:
+    song_id: int
+    title: str
+    artists: list[str]
+    album: str
+    duration_ms: int
 
 
 class LRCLibLyricsProvider:
@@ -364,3 +396,375 @@ class MusixmatchLyricsProvider:
             return int(value)
         except (TypeError, ValueError):
             return default
+
+
+class NeteaseLyricsProvider:
+    """NetEase-backed lyrics fetch provider.
+
+    Search and lyric request behavior is adapted from:
+    - cqjjjzr/MusicBee-NeteaseLyrics (C# plugin logic)
+    - Gaohaoyang/netease-music-downloader (TS implementation details)
+    """
+
+    name = "netease"
+    _warned_missing_crypto = False
+
+    def __init__(self):
+        self.search_url = "https://music.163.com/weapi/search/get"
+        self.lyric_url = "https://music.163.com/weapi/song/lyric?csrf_token="
+        self.legacy_search_url = "http://music.163.com/api/search/get/"
+        self.legacy_lyric_url = "http://music.163.com/api/song/lyric"
+        self.headers = {
+            "Referer": "https://music.163.com",
+            "User-Agent": _NETEASE_USER_AGENT,
+        }
+
+    async def fetch(self, inferred_song: ls_module.InferredSong) -> Optional[ls_module.LyricsPayload]:
+        if not inferred_song.title.strip():
+            return None
+
+        candidates = await self._search_candidates(inferred_song)
+        candidate = self._select_best_candidate(candidates, inferred_song)
+        if candidate is None:
+            return None
+
+        lyric_payload = await self._request_lyrics(candidate.song_id)
+        if lyric_payload is None:
+            return None
+
+        lyric_text = self._extract_lyric_text(lyric_payload, "lrc")
+        if not lyric_text:
+            return None
+
+        translated_text = self._extract_lyric_text(lyric_payload, "tlyric")
+        is_synced = self._looks_synced(lyric_text)
+        if is_synced and translated_text:
+            lyric_text = self._merge_translated_lyrics(lyric_text, translated_text)
+
+        resolved_song = ls_module.InferredSong(
+            title=candidate.title or inferred_song.title,
+            artist=", ".join(candidate.artists) if candidate.artists else inferred_song.artist,
+            source=inferred_song.source,
+        )
+        return ls_module.LyricsPayload(
+            lyrics=lyric_text,
+            is_synced=is_synced,
+            provider=self.name,
+            inferred_song=resolved_song,
+            provider_details={
+                "song_id": candidate.song_id,
+                "song_title": candidate.title,
+                "song_artist": ", ".join(candidate.artists),
+            },
+        )
+
+    async def _search_candidates(
+        self, inferred_song: ls_module.InferredSong
+    ) -> list[_NeteaseSongCandidate]:
+        candidates_by_id: dict[int, _NeteaseSongCandidate] = {}
+        for query in self._build_queries(inferred_song):
+            rows = await self._request_search(query)
+            for row in rows:
+                candidates_by_id[row.song_id] = row
+        return list(candidates_by_id.values())
+
+    async def _request_search(self, query: str) -> list[_NeteaseSongCandidate]:
+        payload = {
+            "csrf_token": "",
+            "s": query,
+            "offset": 0,
+            "type": 1,
+            "limit": 20,
+        }
+        try:
+            return await self._request_search_weapi(payload)
+        except (RuntimeError, ls_module.httpx.HTTPError, ValueError) as exc:
+            logger.info("NetEase weapi search failed query=%r error=%s; trying legacy API", query, exc)
+        return await self._request_search_legacy(query)
+
+    async def _request_search_weapi(self, payload: dict[str, Any]) -> list[_NeteaseSongCandidate]:
+        encrypted = self._weapi_encrypt(payload)
+        async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                self.search_url,
+                data=encrypted,
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+        return self._parse_search_response(data)
+
+    async def _request_search_legacy(self, query: str) -> list[_NeteaseSongCandidate]:
+        params = {
+            "csrf_token": "",
+            "hlpretag": "",
+            "hlposttag": "",
+            "s": query,
+            "type": 1,
+            "offset": 0,
+            "total": "true",
+            "limit": 6,
+        }
+        try:
+            async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    self.legacy_search_url,
+                    params=params,
+                    headers=self.headers,
+                )
+                response.raise_for_status()
+                data = response.json()
+        except (ls_module.httpx.HTTPError, ValueError) as exc:
+            logger.warning("NetEase legacy search failed query=%r error=%s", query, exc)
+            return []
+        return self._parse_search_response(data)
+
+    async def _request_lyrics(self, song_id: int) -> Optional[dict[str, Any]]:
+        payload = {
+            "os": "pc",
+            "id": song_id,
+            "lv": -1,
+            "kv": -1,
+            "tv": -1,
+            "rv": -1,
+        }
+        try:
+            data = await self._request_lyrics_weapi(payload)
+            if int(data.get("code", 0)) == 200:
+                return data
+        except (RuntimeError, ls_module.httpx.HTTPError, ValueError) as exc:
+            logger.info("NetEase weapi lyric request failed song_id=%s error=%s; trying legacy API", song_id, exc)
+        return await self._request_lyrics_legacy(song_id)
+
+    async def _request_lyrics_weapi(self, payload: dict[str, Any]) -> dict[str, Any]:
+        encrypted = self._weapi_encrypt(payload)
+        async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                self.lyric_url,
+                data=encrypted,
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError("NetEase lyric payload was not a JSON object")
+        return data
+
+    async def _request_lyrics_legacy(self, song_id: int) -> Optional[dict[str, Any]]:
+        params = {"os": "pc", "id": song_id, "lv": -1, "kv": -1, "tv": -1}
+        headers = {**self.headers, "Cookie": "appver=1.5.0.75771;"}
+        try:
+            async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    self.legacy_lyric_url,
+                    params=params,
+                    headers=headers,
+                )
+                response.raise_for_status()
+                data = response.json()
+        except (ls_module.httpx.HTTPError, ValueError) as exc:
+            logger.warning("NetEase legacy lyric request failed song_id=%s error=%s", song_id, exc)
+            return None
+
+        if not isinstance(data, dict):
+            return None
+        if int(data.get("code", 0)) != 200:
+            return None
+        return data
+
+    @staticmethod
+    def _parse_search_response(payload: object) -> list[_NeteaseSongCandidate]:
+        if not isinstance(payload, dict):
+            return []
+        if int(payload.get("code", 0)) != 200:
+            return []
+
+        songs = (payload.get("result") or {}).get("songs") if isinstance(payload.get("result"), dict) else None
+        if not isinstance(songs, list):
+            return []
+
+        out: list[_NeteaseSongCandidate] = []
+        for row in songs:
+            if not isinstance(row, dict):
+                continue
+            song_id = row.get("id")
+            try:
+                normalized_song_id = int(song_id)
+            except (TypeError, ValueError):
+                continue
+            artists = [
+                str(artist.get("name") or "").strip()
+                for artist in (row.get("artists") or [])
+                if isinstance(artist, dict)
+            ]
+            album = row.get("album")
+            album_name = str(album.get("name") or "").strip() if isinstance(album, dict) else ""
+            out.append(
+                _NeteaseSongCandidate(
+                    song_id=normalized_song_id,
+                    title=str(row.get("name") or "").strip(),
+                    artists=[artist for artist in artists if artist],
+                    album=album_name,
+                    duration_ms=int(row.get("duration") or 0),
+                )
+            )
+        return out
+
+    @staticmethod
+    def _build_queries(inferred_song: ls_module.InferredSong) -> list[str]:
+        queries = [inferred_song.title]
+        if inferred_song.artist:
+            queries.insert(0, f"{inferred_song.title} {inferred_song.artist}")
+            queries.append(f"{inferred_song.artist} - {inferred_song.title}")
+        return [query.strip() for query in queries if query.strip()]
+
+    @staticmethod
+    def _select_best_candidate(
+        candidates: list[_NeteaseSongCandidate], inferred_song: ls_module.InferredSong
+    ) -> Optional[_NeteaseSongCandidate]:
+        if not candidates:
+            return None
+        scored = [
+            (
+                NeteaseLyricsProvider._score_candidate(candidate, inferred_song),
+                candidate.song_id,
+                candidate,
+            )
+            for candidate in candidates
+        ]
+        scored.sort()
+        return scored[-1][2]
+
+    @staticmethod
+    def _score_candidate(candidate: _NeteaseSongCandidate, inferred_song: ls_module.InferredSong) -> int:
+        score = 0
+        target_title = NeteaseLyricsProvider._normalize_text(inferred_song.title)
+        target_artist = NeteaseLyricsProvider._normalize_text(inferred_song.artist or "")
+        candidate_title = NeteaseLyricsProvider._normalize_text(candidate.title)
+        candidate_artist = NeteaseLyricsProvider._normalize_text(", ".join(candidate.artists))
+
+        if target_title and candidate_title == target_title:
+            score += 120
+        elif target_title and target_title in candidate_title:
+            score += 70
+        if target_artist and candidate_artist == target_artist:
+            score += 50
+        elif target_artist and target_artist in candidate_artist:
+            score += 25
+        return score
+
+    @staticmethod
+    def _normalize_text(value: str) -> str:
+        compact = re.sub(r"\s+", " ", value).strip().lower()
+        return re.sub(r"[^\w\s]", "", compact)
+
+    @staticmethod
+    def _extract_lyric_text(payload: dict[str, Any], key: str) -> Optional[str]:
+        item = payload.get(key)
+        if not isinstance(item, dict):
+            return None
+        text = item.get("lyric")
+        if not isinstance(text, str):
+            return None
+        stripped = text.strip()
+        return stripped or None
+
+    @staticmethod
+    def _looks_synced(lyrics: str) -> bool:
+        return any(_NETEASE_TIMESTAMP_RE.search(line) for line in lyrics.splitlines())
+
+    @staticmethod
+    def _merge_translated_lyrics(original_lrc: str, translated_lrc: str) -> str:
+        translations = NeteaseLyricsProvider._timestamp_to_text_map(translated_lrc)
+        if not translations:
+            return original_lrc
+
+        merged_lines: list[str] = []
+        for line in original_lrc.splitlines():
+            matches = list(_NETEASE_TIMESTAMP_RE.finditer(line))
+            if not matches:
+                merged_lines.append(line)
+                continue
+
+            base_text = _NETEASE_TIMESTAMP_RE.sub("", line).strip()
+            if not base_text:
+                merged_lines.append(line)
+                continue
+
+            translation = None
+            for match in matches:
+                timestamp_key = NeteaseLyricsProvider._timestamp_key(match)
+                if timestamp_key in translations:
+                    translation = translations[timestamp_key]
+                    break
+            if translation and translation not in base_text:
+                merged_lines.append("".join(match.group(0) for match in matches) + f"{base_text}/{translation}")
+            else:
+                merged_lines.append(line)
+        return "\n".join(merged_lines).strip()
+
+    @staticmethod
+    def _timestamp_to_text_map(lyrics: str) -> dict[int, str]:
+        out: dict[int, str] = {}
+        for line in lyrics.splitlines():
+            matches = list(_NETEASE_TIMESTAMP_RE.finditer(line))
+            if not matches:
+                continue
+            text = _NETEASE_TIMESTAMP_RE.sub("", line).strip()
+            if not text:
+                continue
+            for match in matches:
+                out[NeteaseLyricsProvider._timestamp_key(match)] = text
+        return out
+
+    @staticmethod
+    def _timestamp_key(match: re.Match[str]) -> int:
+        minutes = int(match.group(1))
+        seconds = int(match.group(2))
+        fraction_raw = match.group(3) or "0"
+        millis = int(fraction_raw.ljust(3, "0")[:3])
+        return (minutes * 60 + seconds) * 1000 + millis
+
+    @staticmethod
+    def _weapi_encrypt(payload: dict[str, Any]) -> dict[str, str]:
+        if _AES is None:
+            if not NeteaseLyricsProvider._warned_missing_crypto:
+                logger.info("pycryptodome not installed; NetEase provider will use legacy API fallback")
+                NeteaseLyricsProvider._warned_missing_crypto = True
+            raise RuntimeError("AES-CBC encryption support unavailable")
+
+        text = json.dumps(payload, separators=(",", ":"))
+        secret_key = NeteaseLyricsProvider._random_secret_key()
+        params = NeteaseLyricsProvider._aes_cbc_base64(
+            NeteaseLyricsProvider._aes_cbc_base64(text, _NETEASE_NONCE),
+            secret_key,
+        )
+        enc_sec_key = NeteaseLyricsProvider._rsa_enc_sec_key(secret_key)
+        return {"params": params, "encSecKey": enc_sec_key}
+
+    @staticmethod
+    def _aes_cbc_base64(plaintext: str, key: str) -> str:
+        assert _AES is not None
+        cipher = _AES.new(key.encode("utf-8"), _AES.MODE_CBC, _NETEASE_IV.encode("utf-8"))
+        padded = NeteaseLyricsProvider._pkcs7_pad(plaintext.encode("utf-8"))
+        encrypted = cipher.encrypt(padded)
+        return base64.b64encode(encrypted).decode("utf-8")
+
+    @staticmethod
+    def _pkcs7_pad(data: bytes) -> bytes:
+        pad_len = 16 - (len(data) % 16)
+        return data + bytes([pad_len]) * pad_len
+
+    @staticmethod
+    def _rsa_enc_sec_key(secret_key: str) -> str:
+        reversed_key = secret_key[::-1]
+        key_int = int(reversed_key.encode("utf-8").hex(), 16)
+        pubkey_int = int(_NETEASE_PUBKEY, 16)
+        modulus_int = int(_NETEASE_MODULUS, 16)
+        encrypted = pow(key_int, pubkey_int, modulus_int)
+        return format(encrypted, "x").zfill(256)
+
+    @staticmethod
+    def _random_secret_key(length: int = 16) -> str:
+        alphabet = string.ascii_letters + string.digits
+        return "".join(random.choice(alphabet) for _ in range(length))

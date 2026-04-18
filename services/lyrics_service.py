@@ -36,6 +36,7 @@ class LyricsPayload:
     is_synced: bool
     provider: str
     inferred_song: InferredSong
+    provider_details: dict[str, str | int | float] | None = None
 
 
 class SongMetadataInferrer(Protocol):
@@ -75,11 +76,16 @@ class LyricsService:
             self.providers = providers
             return
 
-        from services.lyrics_providers import LRCLibLyricsProvider, MusixmatchLyricsProvider
+        from services.lyrics_providers import (
+            LRCLibLyricsProvider,
+            MusixmatchLyricsProvider,
+            NeteaseLyricsProvider,
+        )
 
         default_providers: list[LyricsProvider] = []
         if settings.musixmatch_token.strip():
             default_providers.append(MusixmatchLyricsProvider())
+        default_providers.append(NeteaseLyricsProvider())
         default_providers.append(LRCLibLyricsProvider())
         self.providers = default_providers
 
@@ -255,7 +261,11 @@ class LyricsService:
 
 # Backward-compatible re-exports for existing imports.
 from services.lyrics_inference import YouTubeTitleInferrer  # noqa: E402
-from services.lyrics_providers import LRCLibLyricsProvider, MusixmatchLyricsProvider  # noqa: E402
+from services.lyrics_providers import (  # noqa: E402
+    LRCLibLyricsProvider,
+    MusixmatchLyricsProvider,
+    NeteaseLyricsProvider,
+)
 
 __all__ = [
     "InferredSong",
@@ -265,5 +275,6 @@ __all__ = [
     "YouTubeTitleInferrer",
     "LRCLibLyricsProvider",
     "MusixmatchLyricsProvider",
+    "NeteaseLyricsProvider",
     "LyricsService",
 ]
