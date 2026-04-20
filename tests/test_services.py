@@ -1,4 +1,5 @@
 """Tests for service layer."""
+import asyncio
 import pytest
 import httpx
 import zipfile
@@ -1135,6 +1136,303 @@ async def test_lyrics_service_provider_fallback_uses_lrclib_after_musixmatch_mis
     assert payload.provider == "lrclib"
     assert musix.calls == 1
     assert lrclib.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_lyrics_service_fallback_providers_run_concurrently_and_pick_best_score():
+    """Fallback providers should run together and return the highest-scoring payload."""
+    from services import lyrics_service as ls_module
+
+    inferred = ls_module.InferredSong(title="Song", artist="Artist", source="regex")
+
+    class FakeInferrer:
+        async def infer(self, title: str, artist: str | None = None):
+            return inferred
+
+    class WaitingProvider:
+        def __init__(self, name: str, score: float):
+            self.name = name
+            self.score = score
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+            self.calls = 0
+
+        async def fetch(self, inferred_song):
+            self.calls += 1
+            self.started.set()
+            await self.release.wait()
+            return ls_module.LyricsPayload(
+                lyrics=f"{self.name} line",
+                is_synced=True,
+                provider=self.name,
+                inferred_song=inferred_song,
+                provider_score=self.score,
+            )
+
+    slow_low = WaitingProvider("netease", 50.0)
+    slow_high = WaitingProvider("lrclib", 80.0)
+    service = LyricsService(metadata_inferrer=FakeInferrer(), providers=[slow_low, slow_high])
+
+    task = asyncio.create_task(service.resolve_lyrics(title="Song", artist="Artist"))
+    await asyncio.wait_for(slow_low.started.wait(), timeout=1)
+    await asyncio.wait_for(slow_high.started.wait(), timeout=1)
+    slow_low.release.set()
+    slow_high.release.set()
+    payload = await asyncio.wait_for(task, timeout=1)
+
+    assert payload is not None
+    assert payload.provider == "lrclib"
+    assert slow_low.calls == 1
+    assert slow_high.calls == 1
+
+
+def test_lyrics_service_default_provider_order_includes_netease_between_musixmatch_and_lrclib():
+    """Default provider chain should keep NetEase between Musixmatch and LRCLib."""
+    original_token = settings.musixmatch_token
+    try:
+        settings.musixmatch_token = "token123"
+        service = LyricsService()
+    finally:
+        settings.musixmatch_token = original_token
+
+    provider_names = [provider.name for provider in service.providers]
+    assert provider_names == ["musixmatch", "netease", "lrclib"]
+
+
+@pytest.mark.asyncio
+async def test_netease_provider_fetches_synced_and_merges_translation():
+    """NetEase provider should merge translated lines when synced timestamps match."""
+    from services import lyrics_service as ls_module
+
+    provider = ls_module.NeteaseLyricsProvider()
+    provider._weapi_encrypt = lambda payload: {"params": "encrypted", "encSecKey": "key"}  # type: ignore[attr-defined]
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, data, headers):
+            if "weapi/search/get" in url:
+                return FakeResponse(
+                    {
+                        "code": 200,
+                        "result": {
+                            "songs": [
+                                {
+                                    "id": 12345,
+                                    "name": "Song A",
+                                    "duration": 123000,
+                                    "album": {"name": "Album A"},
+                                    "artists": [{"name": "Artist A"}],
+                                }
+                            ]
+                        },
+                    }
+                )
+            if "weapi/song/lyric" in url:
+                return FakeResponse(
+                    {
+                        "code": 200,
+                        "lrc": {"lyric": "[00:01.00]Hello\n[00:02.00]World"},
+                        "tlyric": {"lyric": "[00:01.00]你好\n[00:02.00]世界"},
+                    }
+                )
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        async def get(self, url, params, headers):
+            raise AssertionError(f"Legacy endpoint should not be used: {url}")
+
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        payload = await provider.fetch(
+            ls_module.InferredSong(title="Song A", artist="Artist A", source="regex")
+        )
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+
+    assert payload is not None
+    assert payload.provider == "netease"
+    assert payload.is_synced is True
+    assert payload.lyrics == "[00:01.00]Hello/你好\n[00:02.00]World/世界"
+    assert payload.provider_details is not None
+    assert payload.provider_details["song_id"] == 12345
+    assert payload.provider_details["selected_query"] is not None
+    assert payload.provider_details["queries_tried"]
+
+
+@pytest.mark.asyncio
+async def test_netease_provider_falls_back_to_legacy_api_when_weapi_unavailable():
+    """NetEase provider should continue via legacy endpoints when weapi encryption is unavailable."""
+    from services import lyrics_service as ls_module
+
+    provider = ls_module.NeteaseLyricsProvider()
+
+    def _raise_no_crypto(_: dict):
+        raise RuntimeError("no crypto")
+
+    provider._weapi_encrypt = _raise_no_crypto  # type: ignore[attr-defined]
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, data, headers):
+            raise AssertionError(f"weapi endpoint should not be used: {url}")
+
+        async def get(self, url, params, headers):
+            if "api/search/get" in url:
+                return FakeResponse(
+                    {
+                        "code": 200,
+                        "result": {
+                            "songs": [
+                                {
+                                    "id": 8888,
+                                    "name": "Legacy Song",
+                                    "duration": 111000,
+                                    "album": {"name": "Legacy Album"},
+                                    "artists": [{"name": "Legacy Artist"}],
+                                }
+                            ]
+                        },
+                    }
+                )
+            if "api/song/lyric" in url:
+                return FakeResponse(
+                    {
+                        "code": 200,
+                        "lrc": {"lyric": "Line 1\nLine 2"},
+                    }
+                )
+            raise AssertionError(f"Unexpected URL: {url}")
+
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        payload = await provider.fetch(
+            ls_module.InferredSong(title="Legacy Song", artist="Legacy Artist", source="regex")
+        )
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+
+    assert payload is not None
+    assert payload.provider == "netease"
+    assert payload.is_synced is False
+    assert payload.lyrics == "Line 1\nLine 2"
+
+
+@pytest.mark.asyncio
+async def test_netease_provider_stops_after_high_confidence_match():
+    """A strong early match should avoid extra NetEase search requests."""
+    from services import lyrics_providers as lp_module
+    from services import lyrics_service as ls_module
+
+    provider = ls_module.NeteaseLyricsProvider()
+    queries_seen: list[str] = []
+    best_candidate = lp_module._NeteaseSongCandidate(
+        song_id=543798364,
+        title="月亮惹的祸",
+        artists=["张宇"],
+        album="月亮 太阳",
+        duration_ms=262466,
+    )
+
+    async def fake_request_search(query: str):
+        queries_seen.append(query)
+        return [best_candidate]
+
+    async def fake_request_lyrics(song_id: int):
+        assert song_id == 543798364
+        return {
+            "code": 200,
+            "lrc": {"lyric": "[00:01.00]Hello"},
+            "tlyric": {"lyric": "[00:01.00]你好"},
+        }
+
+    provider._request_search = fake_request_search  # type: ignore[method-assign]
+    provider._request_lyrics = fake_request_lyrics  # type: ignore[method-assign]
+
+    payload = await provider.fetch(
+        ls_module.InferredSong(
+            title="月亮惹的禍 Troubled By The Moon",
+            artist="張宇 Phil Chang",
+            source="lastfm",
+        )
+    )
+
+    assert payload is not None
+    assert payload.provider == "netease"
+    assert queries_seen == [queries_seen[0]]
+    assert len(queries_seen) == 1
+
+
+def test_netease_provider_prefers_cjk_candidate_and_rejects_low_confidence():
+    """Candidate selector should avoid unrelated songs and pick CJK-near matches."""
+    from services import lyrics_providers as lp_module
+    from services import lyrics_service as ls_module
+
+    inferred = ls_module.InferredSong(
+        title="月亮惹的禍 Troubled By The Moon",
+        artist="張宇 Phil Chang",
+        source="lastfm",
+    )
+
+    unrelated = lp_module._NeteaseSongCandidate(
+        song_id=2051231725,
+        title="Üher",
+        artists=["NaraBara"],
+        album="Other",
+        duration_ms=180000,
+    )
+    expected = lp_module._NeteaseSongCandidate(
+        song_id=190526,
+        title="月亮惹的祸",
+        artists=["张宇"],
+        album="月亮 太阳",
+        duration_ms=262466,
+    )
+
+    selected = lp_module.NeteaseLyricsProvider._select_best_candidate(
+        [unrelated, expected], inferred
+    )
+    assert selected is not None
+    assert selected.song_id == 190526
+
+    low_conf_only = lp_module.NeteaseLyricsProvider._select_best_candidate([unrelated], inferred)
+    assert low_conf_only is None
 
 
 @pytest.mark.asyncio

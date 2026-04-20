@@ -115,9 +115,14 @@ When concurrent yt-dlp search is enabled:
 - Combined results are staggered/interleaved and de-duplicated by video id
 
 When karaoke mode is enabled:
-- `Burn lyrics` ON: app infers artist/title from the YouTube-style song title, fetches lyrics through the modular provider pipeline (Musixmatch primary when `MUSIXMATCH_TOKEN` is set, LRCLib fallback), and burns subtitles.
+- `Burn lyrics` ON: app infers artist/title from the YouTube-style song title, fetches lyrics through the modular provider pipeline (Musixmatch primary when `MUSIXMATCH_TOKEN` is set, then NetEase, then LRCLib fallback), and burns subtitles.
 - `Burn lyrics` OFF: app skips lyric burn and uses faster remux with vocals-removed audio.
 - If Demucs is offline/unhealthy, karaoke processing fails fast and queue UI disables karaoke toggles.
+
+Lyrics lookup behavior:
+- Musixmatch is tried first when configured.
+- If Musixmatch misses, the remaining providers run concurrently and the highest-scoring result wins.
+- Debug output shows the selected provider score plus provider-specific diagnostics for troubleshooting.
 
 ## API Endpoints
 
@@ -163,6 +168,10 @@ uv run scripts/lyrics_debug_cli.py
 ```
 Use this menu-driven helper to step through the bundled karaoke titles or paste a custom YouTube title, then inspect the inferred metadata, provider, and lyrics preview.
 
+NetEase implementation notes:
+- Adapted from `cqjjjzr/MusicBee-NeteaseLyrics` (search + lyric flow) and `Gaohaoyang/netease-music-downloader` (lyrics retrieval endpoint behavior).
+- Keeps a Python-native runtime path (no Node dependency in production provider flow).
+
 ### With coverage
 ```bash
 uv run pytest --cov=. --cov-report=html
@@ -205,10 +214,12 @@ karaoke/
 │   └── pages.py          # HTML pages
 ├── services/              # Business logic
 │   ├── queue_service.py
-│   ├── youtube_service.py
-│   ├── lyrics_service.py
-│   ├── karaoke_service.py
-│   └── demucs_client.py
+ │   ├── youtube_service.py
+ │   ├── lyrics_service.py
+ │   ├── lyrics_inference.py
+ │   ├── lyrics_providers.py
+ │   ├── karaoke_service.py
+ │   └── demucs_client.py
 ├── adapters/              # External tool wrappers
 │   ├── ytdlp.py
 │   └── ffmpeg.py
