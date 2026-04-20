@@ -95,6 +95,8 @@ async def _debug_title(
         return
 
     printer(f"Provider: {payload.provider} ({'synced' if payload.is_synced else 'plain'})")
+    if payload.provider_score is not None:
+        printer(f"Provider score: {payload.provider_score}")
     printer(f"Resolved metadata: {_format_artist_title(payload.inferred_song.title, payload.inferred_song.artist)}")
     for line in _format_provider_details(payload.provider_details):
         printer(line)

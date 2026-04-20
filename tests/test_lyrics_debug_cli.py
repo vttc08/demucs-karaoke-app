@@ -47,6 +47,7 @@ async def test_debug_title_prints_inference_provider_and_preview():
         is_synced=True,
         provider="musixmatch",
         inferred_song=inferred,
+        provider_score=91.5,
         provider_details={
             "song_id": 777,
             "song_title": "Debug Song",
@@ -74,6 +75,7 @@ async def test_debug_title_prints_inference_provider_and_preview():
     assert "Provider query title: Clean Title" in joined
     assert "Provider query artist: Clean Artist" in joined
     assert "Provider: musixmatch (synced)" in joined
+    assert "Provider score: 91.5" in joined
     assert "song id: 777" in joined
     assert "song title: Debug Song" in joined
     assert "song artist: Debug Artist" in joined

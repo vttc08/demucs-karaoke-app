@@ -69,7 +69,7 @@ class LRCLibLyricsProvider:
     async def fetch(self, inferred_song: ls_module.InferredSong) -> Optional[ls_module.LyricsPayload]:
         queries = self._build_queries(inferred_song)
         best_entry: dict | None = None
-        best_score: int | None = None
+        best_score: float | None = None
 
         try:
             async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
@@ -109,6 +109,7 @@ class LRCLibLyricsProvider:
                 is_synced=True,
                 provider=self.name,
                 inferred_song=inferred_song,
+                provider_score=best_score,
             )
 
         plain = best_entry.get("plainLyrics")
@@ -118,6 +119,7 @@ class LRCLibLyricsProvider:
                 is_synced=False,
                 provider=self.name,
                 inferred_song=inferred_song,
+                provider_score=best_score,
             )
 
         return None
@@ -211,6 +213,7 @@ class MusixmatchLyricsProvider:
                 is_synced=True,
                 provider=self.name,
                 inferred_song=resolved_song,
+                provider_score=120.0,
             )
 
         plain = self._extract_plain_lyrics(macro_calls)
@@ -220,6 +223,7 @@ class MusixmatchLyricsProvider:
                 is_synced=False,
                 provider=self.name,
                 inferred_song=resolved_song,
+                provider_score=90.0,
             )
 
         if self._is_instrumental(macro_calls):
@@ -228,6 +232,7 @@ class MusixmatchLyricsProvider:
                 is_synced=True,
                 provider=self.name,
                 inferred_song=resolved_song,
+                provider_score=70.0,
             )
         return None
 
@@ -456,6 +461,7 @@ class NeteaseLyricsProvider:
             is_synced=is_synced,
             provider=self.name,
             inferred_song=resolved_song,
+            provider_score=float(search_debug.get("selected_score") or 0.0),
             provider_details={
                 "song_id": candidate.song_id,
                 "song_title": candidate.title,

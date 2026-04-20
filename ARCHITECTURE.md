@@ -116,6 +116,7 @@ The stage page uses a websocket-first model:
   - `services/lyrics_inference.py`: metadata inference (`YouTubeTitleInferrer`) to normalize noisy YouTube titles into title/artist pairs
 - `services/lyrics_providers.py`: provider implementations (`MusixmatchLyricsProvider`, `NeteaseLyricsProvider`, `LRCLibLyricsProvider`)
 - Provider order is Musixmatch first (when `MUSIXMATCH_TOKEN` is configured), then NetEase, then LRCLib fallback.
+- Resolution behavior is Musixmatch-first, then concurrent fallback search across the remaining providers with score-based selection of the best payload.
 - `services/karaoke_service.py` calls the orchestrator during karaoke processing when `requested_burn_lyrics` is enabled.
 - Synced lyrics are persisted as `.lrc` sidecars for stage overlay cue parsing.
 - Unsynced lyrics are still usable for burned subtitle rendering via ffmpeg text fallback.

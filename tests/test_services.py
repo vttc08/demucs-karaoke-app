@@ -1,4 +1,5 @@
 """Tests for service layer."""
+import asyncio
 import pytest
 import httpx
 import zipfile
@@ -1135,6 +1136,54 @@ async def test_lyrics_service_provider_fallback_uses_lrclib_after_musixmatch_mis
     assert payload.provider == "lrclib"
     assert musix.calls == 1
     assert lrclib.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_lyrics_service_fallback_providers_run_concurrently_and_pick_best_score():
+    """Fallback providers should run together and return the highest-scoring payload."""
+    from services import lyrics_service as ls_module
+
+    inferred = ls_module.InferredSong(title="Song", artist="Artist", source="regex")
+
+    class FakeInferrer:
+        async def infer(self, title: str, artist: str | None = None):
+            return inferred
+
+    class WaitingProvider:
+        def __init__(self, name: str, score: float):
+            self.name = name
+            self.score = score
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+            self.calls = 0
+
+        async def fetch(self, inferred_song):
+            self.calls += 1
+            self.started.set()
+            await self.release.wait()
+            return ls_module.LyricsPayload(
+                lyrics=f"{self.name} line",
+                is_synced=True,
+                provider=self.name,
+                inferred_song=inferred_song,
+                provider_score=self.score,
+            )
+
+    slow_low = WaitingProvider("netease", 50.0)
+    slow_high = WaitingProvider("lrclib", 80.0)
+    service = LyricsService(metadata_inferrer=FakeInferrer(), providers=[slow_low, slow_high])
+
+    task = asyncio.create_task(service.resolve_lyrics(title="Song", artist="Artist"))
+    await asyncio.wait_for(slow_low.started.wait(), timeout=1)
+    await asyncio.wait_for(slow_high.started.wait(), timeout=1)
+    slow_low.release.set()
+    slow_high.release.set()
+    payload = await asyncio.wait_for(task, timeout=1)
+
+    assert payload is not None
+    assert payload.provider == "lrclib"
+    assert slow_low.calls == 1
+    assert slow_high.calls == 1
 
 
 def test_lyrics_service_default_provider_order_includes_netease_between_musixmatch_and_lrclib():

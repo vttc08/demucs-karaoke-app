@@ -1,6 +1,7 @@
 """Lyrics service orchestration, contracts, and cue parsing."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import math
@@ -36,6 +37,7 @@ class LyricsPayload:
     is_synced: bool
     provider: str
     inferred_song: InferredSong
+    provider_score: float | None = None
     provider_details: dict[str, Any] | None = None
 
 
@@ -105,18 +107,55 @@ class LyricsService:
         if not inferred_song.title:
             return None
 
-        for provider in self.providers:
+        musixmatch_providers = [provider for provider in self.providers if provider.name == "musixmatch"]
+        fallback_providers = [provider for provider in self.providers if provider.name != "musixmatch"]
+
+        for provider in musixmatch_providers:
             payload = await provider.fetch(inferred_song)
             if payload:
                 logger.info(
-                    "Lyrics resolved provider=%s source=%s title=%r artist=%r synced=%s",
+                    "Lyrics resolved provider=%s score=%s source=%s title=%r artist=%r synced=%s",
                     payload.provider,
+                    self._score_payload(payload),
                     inferred_song.source,
                     inferred_song.title,
                     inferred_song.artist,
                     payload.is_synced,
                 )
                 return payload
+
+        if fallback_providers:
+            results = await asyncio.gather(
+                *(provider.fetch(inferred_song) for provider in fallback_providers),
+                return_exceptions=True,
+            )
+            payloads: list[LyricsPayload] = []
+            for provider, result in zip(fallback_providers, results):
+                if isinstance(result, Exception):
+                    exc_info = (type(result), result, result.__traceback__)
+                    logger.error(
+                        "Lyrics provider raised provider=%s title=%r artist=%r",
+                        provider.name,
+                        inferred_song.title,
+                        inferred_song.artist,
+                        exc_info=exc_info,
+                    )
+                    continue
+                if result:
+                    payloads.append(result)
+
+            if payloads:
+                best_payload = max(payloads, key=self._score_payload)
+                logger.info(
+                    "Lyrics resolved provider=%s score=%s source=%s title=%r artist=%r synced=%s",
+                    best_payload.provider,
+                    self._score_payload(best_payload),
+                    inferred_song.source,
+                    inferred_song.title,
+                    inferred_song.artist,
+                    best_payload.is_synced,
+                )
+                return best_payload
 
         logger.info(
             "Lyrics not found title=%r artist=%r inferred_source=%s",
@@ -139,6 +178,16 @@ class LyricsService:
     def parse_lyrics_to_lines(self, lyrics: str) -> list[str]:
         """Parse lyrics text into individual lines."""
         return [line.strip() for line in lyrics.split("\n") if line.strip()]
+
+    @staticmethod
+    def _score_payload(payload: LyricsPayload) -> float:
+        if payload.provider_score is not None:
+            return float(payload.provider_score)
+        provider_details = payload.provider_details or {}
+        selected_score = provider_details.get("selected_score")
+        if isinstance(selected_score, (int, float)):
+            return float(selected_score)
+        return 0.0
 
     def parse_lrc_to_cues(self, lyrics: str) -> list[dict[str, float | str]]:
         """Parse LRC into sorted cue objects."""

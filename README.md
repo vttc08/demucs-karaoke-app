@@ -119,6 +119,11 @@ When karaoke mode is enabled:
 - `Burn lyrics` OFF: app skips lyric burn and uses faster remux with vocals-removed audio.
 - If Demucs is offline/unhealthy, karaoke processing fails fast and queue UI disables karaoke toggles.
 
+Lyrics lookup behavior:
+- Musixmatch is tried first when configured.
+- If Musixmatch misses, the remaining providers run concurrently and the highest-scoring result wins.
+- Debug output shows the selected provider score plus provider-specific diagnostics for troubleshooting.
+
 ## API Endpoints
 
 See [docs/API.md](docs/API.md) for full API documentation.
