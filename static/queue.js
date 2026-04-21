@@ -49,6 +49,8 @@ const queueConfigLyricsProvider = document.getElementById('queue-config-lyrics-p
 const queueConfigLyricsPreview = document.getElementById('queue-config-lyrics-preview');
 const queueConfigLyricsTextarea = document.getElementById('queue-config-lyrics-textarea');
 const queueConfigLyricsHelp = document.getElementById('queue-config-lyrics-help');
+const QUEUE_CONFIRM_DEFAULT_HTML = '<span class="material-symbols-outlined text-base" style="font-variation-settings: \'FILL\' 1">add_circle</span>Add to Queue';
+const QUEUE_CONFIRM_LOADING_HTML = '<span class="material-symbols-outlined animate-spin text-base">sync</span>Resolving lyrics...';
 let stageRemotePaused = false;
 let stageRemoteLyricsEnabled = true;
 let stageRemoteLyricsAvailable = false;
@@ -440,6 +442,24 @@ function syncQueueConfirmState() {
     const disabled = waiting || (lyricsRequired && !ready);
 
     queueConfigConfirmBtn.disabled = disabled;
+    queueConfigConfirmBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    queueConfigConfirmBtn.setAttribute('aria-busy', waiting ? 'true' : 'false');
+    queueConfigConfirmBtn.title = waiting
+        ? 'Lyrics are still resolving'
+        : lyricsRequired && !ready
+            ? 'Resolve lyrics or add your own synced lyrics before continuing'
+            : 'Add the song to the queue';
+
+    queueConfigConfirmBtn.classList.toggle('bg-primary', !disabled);
+    queueConfigConfirmBtn.classList.toggle('text-on-primary', !disabled);
+    queueConfigConfirmBtn.classList.toggle('bg-surface-container-highest', disabled);
+    queueConfigConfirmBtn.classList.toggle('text-on-surface-variant', disabled);
+
+    if (waiting) {
+        queueConfigConfirmBtn.innerHTML = QUEUE_CONFIRM_LOADING_HTML;
+    } else {
+        queueConfigConfirmBtn.innerHTML = QUEUE_CONFIRM_DEFAULT_HTML;
+    }
 }
 
 async function openQueueConfigModal(resultElement, triggerButton) {
@@ -471,9 +491,12 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     }
 
     queueConfigConfirmBtn.disabled = false;
-    queueConfigConfirmBtn.classList.remove('bg-secondary', 'text-white', 'bg-error');
+    queueConfigConfirmBtn.setAttribute('aria-disabled', 'false');
+    queueConfigConfirmBtn.setAttribute('aria-busy', 'false');
+    queueConfigConfirmBtn.title = 'Add the song to the queue';
+    queueConfigConfirmBtn.classList.remove('bg-secondary', 'text-white', 'bg-error', 'bg-surface-container-highest', 'text-on-surface-variant');
     queueConfigConfirmBtn.classList.add('bg-primary', 'text-on-primary');
-    queueConfigConfirmBtn.innerHTML = '<span class="material-symbols-outlined text-base" style="font-variation-settings: \'FILL\' 1">add_circle</span>Add to Queue';
+    queueConfigConfirmBtn.innerHTML = QUEUE_CONFIRM_DEFAULT_HTML;
     queueConfigModal.classList.remove('hidden');
     queueConfigModal.classList.add('flex');
     document.body.classList.add('overflow-hidden');

@@ -193,7 +193,7 @@
 
     <div id="queue-config-modal" class="fixed inset-0 z-[80] hidden items-end justify-center bg-background/80 p-0 backdrop-blur-sm sm:items-center sm:p-6">
         <div id="queue-config-modal-backdrop" class="absolute inset-0"></div>
-        <div class="relative w-full max-w-2xl overflow-hidden rounded-t-2xl border border-outline-variant/20 bg-surface-container-high shadow-[0_-10px_60px_rgba(143,67,251,0.2)] sm:rounded-2xl">
+        <div class="relative flex w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-t-2xl border border-outline-variant/20 bg-surface-container-high shadow-[0_-10px_60px_rgba(143,67,251,0.2)] sm:rounded-2xl">
             <div class="flex items-center justify-between border-b border-outline-variant/20 px-5 py-4">
                 <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">Configure Queue</h3>
                 <button
@@ -205,7 +205,7 @@
                     <span class="material-symbols-outlined text-lg">close</span>
                 </button>
             </div>
-            <div class="space-y-5 px-5 py-5">
+            <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 no-scrollbar">
                 <div class="flex items-center gap-3 rounded-xl bg-surface-container-highest/60 p-3">
                     <div class="h-14 w-14 overflow-hidden rounded-md bg-surface-container-lowest">
                         <img id="queue-config-song-thumb" src="/static/placeholder.png" alt="Selected song" class="h-full w-full object-cover" />
@@ -305,7 +305,7 @@
                 <button id="queue-config-cancel-btn" type="button" class="rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface-variant transition-colors hover:text-on-surface">
                     Cancel
                 </button>
-                <button id="queue-config-confirm-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black uppercase tracking-tight text-on-primary transition-all hover:brightness-110 active:scale-95">
+                <button id="queue-config-confirm-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black uppercase tracking-tight text-on-primary transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:shadow-none disabled:opacity-100 disabled:hover:brightness-100">
                     <span class="material-symbols-outlined text-base" style="font-variation-settings: 'FILL' 1">add_circle</span>
                     Add to Queue
                 </button>
