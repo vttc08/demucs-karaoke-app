@@ -99,3 +99,12 @@ async def media_management_page(request: Request):
             "media_stats": media_stats,
         },
     )
+
+
+@router.get("/access-restricted", response_class=HTMLResponse)
+async def access_restricted_page(request: Request):
+    """Static access gate page for reverse proxy network checks."""
+    return templates.TemplateResponse(
+        "access_restricted.html",
+        {"request": request},
+    )

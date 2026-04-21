@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Access Restricted - Karaoke</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#00f2ff",
+                        secondary: "#3ce36a",
+                        tertiary: "#ffb950",
+                        background: "#0e0c1f",
+                        surface: "#0e0c1f",
+                        "surface-container": "#19172e",
+                        "surface-container-low": "#131126",
+                        "surface-container-high": "#1f1c36",
+                        "surface-container-highest": "#25223e",
+                        "surface-container-lowest": "#000000",
+                        "on-surface": "#e7e2fe",
+                        "on-surface-variant": "#c9c5d0",
+                        "outline-variant": "#48455b",
+                        error: "#ff6e84",
+                    },
+                    fontFamily: {
+                        headline: ["Space Grotesk", "sans-serif"],
+                        body: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        lg: "0.75rem",
+                        xl: "1rem",
+                        "2xl": "1.25rem",
+                        full: "9999px",
+                    },
+                },
+            },
+        }
+    </script>
+
+    <style>
+        body {
+            background:
+                radial-gradient(circle at top left, rgba(0, 242, 255, 0.16), transparent 28%),
+                radial-gradient(circle at bottom right, rgba(143, 67, 251, 0.16), transparent 30%),
+                #0e0c1f;
+            color: #e7e2fe;
+        }
+
+        .noise::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+            background-size: 28px 28px;
+            mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 85%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-body">
+    <main class="noise relative mx-auto flex min-h-screen w-full max-w-7xl items-center px-4 py-8 sm:px-6 lg:px-8">
+        <div class="relative z-10 grid w-full gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:gap-8">
+            <section class="relative overflow-hidden rounded-[1.5rem] bg-surface-container-low/80 p-6 shadow-[0_30px_80px_rgba(0,0,0,0.35)] ring-1 ring-white/5 backdrop-blur-xl sm:p-8 lg:p-10">
+                <div class="absolute -right-10 top-8 h-28 w-28 rounded-full bg-primary/10 blur-3xl"></div>
+                <div class="absolute -left-8 bottom-4 h-32 w-32 rounded-full bg-tertiary/10 blur-3xl"></div>
+
+                <div class="flex items-center justify-between gap-3">
+                    <div class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-primary">
+                        <span class="material-symbols-outlined text-sm">shield_lock</span>
+                        Access status
+                    </div>
+                    <div class="hidden items-center gap-2 rounded-full border border-outline-variant/20 bg-surface-container-high/60 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-on-surface-variant sm:inline-flex">
+                        <span class="h-2 w-2 rounded-full bg-error"></span>
+                        Gate closed
+                    </div>
+                </div>
+
+                <div class="mt-8 grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
+                    <div class="max-w-2xl">
+                        <p class="text-[11px] font-bold uppercase tracking-[0.28em] text-on-surface-variant">Home network required</p>
+                        <h1 class="mt-3 font-headline text-4xl font-extrabold tracking-tight text-on-surface sm:text-5xl lg:text-6xl">Access restricted</h1>
+                        <p class="mt-4 max-w-2xl text-sm leading-6 text-on-surface-variant sm:text-base">
+                            This karaoke session is only available from the approved home Wi-Fi or trusted WAN IP. If a VPN, private relay, or proxy is masking your connection, the reverse proxy will keep this page in place.
+                        </p>
+
+                        <div class="mt-6 flex flex-wrap gap-2">
+                            <span class="rounded-full border border-white/10 bg-surface-container-high/70 px-3 py-1 text-[11px] font-semibold text-on-surface-variant">Approved LAN</span>
+                            <span class="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">WAN IP check</span>
+                            <span class="rounded-full border border-secondary/20 bg-secondary/10 px-3 py-1 text-[11px] font-semibold text-secondary">Proxy off</span>
+                        </div>
+                    </div>
+
+                    <div class="mx-auto flex w-full max-w-xs items-center justify-center">
+                        <div class="relative flex h-40 w-40 items-center justify-center rounded-full bg-surface-container-high/65 ring-1 ring-white/5 shadow-[0_0_60px_rgba(0,242,255,0.12)] sm:h-48 sm:w-48">
+                            <div class="absolute inset-3 rounded-full border border-primary/15"></div>
+                            <div class="absolute inset-7 rounded-full border border-white/5 bg-surface-container-low/70"></div>
+                            <div class="relative flex h-24 w-24 items-center justify-center rounded-full bg-primary/10 text-primary shadow-[0_0_36px_rgba(0,242,255,0.25)]">
+                                <span class="material-symbols-outlined text-5xl">lock</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-2xl bg-surface-container-high/55 p-4">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.24em] text-on-surface-variant">Network</p>
+                        <p class="mt-2 text-sm font-semibold text-on-surface">Approved home Wi-Fi only</p>
+                    </div>
+                    <div class="rounded-2xl bg-surface-container-high/55 p-4">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.24em] text-on-surface-variant">Relay</p>
+                        <p class="mt-2 text-sm font-semibold text-on-surface">Disable masking tools</p>
+                    </div>
+                    <div class="rounded-2xl bg-surface-container-high/55 p-4">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.24em] text-on-surface-variant">Next step</p>
+                        <p class="mt-2 text-sm font-semibold text-on-surface">Reconnect, then reload</p>
+                    </div>
+                </div>
+            </section>
+
+            <aside class="rounded-[1.5rem] bg-surface-container/80 p-6 shadow-[0_30px_80px_rgba(0,0,0,0.28)] ring-1 ring-white/5 backdrop-blur-xl sm:p-8">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">travel_explore</span>
+                    <h2 class="font-headline text-2xl font-bold tracking-tight text-on-surface">Recovery steps</h2>
+                </div>
+
+                <ol class="mt-6 space-y-4">
+                    <li class="flex gap-4 rounded-2xl bg-surface-container-high/50 p-4">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-black text-primary">1</span>
+                        <div>
+                            <p class="font-semibold text-on-surface">Join the approved home Wi-Fi.</p>
+                            <p class="mt-1 text-sm leading-6 text-on-surface-variant">The page opens only when your device comes from the expected local network.</p>
+                        </div>
+                    </li>
+                    <li class="flex gap-4 rounded-2xl bg-surface-container-high/50 p-4">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary/10 text-sm font-black text-secondary">2</span>
+                        <div>
+                            <p class="font-semibold text-on-surface">Turn off relay or VPN masking.</p>
+                            <p class="mt-1 text-sm leading-6 text-on-surface-variant">iCloud Private Relay, Clash, V2Ray, and similar tools can hide the WAN IP the proxy expects.</p>
+                        </div>
+                    </li>
+                    <li class="flex gap-4 rounded-2xl bg-surface-container-high/50 p-4">
+                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-tertiary/15 text-sm font-black text-tertiary">3</span>
+                        <div>
+                            <p class="font-semibold text-on-surface">Reload after the network changes.</p>
+                            <p class="mt-1 text-sm leading-6 text-on-surface-variant">Once the connection matches, refresh the page and the app should open normally.</p>
+                        </div>
+                    </li>
+                </ol>
+
+                <div class="mt-6 rounded-2xl bg-surface-container-highest/45 p-4">
+                    <p class="text-[10px] font-bold uppercase tracking-[0.24em] text-on-surface-variant">Host note</p>
+                    <p class="mt-2 text-sm leading-6 text-on-surface-variant">
+                        If you are the host, check the reverse proxy or router whitelist so the approved LAN/WAN range reaches the app.
+                    </p>
+                </div>
+            </aside>
+        </div>
+    </main>
+</body>
+</html>
