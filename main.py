@@ -13,7 +13,7 @@ if __name__ == "__main__":
 
 import logging
 from logging_config import configure_logging
-from routes import media_files, pages, queue, qr as qr_routes, search, settings as settings_routes
+from routes import media_files, lyrics, pages, queue, qr as qr_routes, search, settings as settings_routes
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -69,6 +69,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Include routers
 app.include_router(media_files.router)
 app.include_router(pages.router)
+app.include_router(lyrics.router)
 app.include_router(queue.router)
 app.include_router(qr_routes.router)
 app.include_router(search.router)

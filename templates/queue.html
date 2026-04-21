@@ -237,14 +237,68 @@
                         <div class="min-w-0">
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined text-secondary text-base">lyrics</span>
-                                <span class="text-sm font-bold text-on-surface">Lyrics</span>
+                                <span class="text-sm font-bold text-on-surface">Enable Lyrics</span>
                             </div>
-                            <p class="mt-1 text-xs text-on-surface-variant">Placeholder toggle for lyrics behavior.</p>
+                            <p class="mt-1 text-xs text-on-surface-variant">Resolve synced lyrics before you add the song to the queue.</p>
                         </div>
                         <button id="queue-config-lyrics-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-6 w-11 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
                             <span class="h-4 w-4 rounded-full bg-on-surface-variant transition-transform"></span>
                         </button>
                     </div>
+                </div>
+
+                <div id="queue-config-lyrics-panel" class="hidden space-y-4 rounded-xl bg-surface-container p-4">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-primary text-base">text_fields</span>
+                                <span class="text-sm font-bold text-on-surface">Lyrics lookup</span>
+                            </div>
+                            <p class="mt-1 text-xs text-on-surface-variant">Search provider results, then edit or replace the synced lyrics if needed.</p>
+                        </div>
+                        <span id="queue-config-lyrics-state" class="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Idle</span>
+                    </div>
+
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="flex flex-col gap-2">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Title</span>
+                            <input id="queue-config-lyrics-title" type="text" class="w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" />
+                        </label>
+                        <label class="flex flex-col gap-2">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Artist</span>
+                            <input id="queue-config-lyrics-artist" type="text" class="w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" />
+                        </label>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button id="queue-config-lyrics-search-btn" type="button" class="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-bold text-on-primary transition-all hover:brightness-110 active:scale-95">
+                            <span class="material-symbols-outlined text-base">search</span>
+                            Manual search
+                        </button>
+                        <button id="queue-config-lyrics-upload-btn" type="button" class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface transition-all hover:brightness-110 active:scale-95">
+                            <span class="material-symbols-outlined text-base">upload_file</span>
+                            Upload LRC
+                        </button>
+                        <input id="queue-config-lyrics-file" type="file" accept=".lrc,.txt,.srt,text/plain" class="hidden" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Resolved lyrics</span>
+                            <span id="queue-config-lyrics-provider" class="text-[11px] font-medium text-on-surface-variant"></span>
+                        </div>
+                        <textarea id="queue-config-lyrics-preview" rows="7" readonly class="w-full rounded-xl bg-surface-container-highest px-3 py-3 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" placeholder="Resolved lyrics will appear here."></textarea>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Manual synced lyrics</span>
+                            <span class="text-[11px] text-on-surface-variant">Paste or replace synced lines before adding to queue.</span>
+                        </div>
+                        <textarea id="queue-config-lyrics-textarea" rows="8" class="w-full rounded-xl bg-surface-container-highest px-3 py-3 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" placeholder="[00:12.00]Sing along..."></textarea>
+                    </div>
+
+                    <p id="queue-config-lyrics-help" class="text-xs text-on-surface-variant">The Add to Queue button unlocks after lyrics are resolved, fail, or you provide your own lyrics.</p>
                 </div>
             </div>
             <div class="flex flex-col gap-2 border-t border-outline-variant/20 px-5 py-4 sm:flex-row sm:justify-end">

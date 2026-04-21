@@ -78,13 +78,13 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ## Usage
 
 1. **Queue Page** (Mobile): Open `http://<server-ip>:8000/queue`
-   - Search for songs (local library full-text on title/artist + YouTube in parallel)
-   - Or paste a YouTube link / video id directly to add external search results
-   - Local matches are preferred in results; duplicate YouTube matches are hidden
-   - Tap **Add** on a result to open the queue configuration interaction
-   - Choose **AI Karaoke Processing** and optional **Lyrics** toggle in the configuration panel
-   - Confirm to add to queue
-   - Use remote stage controls, including lyrics on/off, for the currently playing item
+    - Search for songs (local library full-text on title/artist + YouTube in parallel)
+    - Or paste a YouTube link / video id directly to add external search results
+    - Local matches are preferred in results; duplicate YouTube matches are hidden
+    - Tap **Add** on a result to open the queue configuration interaction
+    - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, lyrics preview, and LRC upload before adding to queue
+    - Confirm to add to queue
+    - Use remote stage controls, including lyrics on/off, for the currently playing item
     - Queue status updates in real time (downloading, processing, ready, playing, failed)
    
 2. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
@@ -105,9 +105,13 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
        - View real-time Demucs engine health (online/offline with detail)
 
 4. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
-      - Browse existing media entries in responsive card/table layouts
-      - View title, artist, and capability badges (multi-track, lyrics)
-      - Use placeholder UI actions for rename, delete, and add-to-queue flows (integration-ready template variables)
+       - Browse existing media entries in responsive card/table layouts
+       - View title, artist, and capability badges (multi-track, lyrics)
+       - Use placeholder UI actions for rename, delete, and add-to-queue flows (integration-ready template variables)
+
+5. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`
+       - Static reverse-proxy gate page for users who are outside the approved home network
+       - Explains the Wi-Fi / WAN IP check and common masking tools like iCloud Private Relay, Clash, and V2Ray
 
 When concurrent yt-dlp search is enabled:
 - Query without `karaoke` triggers two parallel searches: `<query>` and `<query> karaoke`
@@ -123,6 +127,7 @@ Lyrics lookup behavior:
 - Musixmatch is tried first when configured.
 - If Musixmatch misses, the remaining providers run concurrently and the highest-scoring result wins.
 - Debug output shows the selected provider score plus provider-specific diagnostics for troubleshooting.
+- The queue modal can pre-resolve lyrics, let users replace them with manual synced text, and persist those lyrics as sidecars when the item is queued.
 
 ## API Endpoints
 
@@ -147,6 +152,10 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for system design details.
 ```bash
 uv run pytest
 ```
+
+### Debug logging
+Set `LOG_LEVEL=DEBUG` in your local `.env` when you want to see `logger.debug(...)` output during
+agent-assisted debugging. Switch it back to `INFO` when you're done.
 
 ### Test title inference from CLI
 ```bash
@@ -181,6 +190,9 @@ uv run pytest --cov=. --cov-report=html
 The app uses centralized Python logging with:
 - Console output
 - Rotating file logs
+
+Root logging is configured once at startup, and `LOG_LEVEL` controls whether debug calls are
+emitted.
 
 Configure via `.env`:
 - `LOG_LEVEL` (e.g. `DEBUG`, `INFO`, `WARNING`, `ERROR`)

@@ -44,13 +44,14 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [ ] queue page with users
 - [ ] frontend settings page polish
 - [ ] blueprints for subfolder custom path support
-- [ ] consistent themed restriction page for outside network and splash screen
+- [x] consistent themed restriction page for outside network and splash screen
 - [ ] admin login page for settings and splash
 - [ ] login page for device identification only, stored in local storage
 - [ ] real time join and enqueue feature
 - [ ] admin has ability to remove, skip or reorder queue
 - [ ] fix multi track audio sync issues
-- [ ] customize lyric tracks behavior
+- [x] customize lyric tracks behavior
+- [x] lyrics-assisted add-to-queue flow with manual lyrics override
 - [ ] oidc authelia support
 - [ ] batching demucs using load balancer and split file into small segments for batch processing
 

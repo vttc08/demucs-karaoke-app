@@ -6,6 +6,7 @@ This project currently uses two services:
 1. Main app
 - serves mobile queue page, stage page, and settings page
 - serves media library management page (`/media`) with placeholder-first UI interactions
+- serves a static access-restricted gate page (`/access-restricted`) for reverse-proxy network checks
 - serves stage-focused presentation page
 - manages queue state
 - searches YouTube
@@ -108,6 +109,19 @@ The stage page uses a websocket-first model:
   - current line highlighted in red
   - nearby lines shown in white
 - This custom pipeline keeps room for future per-user appearance/animation customization.
+
+## Add-to-queue lyrics flow
+
+- The queue modal now gates the Add to Queue action behind a lyrics resolution step when lyrics are enabled.
+- Frontend flow:
+  - prefill title/artist from the selected search result
+  - resolve synced lyrics through `POST /api/lyrics/resolve`
+  - let users replace provider lyrics with manual synced text or an uploaded LRC file
+  - submit the final lyrics text alongside the queue payload
+- Backend flow:
+  - `routes/lyrics.py` orchestrates the lookup response for the UI
+  - `QueueService.add_to_queue` stores inline lyrics as a cache sidecar when karaoke + burn lyrics are enabled
+  - `KaraokeService` reuses an existing lyrics sidecar before falling back to provider resolution during processing
 
 ## Lyrics inference and provider flow
 

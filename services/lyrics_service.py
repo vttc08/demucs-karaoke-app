@@ -767,7 +767,14 @@ class LyricsService:
 
     async def infer_song_metadata(self, title: str, artist: Optional[str] = None) -> InferredSong:
         """Infer normalized metadata for downstream lyrics providers."""
-        return await self.metadata_inferrer.infer(title=title, artist=artist)
+        inferred = await self.metadata_inferrer.infer(title=title, artist=artist)
+        logger.debug(
+            "Inferred lyrics metadata title=%r artist=%r source=%s",
+            inferred.title,
+            inferred.artist,
+            inferred.source,
+        )
+        return inferred
 
     async def resolve_lyrics(
         self,
@@ -777,16 +784,26 @@ class LyricsService:
     ) -> Optional[LyricsPayload]:
         """Resolve lyrics payload with provider fallback behavior."""
         lookup_title = (youtube_title or title).strip()
+        logger.debug("Got YouTube title=%r artist=%r", lookup_title, artist)
         inferred_song = await self.infer_song_metadata(title=lookup_title, artist=artist)
         if not inferred_song.title:
             return None
+        debug_query = self._build_debug_query(inferred_song)
 
         musixmatch_providers = [provider for provider in self.providers if provider.name == "musixmatch"]
         fallback_providers = [provider for provider in self.providers if provider.name != "musixmatch"]
 
         for provider in musixmatch_providers:
+            logger.debug("Searching provider=%s with query=%r", provider.name, debug_query)
             payload = await provider.fetch(inferred_song)
             if payload:
+                logger.debug(
+                    "Found lyrics provider=%s synced=%s title=%r artist=%r",
+                    payload.provider,
+                    payload.is_synced,
+                    payload.inferred_song.title,
+                    payload.inferred_song.artist,
+                )
                 logger.info(
                     "Lyrics resolved provider=%s score=%s source=%s title=%r artist=%r synced=%s",
                     payload.provider,
@@ -797,14 +814,19 @@ class LyricsService:
                     payload.is_synced,
                 )
                 return payload
+            logger.debug("Provider %s lyrics not found query=%r", provider.name, debug_query)
 
         if fallback_providers:
-            results = await asyncio.gather(
-                *(provider.fetch(inferred_song) for provider in fallback_providers),
-                return_exceptions=True,
-            )
+            async def _fetch_provider(provider: LyricsProvider):
+                logger.debug("Searching provider=%s with query=%r", provider.name, debug_query)
+                try:
+                    return provider, await provider.fetch(inferred_song)
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    return provider, exc
+
+            results = await asyncio.gather(*(_fetch_provider(provider) for provider in fallback_providers))
             payloads: list[LyricsPayload] = []
-            for provider, result in zip(fallback_providers, results):
+            for provider, result in results:
                 if isinstance(result, Exception):
                     logger.error(
                         "Lyrics provider raised provider=%s title=%r artist=%r",
@@ -816,9 +838,18 @@ class LyricsService:
                     continue
                 if result:
                     payloads.append(result)
+                else:
+                    logger.debug("Provider %s lyrics not found query=%r", provider.name, debug_query)
 
             if payloads:
                 best_payload = max(payloads, key=self._score_payload)
+                logger.debug(
+                    "Found lyrics provider=%s synced=%s title=%r artist=%r",
+                    best_payload.provider,
+                    best_payload.is_synced,
+                    best_payload.inferred_song.title,
+                    best_payload.inferred_song.artist,
+                )
                 logger.info(
                     "Lyrics resolved provider=%s score=%s source=%s title=%r artist=%r synced=%s",
                     best_payload.provider,
@@ -836,6 +867,7 @@ class LyricsService:
             inferred_song.artist,
             inferred_song.source,
         )
+        logger.debug("Provider lookup exhausted lyrics not found query=%r", debug_query)
         return None
 
     async def fetch_lyrics(
@@ -871,6 +903,12 @@ class LyricsService:
         if isinstance(selected_score, (int, float)):
             return float(selected_score)
         return 0.0
+
+    @staticmethod
+    def _build_debug_query(inferred_song: InferredSong) -> str:
+        if inferred_song.artist:
+            return f"{inferred_song.artist} - {inferred_song.title}"
+        return inferred_song.title
 
     def parse_lrc_to_cues(self, lyrics: str) -> list[dict[str, float | str]]:
         """Parse LRC into sorted cue objects."""

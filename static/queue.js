@@ -38,6 +38,17 @@ const queueConfigKaraokeToggle = document.getElementById('queue-config-karaoke-t
 const queueConfigKaraokeStatus = document.getElementById('queue-config-karaoke-status');
 const queueConfigKaraokeDetail = document.getElementById('queue-config-karaoke-detail');
 const queueConfigLyricsToggle = document.getElementById('queue-config-lyrics-toggle');
+const queueConfigLyricsPanel = document.getElementById('queue-config-lyrics-panel');
+const queueConfigLyricsState = document.getElementById('queue-config-lyrics-state');
+const queueConfigLyricsTitle = document.getElementById('queue-config-lyrics-title');
+const queueConfigLyricsArtist = document.getElementById('queue-config-lyrics-artist');
+const queueConfigLyricsSearchBtn = document.getElementById('queue-config-lyrics-search-btn');
+const queueConfigLyricsUploadBtn = document.getElementById('queue-config-lyrics-upload-btn');
+const queueConfigLyricsFile = document.getElementById('queue-config-lyrics-file');
+const queueConfigLyricsProvider = document.getElementById('queue-config-lyrics-provider');
+const queueConfigLyricsPreview = document.getElementById('queue-config-lyrics-preview');
+const queueConfigLyricsTextarea = document.getElementById('queue-config-lyrics-textarea');
+const queueConfigLyricsHelp = document.getElementById('queue-config-lyrics-help');
 let stageRemotePaused = false;
 let stageRemoteLyricsEnabled = true;
 let stageRemoteLyricsAvailable = false;
@@ -48,6 +59,11 @@ let demucsHealth = { healthy: true, detail: 'Health unknown' };
 let modalSelection = null;
 let modalKaraokeEnabled = false;
 let modalLyricsEnabled = false;
+let modalLyricsState = 'idle';
+let modalLyricsProvider = '';
+let modalLyricsSynced = false;
+let modalLyricsFormat = 'txt';
+let modalLyricsRequestId = 0;
 
 searchResults.addEventListener('click', async (event) => {
     const button = event.target.closest('.add-to-queue-btn');
@@ -57,11 +73,6 @@ searchResults.addEventListener('click', async (event) => {
     if (!resultElement) return;
 
     const source = resultElement.dataset.resultSource || 'youtube';
-    if (source === 'local') {
-        await addToQueueDirect(resultElement, button);
-        return;
-    }
-
     openQueueConfigModal(resultElement, button);
 });
 
@@ -339,6 +350,96 @@ function syncQueueConfigModalUi() {
         queueConfigLyricsToggle.classList.toggle('cursor-not-allowed', !lyricsEnabled);
     }
     updateModalToggleAppearance(queueConfigLyricsToggle, modalLyricsEnabled, 'bg-secondary');
+
+    if (queueConfigLyricsPanel) {
+        queueConfigLyricsPanel.classList.toggle('hidden', !modalLyricsEnabled);
+    }
+
+    if (queueConfigLyricsSearchBtn) {
+        queueConfigLyricsSearchBtn.disabled = !modalLyricsEnabled || modalLyricsState === 'loading';
+        queueConfigLyricsSearchBtn.classList.toggle('opacity-60', !modalLyricsEnabled || modalLyricsState === 'loading');
+        queueConfigLyricsSearchBtn.classList.toggle('cursor-not-allowed', !modalLyricsEnabled || modalLyricsState === 'loading');
+    }
+
+    if (queueConfigLyricsUploadBtn) {
+        queueConfigLyricsUploadBtn.disabled = !modalLyricsEnabled;
+        queueConfigLyricsUploadBtn.classList.toggle('opacity-60', !modalLyricsEnabled);
+        queueConfigLyricsUploadBtn.classList.toggle('cursor-not-allowed', !modalLyricsEnabled);
+    }
+
+    if (queueConfigLyricsTitle) {
+        queueConfigLyricsTitle.disabled = !modalLyricsEnabled;
+    }
+    if (queueConfigLyricsArtist) {
+        queueConfigLyricsArtist.disabled = !modalLyricsEnabled;
+    }
+    if (queueConfigLyricsPreview) {
+        queueConfigLyricsPreview.disabled = !modalLyricsEnabled;
+    }
+    if (queueConfigLyricsTextarea) {
+        queueConfigLyricsTextarea.disabled = !modalLyricsEnabled;
+    }
+
+    syncLyricsStatusUi();
+    syncQueueConfirmState();
+}
+
+function getLyricsSubmissionText() {
+    const manualValue = queueConfigLyricsTextarea ? queueConfigLyricsTextarea.value.trim() : '';
+    const previewValue = queueConfigLyricsPreview ? queueConfigLyricsPreview.value.trim() : '';
+    return manualValue || previewValue;
+}
+
+function inferLyricsFormat(text) {
+    if (!text) return 'txt';
+    return /^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/m.test(text) ? 'lrc' : 'txt';
+}
+
+function syncLyricsStatusUi(detail = '') {
+    if (!queueConfigLyricsState) return;
+
+    const states = {
+        idle: { label: 'Idle', className: 'bg-on-surface/5 text-on-surface-variant' },
+        loading: { label: 'Searching', className: 'bg-primary/10 text-primary' },
+        resolved: { label: 'Resolved', className: 'bg-secondary/10 text-secondary' },
+        not_found: { label: 'Not found', className: 'bg-error/10 text-error' },
+        error: { label: 'Error', className: 'bg-error/10 text-error' },
+        manual: { label: 'Manual', className: 'bg-secondary/10 text-secondary' },
+    };
+    const state = states[modalLyricsState] || states.idle;
+    queueConfigLyricsState.textContent = state.label;
+    queueConfigLyricsState.className = `rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${state.className}`;
+
+    if (queueConfigLyricsProvider) {
+        if (modalLyricsProvider) {
+            queueConfigLyricsProvider.textContent = `${modalLyricsProvider}${modalLyricsSynced ? ' • synced' : ' • plain'}`;
+        } else {
+            queueConfigLyricsProvider.textContent = '';
+        }
+    }
+
+    if (queueConfigLyricsHelp && detail) {
+        queueConfigLyricsHelp.textContent = detail;
+    } else if (queueConfigLyricsHelp && modalLyricsState === 'not_found') {
+        queueConfigLyricsHelp.textContent = 'No lyrics were found. Paste your own synced lyrics or upload an LRC file.';
+    } else if (queueConfigLyricsHelp && modalLyricsState === 'error') {
+        queueConfigLyricsHelp.textContent = 'Lyrics search failed. Paste your own synced lyrics or upload an LRC file.';
+    } else if (queueConfigLyricsHelp && modalLyricsState === 'resolved') {
+        queueConfigLyricsHelp.textContent = modalLyricsSynced
+            ? 'Resolved synced lyrics are ready. You can still edit them before adding to the queue.'
+            : 'Resolved plain lyrics are ready. You can still replace them with synced lines before adding to the queue.';
+    }
+}
+
+function syncQueueConfirmState() {
+    if (!queueConfigConfirmBtn) return;
+
+    const lyricsRequired = modalLyricsEnabled;
+    const ready = !lyricsRequired || modalLyricsState === 'resolved' || modalLyricsState === 'not_found' || modalLyricsState === 'error' || Boolean(getLyricsSubmissionText());
+    const waiting = lyricsRequired && modalLyricsState === 'loading';
+    const disabled = waiting || (lyricsRequired && !ready);
+
+    queueConfigConfirmBtn.disabled = disabled;
 }
 
 async function openQueueConfigModal(resultElement, triggerButton) {
@@ -354,6 +455,11 @@ async function openQueueConfigModal(resultElement, triggerButton) {
 
     modalKaraokeEnabled = false;
     modalLyricsEnabled = false;
+    modalLyricsState = 'idle';
+    modalLyricsProvider = '';
+    modalLyricsSynced = false;
+    modalLyricsFormat = 'txt';
+    modalLyricsRequestId = 0;
 
     if (queueConfigSongTitle) queueConfigSongTitle.textContent = modalSelection.title || 'Unknown title';
     if (queueConfigSongChannel) queueConfigSongChannel.textContent = modalSelection.channel || '';
@@ -372,6 +478,10 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     queueConfigModal.classList.add('flex');
     document.body.classList.add('overflow-hidden');
 
+    if (queueConfigLyricsTitle) queueConfigLyricsTitle.value = modalSelection.title || '';
+    if (queueConfigLyricsArtist) queueConfigLyricsArtist.value = modalSelection.channel || '';
+    if (queueConfigLyricsPreview) queueConfigLyricsPreview.value = '';
+    if (queueConfigLyricsTextarea) queueConfigLyricsTextarea.value = '';
     syncQueueConfigModalUi();
     refreshDemucsHealth().then(() => {
         if (modalSelection) {
@@ -388,6 +498,10 @@ function closeQueueConfigModal() {
     modalSelection = null;
     modalKaraokeEnabled = false;
     modalLyricsEnabled = false;
+    modalLyricsState = 'idle';
+    modalLyricsProvider = '';
+    modalLyricsSynced = false;
+    modalLyricsFormat = 'txt';
 }
 
 function displaySearchResults(results) {
@@ -505,6 +619,120 @@ async function addToQueueDirect(resultElement, buttonElement) {
     });
 }
 
+async function resolveLyricsFromModal(trigger = 'manual') {
+    if (!modalSelection || !modalLyricsEnabled) return;
+    const title = queueConfigLyricsTitle ? queueConfigLyricsTitle.value.trim() : '';
+    const artist = queueConfigLyricsArtist ? queueConfigLyricsArtist.value.trim() : '';
+    if (!title) {
+        modalLyricsState = 'error';
+        syncLyricsStatusUi('Title is required before searching for lyrics.');
+        syncQueueConfirmState();
+        return;
+    }
+
+    const requestId = ++modalLyricsRequestId;
+    modalLyricsState = 'loading';
+    modalLyricsProvider = '';
+    modalLyricsSynced = false;
+    syncLyricsStatusUi('Searching lyrics providers...');
+    syncQueueConfirmState();
+
+    const payload = {
+        title,
+    };
+    if (artist) {
+        payload.artist = artist;
+    }
+    if (trigger === 'auto' && modalSelection.title) {
+        payload.youtube_title = modalSelection.title;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/lyrics/resolve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            throw new Error((await response.json()).detail || 'Lyrics search failed');
+        }
+
+        const result = await response.json();
+        if (requestId !== modalLyricsRequestId) return;
+
+        modalLyricsState = result.status;
+        modalLyricsProvider = result.provider || '';
+        modalLyricsSynced = Boolean(result.is_synced);
+        modalLyricsFormat = modalLyricsSynced ? 'lrc' : 'txt';
+
+        if (queueConfigLyricsTitle && result.title) {
+            queueConfigLyricsTitle.value = result.title;
+        }
+        if (queueConfigLyricsArtist && result.artist) {
+            queueConfigLyricsArtist.value = result.artist;
+        }
+        if (queueConfigLyricsPreview) {
+            queueConfigLyricsPreview.value = result.lyrics || '';
+        }
+        if (queueConfigLyricsTextarea && (!queueConfigLyricsTextarea.value.trim() || trigger === 'auto')) {
+            queueConfigLyricsTextarea.value = result.lyrics || '';
+        }
+
+        if (result.status === 'resolved') {
+            syncLyricsStatusUi(result.is_synced ? 'Synced lyrics resolved.' : 'Plain lyrics resolved.');
+        } else {
+            syncLyricsStatusUi(result.detail || 'Lyrics not found.');
+        }
+        syncQueueConfirmState();
+    } catch (error) {
+        if (requestId !== modalLyricsRequestId) return;
+        modalLyricsState = 'error';
+        modalLyricsProvider = '';
+        modalLyricsSynced = false;
+        syncLyricsStatusUi(error.message || 'Lyrics search failed.');
+        syncQueueConfirmState();
+    }
+}
+
+function handleLyricsTextChange() {
+    if (!modalLyricsEnabled) return;
+    const hasText = Boolean(getLyricsSubmissionText());
+    if (hasText) {
+        modalLyricsState = 'manual';
+        syncLyricsStatusUi('Manual lyrics ready.');
+    } else if (modalLyricsState === 'manual' && !queueConfigLyricsPreview?.value.trim()) {
+        modalLyricsState = 'idle';
+        syncLyricsStatusUi('Search or upload lyrics to continue.');
+    }
+    syncQueueConfirmState();
+}
+
+function triggerLyricsUpload() {
+    if (queueConfigLyricsFile && !queueConfigLyricsFile.disabled) {
+        queueConfigLyricsFile.click();
+    }
+}
+
+async function loadLyricsUpload(file) {
+    if (!file) return;
+    const text = await file.text();
+    if (queueConfigLyricsTextarea) {
+        queueConfigLyricsTextarea.value = text.trim();
+    }
+    if (queueConfigLyricsPreview) {
+        queueConfigLyricsPreview.value = text.trim();
+    }
+    modalLyricsFormat = file.name.toLowerCase().endsWith('.lrc') ? 'lrc' : 'txt';
+    modalLyricsState = 'manual';
+    modalLyricsProvider = `upload:${file.name}`;
+    modalLyricsSynced = modalLyricsFormat === 'lrc';
+    syncLyricsStatusUi('Uploaded lyrics ready.');
+    syncQueueConfirmState();
+}
+
 async function submitQueueItem(selection, buttonElement, options = {}) {
     const source = selection?.source || 'youtube';
     const videoId = selection?.videoId || null;
@@ -513,6 +741,8 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
     const channel = selection?.channel || '';
     const isKaraoke = Boolean(options.isKaraoke);
     const burnLyrics = Boolean(options.burnLyrics && isKaraoke);
+    const lyricsText = getLyricsSubmissionText();
+    const lyricsFormat = lyricsText ? inferLyricsFormat(lyricsText) : null;
     const button = buttonElement || queueConfigConfirmBtn;
     if (!button) {
         throw new Error('Missing add-to-queue trigger button');
@@ -533,6 +763,10 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
             is_karaoke: isKaraoke,
             burn_lyrics: burnLyrics,
         };
+        if (isKaraoke && burnLyrics && lyricsText) {
+            payload.lyrics_text = lyricsText;
+            payload.lyrics_format = lyricsFormat || modalLyricsFormat || inferLyricsFormat(lyricsText);
+        }
         if (source === 'local' && mediaItemId) {
             payload.media_item_id = Number(mediaItemId);
         } else if (videoId) {
@@ -608,7 +842,64 @@ if (queueConfigLyricsToggle) {
     queueConfigLyricsToggle.addEventListener('click', () => {
         if (queueConfigLyricsToggle.disabled) return;
         modalLyricsEnabled = !modalLyricsEnabled;
+        if (!modalLyricsEnabled) {
+            modalLyricsState = 'idle';
+            modalLyricsProvider = '';
+            modalLyricsSynced = false;
+        } else if (modalSelection) {
+            resolveLyricsFromModal('auto');
+        }
         syncQueueConfigModalUi();
+    });
+}
+
+if (queueConfigLyricsSearchBtn) {
+    queueConfigLyricsSearchBtn.addEventListener('click', async () => {
+        await resolveLyricsFromModal('manual');
+    });
+}
+
+if (queueConfigLyricsUploadBtn) {
+    queueConfigLyricsUploadBtn.addEventListener('click', triggerLyricsUpload);
+}
+
+if (queueConfigLyricsFile) {
+    queueConfigLyricsFile.addEventListener('change', async () => {
+        const file = queueConfigLyricsFile.files && queueConfigLyricsFile.files[0];
+        if (file) {
+            await loadLyricsUpload(file);
+        }
+        queueConfigLyricsFile.value = '';
+    });
+}
+
+if (queueConfigLyricsTextarea) {
+    queueConfigLyricsTextarea.addEventListener('input', handleLyricsTextChange);
+}
+
+if (queueConfigLyricsTitle) {
+    queueConfigLyricsTitle.addEventListener('input', () => {
+        if (modalLyricsEnabled && !getLyricsSubmissionText() && (modalLyricsState === 'resolved' || modalLyricsState === 'not_found')) {
+            modalLyricsState = 'idle';
+            modalLyricsProvider = '';
+            modalLyricsSynced = false;
+            if (queueConfigLyricsPreview) queueConfigLyricsPreview.value = '';
+            syncLyricsStatusUi('Search again with the updated title.');
+        }
+        syncQueueConfirmState();
+    });
+}
+
+if (queueConfigLyricsArtist) {
+    queueConfigLyricsArtist.addEventListener('input', () => {
+        if (modalLyricsEnabled && !getLyricsSubmissionText() && (modalLyricsState === 'resolved' || modalLyricsState === 'not_found')) {
+            modalLyricsState = 'idle';
+            modalLyricsProvider = '';
+            modalLyricsSynced = false;
+            if (queueConfigLyricsPreview) queueConfigLyricsPreview.value = '';
+            syncLyricsStatusUi('Search again with the updated artist.');
+        }
+        syncQueueConfirmState();
     });
 }
 

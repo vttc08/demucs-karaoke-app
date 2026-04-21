@@ -112,15 +112,40 @@ class QueueItemCreate(BaseModel):
     artist: Optional[str] = None
     is_karaoke: bool = False
     burn_lyrics: bool = True
+    lyrics_text: Optional[str] = None
+    lyrics_format: Optional[Literal["lrc", "txt"]] = None
 
     @model_validator(mode="after")
     def validate_source(self):
         """Require at least one media source identifier."""
         if isinstance(self.youtube_id, str):
             self.youtube_id = self.youtube_id.strip() or None
+        if isinstance(self.lyrics_text, str):
+            self.lyrics_text = self.lyrics_text.strip() or None
         if self.youtube_id is None and self.media_item_id is None:
             raise ValueError("Either youtube_id or media_item_id is required")
         return self
+
+
+class LyricsResolveRequest(BaseModel):
+    """Request to resolve lyrics for queue configuration."""
+
+    title: str
+    artist: Optional[str] = None
+    youtube_title: Optional[str] = None
+
+
+class LyricsResolveResponse(BaseModel):
+    """Lyrics resolution result for the queue UI."""
+
+    status: Literal["resolved", "not_found"]
+    title: str
+    artist: Optional[str] = None
+    source: str
+    provider: Optional[str] = None
+    lyrics: Optional[str] = None
+    is_synced: bool = False
+    detail: Optional[str] = None
 
 
 class QueueItemResponse(BaseModel):

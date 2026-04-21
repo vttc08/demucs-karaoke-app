@@ -218,18 +218,29 @@ class KaraokeService:
 
         output_path = settings.cache_path / f"{item.media.youtube_id}_karaoke.mp4"
         if item.requested_burn_lyrics:
-            lyrics_payload = await self.lyrics_service.resolve_lyrics(
-                title=item.media.title,
-                artist=item.media.artist,
-                youtube_title=item.media.title,
-            )
-            lyrics = lyrics_payload.lyrics if lyrics_payload else None
-            if lyrics and lyrics_payload and lyrics_payload.is_synced:
-                lyrics_dir = settings.cache_path / "lyrics"
-                lyrics_dir.mkdir(parents=True, exist_ok=True)
-                lyrics_path = lyrics_dir / f"{item.media.youtube_id}.lrc"
-                lyrics_path.write_text(lyrics, encoding="utf-8")
-                self.queue_service.set_lyrics_path(db, item.id, str(lyrics_path))
+            lyrics_path = self._existing_local_file(item.media.lyrics_path)
+            lyrics = None
+            if lyrics_path:
+                lyrics = lyrics_path.read_text(encoding="utf-8")
+                logger.info(
+                    "Using existing lyrics sidecar item_id=%s lyrics=%s",
+                    item.id,
+                    lyrics_path,
+                )
+            else:
+                lyrics_payload = await self.lyrics_service.resolve_lyrics(
+                    title=item.media.title,
+                    artist=item.media.artist,
+                    youtube_title=item.media.title,
+                )
+                lyrics = lyrics_payload.lyrics if lyrics_payload else None
+                if lyrics and lyrics_payload:
+                    lyrics_dir = settings.cache_path / "lyrics"
+                    lyrics_dir.mkdir(parents=True, exist_ok=True)
+                    suffix = ".lrc" if lyrics_payload.is_synced else ".txt"
+                    lyrics_path = lyrics_dir / f"{item.media.youtube_id}{suffix}"
+                    lyrics_path.write_text(lyrics, encoding="utf-8")
+                    self.queue_service.set_lyrics_path(db, item.id, str(lyrics_path))
             await asyncio.to_thread(
                 self.ffmpeg.burn_subtitles,
                 video_path=video_path,

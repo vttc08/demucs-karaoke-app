@@ -1,5 +1,6 @@
 """Tests for service layer."""
 import asyncio
+import logging
 import pytest
 import httpx
 import zipfile
@@ -17,6 +18,7 @@ from config import EXPLICIT_SETTINGS_FIELDS, settings
 from models import (
     Base,
     DemucsHealthResponse,
+    DemucsResponse,
     MediaItem,
     QueueItem,
     QueueItemCreate,
@@ -123,6 +125,43 @@ def test_queue_service_response_includes_vocals_sidecar(db_session):
 
     assert created.vocals_path == "/media/sidecar001.vocals.mp3"
     assert created.lyrics_path == "/media/sidecar001.lrc"
+
+
+def test_queue_service_persists_lyrics_sidecar_from_queue_payload(db_session, tmp_path):
+    """Lyrics text in the queue payload should be written to a reusable sidecar."""
+    original_cache = settings.cache_path
+    try:
+        settings.cache_path = tmp_path / "cache"
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        media = MediaItem(
+            youtube_id="lyrics001",
+            title="Lyrics Song",
+            artist="Singer",
+            media_path="/media/lyrics001.mp4",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.flush()
+
+        service = QueueService()
+        created = service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id="lyrics001",
+                title="Lyrics Song",
+                artist="Singer",
+                is_karaoke=True,
+                burn_lyrics=True,
+                lyrics_text="[00:01.00]Hello lyrics",
+            ),
+        )
+
+        assert created.lyrics_path == "/cache/lyrics/lyrics001.lrc"
+        lyrics_file = settings.cache_path / "lyrics" / "lyrics001.lrc"
+        assert lyrics_file.read_text(encoding="utf-8") == "[00:01.00]Hello lyrics"
+    finally:
+        settings.cache_path = original_cache
 
 
 def test_queue_service_repairs_swapped_vocals_and_infers_sidecar(db_session, tmp_path):
@@ -611,6 +650,75 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session)
     assert updated_item.status == QueueStatus.READY
     assert updated_item.media is not None
     assert updated_item.media.media_path == "/media/plain123.mp4"
+
+
+@pytest.mark.asyncio
+async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(db_session, tmp_path):
+    """Karaoke processing should reuse a saved lyrics sidecar instead of re-resolving lyrics."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "karaoke-ready.mp4"
+        lyrics_file = settings.cache_path / "lyrics" / "karaoke-ready.lrc"
+        lyrics_file.parent.mkdir(parents=True, exist_ok=True)
+        media_file.write_text("video", encoding="utf-8")
+        lyrics_file.write_text("[00:01.00]Existing lyrics", encoding="utf-8")
+
+        queue_service = QueueService()
+        item = queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id="karaoke-ready",
+                title="Karaoke Ready",
+                artist="Singer",
+                is_karaoke=True,
+                burn_lyrics=True,
+                lyrics_text="[00:01.00]Existing lyrics",
+            ),
+        )
+
+        service = KaraokeService()
+        service.youtube_service = Mock()
+        service.queue_service = queue_service
+        service.demucs_client = Mock()
+        service.ffmpeg = Mock()
+
+        service.demucs_client.health_check.return_value = DemucsHealthResponse(
+            api_url="http://demucs",
+            healthy=True,
+            detail="ok",
+        )
+        service.ffmpeg.extract_audio.return_value = settings.cache_path / "audio" / "karaoke-ready.wav"
+        no_vocals_path = settings.cache_path / "stem" / "karaoke-ready.no_vocals.wav"
+        vocals_path = settings.cache_path / "stem" / "karaoke-ready.vocals.wav"
+        no_vocals_path.parent.mkdir(parents=True, exist_ok=True)
+        no_vocals_path.write_text("no vocals", encoding="utf-8")
+        vocals_path.write_text("vocals", encoding="utf-8")
+        service.demucs_client.separate_vocals = AsyncMock(
+            return_value=DemucsResponse(
+                no_vocals_path=str(no_vocals_path),
+                vocals_path=str(vocals_path),
+            )
+        )
+        service.ffmpeg.burn_subtitles.return_value = None
+
+        with patch.object(service.lyrics_service, "resolve_lyrics", new=AsyncMock()) as resolve_mock:
+            await service.process_queue_item(db_session, item.id)
+            resolve_mock.assert_not_called()
+
+        updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
+        assert updated_item is not None
+        assert updated_item.status == QueueStatus.READY
+        assert updated_item.media is not None
+        assert updated_item.media.lyrics_path == "/cache/lyrics/karaoke-ready.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
 
 
 @pytest.mark.asyncio
@@ -1136,6 +1244,35 @@ async def test_lyrics_service_provider_fallback_uses_lrclib_after_musixmatch_mis
     assert payload.provider == "lrclib"
     assert musix.calls == 1
     assert lrclib.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_lyrics_service_debug_logs_search_and_not_found(caplog):
+    """Debug logs should describe the title inference and provider lookup."""
+    from services import lyrics_service as ls_module
+
+    inferred = ls_module.InferredSong(title="Clean Song", artist="Clean Artist", source="regex")
+
+    class FakeInferrer:
+        async def infer(self, title: str, artist: str | None = None):
+            return inferred
+
+    class FakeProvider:
+        name = "lrclib"
+
+        async def fetch(self, inferred_song):
+            return None
+
+    service = LyricsService(metadata_inferrer=FakeInferrer(), providers=[FakeProvider()])
+
+    caplog.set_level(logging.DEBUG)
+    payload = await service.resolve_lyrics(title="Raw Song", artist="Raw Artist", youtube_title="YouTube Song")
+
+    assert payload is None
+    messages = "\n".join(record.message for record in caplog.records)
+    assert "Got YouTube title='YouTube Song'" in messages
+    assert "Searching provider=lrclib" in messages
+    assert "lyrics not found" in messages
 
 
 @pytest.mark.asyncio

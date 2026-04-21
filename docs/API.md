@@ -120,7 +120,9 @@ POST /api/queue/
   "title": "Song Title",
   "artist": "Artist Name",
   "is_karaoke": true,
-  "burn_lyrics": true
+  "burn_lyrics": true,
+  "lyrics_text": "[00:01.00]Line 1",
+  "lyrics_format": "lrc"
 }
 ```
 
@@ -131,6 +133,7 @@ Queue payload can identify the target with either:
 `burn_lyrics` is optional and only applies when `is_karaoke` is true.
 If omitted, it defaults to `true`. For non-karaoke items, it is normalized to `false`.
 If the `youtube_id` already exists in `media_items` with a usable local media file, the queue item is created against that existing media row and processing reuses the stored file instead of re-downloading the video again.
+When `lyrics_text` is supplied for karaoke items, the app persists it as a reusable lyrics sidecar under the cache directory so karaoke processing can skip a second lookup. `lyrics_format` is optional; if omitted, the app infers `.lrc` when timestamped lines are present and `.txt` otherwise.
 
 **Response:**
 ```json
@@ -151,6 +154,40 @@ If the `youtube_id` already exists in `media_items` with a usable local media fi
   "created_at": "2024-01-01T00:00:00"
 }
 ```
+
+---
+
+### Resolve Lyrics
+```
+POST /api/lyrics/resolve
+```
+
+Resolve provider lyrics for the add-to-queue modal.
+
+**Request Body:**
+```json
+{
+  "title": "Song Title",
+  "artist": "Artist Name",
+  "youtube_title": "YouTube Style Title"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "resolved",
+  "title": "Song Title",
+  "artist": "Artist Name",
+  "source": "regex",
+  "provider": "lrclib",
+  "lyrics": "[00:01.00]Line 1",
+  "is_synced": true,
+  "detail": null
+}
+```
+
+When no provider returns lyrics, the response still returns inferred metadata with `status: "not_found"` so the UI can fall back to manual lyrics entry.
 
 ---
 

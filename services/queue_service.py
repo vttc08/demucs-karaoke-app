@@ -1,5 +1,6 @@
 """Queue service for managing the karaoke queue."""
 import logging
+import re
 from pathlib import Path
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -61,6 +62,12 @@ class QueueService:
             media_item.title = item.title
         if not media_item.artist and item.artist:
             media_item.artist = item.artist
+        if (
+            item.is_karaoke
+            and item.burn_lyrics
+            and item.lyrics_text
+        ):
+            self._store_lyrics_sidecar(media_item, item)
 
         db_item = QueueItem(
             media_id=media_item.id,
@@ -330,6 +337,41 @@ class QueueService:
             except ValueError:
                 logger.warning("Skipping non-local vocals path item_id=%s path=%s", item_id, vocals_path)
             db.commit()
+
+    def _store_lyrics_sidecar(self, media_item: MediaItem, item: QueueItemCreate) -> None:
+        """Persist lyrics text as a sidecar so karaoke processing can reuse it."""
+        lyrics_text = (item.lyrics_text or "").strip()
+        if not lyrics_text:
+            return
+
+        suffix = self._lyrics_suffix(lyrics_text, item.lyrics_format)
+        stem = media_item.youtube_id or self._sanitize_sidecar_stem(media_item.title)
+        lyrics_dir = settings.cache_path / "lyrics"
+        lyrics_dir.mkdir(parents=True, exist_ok=True)
+        lyrics_path = lyrics_dir / f"{stem}{suffix}"
+        lyrics_path.write_text(lyrics_text, encoding="utf-8")
+        media_item.lyrics_path = self.build_media_url(lyrics_path)
+        logger.debug(
+            "Stored lyrics sidecar title=%r path=%s format=%s",
+            media_item.title,
+            lyrics_path,
+            suffix,
+        )
+
+    @staticmethod
+    def _sanitize_sidecar_stem(value: str) -> str:
+        cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", value).strip("-")
+        return cleaned or "lyrics"
+
+    @staticmethod
+    def _lyrics_suffix(lyrics_text: str, requested_format: str | None) -> str:
+        if requested_format == "lrc":
+            return ".lrc"
+        if requested_format == "txt":
+            return ".txt"
+        if re.search(r"^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]", lyrics_text, re.MULTILINE):
+            return ".lrc"
+        return ".txt"
 
     def append_to_end(self, db: Session) -> int:
         """Return a sparse position value at queue tail."""

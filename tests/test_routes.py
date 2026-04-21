@@ -1,7 +1,7 @@
 """Tests for API routes."""
 import pytest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -15,6 +15,7 @@ from models import (
     QueueStatus,
     RuntimeSetting,
 )
+from services import lyrics_service as lyrics_service_module
 from config import settings
 
 # Test database
@@ -242,6 +243,82 @@ def test_add_to_queue_non_karaoke_forces_burn_lyrics_false(client):
     assert data["burn_lyrics"] is False
 
 
+def test_add_to_queue_persists_inline_lyrics_sidecar(client):
+    """Queue add should persist inline lyrics so karaoke processing can reuse them."""
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "queue-lyrics-1",
+            "title": "Queue Lyrics",
+            "artist": "Singer",
+            "is_karaoke": True,
+            "burn_lyrics": True,
+            "lyrics_text": "[00:01.00]Lyrics line",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["lyrics_path"] == "/cache/lyrics/queue-lyrics-1.lrc"
+
+
+@pytest.mark.asyncio
+async def test_resolve_lyrics_route_returns_payload(client):
+    """Lyrics resolve route should surface provider lyrics and inferred metadata."""
+    from routes import lyrics as lyrics_routes
+
+    payload = lyrics_service_module.LyricsPayload(
+        lyrics="[00:01.00]Resolved line",
+        is_synced=True,
+        provider="lrclib",
+        inferred_song=lyrics_service_module.InferredSong(
+            title="Resolved Song",
+            artist="Resolved Artist",
+            source="regex",
+        ),
+    )
+    with patch.object(lyrics_routes.lyrics_service, "resolve_lyrics", new=AsyncMock(return_value=payload)):
+        response = client.post(
+            "/api/lyrics/resolve",
+            json={"title": "Resolved Song", "artist": "Resolved Artist"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "resolved"
+    assert data["provider"] == "lrclib"
+    assert data["lyrics"] == "[00:01.00]Resolved line"
+    assert data["is_synced"] is True
+
+
+@pytest.mark.asyncio
+async def test_resolve_lyrics_route_returns_not_found(client):
+    """Lyrics resolve route should still return inferred metadata when providers miss."""
+    from routes import lyrics as lyrics_routes
+
+    with patch.object(lyrics_routes.lyrics_service, "resolve_lyrics", new=AsyncMock(return_value=None)):
+        with patch.object(
+            lyrics_routes.lyrics_service,
+            "infer_song_metadata",
+            new=AsyncMock(
+                return_value=lyrics_service_module.InferredSong(
+                    title="Inferred Song",
+                    artist="Inferred Artist",
+                    source="regex",
+                )
+            ),
+        ):
+            response = client.post(
+                "/api/lyrics/resolve",
+                json={"title": "Raw Song Title", "artist": "Raw Artist"},
+            )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "not_found"
+    assert data["title"] == "Inferred Song"
+    assert data["artist"] == "Inferred Artist"
+
+
 def test_add_to_queue_with_media_item_id(client):
     """Queue endpoint should enqueue existing local media by media_item_id."""
     with TestingSessionLocal() as db:
@@ -358,6 +435,13 @@ def test_media_management_page_loads(client):
     assert response.status_code == 200
     assert b"Media Library" in response.content
     assert b"Manage Existing Media" in response.content
+
+
+def test_access_restricted_page_loads(client):
+    """Test access restricted page renders."""
+    response = client.get("/access-restricted")
+    assert response.status_code == 200
+    assert b"Access restricted" in response.content
 
 
 def test_get_runtime_settings(client):
