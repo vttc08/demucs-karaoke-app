@@ -12,7 +12,7 @@ def test_download_audio_uses_direct_audio_format_without_extract(monkeypatch, tm
     """Audio download should avoid yt-dlp postprocessing to not require local ffmpeg."""
     adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
     youtube_id = "abc123"
-    expected_output = tmp_path / f"{youtube_id}.m4a"
+    expected_output = tmp_path / f"{youtube_id}.audio.m4a"
     expected_output.write_bytes(b"audio")
 
     captured_cmd = {}
@@ -107,7 +107,7 @@ def test_download_audio_default_fallback_can_return_mp4(monkeypatch, tmp_path):
     """Audio fallback should accept container outputs when yt-dlp default picks mp4."""
     adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
     youtube_id = "aud123"
-    expected_output = tmp_path / f"{youtube_id}.mp4"
+    expected_output = tmp_path / f"{youtube_id}.audio.mp4"
     calls = []
 
     def fake_run(cmd, check, capture_output, timeout):
@@ -153,7 +153,7 @@ def test_download_includes_proxy_when_configured(monkeypatch, tmp_path):
     """Download command should include --proxy when ytdlp_proxy_url is set."""
     adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
     youtube_id = "proxydl123"
-    expected_output = tmp_path / f"{youtube_id}.m4a"
+    expected_output = tmp_path / f"{youtube_id}.audio.m4a"
     expected_output.write_bytes(b"audio")
     original_proxy = settings.ytdlp_proxy_url
     settings.ytdlp_proxy_url = "http://127.0.0.1:3128"

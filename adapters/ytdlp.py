@@ -198,7 +198,8 @@ class YtDlpAdapter:
         Raises:
             RuntimeError: If download fails
         """
-        output_template = str(output_dir / f"{youtube_id}.%(ext)s")
+        output_stem = f"{youtube_id}.audio"
+        output_template = str(output_dir / f"{output_stem}.%(ext)s")
         attempts = [
             ("bestaudio[ext=m4a]/bestaudio/best", "web", False, True),
             ("bestaudio/best", "web", False, True),
@@ -208,6 +209,7 @@ class YtDlpAdapter:
             youtube_id=youtube_id,
             output_dir=output_dir,
             output_template=output_template,
+            output_stem=output_stem,
             attempts=attempts,
             extensions=[".wav", ".m4a", ".webm", ".mp3", ".opus", ".mp4", ".mkv"],
             media_type="audio",
@@ -239,6 +241,7 @@ class YtDlpAdapter:
             youtube_id=youtube_id,
             output_dir=output_dir,
             output_template=output_template,
+            output_stem=youtube_id,
             attempts=attempts,
             extensions=[".mp4", ".mkv", ".webm"],
             media_type="video",
@@ -268,6 +271,7 @@ class YtDlpAdapter:
             youtube_id=youtube_id,
             output_dir=output_dir,
             output_template=output_template,
+            output_stem=youtube_id,
             attempts=attempts,
             extensions=[".mp4", ".mkv", ".webm"],
             media_type="progressive video+audio",
@@ -278,6 +282,7 @@ class YtDlpAdapter:
         youtube_id: str,
         output_dir: Path,
         output_template: str,
+        output_stem: str,
         attempts: Iterable[Tuple[Optional[str], Optional[str], bool, bool]],
         extensions: List[str],
         media_type: str,
@@ -306,7 +311,7 @@ class YtDlpAdapter:
 
             try:
                 subprocess.run(cmd, check=True, capture_output=True, timeout=300)
-                output_path = self._find_downloaded_file(output_dir, youtube_id, extensions)
+                output_path = self._find_downloaded_file(output_dir, output_stem, extensions)
                 if not output_path.exists():
                     last_error = f"file not found: {output_path}"
                     logger.warning(
@@ -362,18 +367,18 @@ class YtDlpAdapter:
         )
         raise RuntimeError(f"Download failed: {last_error}")
 
-    def _find_downloaded_file(self, output_dir: Path, youtube_id: str, extensions: List[str]) -> Path:
+    def _find_downloaded_file(self, output_dir: Path, output_stem: str, extensions: List[str]) -> Path:
         """
         Find downloaded file, supporting yt-dlp's format-suffixed output names.
         """
-        exact_candidates = [output_dir / f"{youtube_id}{ext}" for ext in extensions]
+        exact_candidates = [output_dir / f"{output_stem}{ext}" for ext in extensions]
         for candidate in exact_candidates:
             if candidate.exists():
                 return candidate
 
-        # yt-dlp can produce names like <id>.f299.mp4 when streams are not merged.
+        # yt-dlp can produce names like <stem>.f299.mp4 when streams are not merged.
         for ext in extensions:
-            matches = sorted(output_dir.glob(f"{youtube_id}*{ext}"))
+            matches = sorted(output_dir.glob(f"{output_stem}*{ext}"))
             if matches:
                 return matches[0]
 
