@@ -39,6 +39,33 @@ def test_configure_logging_sets_console_and_rotating_file_handlers(tmp_path):
         lc._LOGGING_CONFIGURED = False
 
 
+def test_configure_logging_emits_debug_messages_when_enabled(tmp_path):
+    """DEBUG level should allow debug records to reach the file log."""
+    original_log_dir = settings.log_dir
+    original_file_name = settings.log_file_name
+    original_level = settings.log_level
+    try:
+        settings.log_dir = tmp_path
+        settings.log_file_name = "debug-enabled.log"
+        settings.log_level = "DEBUG"
+        lc._LOGGING_CONFIGURED = False
+
+        lc.configure_logging()
+        logger = logging.getLogger("karaoke.debug.test")
+        logger.debug("debug message from test")
+
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+
+        assert "debug message from test" in (tmp_path / "debug-enabled.log").read_text()
+        assert logger.isEnabledFor(logging.DEBUG)
+    finally:
+        settings.log_dir = original_log_dir
+        settings.log_file_name = original_file_name
+        settings.log_level = original_level
+        lc._LOGGING_CONFIGURED = False
+
+
 def test_configure_logging_falls_back_to_info_for_invalid_level(tmp_path):
     """Invalid LOG_LEVEL should fall back to INFO."""
     original_log_dir = settings.log_dir
@@ -95,3 +122,19 @@ def test_configure_logging_quiets_watchfiles_noise():
     lc.configure_logging()
     assert logging.getLogger("watchfiles.main").level == logging.WARNING
     lc._LOGGING_CONFIGURED = False
+
+
+def test_configure_logging_quiets_httpx_and_httpcore_debug_noise():
+    """httpx/httpcore should be quiet so app debug logs remain readable."""
+    original_level = settings.log_level
+    try:
+        settings.log_level = "DEBUG"
+        lc._LOGGING_CONFIGURED = False
+        lc.configure_logging()
+
+        assert logging.getLogger("httpx").level == logging.WARNING
+        assert logging.getLogger("httpcore").level == logging.WARNING
+        assert logging.getLogger("httpcore.http11").isEnabledFor(logging.DEBUG) is False
+    finally:
+        settings.log_level = original_level
+        lc._LOGGING_CONFIGURED = False

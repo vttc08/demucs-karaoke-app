@@ -62,6 +62,12 @@ def configure_logging() -> None:
         uvicorn_logger.propagate = True
         uvicorn_logger.handlers.clear()
 
+    # Keep dependency internals quiet so application debug logs stay readable.
+    for logger_name in ("httpx", "httpcore"):
+        dependency_logger = logging.getLogger(logger_name)
+        dependency_logger.setLevel(logging.WARNING)
+        dependency_logger.propagate = True
+
     # watchfiles can emit high-frequency "N changes detected" logs during reload.
     # Keep reload notices from uvicorn, but suppress watchfiles internal chatter.
     logging.getLogger("watchfiles.main").setLevel(logging.WARNING)
