@@ -57,14 +57,13 @@ def test_queue_service_add_to_queue(db_session):
         title="Test Song",
         artist="Test Artist",
         is_karaoke=True,
-        burn_lyrics=True,
     )
 
     result = service.add_to_queue(db_session, item)
 
     assert result.youtube_id == "test123"
     assert result.title == "Test Song"
-    assert result.burn_lyrics is True
+    assert result.is_karaoke is True
     assert result.status == QueueStatus.PENDING
 
 
@@ -80,10 +79,10 @@ def test_queue_service_get_queue(db_session):
 
     # Add items
     item1 = QueueItemCreate(
-        youtube_id="test1", title="Song 1", is_karaoke=False, burn_lyrics=True
+        youtube_id="test1", title="Song 1", is_karaoke=False
     )
     item2 = QueueItemCreate(
-        youtube_id="test2", title="Song 2", is_karaoke=True, burn_lyrics=True
+        youtube_id="test2", title="Song 2", is_karaoke=True
     )
     service.add_to_queue(db_session, item1)
     service.add_to_queue(db_session, item2)
@@ -93,9 +92,9 @@ def test_queue_service_get_queue(db_session):
 
     assert len(queue) == 2
     assert queue[0].title == "Song 1"
-    assert queue[0].burn_lyrics is False
+    assert queue[0].is_karaoke is False
     assert queue[1].title == "Song 2"
-    assert queue[1].burn_lyrics is True
+    assert queue[1].is_karaoke is True
 
 
 def test_queue_service_response_includes_vocals_sidecar(db_session):
@@ -152,7 +151,6 @@ def test_queue_service_persists_lyrics_sidecar_from_queue_payload(db_session, tm
                 title="Lyrics Song",
                 artist="Singer",
                 is_karaoke=True,
-                burn_lyrics=True,
                 lyrics_text="[00:01.00]Hello lyrics",
             ),
         )
@@ -211,7 +209,7 @@ def test_queue_service_update_status(db_session):
     """Test updating item status."""
     service = QueueService()
     item = QueueItemCreate(
-        youtube_id="test123", title="Test Song", is_karaoke=False, burn_lyrics=True
+        youtube_id="test123", title="Test Song", is_karaoke=False
     )
     result = service.add_to_queue(db_session, item)
 
@@ -630,7 +628,6 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session)
             youtube_id="plain123",
             title="Plain Song",
             is_karaoke=False,
-            burn_lyrics=False,
         ),
     )
 
@@ -654,7 +651,7 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session)
 
 @pytest.mark.asyncio
 async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(db_session, tmp_path):
-    """Karaoke processing should reuse a saved lyrics sidecar instead of re-resolving lyrics."""
+    """Karaoke processing should preserve an existing saved lyrics sidecar."""
     original_media = settings.media_path
     original_cache = settings.cache_path
     try:
@@ -677,7 +674,6 @@ async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(d
                 title="Karaoke Ready",
                 artist="Singer",
                 is_karaoke=True,
-                burn_lyrics=True,
                 lyrics_text="[00:01.00]Existing lyrics",
             ),
         )
@@ -705,11 +701,8 @@ async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(d
                 vocals_path=str(vocals_path),
             )
         )
-        service.ffmpeg.burn_subtitles.return_value = None
-
-        with patch.object(service.lyrics_service, "resolve_lyrics", new=AsyncMock()) as resolve_mock:
-            await service.process_queue_item(db_session, item.id)
-            resolve_mock.assert_not_called()
+        service.ffmpeg.combine_audio_video.return_value = None
+        await service.process_queue_item(db_session, item.id)
 
         updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
         assert updated_item is not None
@@ -1574,7 +1567,7 @@ def test_netease_provider_prefers_cjk_candidate_and_rejects_low_confidence():
 
 @pytest.mark.asyncio
 async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_path):
-    """Karaoke processing without burn_lyrics should remux instead of burning."""
+    """Karaoke processing should remux final output instead of burning subtitles."""
     queue_service = QueueService()
     item = queue_service.add_to_queue(
         db_session,
@@ -1582,14 +1575,12 @@ async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_p
             youtube_id="kara123",
             title="Kara Song",
             is_karaoke=True,
-            burn_lyrics=False,
         ),
     )
 
     service = KaraokeService()
     service.queue_service = queue_service
     service.youtube_service = Mock()
-    service.lyrics_service = Mock()
     service.demucs_client = Mock()
     service.ffmpeg = Mock()
     service.youtube_service.download_video.return_value = Path("/tmp/video.mp4")
@@ -1610,7 +1601,6 @@ async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_p
         settings.cache_path = original_cache
 
     service.ffmpeg.combine_audio_video.assert_called_once()
-    service.ffmpeg.burn_subtitles.assert_not_called()
     updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
     assert updated_item is not None
     assert updated_item.media.vocals_path == "/cache/kara123.vocals.wav"
@@ -1703,6 +1693,82 @@ async def test_karaoke_service_reuses_existing_karaoke_media_without_redownload(
 
 
 @pytest.mark.asyncio
+async def test_karaoke_service_retries_demucs_with_downloaded_audio_after_500(
+    db_session, tmp_path
+):
+    """Retry Demucs once with yt-dlp audio when extracted local audio fails with HTTP 500."""
+    service = KaraokeService()
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+        (settings.media_path / "retry001.mp4").write_text("video", encoding="utf-8")
+
+        db_session.add(
+            MediaItem(
+                youtube_id="retry001",
+                title="Retry Song",
+                artist="Singer",
+                media_path="/media/retry001.mp4",
+                missing=False,
+            )
+        )
+        db_session.flush()
+
+        item = service.queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(youtube_id="retry001", title="Retry Song", is_karaoke=True),
+        )
+
+        service.youtube_service = Mock()
+        service.ffmpeg = Mock()
+        service.demucs_client = Mock()
+        service.demucs_client.health_check.return_value = DemucsHealthResponse(
+            api_url="http://demucs",
+            healthy=True,
+            detail="ok",
+        )
+
+        extracted_audio = settings.cache_path / "audio" / "retry001.m4a"
+        fallback_audio = settings.media_path / "retry001.m4a"
+        service.ffmpeg.extract_audio.return_value = extracted_audio
+        service.youtube_service.download_audio.return_value = fallback_audio
+
+        no_vocals_file = settings.cache_path / "stem" / "retry001.no_vocals.wav"
+        vocals_file = settings.cache_path / "stem" / "retry001.vocals.wav"
+        no_vocals_file.parent.mkdir(parents=True, exist_ok=True)
+        no_vocals_file.write_bytes(b"no-vocals")
+        vocals_file.write_bytes(b"vocals")
+
+        request = httpx.Request("POST", "http://demucs/separate")
+        response = httpx.Response(500, request=request)
+        demucs_error = httpx.HTTPStatusError("500", request=request, response=response)
+        service.demucs_client.separate_vocals = AsyncMock(
+            side_effect=[
+                demucs_error,
+                DemucsResponse(
+                    no_vocals_path=str(no_vocals_file),
+                    vocals_path=str(vocals_file),
+                ),
+            ]
+        )
+
+        await service.process_queue_item(db_session, item.id)
+
+        service.youtube_service.download_audio.assert_called_once_with("retry001")
+        assert service.demucs_client.separate_vocals.await_count == 2
+        updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
+        assert updated_item is not None
+        assert updated_item.status == QueueStatus.READY
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+@pytest.mark.asyncio
 async def test_karaoke_service_fails_fast_when_demucs_unhealthy(db_session):
     """Karaoke processing should fail immediately when Demucs health is bad."""
     queue_service = QueueService()
@@ -1712,7 +1778,6 @@ async def test_karaoke_service_fails_fast_when_demucs_unhealthy(db_session):
             youtube_id="kara-offline",
             title="Kara Offline",
             is_karaoke=True,
-            burn_lyrics=False,
         ),
     )
 
@@ -1756,7 +1821,6 @@ def test_queue_service_ordering_helpers(db_session):
         ),
         position=front_position,
         requested_karaoke=False,
-        requested_burn_lyrics=False,
         status=QueueStatus.PENDING,
     )
     db_session.add(front_item)

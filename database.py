@@ -78,7 +78,6 @@ def _migrate_legacy_queue_items_if_needed():
                     media_id INTEGER NOT NULL REFERENCES media_items(id) ON DELETE RESTRICT,
                     position INTEGER NOT NULL,
                     requested_karaoke BOOLEAN NOT NULL DEFAULT 0,
-                    requested_burn_lyrics BOOLEAN NOT NULL DEFAULT 0,
                     user_id TEXT,
                     session_id TEXT,
                     status TEXT DEFAULT 'pending',
@@ -93,7 +92,7 @@ def _migrate_legacy_queue_items_if_needed():
             text(
                 """
                 INSERT INTO queue_items_new (
-                    id, media_id, position, requested_karaoke, requested_burn_lyrics,
+                    id, media_id, position, requested_karaoke,
                     user_id, session_id, status, error, created_at, updated_at
                 )
                 SELECT
@@ -101,7 +100,6 @@ def _migrate_legacy_queue_items_if_needed():
                     m.id AS media_id,
                     q.id * 1000 AS position,
                     COALESCE(q.is_karaoke, 0) AS requested_karaoke,
-                    CASE WHEN COALESCE(q.is_karaoke, 0) = 1 THEN COALESCE(q.burn_lyrics, 0) ELSE 0 END AS requested_burn_lyrics,
                     NULL AS user_id,
                     NULL AS session_id,
                     COALESCE(q.status, 'pending') AS status,

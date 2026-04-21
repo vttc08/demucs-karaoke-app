@@ -39,7 +39,6 @@ CREATE TABLE queue_items (
     media_id INTEGER NOT NULL REFERENCES media_items(id) ON DELETE RESTRICT,
     position INTEGER NOT NULL,
     requested_karaoke INTEGER NOT NULL DEFAULT 0,
-    requested_burn_lyrics INTEGER NOT NULL DEFAULT 0,
     user_id TEXT,
     session_id TEXT,
     status TEXT NOT NULL DEFAULT 'pending',

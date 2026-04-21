@@ -44,7 +44,6 @@ class QueueItem(Base):
     )
     position = Column(Integer, nullable=False, index=True)
     requested_karaoke = Column(Boolean, default=False, nullable=False)
-    requested_burn_lyrics = Column(Boolean, default=False, nullable=False)
     user_id = Column(String, nullable=True)
     session_id = Column(String, nullable=True)
     status = Column(String, default=QueueStatus.PENDING)
@@ -111,7 +110,6 @@ class QueueItemCreate(BaseModel):
     title: str
     artist: Optional[str] = None
     is_karaoke: bool = False
-    burn_lyrics: bool = True
     lyrics_text: Optional[str] = None
     lyrics_format: Optional[Literal["lrc", "txt"]] = None
 
@@ -160,7 +158,6 @@ class QueueItemResponse(BaseModel):
     title: str
     artist: Optional[str] = None
     is_karaoke: bool
-    burn_lyrics: bool
     status: QueueStatus
     media_path: Optional[str] = None
     lyrics_path: Optional[str] = None

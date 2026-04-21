@@ -6,7 +6,7 @@ Lightweight AI-powered karaoke application for home use.
 
 - **Mobile Queue Page**: Search YouTube, add songs to queue
 - **Stage Page**: Auto-play queue with karaoke mode
-- **Karaoke Mode**: Vocal removal + burned-in lyrics
+- **Karaoke Mode**: Vocal removal + optional sidecar lyrics overlay
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
 
@@ -119,8 +119,8 @@ When concurrent yt-dlp search is enabled:
 - Combined results are staggered/interleaved and de-duplicated by video id
 
 When karaoke mode is enabled:
-- `Burn lyrics` ON: app infers artist/title from the YouTube-style song title, fetches lyrics through the modular provider pipeline (Musixmatch primary when `MUSIXMATCH_TOKEN` is set, then NetEase, then LRCLib fallback), and burns subtitles.
-- `Burn lyrics` OFF: app skips lyric burn and uses faster remux with vocals-removed audio.
+- App removes vocals with Demucs and remuxes the output media (no subtitle burn path).
+- Lyrics workflow remains available from the queue modal (provider resolve/manual upload), and lyrics are stored as sidecars for stage overlay display.
 - If Demucs is offline/unhealthy, karaoke processing fails fast and queue UI disables karaoke toggles.
 
 Lyrics lookup behavior:
@@ -298,7 +298,7 @@ If you want to manually test via proxy, add:
 # Check ffmpeg installation
 ffmpeg -version
 ```
-`ffmpeg` is still required for karaoke subtitle burn and final video rendering.
+`ffmpeg` is still required for karaoke media extraction/remux operations.
 
 ### Demucs service not available
 Karaoke mode requires Demucs service running. Configure `DEMUCS_API_URL` in `.env`.

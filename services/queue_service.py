@@ -62,18 +62,13 @@ class QueueService:
             media_item.title = item.title
         if not media_item.artist and item.artist:
             media_item.artist = item.artist
-        if (
-            item.is_karaoke
-            and item.burn_lyrics
-            and item.lyrics_text
-        ):
+        if item.is_karaoke and item.lyrics_text:
             self._store_lyrics_sidecar(media_item, item)
 
         db_item = QueueItem(
             media_id=media_item.id,
             position=self.append_to_end(db),
             requested_karaoke=item.is_karaoke,
-            requested_burn_lyrics=(item.burn_lyrics if item.is_karaoke else False),
             status=QueueStatus.PENDING,
         )
         db.add(db_item)
@@ -447,7 +442,6 @@ class QueueService:
             title=media.title,
             artist=media.artist,
             is_karaoke=bool(item.requested_karaoke),
-            burn_lyrics=bool(item.requested_burn_lyrics),
             status=QueueStatus(item.status),
             media_path=media_path,
             lyrics_path=lyrics_path,

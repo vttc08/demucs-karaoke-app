@@ -466,7 +466,7 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     if (!queueConfigModal || !queueConfigConfirmBtn) {
         await submitQueueItem(buildQueueSelection(resultElement, triggerButton), triggerButton, {
             isKaraoke: false,
-            burnLyrics: false,
+            lyricsEnabled: false,
         });
         return;
     }
@@ -631,14 +631,14 @@ function displaySearchResults(results) {
 async function addToQueueFromModal(selection, buttonElement) {
     return submitQueueItem(selection, buttonElement, {
         isKaraoke: modalKaraokeEnabled,
-        burnLyrics: modalLyricsEnabled,
+        lyricsEnabled: modalLyricsEnabled,
     });
 }
 
 async function addToQueueDirect(resultElement, buttonElement) {
     return submitQueueItem(buildQueueSelection(resultElement, buttonElement), buttonElement, {
         isKaraoke: false,
-        burnLyrics: false,
+        lyricsEnabled: false,
     });
 }
 
@@ -763,7 +763,7 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
     const title = selection?.title || '';
     const channel = selection?.channel || '';
     const isKaraoke = Boolean(options.isKaraoke);
-    const burnLyrics = Boolean(options.burnLyrics && isKaraoke);
+    const lyricsEnabled = Boolean(options.lyricsEnabled && isKaraoke);
     const lyricsText = getLyricsSubmissionText();
     const lyricsFormat = lyricsText ? inferLyricsFormat(lyricsText) : null;
     const button = buttonElement || queueConfigConfirmBtn;
@@ -784,9 +784,8 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
             title: title,
             artist: channel,
             is_karaoke: isKaraoke,
-            burn_lyrics: burnLyrics,
         };
-        if (isKaraoke && burnLyrics && lyricsText) {
+        if (isKaraoke && lyricsEnabled && lyricsText) {
             payload.lyrics_text = lyricsText;
             payload.lyrics_format = lyricsFormat || modalLyricsFormat || inferLyricsFormat(lyricsText);
         }

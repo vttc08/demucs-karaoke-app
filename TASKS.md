@@ -1,7 +1,7 @@
 # TASKS.md
 
 ## Sprint 01 goal
-Build a working end-to-end MVP for mobile queueing, TV playback, YouTube download, Demucs offload, and basic subtitle-burned karaoke generation.
+Build a working end-to-end MVP for mobile queueing, TV playback, YouTube download, Demucs offload, and basic remuxed karaoke generation with sidecar lyrics.
 
 ## Completed tasks ✓
 - [x] Create base FastAPI app structure
@@ -12,7 +12,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] Implement yt-dlp download adapter
 - [x] Implement lyrics lookup service (placeholder)
 - [x] Implement Demucs API client
-- [x] Implement ffmpeg subtitle-burn video generation
+- [x] Implement ffmpeg karaoke media merge/remux generation
 - [x] Add SQLite queue persistence
 - [x] Add API tests
 - [x] Document setup and sprint behavior

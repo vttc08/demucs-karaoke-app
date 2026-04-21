@@ -120,7 +120,6 @@ POST /api/queue/
   "title": "Song Title",
   "artist": "Artist Name",
   "is_karaoke": true,
-  "burn_lyrics": true,
   "lyrics_text": "[00:01.00]Line 1",
   "lyrics_format": "lrc"
 }
@@ -130,8 +129,6 @@ Queue payload can identify the target with either:
 - `youtube_id` (existing behavior), or
 - `media_item_id` (for direct enqueue of local library search matches).
 
-`burn_lyrics` is optional and only applies when `is_karaoke` is true.
-If omitted, it defaults to `true`. For non-karaoke items, it is normalized to `false`.
 If the `youtube_id` already exists in `media_items` with a usable local media file, the queue item is created against that existing media row and processing reuses the stored file instead of re-downloading the video again.
 When `lyrics_text` is supplied for karaoke items, the app persists it as a reusable lyrics sidecar under the cache directory so karaoke processing can skip a second lookup. `lyrics_format` is optional; if omitted, the app infers `.lrc` when timestamped lines are present and `.txt` otherwise.
 
@@ -145,7 +142,6 @@ When `lyrics_text` is supplied for karaoke items, the app persists it as a reusa
   "title": "Song Title",
   "artist": "Artist Name",
   "is_karaoke": true,
-  "burn_lyrics": true,
   "status": "pending",
   "media_path": "/media/dQw4w9WgXcQ.mp4",
   "lyrics_path": null,
@@ -207,7 +203,6 @@ GET /api/queue/
     "title": "Song Title",
     "artist": "Artist Name",
     "is_karaoke": true,
-    "burn_lyrics": true,
     "status": "ready",
     "media_path": "/media/dQw4w9WgXcQ.mp4",
     "lyrics_path": null,
@@ -497,7 +492,7 @@ If already current:
 
 - `pending`: Waiting to be processed
 - `downloading`: Downloading from YouTube
-- `processing`: Processing (vocal removal, subtitle burn)
+- `processing`: Processing (vocal removal and media remux)
 - `ready`: Ready to play
 - `playing`: Currently playing
 - `failed`: Processing failed (check `error` field)

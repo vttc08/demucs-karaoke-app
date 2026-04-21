@@ -4,10 +4,10 @@ import logging
 import re
 import shutil
 from pathlib import Path
+import httpx
 from sqlalchemy.orm import Session
 from models import QueueItem
 from services.youtube_service import YouTubeService
-from services.lyrics_service import LyricsService
 from services.demucs_client import DemucsClient
 from services.queue_service import QueueService
 from adapters.ffmpeg import FFmpegAdapter
@@ -22,7 +22,6 @@ class KaraokeService:
 
     def __init__(self):
         self.youtube_service = YouTubeService()
-        self.lyrics_service = LyricsService()
         self.demucs_client = DemucsClient()
         self.queue_service = QueueService()
         self.ffmpeg = FFmpegAdapter()
@@ -47,11 +46,10 @@ class KaraokeService:
             existing_media_path = self._existing_media_file(item)
             existing_vocals_path = self._existing_local_file(item.media.vocals_path)
             logger.info(
-                "Processing queue item item_id=%s youtube_id=%s karaoke=%s burn_lyrics=%s",
+                "Processing queue item item_id=%s youtube_id=%s karaoke=%s",
                 item.id,
                 item.media.youtube_id,
                 item.requested_karaoke,
-                item.requested_burn_lyrics,
             )
             # Update status to downloading
             await self.queue_service.update_status_async(
@@ -96,7 +94,7 @@ class KaraokeService:
                     extracted_audio_path = (
                         settings.cache_path
                         / "audio"
-                        / f"{item.media.youtube_id}.wav"
+                        / f"{item.media.youtube_id}.m4a"
                     )
                     audio_path = await asyncio.to_thread(
                         self.ffmpeg.extract_audio,
@@ -198,7 +196,7 @@ class KaraokeService:
         )
 
         # Remove vocals using Demucs
-        demucs_response = await self.demucs_client.separate_vocals(audio_path)
+        demucs_response = await self._separate_vocals_with_retry(item, audio_path)
         no_vocals_path = Path(demucs_response.no_vocals_path)
         vocals_raw_path = Path(demucs_response.vocals_path) if demucs_response.vocals_path else None
         if vocals_raw_path is None or not vocals_raw_path.exists():
@@ -217,46 +215,46 @@ class KaraokeService:
         self.queue_service.set_vocals_path(db, item.id, str(vocals_sidecar_path))
 
         output_path = settings.cache_path / f"{item.media.youtube_id}_karaoke.mp4"
-        if item.requested_burn_lyrics:
-            lyrics_path = self._existing_local_file(item.media.lyrics_path)
-            lyrics = None
-            if lyrics_path:
-                lyrics = lyrics_path.read_text(encoding="utf-8")
-                logger.info(
-                    "Using existing lyrics sidecar item_id=%s lyrics=%s",
-                    item.id,
-                    lyrics_path,
-                )
-            else:
-                lyrics_payload = await self.lyrics_service.resolve_lyrics(
-                    title=item.media.title,
-                    artist=item.media.artist,
-                    youtube_title=item.media.title,
-                )
-                lyrics = lyrics_payload.lyrics if lyrics_payload else None
-                if lyrics and lyrics_payload:
-                    lyrics_dir = settings.cache_path / "lyrics"
-                    lyrics_dir.mkdir(parents=True, exist_ok=True)
-                    suffix = ".lrc" if lyrics_payload.is_synced else ".txt"
-                    lyrics_path = lyrics_dir / f"{item.media.youtube_id}{suffix}"
-                    lyrics_path.write_text(lyrics, encoding="utf-8")
-                    self.queue_service.set_lyrics_path(db, item.id, str(lyrics_path))
-            await asyncio.to_thread(
-                self.ffmpeg.burn_subtitles,
-                video_path=video_path,
-                audio_path=no_vocals_path,
-                subtitle_text=lyrics or "No lyrics available",
-                output_path=output_path,
-            )
-        else:
-            await asyncio.to_thread(
-                self.ffmpeg.combine_audio_video,
-                video_path=video_path,
-                audio_path=no_vocals_path,
-                output_path=output_path,
-            )
+        await asyncio.to_thread(
+            self.ffmpeg.combine_audio_video,
+            video_path=video_path,
+            audio_path=no_vocals_path,
+            output_path=output_path,
+        )
 
         # Update item with final media path
         self.queue_service.set_media_path(db, item.id, str(output_path))
         await self.queue_service.update_status_async(db, item.id, QueueStatus.READY)
         logger.info("Karaoke processing completed item_id=%s output=%s", item.id, output_path)
+
+    async def _separate_vocals_with_retry(self, item: QueueItem, audio_path: Path):
+        """
+        Run Demucs separation with one fallback retry for extracted local audio.
+
+        Some Demucs environments fail on remuxed extracted containers from local media.
+        When that happens, retry once using a fresh yt-dlp audio download.
+        """
+        try:
+            return await self.demucs_client.separate_vocals(audio_path)
+        except httpx.HTTPStatusError as error:
+            status_code = error.response.status_code if error.response is not None else None
+            can_retry = (
+                status_code is not None
+                and status_code >= 500
+                and audio_path.suffix.lower() == ".m4a"
+                and item.media is not None
+                and bool(item.media.youtube_id)
+            )
+            if not can_retry:
+                raise
+
+            logger.warning(
+                "Demucs failed for extracted audio item_id=%s status=%s; retrying with yt-dlp audio",
+                item.id,
+                status_code,
+            )
+            fallback_audio_path = await asyncio.to_thread(
+                self.youtube_service.download_audio,
+                item.media.youtube_id,
+            )
+            return await self.demucs_client.separate_vocals(fallback_audio_path)

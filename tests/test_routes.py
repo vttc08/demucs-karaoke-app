@@ -214,7 +214,6 @@ def test_add_to_queue(client):
             "title": "Test Song",
             "artist": "Test Artist",
             "is_karaoke": True,
-            "burn_lyrics": True,
         },
     )
     assert response.status_code == 200
@@ -222,25 +221,22 @@ def test_add_to_queue(client):
     assert data["youtube_id"] == "test123"
     assert data["title"] == "Test Song"
     assert data["is_karaoke"] is True
-    assert data["burn_lyrics"] is True
     assert data["status"] == "pending"
 
 
-def test_add_to_queue_non_karaoke_forces_burn_lyrics_false(client):
-    """Non-karaoke queue items should not keep burn_lyrics enabled."""
+def test_add_to_queue_non_karaoke(client):
+    """Non-karaoke queue items should be accepted without burn settings."""
     response = client.post(
         "/api/queue/",
         json={
             "youtube_id": "test124",
             "title": "Test Song 2",
             "is_karaoke": False,
-            "burn_lyrics": True,
         },
     )
     assert response.status_code == 200
     data = response.json()
     assert data["is_karaoke"] is False
-    assert data["burn_lyrics"] is False
 
 
 def test_add_to_queue_persists_inline_lyrics_sidecar(client):
@@ -252,7 +248,6 @@ def test_add_to_queue_persists_inline_lyrics_sidecar(client):
             "title": "Queue Lyrics",
             "artist": "Singer",
             "is_karaoke": True,
-            "burn_lyrics": True,
             "lyrics_text": "[00:01.00]Lyrics line",
         },
     )

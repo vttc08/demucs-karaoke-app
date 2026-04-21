@@ -120,8 +120,8 @@ The stage page uses a websocket-first model:
   - submit the final lyrics text alongside the queue payload
 - Backend flow:
   - `routes/lyrics.py` orchestrates the lookup response for the UI
-  - `QueueService.add_to_queue` stores inline lyrics as a cache sidecar when karaoke + burn lyrics are enabled
-  - `KaraokeService` reuses an existing lyrics sidecar before falling back to provider resolution during processing
+  - `QueueService.add_to_queue` stores inline lyrics as a cache sidecar when karaoke is enabled and lyrics text is provided
+  - `KaraokeService` keeps karaoke output assembly independent from subtitle burn behavior
 
 ## Lyrics inference and provider flow
 
@@ -131,9 +131,8 @@ The stage page uses a websocket-first model:
 - `services/lyrics_providers.py`: provider implementations (`MusixmatchLyricsProvider`, `NeteaseLyricsProvider`, `LRCLibLyricsProvider`)
 - Provider order is Musixmatch first (when `MUSIXMATCH_TOKEN` is configured), then NetEase, then LRCLib fallback.
 - Resolution behavior is Musixmatch-first, then concurrent fallback search across the remaining providers with score-based selection of the best payload.
-- `services/karaoke_service.py` calls the orchestrator during karaoke processing when `requested_burn_lyrics` is enabled.
 - Synced lyrics are persisted as `.lrc` sidecars for stage overlay cue parsing.
-- Unsynced lyrics are still usable for burned subtitle rendering via ffmpeg text fallback.
+- Unsynced lyrics can still be persisted as sidecars for future/manual overlay handling.
 
 ## Software Stack
 
@@ -157,7 +156,7 @@ The stage page uses a websocket-first model:
 - `queue_items` is active queue state only:
   - `media_id` FK (`ON DELETE RESTRICT`)
   - sparse `position` ordering (`1000` step)
-  - runtime queue state (`requested_karaoke`, `requested_burn_lyrics`, `status`, `error`)
+  - runtime queue state (`requested_karaoke`, `status`, `error`)
   - rows are removed when songs are skipped/completed (active queue persists across crashes)
 
 ## Runtime yt-dlp proxy flow
