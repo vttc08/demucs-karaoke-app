@@ -46,7 +46,6 @@ const queueConfigLyricsSearchBtn = document.getElementById('queue-config-lyrics-
 const queueConfigLyricsUploadBtn = document.getElementById('queue-config-lyrics-upload-btn');
 const queueConfigLyricsFile = document.getElementById('queue-config-lyrics-file');
 const queueConfigLyricsProvider = document.getElementById('queue-config-lyrics-provider');
-const queueConfigLyricsPreview = document.getElementById('queue-config-lyrics-preview');
 const queueConfigLyricsTextarea = document.getElementById('queue-config-lyrics-textarea');
 const queueConfigLyricsHelp = document.getElementById('queue-config-lyrics-help');
 const QUEUE_CONFIRM_DEFAULT_HTML = '<span class="material-symbols-outlined text-base" style="font-variation-settings: \'FILL\' 1">add_circle</span>Add to Queue';
@@ -375,9 +374,6 @@ function syncQueueConfigModalUi() {
     if (queueConfigLyricsArtist) {
         queueConfigLyricsArtist.disabled = !modalLyricsEnabled;
     }
-    if (queueConfigLyricsPreview) {
-        queueConfigLyricsPreview.disabled = !modalLyricsEnabled;
-    }
     if (queueConfigLyricsTextarea) {
         queueConfigLyricsTextarea.disabled = !modalLyricsEnabled;
     }
@@ -388,8 +384,7 @@ function syncQueueConfigModalUi() {
 
 function getLyricsSubmissionText() {
     const manualValue = queueConfigLyricsTextarea ? queueConfigLyricsTextarea.value.trim() : '';
-    const previewValue = queueConfigLyricsPreview ? queueConfigLyricsPreview.value.trim() : '';
-    return manualValue || previewValue;
+    return manualValue;
 }
 
 function inferLyricsFormat(text) {
@@ -423,13 +418,15 @@ function syncLyricsStatusUi(detail = '') {
     if (queueConfigLyricsHelp && detail) {
         queueConfigLyricsHelp.textContent = detail;
     } else if (queueConfigLyricsHelp && modalLyricsState === 'not_found') {
-        queueConfigLyricsHelp.textContent = 'No lyrics were found. Paste your own synced lyrics or upload an LRC file.';
+        queueConfigLyricsHelp.textContent = 'No lyrics were found. Use the editor below or upload an LRC file.';
     } else if (queueConfigLyricsHelp && modalLyricsState === 'error') {
-        queueConfigLyricsHelp.textContent = 'Lyrics search failed. Paste your own synced lyrics or upload an LRC file.';
+        queueConfigLyricsHelp.textContent = 'Lyrics search failed. Use the editor below or upload an LRC file.';
     } else if (queueConfigLyricsHelp && modalLyricsState === 'resolved') {
         queueConfigLyricsHelp.textContent = modalLyricsSynced
-            ? 'Resolved synced lyrics are ready. You can still edit them before adding to the queue.'
-            : 'Resolved plain lyrics are ready. You can still replace them with synced lines before adding to the queue.';
+            ? 'Resolved synced lyrics are ready. Edit the box below before adding to the queue.'
+            : 'Resolved plain lyrics are ready. Edit the box below before adding to the queue.';
+    } else if (queueConfigLyricsHelp && modalLyricsState === 'manual') {
+        queueConfigLyricsHelp.textContent = 'Your editor content is ready to be queued.';
     }
 }
 
@@ -503,7 +500,6 @@ async function openQueueConfigModal(resultElement, triggerButton) {
 
     if (queueConfigLyricsTitle) queueConfigLyricsTitle.value = modalSelection.title || '';
     if (queueConfigLyricsArtist) queueConfigLyricsArtist.value = modalSelection.channel || '';
-    if (queueConfigLyricsPreview) queueConfigLyricsPreview.value = '';
     if (queueConfigLyricsTextarea) queueConfigLyricsTextarea.value = '';
     syncQueueConfigModalUi();
     refreshDemucsHealth().then(() => {
@@ -697,10 +693,7 @@ async function resolveLyricsFromModal(trigger = 'manual') {
         if (queueConfigLyricsArtist && result.artist) {
             queueConfigLyricsArtist.value = result.artist;
         }
-        if (queueConfigLyricsPreview) {
-            queueConfigLyricsPreview.value = result.lyrics || '';
-        }
-        if (queueConfigLyricsTextarea && (!queueConfigLyricsTextarea.value.trim() || trigger === 'auto')) {
+        if (result.status === 'resolved' && queueConfigLyricsTextarea) {
             queueConfigLyricsTextarea.value = result.lyrics || '';
         }
 
@@ -726,7 +719,7 @@ function handleLyricsTextChange() {
     if (hasText) {
         modalLyricsState = 'manual';
         syncLyricsStatusUi('Manual lyrics ready.');
-    } else if (modalLyricsState === 'manual' && !queueConfigLyricsPreview?.value.trim()) {
+    } else if (modalLyricsState === 'manual') {
         modalLyricsState = 'idle';
         syncLyricsStatusUi('Search or upload lyrics to continue.');
     }
@@ -744,9 +737,6 @@ async function loadLyricsUpload(file) {
     const text = await file.text();
     if (queueConfigLyricsTextarea) {
         queueConfigLyricsTextarea.value = text.trim();
-    }
-    if (queueConfigLyricsPreview) {
-        queueConfigLyricsPreview.value = text.trim();
     }
     modalLyricsFormat = file.name.toLowerCase().endsWith('.lrc') ? 'lrc' : 'txt';
     modalLyricsState = 'manual';
@@ -901,26 +891,12 @@ if (queueConfigLyricsTextarea) {
 
 if (queueConfigLyricsTitle) {
     queueConfigLyricsTitle.addEventListener('input', () => {
-        if (modalLyricsEnabled && !getLyricsSubmissionText() && (modalLyricsState === 'resolved' || modalLyricsState === 'not_found')) {
-            modalLyricsState = 'idle';
-            modalLyricsProvider = '';
-            modalLyricsSynced = false;
-            if (queueConfigLyricsPreview) queueConfigLyricsPreview.value = '';
-            syncLyricsStatusUi('Search again with the updated title.');
-        }
         syncQueueConfirmState();
     });
 }
 
 if (queueConfigLyricsArtist) {
     queueConfigLyricsArtist.addEventListener('input', () => {
-        if (modalLyricsEnabled && !getLyricsSubmissionText() && (modalLyricsState === 'resolved' || modalLyricsState === 'not_found')) {
-            modalLyricsState = 'idle';
-            modalLyricsProvider = '';
-            modalLyricsSynced = false;
-            if (queueConfigLyricsPreview) queueConfigLyricsPreview.value = '';
-            syncLyricsStatusUi('Search again with the updated artist.');
-        }
         syncQueueConfirmState();
     });
 }

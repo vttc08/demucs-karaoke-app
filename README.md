@@ -82,7 +82,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
     - Or paste a YouTube link / video id directly to add external search results
     - Local matches are preferred in results; duplicate YouTube matches are hidden
     - Tap **Add** on a result to open the queue configuration interaction
-    - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, lyrics preview, and LRC upload before adding to queue
+    - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, an editable lyrics box, and LRC upload before adding to queue
     - Confirm to add to queue
     - Use remote stage controls, including lyrics on/off, for the currently playing item
     - Queue status updates in real time (downloading, processing, ready, playing, failed)
@@ -175,7 +175,7 @@ Set `LASTFM_API_KEY` in `.env` to enable online Last.fm-assisted inference; othe
 ```bash
 uv run scripts/lyrics_debug_cli.py
 ```
-Use this menu-driven helper to step through the bundled karaoke titles or paste a custom YouTube title, then inspect the inferred metadata, provider, and lyrics preview.
+Use this menu-driven helper to step through the bundled karaoke titles or paste a custom YouTube title, then inspect the inferred metadata, provider, and editable lyrics box.
 
 NetEase implementation notes:
 - Adapted from `cqjjjzr/MusicBee-NeteaseLyrics` (search + lyric flow) and `Gaohaoyang/netease-music-downloader` (lyrics retrieval endpoint behavior).

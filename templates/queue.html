@@ -284,21 +284,14 @@
 
                     <div class="space-y-2">
                         <div class="flex items-center justify-between gap-3">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Resolved lyrics</span>
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Lyrics editor</span>
                             <span id="queue-config-lyrics-provider" class="text-[11px] font-medium text-on-surface-variant"></span>
                         </div>
-                        <textarea id="queue-config-lyrics-preview" rows="7" readonly class="w-full rounded-xl bg-surface-container-highest px-3 py-3 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" placeholder="Resolved lyrics will appear here."></textarea>
+                        <textarea id="queue-config-lyrics-textarea" rows="10" class="w-full rounded-xl bg-surface-container-highest px-3 py-3 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" placeholder="[00:12.00]Sing along..."></textarea>
+                        <p class="text-xs text-on-surface-variant">Resolved lyrics will overwrite this box. You can edit it before adding to the queue.</p>
                     </div>
 
-                    <div class="space-y-2">
-                        <div class="flex items-center justify-between gap-3">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Manual synced lyrics</span>
-                            <span class="text-[11px] text-on-surface-variant">Paste or replace synced lines before adding to queue.</span>
-                        </div>
-                        <textarea id="queue-config-lyrics-textarea" rows="8" class="w-full rounded-xl bg-surface-container-highest px-3 py-3 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" placeholder="[00:12.00]Sing along..."></textarea>
-                    </div>
-
-                    <p id="queue-config-lyrics-help" class="text-xs text-on-surface-variant">The Add to Queue button unlocks after lyrics are resolved, fail, or you provide your own lyrics.</p>
+                    <p id="queue-config-lyrics-help" class="text-xs text-on-surface-variant">The Add to Queue button unlocks after lyrics are resolved, fail, or you provide your own lyrics in the editor.</p>
                 </div>
             </div>
             <div class="flex flex-col gap-2 border-t border-outline-variant/20 px-5 py-4 sm:flex-row sm:justify-end">
