@@ -65,6 +65,7 @@ let modalLyricsProvider = '';
 let modalLyricsSynced = false;
 let modalLyricsFormat = 'txt';
 let modalLyricsRequestId = 0;
+let modalLyricsAbortController = null;
 
 searchResults.addEventListener('click', async (event) => {
     const button = event.target.closest('.add-to-queue-btn');
@@ -392,6 +393,16 @@ function inferLyricsFormat(text) {
     return /^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/m.test(text) ? 'lrc' : 'txt';
 }
 
+function cancelInFlightLyricsResolve() {
+    if (modalLyricsAbortController) {
+        modalLyricsAbortController.abort();
+        modalLyricsAbortController = null;
+    }
+    if (modalLyricsState === 'loading') {
+        modalLyricsRequestId += 1;
+    }
+}
+
 function syncLyricsStatusUi(detail = '') {
     if (!queueConfigLyricsState) return;
 
@@ -477,6 +488,7 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     modalLyricsSynced = false;
     modalLyricsFormat = 'txt';
     modalLyricsRequestId = 0;
+    modalLyricsAbortController = null;
 
     if (queueConfigSongTitle) queueConfigSongTitle.textContent = modalSelection.title || 'Unknown title';
     if (queueConfigSongChannel) queueConfigSongChannel.textContent = modalSelection.channel || '';
@@ -511,6 +523,7 @@ async function openQueueConfigModal(resultElement, triggerButton) {
 
 function closeQueueConfigModal() {
     if (!queueConfigModal) return;
+    cancelInFlightLyricsResolve();
     queueConfigModal.classList.add('hidden');
     queueConfigModal.classList.remove('flex');
     document.body.classList.remove('overflow-hidden');
@@ -649,7 +662,10 @@ async function resolveLyricsFromModal(trigger = 'manual') {
         return;
     }
 
+    cancelInFlightLyricsResolve();
     const requestId = ++modalLyricsRequestId;
+    const abortController = new AbortController();
+    modalLyricsAbortController = abortController;
     modalLyricsState = 'loading';
     modalLyricsProvider = '';
     modalLyricsSynced = false;
@@ -673,6 +689,7 @@ async function resolveLyricsFromModal(trigger = 'manual') {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(payload),
+            signal: abortController.signal,
         });
 
         if (!response.ok) {
@@ -705,16 +722,22 @@ async function resolveLyricsFromModal(trigger = 'manual') {
         syncQueueConfirmState();
     } catch (error) {
         if (requestId !== modalLyricsRequestId) return;
+        if (error?.name === 'AbortError') return;
         modalLyricsState = 'error';
         modalLyricsProvider = '';
         modalLyricsSynced = false;
         syncLyricsStatusUi(error.message || 'Lyrics search failed.');
         syncQueueConfirmState();
+    } finally {
+        if (requestId === modalLyricsRequestId) {
+            modalLyricsAbortController = null;
+        }
     }
 }
 
 function handleLyricsTextChange() {
     if (!modalLyricsEnabled) return;
+    cancelInFlightLyricsResolve();
     const hasText = Boolean(getLyricsSubmissionText());
     if (hasText) {
         modalLyricsState = 'manual';
@@ -734,6 +757,7 @@ function triggerLyricsUpload() {
 
 async function loadLyricsUpload(file) {
     if (!file) return;
+    cancelInFlightLyricsResolve();
     const text = await file.text();
     if (queueConfigLyricsTextarea) {
         queueConfigLyricsTextarea.value = text.trim();
@@ -855,6 +879,7 @@ if (queueConfigLyricsToggle) {
         if (queueConfigLyricsToggle.disabled) return;
         modalLyricsEnabled = !modalLyricsEnabled;
         if (!modalLyricsEnabled) {
+            cancelInFlightLyricsResolve();
             modalLyricsState = 'idle';
             modalLyricsProvider = '';
             modalLyricsSynced = false;
