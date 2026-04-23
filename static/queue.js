@@ -358,9 +358,14 @@ function syncQueueConfigModalUi() {
     }
 
     if (queueConfigLyricsSearchBtn) {
-        queueConfigLyricsSearchBtn.disabled = !modalLyricsEnabled || modalLyricsState === 'loading';
-        queueConfigLyricsSearchBtn.classList.toggle('opacity-60', !modalLyricsEnabled || modalLyricsState === 'loading');
-        queueConfigLyricsSearchBtn.classList.toggle('cursor-not-allowed', !modalLyricsEnabled || modalLyricsState === 'loading');
+        queueConfigLyricsSearchBtn.disabled = !modalLyricsEnabled;
+        queueConfigLyricsSearchBtn.classList.toggle('opacity-60', !modalLyricsEnabled);
+        queueConfigLyricsSearchBtn.classList.toggle('cursor-not-allowed', !modalLyricsEnabled);
+        queueConfigLyricsSearchBtn.title = modalLyricsEnabled
+            ? (modalLyricsState === 'loading'
+                ? 'Cancel the current lookup and search again with the current title and artist'
+                : 'Search with the current title and artist')
+            : 'Enable lyrics first';
     }
 
     if (queueConfigLyricsUploadBtn) {
