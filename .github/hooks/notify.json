@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "hooks": {
+    "notification": [
+      {
+        "type": "command",
+        "matcher": "permission_prompt|elicitation_dialog|agent_completed|agent_idle",
+        "bash": "./scripts/notify-home-assistant.sh notification",
+        "cwd": ".github/hooks",
+        "timeoutSec": 5
+      }
+    ],
+    "sessionEnd": [
+      {
+        "type": "command",
+        "bash": "./scripts/notify-home-assistant.sh session_end",
+        "cwd": ".github/hooks",
+        "timeoutSec": 5
+      }
+    ],
+    "errorOccurred": [
+      {
+        "type": "command",
+        "bash": "./scripts/notify-home-assistant.sh error_occurred",
+        "cwd": ".github/hooks",
+        "timeoutSec": 5
+      }
+    ],
+    "agentStop": [
+      {
+        "type": "command",
+        "bash": "./scripts/notify-home-assistant.sh session_end",
+        "cwd": ".github/hooks",
+        "timeoutSec": 5
+      }
+    ]
+  }
+}
