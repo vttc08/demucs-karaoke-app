@@ -72,7 +72,9 @@ class LRCLibLyricsProvider:
         best_score: float | None = None
 
         try:
-            async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
+            async with ls_module.httpx.AsyncClient(
+                **ls_module.build_httpx_client_kwargs(timeout=10.0)
+            ) as client:
                 for query in queries:
                     response = await client.get(
                         f"{self.base_url}/api/search",
@@ -180,7 +182,9 @@ class MusixmatchLyricsProvider:
             "usertoken": self.token,
         }
         try:
-            async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
+            async with ls_module.httpx.AsyncClient(
+                **ls_module.build_httpx_client_kwargs(timeout=10.0)
+            ) as client:
                 response = await client.get(self.base_url, params=params, headers=self.headers)
                 response.raise_for_status()
                 payload = response.json()
@@ -515,7 +519,9 @@ class NeteaseLyricsProvider:
 
     async def _request_search_weapi(self, payload: dict[str, Any]) -> list[_NeteaseSongCandidate]:
         encrypted = self._weapi_encrypt(payload)
-        async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
+        async with ls_module.httpx.AsyncClient(
+            **ls_module.build_httpx_client_kwargs(timeout=10.0)
+        ) as client:
             response = await client.post(
                 self.search_url,
                 data=encrypted,
@@ -537,7 +543,9 @@ class NeteaseLyricsProvider:
             "limit": 6,
         }
         try:
-            async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
+            async with ls_module.httpx.AsyncClient(
+                **ls_module.build_httpx_client_kwargs(timeout=10.0)
+            ) as client:
                 response = await client.get(
                     self.legacy_search_url,
                     params=params,
@@ -569,7 +577,9 @@ class NeteaseLyricsProvider:
 
     async def _request_lyrics_weapi(self, payload: dict[str, Any]) -> dict[str, Any]:
         encrypted = self._weapi_encrypt(payload)
-        async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
+        async with ls_module.httpx.AsyncClient(
+            **ls_module.build_httpx_client_kwargs(timeout=10.0)
+        ) as client:
             response = await client.post(
                 self.lyric_url,
                 data=encrypted,
@@ -585,7 +595,9 @@ class NeteaseLyricsProvider:
         params = {"os": "pc", "id": song_id, "lv": -1, "kv": -1, "tv": -1}
         headers = {**self.headers, "Cookie": "appver=1.5.0.75771;"}
         try:
-            async with ls_module.httpx.AsyncClient(timeout=10.0) as client:
+            async with ls_module.httpx.AsyncClient(
+                **ls_module.build_httpx_client_kwargs(timeout=10.0)
+            ) as client:
                 response = await client.get(
                     self.legacy_lyric_url,
                     params=params,

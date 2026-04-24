@@ -305,7 +305,9 @@ class YouTubeTitleInferrer:
             "limit": 10,
         }
         try:
-            async with ls_module.httpx.AsyncClient(timeout=5.0) as client:
+            async with ls_module.httpx.AsyncClient(
+                **ls_module.build_httpx_client_kwargs(timeout=5.0)
+            ) as client:
                 response = await client.get("https://ws.audioscrobbler.com/2.0/", params=params)
                 response.raise_for_status()
                 payload = response.json()

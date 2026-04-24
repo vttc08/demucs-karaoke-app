@@ -39,6 +39,15 @@ _MUSIXMATCH_PARAMS = {
 _MUSIXMATCH_DISCLAIMER_RE = re.compile(r"not\s+for\s+commercial\s+use", re.IGNORECASE)
 
 
+def build_httpx_client_kwargs(timeout: float) -> dict[str, Any]:
+    """Build common HTTP client kwargs for outbound lyrics provider requests."""
+    kwargs: dict[str, Any] = {"timeout": timeout}
+    proxy_url = settings.ytdlp_proxy_url.strip()
+    if proxy_url:
+        kwargs["proxy"] = proxy_url
+    return kwargs
+
+
 @dataclass(frozen=True)
 class InferredSong:
     """Best-effort normalized metadata used for lyrics lookup."""

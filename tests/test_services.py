@@ -839,6 +839,62 @@ async def test_lyrics_service_prefers_lastfm_when_configured():
 
 
 @pytest.mark.asyncio
+async def test_lyrics_service_lastfm_uses_runtime_proxy_when_configured():
+    """Last.fm metadata lookup should use the runtime proxy URL when configured."""
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "results": {
+                    "trackmatches": {
+                        "track": [{"name": "Enchanted", "artist": "Taylor Swift"}]
+                    }
+                }
+            }
+
+    observed = {"proxy": None, "timeout": None}
+
+    class FakeAsyncClient:
+        def __init__(self, timeout, proxy=None):
+            observed["timeout"] = timeout
+            observed["proxy"] = proxy
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params):
+            return FakeResponse()
+
+    from services import lyrics_service as ls_module
+
+    original_proxy = settings.ytdlp_proxy_url
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        settings.ytdlp_proxy_url = "socks5://127.0.0.1:1080"
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        service = LyricsService(
+            metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key="test-key")
+        )
+        inferred = await service.infer_song_metadata(
+            title="Taylor Swift - Enchanted (Taylor's Version) (Lyric Video)",
+            artist=None,
+        )
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+        settings.ytdlp_proxy_url = original_proxy
+
+    assert inferred.source == "lastfm"
+    assert observed["timeout"] == 5.0
+    assert observed["proxy"] == "socks5://127.0.0.1:1080"
+
+
+@pytest.mark.asyncio
 async def test_lyrics_service_strips_artist_prefix_from_lastfm_track_name():
     """Last.fm track names that already include the artist should not duplicate it."""
 
@@ -985,6 +1041,59 @@ async def test_lyrics_service_fetch_falls_back_to_plain():
         ls_module.httpx.AsyncClient = original_client
 
     assert lyrics == "Plain only line"
+
+
+@pytest.mark.asyncio
+async def test_lyrics_provider_uses_runtime_proxy_when_configured():
+    """Lyrics provider HTTP requests should use runtime proxy settings."""
+    from services import lyrics_service as ls_module
+
+    observed = {"proxy": None, "timeout": None}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return [
+                {
+                    "trackName": "Test Song",
+                    "artistName": "Test Artist",
+                    "syncedLyrics": "[00:01.00]Synced line",
+                }
+            ]
+
+    class FakeAsyncClient:
+        def __init__(self, timeout, proxy=None):
+            observed["timeout"] = timeout
+            observed["proxy"] = proxy
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, params):
+            return FakeResponse()
+
+    original_proxy = settings.ytdlp_proxy_url
+    original_client = ls_module.httpx.AsyncClient
+    try:
+        settings.ytdlp_proxy_url = "http://127.0.0.1:8080"
+        ls_module.httpx.AsyncClient = FakeAsyncClient
+        service = LyricsService(
+            metadata_inferrer=ls_module.YouTubeTitleInferrer(lastfm_api_key=""),
+            providers=[ls_module.LRCLibLyricsProvider()],
+        )
+        lyrics = await service.fetch_lyrics("Test Song", "Test Artist")
+    finally:
+        ls_module.httpx.AsyncClient = original_client
+        settings.ytdlp_proxy_url = original_proxy
+
+    assert lyrics == "[00:01.00]Synced line"
+    assert observed["timeout"] == 10.0
+    assert observed["proxy"] == "http://127.0.0.1:8080"
 
 
 @pytest.mark.asyncio

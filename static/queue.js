@@ -432,6 +432,15 @@ function syncQueueSongTitleLink() {
     }
 }
 
+function shouldAutoResolveLyrics() {
+    if (!modalSelection) return false;
+    if (modalLyricsState === 'loading') return false;
+
+    const hasSubmissionText = Boolean(getLyricsSubmissionText());
+    const hasCompletedLookup = ['resolved', 'not_found', 'error', 'manual'].includes(modalLyricsState);
+    return !hasSubmissionText && !hasCompletedLookup;
+}
+
 function cancelInFlightLyricsResolve() {
     if (modalLyricsAbortController) {
         modalLyricsAbortController.abort();
@@ -918,15 +927,25 @@ if (queueConfigKaraokeToggle) {
 if (queueConfigLyricsToggle) {
     queueConfigLyricsToggle.addEventListener('click', () => {
         if (queueConfigLyricsToggle.disabled) return;
+        const wasLoading = modalLyricsState === 'loading';
         modalLyricsEnabled = !modalLyricsEnabled;
+
         if (!modalLyricsEnabled) {
             cancelInFlightLyricsResolve();
-            modalLyricsState = 'idle';
-            modalLyricsProvider = '';
-            modalLyricsSynced = false;
-        } else if (modalSelection) {
+            if (wasLoading) {
+                if (getLyricsSubmissionText()) {
+                    modalLyricsState = 'manual';
+                    modalLyricsProvider = modalLyricsProvider || 'manual';
+                } else {
+                    modalLyricsState = 'idle';
+                    modalLyricsProvider = '';
+                    modalLyricsSynced = false;
+                }
+            }
+        } else if (shouldAutoResolveLyrics()) {
             resolveLyricsFromModal('auto');
         }
+
         syncQueueConfigModalUi();
     });
 }

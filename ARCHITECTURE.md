@@ -159,11 +159,11 @@ The stage page uses a websocket-first model:
   - runtime queue state (`requested_karaoke`, `status`, `error`)
   - rows are removed when songs are skipped/completed (active queue persists across crashes)
 
-## Runtime yt-dlp proxy flow
+## Runtime outbound proxy flow
 
 - Runtime settings expose `ytdlp_proxy_url` through:
-  - `GET /api/settings/runtime`
-  - `PATCH /api/settings/runtime`
+  - `GET /api/settings/`
+  - `PATCH /api/settings/`
 - `services/runtime_settings_service.py` validates proxy values and allows:
   - Empty value (direct connection)
   - Schemes: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`
@@ -172,6 +172,11 @@ The stage page uses a websocket-first model:
   - Audio download
   - Video-only download
   - Progressive video+audio download
+- `services/lyrics_service.py` exposes shared HTTP client kwargs that add the same proxy for:
+  - Musixmatch provider calls
+  - NetEase provider calls
+  - LRCLib provider calls
+  - Last.fm metadata lookup
 
 This is applied at command build time, so new operations use updated proxy settings immediately without app restart.
 

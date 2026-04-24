@@ -414,12 +414,14 @@ Validation:
 - `demucs_output_format` must be `wav` or `mp3`
 - `demucs_mp3_bitrate` must be between `64` and `320`
 - `concurrent_ytdlp_search_enabled` toggles optional parallel search mode
+- `ytdlp_proxy_url` must be empty or use one of: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`
 - executable paths cannot be empty
 - `media_path` and `cache_path` cannot be empty when provided
 
 Notes:
 - Updating `media_path`/`cache_path` applies immediately for processing and new outputs.
 - Static file mounts are initialized at app startup; restart the app after path changes so serving mounts align with new paths.
+- `ytdlp_proxy_url` applies to yt-dlp operations and lyrics-provider outbound requests.
 
 ---
 

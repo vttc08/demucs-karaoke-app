@@ -97,7 +97,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
 
 3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
        - View current runtime settings
-       - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and yt-dlp proxy URL
+       - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and outbound proxy URL
       - Enable/disable concurrent yt-dlp search mode
       - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
       - Apply settings immediately without restarting the app (for processing/runtime behavior)
@@ -250,7 +250,9 @@ pip install --upgrade yt-dlp
 
 For karaoke mode, this app downloads source audio directly from yt-dlp formats (instead of yt-dlp ffmpeg postprocessing), which avoids `ffprobe/ffmpeg not found` during the audio-download step.
 The downloader uses progressive fallback for unavailable formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise.
-Runtime proxy is supported through settings (`yt-dlp Proxy URL`) and applied to both search and download commands.
+Runtime proxy is supported through settings (`yt-dlp Proxy URL`) and applied to:
+- yt-dlp search/download commands
+- lyrics provider requests (Musixmatch, NetEase, LRCLib, and Last.fm metadata lookup)
 Supported schemes: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`.
 Leave proxy empty for direct connections.
 
