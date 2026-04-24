@@ -5,9 +5,17 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
 try:
-    from .settings import REQUEST_TIMEOUT_SECONDS, UPSTREAM_DEMUCS_API_URL
+    from .settings import (
+        HEALTH_REQUEST_TIMEOUT_SECONDS,
+        REQUEST_TIMEOUT_SECONDS,
+        UPSTREAM_DEMUCS_API_URL,
+    )
 except ImportError:
-    from settings import REQUEST_TIMEOUT_SECONDS, UPSTREAM_DEMUCS_API_URL
+    from settings import (
+        HEALTH_REQUEST_TIMEOUT_SECONDS,
+        REQUEST_TIMEOUT_SECONDS,
+        UPSTREAM_DEMUCS_API_URL,
+    )
 
 
 app = FastAPI(title="Demucs Stub Service", version="0.1.0")
@@ -62,10 +70,10 @@ def _stub_health_payload(detail: str | None = None) -> dict[str, object]:
     }
 
 
-async def _forward_request(request: Request, path: str) -> Response:
+async def _forward_request(request: Request, path: str, timeout: float) -> Response:
     body = await request.body()
     async with httpx.AsyncClient(
-        timeout=REQUEST_TIMEOUT_SECONDS,
+        timeout=timeout,
         follow_redirects=True,
     ) as client:
         upstream_response = await client.request(
@@ -86,7 +94,11 @@ async def _forward_request(request: Request, path: str) -> Response:
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health(request: Request) -> Response:
     try:
-        return await _forward_request(request, "health")
+        return await _forward_request(
+            request,
+            "health",
+            timeout=HEALTH_REQUEST_TIMEOUT_SECONDS,
+        )
     except (httpx.RequestError, RuntimeError) as error:
         logger.warning(
             "Demucs stub health fallback path=%s error=%s",
@@ -101,7 +113,11 @@ async def health(request: Request) -> Response:
 @app.api_route("/{path:path}", methods=_FORWARDED_METHODS)
 async def proxy(path: str, request: Request) -> Response:
     try:
-        return await _forward_request(request, path)
+        return await _forward_request(
+            request,
+            path,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
     except (httpx.RequestError, RuntimeError) as error:
         logger.warning(
             "Demucs stub upstream unavailable method=%s path=%s error=%s",

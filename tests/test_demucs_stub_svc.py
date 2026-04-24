@@ -17,10 +17,12 @@ stub_app = importlib.import_module("demucs_stub_svc.app")
 
 
 def _install_async_client(monkeypatch, responder):
+    seen_ctor = {}
+
     class FakeAsyncClient:
         def __init__(self, *args, **kwargs):
-            self.args = args
-            self.kwargs = kwargs
+            seen_ctor["args"] = args
+            seen_ctor["kwargs"] = kwargs
 
         async def __aenter__(self):
             return self
@@ -32,15 +34,17 @@ def _install_async_client(monkeypatch, responder):
             return await responder(method, url, **kwargs)
 
     monkeypatch.setattr(stub_app.httpx, "AsyncClient", FakeAsyncClient)
+    return seen_ctor
 
 
 def test_health_returns_stub_healthy_when_upstream_unreachable(monkeypatch):
     monkeypatch.setattr(stub_app, "UPSTREAM_DEMUCS_API_URL", "http://backend:8001")
+    monkeypatch.setattr(stub_app, "HEALTH_REQUEST_TIMEOUT_SECONDS", 1.5)
 
     async def responder(method, url, **kwargs):
         raise httpx.ConnectError("offline")
 
-    _install_async_client(monkeypatch, responder)
+    seen_ctor = _install_async_client(monkeypatch, responder)
 
     client = TestClient(stub_app.app)
     response = client.get("/health")
@@ -49,15 +53,17 @@ def test_health_returns_stub_healthy_when_upstream_unreachable(monkeypatch):
     assert response.json()["status"] == "healthy"
     assert response.json()["service"] == "demucs_stub"
     assert response.json()["upstream_api_url"] == "http://backend:8001"
+    assert seen_ctor["kwargs"]["timeout"] == 1.5
 
 
 def test_non_health_request_returns_500_when_upstream_unreachable(monkeypatch):
     monkeypatch.setattr(stub_app, "UPSTREAM_DEMUCS_API_URL", "http://backend:8001")
+    monkeypatch.setattr(stub_app, "REQUEST_TIMEOUT_SECONDS", 45.0)
 
     async def responder(method, url, **kwargs):
         raise httpx.ConnectError("offline")
 
-    _install_async_client(monkeypatch, responder)
+    seen_ctor = _install_async_client(monkeypatch, responder)
 
     client = TestClient(stub_app.app)
     response = client.post(
@@ -68,6 +74,7 @@ def test_non_health_request_returns_500_when_upstream_unreachable(monkeypatch):
 
     assert response.status_code == 500
     assert response.json()["detail"] == "Upstream Demucs backend unavailable"
+    assert seen_ctor["kwargs"]["timeout"] == 45.0
 
 
 def test_health_forwards_upstream_payload_when_available(monkeypatch):
