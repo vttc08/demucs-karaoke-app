@@ -211,7 +211,7 @@
                         <img id="queue-config-song-thumb" src="/static/placeholder.png" alt="Selected song" class="h-full w-full object-cover" />
                     </div>
                     <div class="min-w-0">
-                        <p id="queue-config-song-title" class="truncate text-sm font-bold text-on-surface">Selected song</p>
+                        <a id="queue-config-song-title" class="block truncate text-sm font-bold text-on-surface hover:underline underline-offset-2" target="_blank" rel="noopener noreferrer">Selected song</a>
                         <p id="queue-config-song-channel" class="truncate text-xs text-on-surface-variant"></p>
                     </div>
                 </div>
@@ -275,6 +275,10 @@
                             <span class="material-symbols-outlined text-base">search</span>
                             Manual search
                         </button>
+                        <a id="queue-config-lyrics-google-link" href="https://www.google.com/search?q=lyrics" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface transition-all hover:brightness-110 active:scale-95">
+                            <span class="material-symbols-outlined text-base">open_in_new</span>
+                            Search Google
+                        </a>
                         <button id="queue-config-lyrics-upload-btn" type="button" class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface transition-all hover:brightness-110 active:scale-95">
                             <span class="material-symbols-outlined text-base">upload_file</span>
                             Upload lyrics file

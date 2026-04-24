@@ -40,13 +40,26 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [ ] integrate whisper (lang detect, word by word transcription), align lyrics if lyrics file present
 - [x] explore client side lyrics compositing
 - [x] explore client side multi-track playback and toggle vocals
-- [ ] user can upload mp3 and mp4 videos
+- [x] add google search links for lyrics
+- [x] add YouTube link on queue lyrics page
+- [ ] proxy support for lyrics
+- [ ] cache searched results and lyrics
+- [ ] modular provider files and user can disable or implement their own
+- [ ] investigate search slowness, specifically local
+- [ ] nudge user options whether to enable karaoke or lyrics based on video title
+- [ ] store media name more human readable
+- [ ] store demucs output not in cache, all should be served from media
+- [ ] file manager with real data
+- [ ] scan database button to sync states
+- [ ] perform crud on karaoke media
+- [ ] refine UI screen: add to queue condensed (mobile)
+- [ ] user can upload mp3 and mp4 videos screen: media upload (mobile+desktop)
 - [ ] queue page with users
 - [ ] frontend settings page polish
 - [ ] blueprints for subfolder custom path support
 - [x] consistent themed restriction page for outside network and splash screen
 - [ ] admin login page for settings and splash
-- [ ] login page for device identification only, stored in local storage
+- [ ] login page for device identification only, stored in local storage (Login Screen)
 - [ ] real time join and enqueue feature
 - [ ] admin has ability to remove, skip or reorder queue
 - [ ] fix multi track audio sync issues
