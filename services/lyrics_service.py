@@ -763,16 +763,23 @@ class LyricsService:
         self.metadata_inferrer = metadata_inferrer or YouTubeTitleInferrer(
             lastfm_api_key=settings.lastfm_api_key
         )
+        self._uses_runtime_provider_settings = providers is None
         if providers is not None:
             self.providers = providers
             return
 
+        self.providers = self._build_default_providers()
+
+    @staticmethod
+    def _build_default_providers() -> list[LyricsProvider]:
         default_providers: list[LyricsProvider] = []
         if settings.musixmatch_token.strip():
             default_providers.append(MusixmatchLyricsProvider())
-        default_providers.append(NeteaseLyricsProvider())
-        default_providers.append(LRCLibLyricsProvider())
-        self.providers = default_providers
+        if settings.lyrics_provider_netease_enabled:
+            default_providers.append(NeteaseLyricsProvider())
+        if settings.lyrics_provider_lrclib_enabled:
+            default_providers.append(LRCLibLyricsProvider())
+        return default_providers
 
     async def infer_song_metadata(self, title: str, artist: Optional[str] = None) -> InferredSong:
         """Infer normalized metadata for downstream lyrics providers."""
@@ -797,6 +804,8 @@ class LyricsService:
         inferred_song = await self.infer_song_metadata(title=lookup_title, artist=artist)
         if not inferred_song.title:
             return None
+        if self._uses_runtime_provider_settings:
+            self.providers = self._build_default_providers()
         debug_query = self._build_debug_query(inferred_song)
 
         musixmatch_providers = [provider for provider in self.providers if provider.name == "musixmatch"]

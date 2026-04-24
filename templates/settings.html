@@ -136,6 +136,17 @@
                         </div>
                         <input id="concurrent_ytdlp_search_enabled" type="checkbox" class="h-5 w-5 accent-primary" />
                     </label>
+                    <div class="space-y-2 rounded-lg bg-surface-container-highest/40 px-4 py-3">
+                        <p class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Concurrent Lyrics Providers</p>
+                        <label class="flex items-center justify-between gap-3">
+                            <span class="text-xs text-on-surface-variant/90">Enable NetEase provider (often includes translated lines)</span>
+                            <input id="lyrics_provider_netease_enabled" type="checkbox" class="h-5 w-5 accent-primary" />
+                        </label>
+                        <label class="flex items-center justify-between gap-3">
+                            <span class="text-xs text-on-surface-variant/90">Enable LRCLib provider</span>
+                            <input id="lyrics_provider_lrclib_enabled" type="checkbox" class="h-5 w-5 accent-primary" />
+                        </label>
+                    </div>
                     <label class="flex flex-col gap-1.5">
                         <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">FFmpeg Path</span>
                         <input id="ffmpeg_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />

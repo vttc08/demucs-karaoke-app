@@ -369,6 +369,8 @@ endpoint reflects the latest saved UI configuration after the app has booted.
   "ffmpeg_preset": "superfast",
   "ffmpeg_crf": 23,
   "concurrent_ytdlp_search_enabled": false,
+  "lyrics_provider_netease_enabled": true,
+  "lyrics_provider_lrclib_enabled": true,
   "media_path": "/mnt/karaoke_media",
   "cache_path": "/mnt/karaoke_cache",
   "ytdlp_path": "/home/user/.venv/bin/yt-dlp",
@@ -399,6 +401,8 @@ and restarts when no explicit `.env` override is present.
   "ffmpeg_preset": "veryfast",
   "ffmpeg_crf": 23,
   "concurrent_ytdlp_search_enabled": true,
+  "lyrics_provider_netease_enabled": false,
+  "lyrics_provider_lrclib_enabled": true,
   "media_path": "/mnt/karaoke_media",
   "cache_path": "/mnt/karaoke_cache",
   "ytdlp_path": "yt-dlp",
@@ -414,6 +418,8 @@ Validation:
 - `demucs_output_format` must be `wav` or `mp3`
 - `demucs_mp3_bitrate` must be between `64` and `320`
 - `concurrent_ytdlp_search_enabled` toggles optional parallel search mode
+- `lyrics_provider_netease_enabled` toggles NetEase in concurrent lyrics fallback
+- `lyrics_provider_lrclib_enabled` toggles LRCLib in concurrent lyrics fallback
 - `ytdlp_proxy_url` must be empty or use one of: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`
 - executable paths cannot be empty
 - `media_path` and `cache_path` cannot be empty when provided

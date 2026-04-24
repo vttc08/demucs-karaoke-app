@@ -181,6 +181,8 @@ class RuntimeSettingsResponse(BaseModel):
     ytdlp_path: str
     ytdlp_proxy_url: str
     concurrent_ytdlp_search_enabled: bool
+    lyrics_provider_netease_enabled: bool
+    lyrics_provider_lrclib_enabled: bool
     ffmpeg_path: str
     media_path: str
     cache_path: str
@@ -200,6 +202,8 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     ytdlp_path: Optional[str] = None
     ytdlp_proxy_url: Optional[str] = None
     concurrent_ytdlp_search_enabled: Optional[bool] = None
+    lyrics_provider_netease_enabled: Optional[bool] = None
+    lyrics_provider_lrclib_enabled: Optional[bool] = None
     ffmpeg_path: Optional[str] = None
     media_path: Optional[str] = None
     cache_path: Optional[str] = None

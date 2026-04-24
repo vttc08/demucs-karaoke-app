@@ -1428,14 +1428,97 @@ async def test_lyrics_service_fallback_providers_run_concurrently_and_pick_best_
 def test_lyrics_service_default_provider_order_includes_netease_between_musixmatch_and_lrclib():
     """Default provider chain should keep NetEase between Musixmatch and LRCLib."""
     original_token = settings.musixmatch_token
+    original_netease_enabled = settings.lyrics_provider_netease_enabled
+    original_lrclib_enabled = settings.lyrics_provider_lrclib_enabled
     try:
         settings.musixmatch_token = "token123"
+        settings.lyrics_provider_netease_enabled = True
+        settings.lyrics_provider_lrclib_enabled = True
         service = LyricsService()
     finally:
         settings.musixmatch_token = original_token
+        settings.lyrics_provider_netease_enabled = original_netease_enabled
+        settings.lyrics_provider_lrclib_enabled = original_lrclib_enabled
 
     provider_names = [provider.name for provider in service.providers]
     assert provider_names == ["musixmatch", "netease", "lrclib"]
+
+
+def test_lyrics_service_default_provider_order_respects_runtime_toggles():
+    """Default provider list should honor runtime enable/disable toggles."""
+    original_token = settings.musixmatch_token
+    original_netease_enabled = settings.lyrics_provider_netease_enabled
+    original_lrclib_enabled = settings.lyrics_provider_lrclib_enabled
+    try:
+        settings.musixmatch_token = "token123"
+        settings.lyrics_provider_netease_enabled = False
+        settings.lyrics_provider_lrclib_enabled = True
+        service = LyricsService()
+        provider_names = [provider.name for provider in service.providers]
+    finally:
+        settings.musixmatch_token = original_token
+        settings.lyrics_provider_netease_enabled = original_netease_enabled
+        settings.lyrics_provider_lrclib_enabled = original_lrclib_enabled
+
+    assert provider_names == ["musixmatch", "lrclib"]
+
+
+@pytest.mark.asyncio
+async def test_lyrics_service_rebuilds_default_providers_on_each_resolve():
+    """Default provider selection should refresh from runtime settings without recreating the service."""
+    from services import lyrics_service as ls_module
+
+    inferred = ls_module.InferredSong(title="Song", artist="Artist", source="regex")
+
+    class FakeInferrer:
+        async def infer(self, title: str, artist: str | None = None):
+            return inferred
+
+    class FakeProvider:
+        def __init__(self, name: str):
+            self.name = name
+
+        async def fetch(self, inferred_song):
+            return ls_module.LyricsPayload(
+                lyrics=f"{self.name}-lyrics",
+                is_synced=True,
+                provider=self.name,
+                inferred_song=inferred_song,
+                provider_score=1.0,
+            )
+
+    service = LyricsService(metadata_inferrer=FakeInferrer())
+    netease_provider = FakeProvider("netease")
+    lrclib_provider = FakeProvider("lrclib")
+
+    original_netease_enabled = settings.lyrics_provider_netease_enabled
+    original_lrclib_enabled = settings.lyrics_provider_lrclib_enabled
+    original_builder = service._build_default_providers
+    try:
+        def fake_builder():
+            if settings.lyrics_provider_netease_enabled:
+                return [netease_provider]
+            if settings.lyrics_provider_lrclib_enabled:
+                return [lrclib_provider]
+            return []
+
+        service._build_default_providers = fake_builder  # type: ignore[assignment]
+        settings.lyrics_provider_netease_enabled = True
+        settings.lyrics_provider_lrclib_enabled = False
+        first = await service.resolve_lyrics("Song", "Artist")
+
+        settings.lyrics_provider_netease_enabled = False
+        settings.lyrics_provider_lrclib_enabled = True
+        second = await service.resolve_lyrics("Song", "Artist")
+    finally:
+        service._build_default_providers = original_builder
+        settings.lyrics_provider_netease_enabled = original_netease_enabled
+        settings.lyrics_provider_lrclib_enabled = original_lrclib_enabled
+
+    assert first is not None
+    assert first.provider == "netease"
+    assert second is not None
+    assert second.provider == "lrclib"
 
 
 @pytest.mark.asyncio
@@ -2367,11 +2450,41 @@ def test_runtime_settings_update_settings_accepts_concurrent_search_toggle():
         settings.concurrent_ytdlp_search_enabled = original_value
 
 
+def test_runtime_settings_update_settings_accepts_lyrics_provider_toggles():
+    """Runtime settings should accept lyrics provider enable/disable updates."""
+    service = RuntimeSettingsService()
+    original_netease = settings.lyrics_provider_netease_enabled
+    original_lrclib = settings.lyrics_provider_lrclib_enabled
+    try:
+        with patch.object(
+            RuntimeSettingsService,
+            "get_demucs_health",
+            return_value=DemucsHealthResponse(
+                api_url="http://127.0.0.1:8001",
+                healthy=True,
+                detail="Demucs service is healthy",
+            ),
+        ):
+            result = service.update_settings(
+                RuntimeSettingsUpdateRequest(
+                    lyrics_provider_netease_enabled=False,
+                    lyrics_provider_lrclib_enabled=True,
+                )
+            )
+        assert result.lyrics_provider_netease_enabled is False
+        assert result.lyrics_provider_lrclib_enabled is True
+    finally:
+        settings.lyrics_provider_netease_enabled = original_netease
+        settings.lyrics_provider_lrclib_enabled = original_lrclib
+
+
 def test_runtime_settings_update_settings_persists_to_database(db_session):
     """Updating settings with a DB session should persist selected values."""
     service = RuntimeSettingsService()
     original_stage_qr_url = settings.stage_qr_url
     original_concurrent = settings.concurrent_ytdlp_search_enabled
+    original_netease = settings.lyrics_provider_netease_enabled
+    original_lrclib = settings.lyrics_provider_lrclib_enabled
     try:
         with patch.object(
             RuntimeSettingsService,
@@ -2385,12 +2498,16 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
             result = service.update_settings(
                 RuntimeSettingsUpdateRequest(
                     concurrent_ytdlp_search_enabled=True,
+                    lyrics_provider_netease_enabled=False,
+                    lyrics_provider_lrclib_enabled=True,
                     stage_qr_url="https://karaoke.test/stage",
                 ),
                 db_session,
             )
 
         assert result.concurrent_ytdlp_search_enabled is True
+        assert result.lyrics_provider_netease_enabled is False
+        assert result.lyrics_provider_lrclib_enabled is True
         assert result.stage_qr_url == "https://karaoke.test/stage"
 
         stored = {
@@ -2398,10 +2515,14 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
             for row in db_session.query(RuntimeSetting).all()
         }
         assert stored["concurrent_ytdlp_search_enabled"] == "true"
+        assert stored["lyrics_provider_netease_enabled"] == "false"
+        assert stored["lyrics_provider_lrclib_enabled"] == "true"
         assert stored["stage_qr_url"] == "https://karaoke.test/stage"
     finally:
         settings.stage_qr_url = original_stage_qr_url
         settings.concurrent_ytdlp_search_enabled = original_concurrent
+        settings.lyrics_provider_netease_enabled = original_netease
+        settings.lyrics_provider_lrclib_enabled = original_lrclib
 
 
 def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):

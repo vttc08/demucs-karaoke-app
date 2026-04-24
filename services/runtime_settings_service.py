@@ -45,6 +45,8 @@ class RuntimeSettingsService:
         "ytdlp_path",
         "ytdlp_proxy_url",
         "concurrent_ytdlp_search_enabled",
+        "lyrics_provider_netease_enabled",
+        "lyrics_provider_lrclib_enabled",
         "ffmpeg_path",
         "media_path",
         "cache_path",
@@ -79,6 +81,8 @@ class RuntimeSettingsService:
             ytdlp_path=settings.ytdlp_path,
             ytdlp_proxy_url=settings.ytdlp_proxy_url,
             concurrent_ytdlp_search_enabled=settings.concurrent_ytdlp_search_enabled,
+            lyrics_provider_netease_enabled=settings.lyrics_provider_netease_enabled,
+            lyrics_provider_lrclib_enabled=settings.lyrics_provider_lrclib_enabled,
             ffmpeg_path=settings.ffmpeg_path,
             media_path=str(settings.media_path),
             cache_path=str(settings.cache_path),
@@ -213,6 +217,20 @@ class RuntimeSettingsService:
             settings.concurrent_ytdlp_search_enabled = payload.concurrent_ytdlp_search_enabled
             updated_fields.append("concurrent_ytdlp_search_enabled")
 
+        if payload.lyrics_provider_netease_enabled is not None:
+            snapshot.setdefault(
+                "lyrics_provider_netease_enabled", settings.lyrics_provider_netease_enabled
+            )
+            settings.lyrics_provider_netease_enabled = payload.lyrics_provider_netease_enabled
+            updated_fields.append("lyrics_provider_netease_enabled")
+
+        if payload.lyrics_provider_lrclib_enabled is not None:
+            snapshot.setdefault(
+                "lyrics_provider_lrclib_enabled", settings.lyrics_provider_lrclib_enabled
+            )
+            settings.lyrics_provider_lrclib_enabled = payload.lyrics_provider_lrclib_enabled
+            updated_fields.append("lyrics_provider_lrclib_enabled")
+
         if payload.ffmpeg_path is not None:
             ffmpeg_input = payload.ffmpeg_path.strip()
             if not ffmpeg_input:
@@ -286,6 +304,20 @@ class RuntimeSettingsService:
             settings.ytdlp_proxy_url = raw_value
         elif field_name == "concurrent_ytdlp_search_enabled":
             settings.concurrent_ytdlp_search_enabled = raw_value.lower() in {"1", "true", "yes", "on"}
+        elif field_name == "lyrics_provider_netease_enabled":
+            settings.lyrics_provider_netease_enabled = raw_value.lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+        elif field_name == "lyrics_provider_lrclib_enabled":
+            settings.lyrics_provider_lrclib_enabled = raw_value.lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
         elif field_name == "ffmpeg_path":
             settings.ffmpeg_path = self._resolve_executable_path(raw_value.strip())
         elif field_name == "media_path":

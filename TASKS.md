@@ -42,9 +42,9 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] explore client side multi-track playback and toggle vocals
 - [x] add google search links for lyrics
 - [x] add YouTube link on queue lyrics page
-- [ ] proxy support for lyrics
-- [ ] cache searched results and lyrics
-- [ ] modular provider files and user can disable or implement their own
+- [x] proxy support for lyrics
+- [x] cache searched results and lyrics
+- [x] modular provider files and user can disable or implement their own
 - [ ] investigate search slowness, specifically local
 - [ ] nudge user options whether to enable karaoke or lyrics based on video title
 - [ ] store media name more human readable

@@ -63,6 +63,8 @@ class Settings(BaseSettings):
     ytdlp_path: str = "yt-dlp"
     ytdlp_proxy_url: str = ""
     concurrent_ytdlp_search_enabled: bool = False
+    lyrics_provider_netease_enabled: bool = True
+    lyrics_provider_lrclib_enabled: bool = True
     ffmpeg_path: str = "ffmpeg"
     ffmpeg_preset: str = "veryfast"
     ffmpeg_crf: int = 23

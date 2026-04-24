@@ -50,6 +50,8 @@ def client():
     original_ffmpeg_crf = settings.ffmpeg_crf
     original_ytdlp_path = settings.ytdlp_path
     original_ytdlp_proxy_url = settings.ytdlp_proxy_url
+    original_lyrics_provider_netease_enabled = settings.lyrics_provider_netease_enabled
+    original_lyrics_provider_lrclib_enabled = settings.lyrics_provider_lrclib_enabled
     original_ffmpeg_path = settings.ffmpeg_path
     original_media_path = settings.media_path
     original_cache_path = settings.cache_path
@@ -67,6 +69,8 @@ def client():
     settings.ffmpeg_crf = original_ffmpeg_crf
     settings.ytdlp_path = original_ytdlp_path
     settings.ytdlp_proxy_url = original_ytdlp_proxy_url
+    settings.lyrics_provider_netease_enabled = original_lyrics_provider_netease_enabled
+    settings.lyrics_provider_lrclib_enabled = original_lyrics_provider_lrclib_enabled
     settings.ffmpeg_path = original_ffmpeg_path
     settings.media_path = original_media_path
     settings.cache_path = original_cache_path
@@ -454,6 +458,8 @@ def test_get_runtime_settings(client):
     assert "ytdlp_path" in data
     assert "ytdlp_proxy_url" in data
     assert "concurrent_ytdlp_search_enabled" in data
+    assert "lyrics_provider_netease_enabled" in data
+    assert "lyrics_provider_lrclib_enabled" in data
     assert "ffmpeg_path" in data
     assert "media_path" in data
     assert "cache_path" in data
@@ -479,6 +485,8 @@ def test_update_runtime_settings(client):
             "ytdlp_path": "yt-dlp",
             "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
             "concurrent_ytdlp_search_enabled": True,
+            "lyrics_provider_netease_enabled": False,
+            "lyrics_provider_lrclib_enabled": True,
             "ffmpeg_path": "ffmpeg",
             "stage_qr_url": "https://karaoke.test/queue",
         },
@@ -496,6 +504,8 @@ def test_update_runtime_settings(client):
     assert data["cache_path"] == "/tmp/karaoke_cache_test"
     assert data["ytdlp_proxy_url"] == "socks5://127.0.0.1:1080"
     assert data["concurrent_ytdlp_search_enabled"] is True
+    assert data["lyrics_provider_netease_enabled"] is False
+    assert data["lyrics_provider_lrclib_enabled"] is True
     assert data["stage_qr_url"] == "https://karaoke.test/queue"
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data

@@ -97,9 +97,10 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
 
 3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
        - View current runtime settings
-       - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and outbound proxy URL
-      - Enable/disable concurrent yt-dlp search mode
-      - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
+        - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and outbound proxy URL
+       - Enable/disable concurrent yt-dlp search mode
+       - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
+       - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
       - Apply settings immediately without restarting the app (for processing/runtime behavior)
        - Persist changes to the database so settings survive app reloads and restarts
        - View real-time Demucs engine health (online/offline with detail)

@@ -197,6 +197,8 @@ This is applied at command build time, so new operations use updated proxy setti
   - `ytdlp_path`
   - `ytdlp_proxy_url`
   - `concurrent_ytdlp_search_enabled`
+  - `lyrics_provider_netease_enabled`
+  - `lyrics_provider_lrclib_enabled`
   - `ffmpeg_path`
   - `media_path`
   - `cache_path`

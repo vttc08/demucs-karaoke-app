@@ -33,6 +33,8 @@ const fields = {
     ytdlp_path: document.getElementById("ytdlp_path"),
     ytdlp_proxy_url: document.getElementById("ytdlp_proxy_url"),
     concurrent_ytdlp_search_enabled: document.getElementById("concurrent_ytdlp_search_enabled"),
+    lyrics_provider_netease_enabled: document.getElementById("lyrics_provider_netease_enabled"),
+    lyrics_provider_lrclib_enabled: document.getElementById("lyrics_provider_lrclib_enabled"),
     ffmpeg_path: document.getElementById("ffmpeg_path"),
     stage_qr_url: document.getElementById("stage_qr_url"),
 };
@@ -217,6 +219,8 @@ function applySettingsToForm(data) {
     fields.ytdlp_path.value = data.ytdlp_path || "";
     fields.ytdlp_proxy_url.value = data.ytdlp_proxy_url || "";
     fields.concurrent_ytdlp_search_enabled.checked = Boolean(data.concurrent_ytdlp_search_enabled);
+    fields.lyrics_provider_netease_enabled.checked = Boolean(data.lyrics_provider_netease_enabled ?? true);
+    fields.lyrics_provider_lrclib_enabled.checked = Boolean(data.lyrics_provider_lrclib_enabled ?? true);
     fields.ffmpeg_path.value = data.ffmpeg_path || "";
     if (fields.stage_qr_url) {
         fields.stage_qr_url.value = data.stage_qr_url || "";
@@ -275,6 +279,8 @@ async function saveSettings() {
         ytdlp_path: fields.ytdlp_path.value.trim(),
         ytdlp_proxy_url: fields.ytdlp_proxy_url.value.trim(),
         concurrent_ytdlp_search_enabled: fields.concurrent_ytdlp_search_enabled.checked,
+        lyrics_provider_netease_enabled: fields.lyrics_provider_netease_enabled.checked,
+        lyrics_provider_lrclib_enabled: fields.lyrics_provider_lrclib_enabled.checked,
         ffmpeg_path: fields.ffmpeg_path.value.trim(),
         stage_qr_url: fields.stage_qr_url ? fields.stage_qr_url.value.trim() : "",
     };
