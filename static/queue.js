@@ -120,8 +120,12 @@ async function performSearch() {
 
         // Display local results immediately
         if (localResults.length > 0) {
-            await refreshDemucsHealth();
             displaySearchResults(localResults);
+            refreshDemucsHealth().then(() => {
+                if (modalSelection) {
+                    syncQueueConfigModalUi();
+                }
+            });
             
             // Update UI to show YouTube is searching
             const loadingDiv = document.createElement('div');
