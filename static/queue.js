@@ -42,6 +42,7 @@ const queueConfigLyricsPanel = document.getElementById('queue-config-lyrics-pane
 const queueConfigLyricsState = document.getElementById('queue-config-lyrics-state');
 const queueConfigLyricsTitle = document.getElementById('queue-config-lyrics-title');
 const queueConfigLyricsArtist = document.getElementById('queue-config-lyrics-artist');
+const queueConfigLyricsDetail = document.getElementById('queue-config-lyrics-detail');
 const queueConfigLyricsSearchBtn = document.getElementById('queue-config-lyrics-search-btn');
 const queueConfigLyricsGoogleLink = document.getElementById('queue-config-lyrics-google-link');
 const queueConfigLyricsUploadBtn = document.getElementById('queue-config-lyrics-upload-btn');
@@ -49,8 +50,12 @@ const queueConfigLyricsFile = document.getElementById('queue-config-lyrics-file'
 const queueConfigLyricsProvider = document.getElementById('queue-config-lyrics-provider');
 const queueConfigLyricsTextarea = document.getElementById('queue-config-lyrics-textarea');
 const queueConfigLyricsHelp = document.getElementById('queue-config-lyrics-help');
+const queueToast = document.getElementById('queue-toast');
+const queueToastText = document.getElementById('queue-toast-text');
 const QUEUE_CONFIRM_DEFAULT_HTML = '<span class="material-symbols-outlined text-base" style="font-variation-settings: \'FILL\' 1">add_circle</span>Add to Queue';
 const QUEUE_CONFIRM_LOADING_HTML = '<span class="material-symbols-outlined animate-spin text-base">sync</span>Resolving lyrics...';
+const KARAOKE_TITLE_HINT_RE = /\b(karaoke|ktv|sing[-\s]?along|off[-\s]?vocal|no[-\s]?vocal|instrumental|noraebang)\b/i;
+const LYRICS_TITLE_HINT_RE = /\b(lyrics?|lyric\s+video|with\s+lyrics)\b/i;
 let stageRemotePaused = false;
 let stageRemoteLyricsEnabled = true;
 let stageRemoteLyricsAvailable = false;
@@ -67,6 +72,52 @@ let modalLyricsSynced = false;
 let modalLyricsFormat = 'txt';
 let modalLyricsRequestId = 0;
 let modalLyricsAbortController = null;
+let queueToastTimer = null;
+
+function showQueueToast(message) {
+    if (!queueToast || !queueToastText) {
+        return;
+    }
+
+    queueToastText.textContent = message;
+    queueToast.classList.remove('opacity-0', 'translate-y-3');
+    queueToast.classList.add('opacity-100', 'translate-y-0');
+
+    if (queueToastTimer) {
+        clearTimeout(queueToastTimer);
+    }
+    queueToastTimer = setTimeout(() => {
+        queueToast.classList.remove('opacity-100', 'translate-y-0');
+        queueToast.classList.add('opacity-0', 'translate-y-3');
+    }, 2200);
+}
+
+function getTitleHints(title) {
+    const normalizedTitle = String(title || '').trim();
+    return {
+        karaokeLike: KARAOKE_TITLE_HINT_RE.test(normalizedTitle),
+        lyricsLike: LYRICS_TITLE_HINT_RE.test(normalizedTitle),
+    };
+}
+
+function getModalTitleHints() {
+    return getTitleHints(modalSelection?.title || '');
+}
+
+function getModalDefaults() {
+    const karaokeAvailable = demucsHealth.healthy;
+    const hints = getModalTitleHints();
+
+    if (hints.karaokeLike) {
+        return { karaokeEnabled: false, lyricsEnabled: false };
+    }
+
+    if (hints.lyricsLike) {
+        return { karaokeEnabled: karaokeAvailable, lyricsEnabled: false };
+    }
+
+    return { karaokeEnabled: karaokeAvailable, lyricsEnabled: karaokeAvailable };
+}
 
 searchResults.addEventListener('click', async (event) => {
     const button = event.target.closest('.add-to-queue-btn');
@@ -327,6 +378,7 @@ function buildQueueSelection(resultElement, triggerButton) {
 
 function syncQueueConfigModalUi() {
     const karaokeAvailable = demucsHealth.healthy;
+    const titleHints = getModalTitleHints();
     if (!karaokeAvailable) {
         modalKaraokeEnabled = false;
     }
@@ -340,9 +392,13 @@ function syncQueueConfigModalUi() {
         queueConfigKaraokeStatus.classList.toggle('hidden', karaokeAvailable);
     }
     if (queueConfigKaraokeDetail) {
-        queueConfigKaraokeDetail.textContent = karaokeAvailable
-            ? 'Remove lead vocals using Demucs AI processing.'
-            : `Demucs offline: ${demucsHealth.detail}`;
+        if (!karaokeAvailable) {
+            queueConfigKaraokeDetail.textContent = `Demucs offline: ${demucsHealth.detail}`;
+        } else if (titleHints.karaokeLike) {
+            queueConfigKaraokeDetail.textContent = 'This looks like a karaoke version already, so Demucs stays off by default.';
+        } else {
+            queueConfigKaraokeDetail.textContent = 'Remove lead vocals using Demucs AI processing.';
+        }
     }
 
     updateModalToggleAppearance(queueConfigKaraokeToggle, modalKaraokeEnabled, 'bg-tertiary');
@@ -360,6 +416,13 @@ function syncQueueConfigModalUi() {
 
     if (queueConfigLyricsPanel) {
         queueConfigLyricsPanel.classList.toggle('hidden', !modalLyricsEnabled);
+    }
+    if (queueConfigLyricsDetail) {
+        if (titleHints.lyricsLike) {
+            queueConfigLyricsDetail.textContent = 'This looks like a lyrics video already, so lyrics search stays off by default.';
+        } else {
+            queueConfigLyricsDetail.textContent = 'Resolve synced lyrics before you add the song to the queue.';
+        }
     }
 
     if (queueConfigLyricsSearchBtn) {
@@ -533,8 +596,9 @@ async function openQueueConfigModal(resultElement, triggerButton) {
 
     modalSelection = buildQueueSelection(resultElement, triggerButton);
 
-    modalKaraokeEnabled = false;
-    modalLyricsEnabled = false;
+    const defaults = getModalDefaults();
+    modalKaraokeEnabled = defaults.karaokeEnabled;
+    modalLyricsEnabled = defaults.lyricsEnabled;
     modalLyricsState = 'idle';
     modalLyricsProvider = '';
     modalLyricsSynced = false;
@@ -567,6 +631,11 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     if (queueConfigLyricsTextarea) queueConfigLyricsTextarea.value = '';
     syncLyricsGoogleSearchLink();
     syncQueueConfigModalUi();
+
+    if (modalLyricsEnabled && modalKaraokeEnabled) {
+        resolveLyricsFromModal('auto');
+    }
+
     refreshDemucsHealth().then(() => {
         if (modalSelection) {
             syncQueueConfigModalUi();
@@ -924,6 +993,9 @@ if (queueConfigKaraokeToggle) {
     queueConfigKaraokeToggle.addEventListener('click', () => {
         if (queueConfigKaraokeToggle.disabled) return;
         modalKaraokeEnabled = !modalKaraokeEnabled;
+        if (modalKaraokeEnabled && getModalTitleHints().karaokeLike) {
+            showQueueToast('This looks like a karaoke version already.');
+        }
         syncQueueConfigModalUi();
     });
 }
@@ -948,6 +1020,10 @@ if (queueConfigLyricsToggle) {
             }
         } else if (shouldAutoResolveLyrics()) {
             resolveLyricsFromModal('auto');
+        }
+
+        if (modalLyricsEnabled && getModalTitleHints().lyricsLike) {
+            showQueueToast('This looks like a lyrics video already.');
         }
 
         syncQueueConfigModalUi();

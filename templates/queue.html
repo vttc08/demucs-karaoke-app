@@ -239,7 +239,7 @@
                                 <span class="material-symbols-outlined text-secondary text-base">lyrics</span>
                                 <span class="text-sm font-bold text-on-surface">Enable Lyrics</span>
                             </div>
-                            <p class="mt-1 text-xs text-on-surface-variant">Resolve synced lyrics before you add the song to the queue.</p>
+                            <p id="queue-config-lyrics-detail" class="mt-1 text-xs text-on-surface-variant">Resolve synced lyrics before you add the song to the queue.</p>
                         </div>
                         <button id="queue-config-lyrics-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-6 w-11 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
                             <span class="h-4 w-4 rounded-full bg-on-surface-variant transition-transform"></span>
@@ -324,6 +324,10 @@
         </div>
     </div>
 </main>
+
+<div id="queue-toast" class="pointer-events-none fixed bottom-4 right-4 z-50 translate-y-3 rounded-lg border border-primary/30 bg-surface-container px-4 py-2 text-sm text-on-surface opacity-0 transition-all duration-200" role="status" aria-live="polite">
+    <span id="queue-toast-text">Updated</span>
+</div>
 {% endblock %}
 
 {% block scripts %}

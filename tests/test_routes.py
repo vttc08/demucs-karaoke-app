@@ -405,6 +405,8 @@ def test_queue_page_loads(client):
     assert b"Karaoke Queue" in response.content
     assert b"queue-config-modal" in response.content
     assert b"Configure Queue" in response.content
+    assert b"queue-toast" in response.content
+    assert b"queue-config-lyrics-detail" in response.content
 
 
 def test_stage_page_loads(client):
