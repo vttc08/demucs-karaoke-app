@@ -407,6 +407,7 @@ def test_queue_page_loads(client):
     assert b"Configure Queue" in response.content
     assert b"queue-toast" in response.content
     assert b"queue-config-lyrics-detail" in response.content
+    assert b"flex-none shrink-0" in response.content
 
 
 def test_stage_page_loads(client):

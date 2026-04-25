@@ -46,7 +46,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] cache searched results and lyrics
 - [x] modular provider files and user can disable or implement their own
 - [x] investigate search slowness, specifically local
-- [x] nudge user options whether to enable karaoke or lyrics based on video title
+- [ ] nudge user options whether to enable karaoke or lyrics based on video title
 - [ ] store media name more human readable
 - [ ] store demucs output not in cache, all should be served from media
 - [ ] file manager with real data
