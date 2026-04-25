@@ -7,12 +7,14 @@ from fastapi.responses import JSONResponse, Response
 try:
     from .settings import (
         HEALTH_REQUEST_TIMEOUT_SECONDS,
+        REQUEST_CONNECT_TIMEOUT_SECONDS,
         REQUEST_TIMEOUT_SECONDS,
         UPSTREAM_DEMUCS_API_URL,
     )
 except ImportError:
     from settings import (
         HEALTH_REQUEST_TIMEOUT_SECONDS,
+        REQUEST_CONNECT_TIMEOUT_SECONDS,
         REQUEST_TIMEOUT_SECONDS,
         UPSTREAM_DEMUCS_API_URL,
     )
@@ -70,6 +72,24 @@ def _stub_health_payload(detail: str | None = None) -> dict[str, object]:
     }
 
 
+def _error_detail(error: Exception) -> str:
+    message = str(error).strip()
+    return message or error.__class__.__name__
+
+
+def _health_timeout() -> httpx.Timeout:
+    return httpx.Timeout(HEALTH_REQUEST_TIMEOUT_SECONDS)
+
+
+def _request_timeout() -> httpx.Timeout:
+    return httpx.Timeout(
+        connect=REQUEST_CONNECT_TIMEOUT_SECONDS,
+        read=REQUEST_TIMEOUT_SECONDS,
+        write=REQUEST_TIMEOUT_SECONDS,
+        pool=REQUEST_CONNECT_TIMEOUT_SECONDS,
+    )
+
+
 async def _forward_request(request: Request, path: str, timeout: float) -> Response:
     body = await request.body()
     async with httpx.AsyncClient(
@@ -97,17 +117,20 @@ async def health(request: Request) -> Response:
         return await _forward_request(
             request,
             "health",
-            timeout=HEALTH_REQUEST_TIMEOUT_SECONDS,
+            timeout=_health_timeout(),
         )
     except (httpx.RequestError, RuntimeError) as error:
         logger.warning(
             "Demucs stub health fallback path=%s error=%s",
             request.url.path,
-            error,
+            _error_detail(error),
         )
         if request.method == "HEAD":
             return Response(status_code=200)
-        return JSONResponse(status_code=200, content=_stub_health_payload(str(error)))
+        return JSONResponse(
+            status_code=200,
+            content=_stub_health_payload(_error_detail(error)),
+        )
 
 
 @app.api_route("/{path:path}", methods=_FORWARDED_METHODS)
@@ -116,14 +139,14 @@ async def proxy(path: str, request: Request) -> Response:
         return await _forward_request(
             request,
             path,
-            timeout=REQUEST_TIMEOUT_SECONDS,
+            timeout=_request_timeout(),
         )
     except (httpx.RequestError, RuntimeError) as error:
         logger.warning(
             "Demucs stub upstream unavailable method=%s path=%s error=%s",
             request.method,
             request.url.path,
-            error,
+            _error_detail(error),
         )
         raise HTTPException(
             status_code=500,

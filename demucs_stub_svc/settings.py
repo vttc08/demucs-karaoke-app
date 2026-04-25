@@ -17,10 +17,12 @@ class StubSettings(BaseSettings):
 
     demucs_api_url: str = ""
     health_request_timeout_seconds: float = 2.0
+    request_connect_timeout_seconds: float = 2.0
     request_timeout_seconds: float = 600.0
 
 
 settings = StubSettings()
 UPSTREAM_DEMUCS_API_URL = settings.demucs_api_url.strip().rstrip("/")
 HEALTH_REQUEST_TIMEOUT_SECONDS = settings.health_request_timeout_seconds
+REQUEST_CONNECT_TIMEOUT_SECONDS = settings.request_connect_timeout_seconds
 REQUEST_TIMEOUT_SECONDS = settings.request_timeout_seconds
