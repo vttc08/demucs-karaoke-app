@@ -67,6 +67,42 @@ def test_queue_service_add_to_queue(db_session):
     assert result.status == QueueStatus.PENDING
 
 
+def test_queue_service_updates_youtube_metadata_from_payload(db_session):
+    """YouTube-backed media rows should store the submitted title and artist."""
+    db_session.add(
+        MediaItem(
+            youtube_id="resolve123",
+            title="Original Video Title",
+            artist="Original Uploader",
+            media_path="/media/resolve123.mp4",
+            missing=False,
+        )
+    )
+    db_session.commit()
+
+    service = QueueService()
+    result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="resolve123",
+            title="Resolved Track Title",
+            artist="Resolved Artist",
+            is_karaoke=True,
+        ),
+    )
+
+    stored = (
+        db_session.query(MediaItem)
+        .filter(MediaItem.youtube_id == "resolve123")
+        .first()
+    )
+    assert stored is not None
+    assert stored.title == "Resolved Track Title"
+    assert stored.artist == "Resolved Artist"
+    assert result.title == "Resolved Track Title"
+    assert result.artist == "Resolved Artist"
+
+
 def test_media_items_has_youtube_id_index(db_session):
     """Media item youtube_id lookups should be backed by an index."""
     indexes = inspect(db_session.get_bind()).get_indexes("media_items")

@@ -14,6 +14,7 @@ if str(REPO_ROOT) not in __import__("sys").path:
     __import__("sys").path.insert(0, str(REPO_ROOT))
 
 stub_app = importlib.import_module("demucs_stub_svc.app")
+stub_settings = importlib.import_module("demucs_stub_svc.settings")
 
 
 def _install_async_client(monkeypatch, responder):
@@ -55,6 +56,15 @@ def test_health_returns_stub_healthy_when_upstream_unreachable(monkeypatch):
     assert response.json()["upstream_api_url"] == "http://backend:8001"
     assert seen_ctor["kwargs"]["timeout"].connect == 1.5
     assert seen_ctor["kwargs"]["timeout"].read == 1.5
+
+
+def test_stub_settings_prefers_explicit_upstream_url():
+    config = stub_settings.StubSettings(
+        upstream_demucs_api_url="http://backend:8001",
+        demucs_api_url="http://localhost:8002",
+    )
+
+    assert stub_settings.get_upstream_demucs_api_url(config) == "http://backend:8001"
 
 
 def test_non_health_request_returns_500_when_upstream_unreachable(monkeypatch):

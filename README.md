@@ -82,7 +82,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
     - Or paste a YouTube link / video id directly to add external search results
     - Local matches are preferred in results; duplicate YouTube matches are hidden
     - Tap **Add** on a result to open the queue configuration interaction
-    - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, a Google search link, an editable lyrics box, and lyrics file upload before adding to queue
+    - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, a Google search link, an editable lyrics box, and lyrics file upload before adding to queue; resolved metadata is saved back into the media entry before queueing
     - Confirm to add to queue
     - Use remote stage controls, including lyrics on/off, for the currently playing item
     - Queue status updates in real time (downloading, processing, ready, playing, failed)
@@ -304,7 +304,7 @@ ffmpeg -version
 `ffmpeg` is still required for karaoke media extraction/remux operations.
 
 ### Demucs service not available
-Karaoke mode requires Demucs service running. Configure `DEMUCS_API_URL` in `.env`.
+Karaoke mode requires Demucs service running. Configure `DEMUCS_API_URL` for the main app and `UPSTREAM_DEMUCS_API_URL` for the stub in `.env`.
 
 ### WebSocket troubleshooting
 
@@ -325,6 +325,8 @@ Then verify from Linux host:
 ```bash
 curl http://10.10.120.191:8001/health
 ```
+
+If you run the local stub proxy on `localhost:8002`, keep `DEMUCS_API_URL=http://localhost:8002` for the main app and set `UPSTREAM_DEMUCS_API_URL=http://10.10.120.191:8001` for the stub.
 
 ## License
 

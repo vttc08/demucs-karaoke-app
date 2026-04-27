@@ -10,7 +10,7 @@ from models import DemucsHealthResponse, DemucsResponse
 
 class DemucsClient:
     """Client for Demucs vocal separation service."""
-    HEALTH_TIMEOUT_SECONDS = 2.0
+    HEALTH_TIMEOUT_SECONDS = 5.0
 
     def __init__(self, api_url: str = None):
         self.api_url = api_url or settings.demucs_api_url

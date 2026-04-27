@@ -114,6 +114,8 @@ C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe -m uvicorn ap
 ```
 
 ## Connectivity Notes
-- Linux backend should use `DEMUCS_API_URL=http://10.10.120.191:8001`.
+- Linux backend should use `DEMUCS_API_URL=http://localhost:8002`.
+- Demucs stub should use `UPSTREAM_DEMUCS_API_URL=http://10.10.120.191:8001`.
+- The stub health proxy uses a 5 second upstream timeout by default (`HEALTH_REQUEST_TIMEOUT_SECONDS`) so a slightly slow `/health` response does not spam fallback warnings.
 - Do **not** return Windows file paths for consumption by Linux pipeline.
 - Return file content and save locally on Linux side.

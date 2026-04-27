@@ -117,10 +117,11 @@ The stage page uses a websocket-first model:
   - prefill title/artist from the selected search result
   - resolve synced lyrics through `POST /api/lyrics/resolve`
   - let users replace provider lyrics with manual synced text or an uploaded LRC file
-  - submit the final lyrics text alongside the queue payload
+  - submit the resolved title/artist alongside the queue payload so media rows can store normalized metadata
 - Backend flow:
   - `routes/lyrics.py` orchestrates the lookup response for the UI
   - `QueueService.add_to_queue` stores inline lyrics as a cache sidecar when karaoke is enabled and lyrics text is provided
+  - YouTube-backed media rows are refreshed with the submitted title/artist so resolved lyrics metadata persists in `media_items`
   - `KaraokeService` keeps karaoke output assembly independent from subtitle burn behavior
 
 ## Lyrics inference and provider flow
