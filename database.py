@@ -15,6 +15,7 @@ def init_db():
     """Initialize database tables."""
     _migrate_legacy_queue_items_if_needed()
     Base.metadata.create_all(bind=engine)
+    _migrate_media_items_file_stems_if_needed()
     ensure_auxiliary_schema()
 
 
@@ -35,6 +36,7 @@ def _migrate_legacy_queue_items_if_needed():
                 CREATE TABLE IF NOT EXISTS media_items (
                     id INTEGER PRIMARY KEY,
                     youtube_id TEXT UNIQUE,
+                    file_stem TEXT,
                     title TEXT NOT NULL,
                     artist TEXT,
                     media_path TEXT NOT NULL UNIQUE,
@@ -52,11 +54,12 @@ def _migrate_legacy_queue_items_if_needed():
             text(
                 """
                 INSERT OR IGNORE INTO media_items (
-                    youtube_id, title, artist, media_path, lyrics_path, vocals_path,
+                    youtube_id, file_stem, title, artist, media_path, lyrics_path, vocals_path,
                     missing, created_at, updated_at, last_scanned_at
                 )
                 SELECT
                     q.youtube_id,
+                    NULL AS file_stem,
                     COALESCE(q.title, q.youtube_id) AS title,
                     q.artist,
                     COALESCE(q.media_path, '/media/' || q.youtube_id || '.mp4') AS media_path,
@@ -113,6 +116,41 @@ def _migrate_legacy_queue_items_if_needed():
         )
         conn.execute(text("DROP TABLE queue_items"))
         conn.execute(text("ALTER TABLE queue_items_new RENAME TO queue_items"))
+
+
+def _migrate_media_items_file_stems_if_needed():
+    """Add/refresh human-readable media stems and rename existing assets."""
+    inspector = inspect(engine)
+    if "media_items" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("media_items")}
+    with engine.begin() as conn:
+        if "file_stem" not in columns:
+            conn.execute(text("ALTER TABLE media_items ADD COLUMN file_stem TEXT"))
+
+    from models import MediaItem
+    from services.queue_service import QueueService
+    from services.media_naming import build_media_stem
+
+    service = QueueService()
+    with SessionLocal() as db:
+        items = db.query(MediaItem).order_by(MediaItem.id.asc()).all()
+        for media_item in items:
+            desired_stem = build_media_stem(
+                media_item.title,
+                media_item.artist,
+                fallback=media_item.youtube_id or f"media-{media_item.id}",
+            )
+            desired_stem = service._allocate_media_stem(
+                db,
+                desired_stem,
+                media_item.youtube_id,
+                media_item.id,
+            )
+            media_item.file_stem = desired_stem
+            service._rehome_media_item_assets(db, media_item, desired_stem)
+        db.commit()
 
 
 def ensure_auxiliary_schema(bind_engine=None):

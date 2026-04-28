@@ -93,8 +93,8 @@ The stage page uses a websocket-first model:
   - optional hidden `<audio>` plays `vocals_path`
   - vocals are routed through Web Audio `GainNode` for real-time mix control.
 - Karaoke processing persists stems with explicit mapping:
-  - `no_vocals` is muxed into the final `media_path` video
-  - `vocals` is persisted separately to `vocals_path`
+  - `no_vocals` is muxed into the final `media_path` video under `media_path`
+  - `vocals` is persisted separately to `vocals_path` under `media_path`
 - Vocal mix state is runtime-only and resets when the current queue item changes.
 
 ## Stage lyrics overlay flow

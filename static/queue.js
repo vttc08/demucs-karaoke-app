@@ -463,6 +463,20 @@ function getLyricsSubmissionText() {
     return manualValue;
 }
 
+function getQueueSubmissionMetadata(selection, lyricsEnabled) {
+    const fallbackTitle = selection?.title || '';
+    const fallbackArtist = selection?.channel || '';
+
+    if (!lyricsEnabled) {
+        return { title: fallbackTitle, artist: fallbackArtist };
+    }
+
+    return {
+        title: queueConfigLyricsTitle ? queueConfigLyricsTitle.value.trim() || fallbackTitle : fallbackTitle,
+        artist: queueConfigLyricsArtist ? queueConfigLyricsArtist.value.trim() || fallbackArtist : fallbackArtist,
+    };
+}
+
 function inferLyricsFormat(text) {
     if (!text) return 'txt';
     return /^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/m.test(text) ? 'lrc' : 'txt';
@@ -897,10 +911,11 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
     const source = selection?.source || 'youtube';
     const videoId = selection?.videoId || null;
     const mediaItemId = selection?.mediaItemId || null;
-    const title = selection?.title || '';
-    const channel = selection?.channel || '';
     const isKaraoke = Boolean(options.isKaraoke);
     const lyricsEnabled = Boolean(options.lyricsEnabled && isKaraoke);
+    const submissionMetadata = getQueueSubmissionMetadata(selection, lyricsEnabled);
+    const title = submissionMetadata.title;
+    const artist = submissionMetadata.artist;
     const lyricsText = getLyricsSubmissionText();
     const lyricsFormat = lyricsText ? inferLyricsFormat(lyricsText) : null;
     const button = buttonElement || queueConfigConfirmBtn;
@@ -919,7 +934,7 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
     try {
         const payload = {
             title: title,
-            artist: channel,
+            artist: artist,
             is_karaoke: isKaraoke,
         };
         if (isKaraoke && lyricsEnabled && lyricsText) {

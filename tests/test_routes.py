@@ -16,6 +16,7 @@ from models import (
     RuntimeSetting,
 )
 from services import lyrics_service as lyrics_service_module
+from services.media_naming import build_media_stem
 from config import settings
 
 # Test database
@@ -257,7 +258,8 @@ def test_add_to_queue_persists_inline_lyrics_sidecar(client):
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["lyrics_path"] == "/cache/lyrics/queue-lyrics-1.lrc"
+    expected_stem = build_media_stem("Queue Lyrics", "Singer", fallback="queue-lyrics-1")
+    assert data["lyrics_path"] == f"/cache/lyrics/{expected_stem}.lrc"
 
 
 @pytest.mark.asyncio

@@ -120,7 +120,8 @@ When concurrent yt-dlp search is enabled:
 - Combined results are staggered/interleaved and de-duplicated by video id
 
 When karaoke mode is enabled:
-- App removes vocals with Demucs and remuxes the output media (no subtitle burn path).
+- App removes vocals with Demucs and remuxes the output media into the media library root (no subtitle burn path).
+- Karaoke remuxes and vocals sidecars are served from `/media`, not `/cache`.
 - Lyrics workflow remains available from the queue modal (provider resolve/manual upload), and lyrics are stored as sidecars for stage overlay display.
 - If Demucs is offline/unhealthy, karaoke processing fails fast and queue UI disables karaoke toggles.
 
