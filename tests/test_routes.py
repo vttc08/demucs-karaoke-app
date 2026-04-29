@@ -533,6 +533,89 @@ def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
         settings.media_path = original_media
 
 
+def test_media_delete_route_removes_row_files_and_queue_items(client, tmp_path):
+    """Delete route should remove media rows, queue rows, and local files."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "delete-route.mp4"
+        vocals_file = settings.media_path / "delete-route.vocals.mp3"
+        lyrics_file = settings.cache_path / "lyrics" / "delete-route.lrc"
+        media_file.write_text("video", encoding="utf-8")
+        vocals_file.write_text("vocals", encoding="utf-8")
+        lyrics_file.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Delete Route",
+                artist="Artist",
+                media_path="/media/delete-route.mp4",
+                vocals_path="/media/delete-route.vocals.mp3",
+                lyrics_path="/cache/lyrics/delete-route.lrc",
+                missing=False,
+            )
+            db.add(media)
+            db.flush()
+            db.add(
+                QueueItem(
+                    media_id=media.id,
+                    position=1000,
+                    status=QueueStatus.PENDING,
+                )
+            )
+            db.commit()
+            media_id = media.id
+
+        response = client.delete(f"/api/media/{media_id}")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["summary"]["deleted_files"] == 3
+        assert payload["summary"]["removed_queue_items"] == 1
+
+        assert not media_file.exists()
+        assert not vocals_file.exists()
+        assert not lyrics_file.exists()
+
+        with TestingSessionLocal() as db:
+            assert db.query(MediaItem).filter(MediaItem.id == media_id).first() is None
+            assert db.query(QueueItem).filter(QueueItem.media_id == media_id).count() == 0
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_delete_route_rejects_playing_item(client):
+    """Delete route should reject items that are currently playing."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Playing Route",
+            artist="Artist",
+            media_path="/media/playing-route.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.flush()
+        db.add(
+            QueueItem(
+                media_id=media.id,
+                position=1000,
+                status=QueueStatus.PLAYING,
+            )
+        )
+        db.commit()
+        media_id = media.id
+
+    response = client.delete(f"/api/media/{media_id}")
+    assert response.status_code == 409
+    assert "currently playing" in response.json()["detail"].lower()
+
+
 def test_access_restricted_page_loads(client):
     """Test access restricted page renders."""
     response = client.get("/access-restricted")

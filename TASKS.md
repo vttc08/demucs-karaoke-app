@@ -50,7 +50,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] store media name more human readable
 - [x] store demucs output not in cache, all should be served from media
 - [x] file manager with real data
-- [ ] scan database button to sync states
+- [x] scan database button to sync states
 - [ ] perform crud on karaoke media
 - [ ] refine UI screen: add to queue condensed (mobile)
 - [ ] user can upload mp3 and mp4 videos screen: media upload (mobile+desktop)

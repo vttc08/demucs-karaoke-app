@@ -244,6 +244,27 @@ Behavior:
 
 ---
 
+### Delete Media Item
+```
+DELETE /api/media/{item_id}
+```
+
+Deletes a media row, removes any queued items for that media if it is not currently playing, and deletes local media/sidecar files when they exist.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "summary": {
+    "deleted_files": 3,
+    "missing_files": 1,
+    "removed_queue_items": 2
+  }
+}
+```
+
+---
+
 ### Serve Media File
 ```
 GET /media/{file_path}

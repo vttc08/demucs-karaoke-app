@@ -87,6 +87,20 @@ function normalizeArtistValue(value) {
     return cleaned;
 }
 
+function setButtonsForAction(itemId, action, options = {}) {
+    const { disabled = false, label = null } = options;
+    getMediaItemNodes(itemId).forEach((node) => {
+        node.querySelectorAll(`button[data-action="${action}"]`).forEach((button) => {
+            button.disabled = disabled;
+            if (label !== null) {
+                button.textContent = label;
+            }
+            button.classList.toggle("opacity-60", disabled);
+            button.classList.toggle("cursor-not-allowed", disabled);
+        });
+    });
+}
+
 function setItemFieldText(itemNode, field, value) {
     const fieldNode = itemNode.querySelector(`[data-field="${field}"]`);
     if (fieldNode) {
@@ -270,29 +284,93 @@ function saveEditModal(event) {
     applyFilters();
 }
 
-function deleteItem(itemNode) {
+async function addToQueue(itemNode) {
+    const itemId = itemNode.dataset.itemId;
+    const title = getItemFieldText(itemNode, "title") || "item";
+    const artistText = getItemFieldText(itemNode, "artist");
+    const artist = artistText && artistText !== "Unknown Artist" ? artistText : "";
+
+    if (itemNode.dataset.missing === "true") {
+        showToast("This media item is missing from disk.");
+        return;
+    }
+
+    setButtonsForAction(itemId, "add-to-queue", { disabled: true, label: "Adding..." });
+
+    try {
+        const payload = {
+            media_item_id: Number(itemId),
+            title,
+            is_karaoke: false,
+        };
+        if (artist) {
+            payload.artist = artist;
+        }
+
+        const response = await fetch("/api/queue/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "Failed to add to queue");
+        }
+
+        const item = await response.json();
+        try {
+            await fetch(`/api/queue/${item.id}/process`, {
+                method: "POST",
+            });
+        } catch (processError) {
+            console.warn("Queue processing trigger failed:", processError);
+        }
+
+        showToast(`Queued "${title}"`);
+        setButtonsForAction(itemId, "add-to-queue", { disabled: true, label: "Queued" });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to add to queue";
+        showToast(message);
+        setButtonsForAction(itemId, "add-to-queue", { disabled: false, label: "Add to Queue" });
+    }
+}
+
+async function deleteItem(itemNode) {
     const itemId = itemNode.dataset.itemId;
     const title = getItemFieldText(itemNode, "title") || "item";
     const confirmed = window.confirm(`Delete "${title}" from media library?`);
     if (!confirmed) {
         return;
     }
-    getMediaItemNodes(itemId).forEach((node) => node.remove());
-    showToast(`Deleted "${title}"`);
-    updateEmptyState();
-}
 
-function addToQueue(itemNode) {
-    const itemId = itemNode.dataset.itemId;
-    const title = getItemFieldText(itemNode, "title") || "item";
-    getMediaItemNodes(itemId).forEach((node) => {
-        node.querySelectorAll('button[data-action="add-to-queue"]').forEach((button) => {
-            button.disabled = true;
-            button.textContent = "Queued";
-            button.classList.add("opacity-70", "cursor-default");
+    setButtonsForAction(itemId, "delete", { disabled: true, label: "Deleting..." });
+    setButtonsForAction(itemId, "add-to-queue", { disabled: true });
+    setButtonsForAction(itemId, "edit", { disabled: true });
+
+    try {
+        const response = await fetch(`/api/media/${Number(itemId)}`, {
+            method: "DELETE",
         });
-    });
-    showToast(`Added "${title}" to queue (placeholder)`);
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "Failed to delete media item");
+        }
+
+        showToast(`Deleted "${title}"`);
+        window.setTimeout(() => {
+            window.location.reload();
+        }, 450);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to delete media item";
+        showToast(message);
+        setButtonsForAction(itemId, "delete", { disabled: false, label: "Delete" });
+        setButtonsForAction(itemId, "add-to-queue", { disabled: false, label: "Add to Queue" });
+        setButtonsForAction(itemId, "edit", { disabled: false });
+    }
 }
 
 async function runLibraryScan(actionButton) {

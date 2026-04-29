@@ -13,6 +13,11 @@ from services.karaoke_service import KaraokeService
 from services.lyrics_service import LyricsService
 from services.demucs_client import DemucsClient
 from services.media_naming import build_media_stem
+from services.media_library_maintenance_service import (
+    MediaItemDeleteConflictError,
+    MediaItemNotFoundError,
+    MediaLibraryMaintenanceService,
+)
 from services.runtime_settings_service import RuntimeSettingsService
 from services.websocket_manager import ConnectionManager
 from services.media_library_sync_service import MediaLibrarySyncService
@@ -152,6 +157,89 @@ def test_media_library_sync_service_skips_sidecars_as_primary_media(db_session, 
         assert db_session.query(MediaItem).count() == 0
     finally:
         settings.media_path = original_media
+
+
+def test_media_library_maintenance_service_deletes_files_and_queue_rows(db_session, tmp_path):
+    """Deleting a media item should remove its DB row, queue rows, and local files."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "delete-me.mp4"
+        vocals_file = settings.media_path / "delete-me.vocals.wav"
+        lyrics_file = settings.cache_path / "lyrics" / "delete-me.lrc"
+        media_file.write_text("video", encoding="utf-8")
+        vocals_file.write_text("vocals", encoding="utf-8")
+
+        media = MediaItem(
+            title="Delete Me",
+            artist="Singer",
+            media_path="/media/delete-me.mp4",
+            vocals_path="/media/delete-me.vocals.wav",
+            lyrics_path="/cache/lyrics/delete-me.lrc",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.flush()
+        db_session.add(
+            QueueItem(
+                media_id=media.id,
+                position=1000,
+                status=QueueStatus.PENDING,
+            )
+        )
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        summary = service.delete_media_item(db_session, media.id)
+
+        assert summary["deleted_files"] == 2
+        assert summary["missing_files"] == 1
+        assert summary["removed_queue_items"] == 1
+        assert not media_file.exists()
+        assert not vocals_file.exists()
+        assert not lyrics_file.exists()
+        assert db_session.query(MediaItem).filter(MediaItem.id == media.id).first() is None
+        assert db_session.query(QueueItem).filter(QueueItem.media_id == media.id).count() == 0
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_library_maintenance_service_rejects_missing_item(db_session):
+    """Deleting a missing media item should raise a not-found error."""
+    service = MediaLibraryMaintenanceService()
+
+    with pytest.raises(MediaItemNotFoundError):
+        service.delete_media_item(db_session, 9999)
+
+
+def test_media_library_maintenance_service_rejects_playing_queue_item(db_session):
+    """Deleting a currently playing media item should be blocked."""
+    media = MediaItem(
+        title="Playing Track",
+        media_path="/media/playing-track.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.flush()
+    db_session.add(
+        QueueItem(
+            media_id=media.id,
+            position=1000,
+            status=QueueStatus.PLAYING,
+        )
+    )
+    db_session.commit()
+
+    service = MediaLibraryMaintenanceService()
+
+    with pytest.raises(MediaItemDeleteConflictError):
+        service.delete_media_item(db_session, media.id)
 
 
 def test_queue_service_renames_existing_media_assets(db_session, tmp_path):
