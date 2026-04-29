@@ -4,9 +4,16 @@ const mediaRows = document.querySelectorAll(".media-item-row, .media-item-card")
 const emptyState = document.getElementById("media-empty-state");
 const toast = document.getElementById("media-toast");
 const toastText = document.getElementById("media-toast-text");
+const editModal = document.getElementById("media-edit-modal");
+const editForm = document.getElementById("media-edit-form");
+const editItemIdInput = document.getElementById("media-edit-item-id");
+const editTitleInput = document.getElementById("media-edit-title");
+const editArtistInput = document.getElementById("media-edit-artist");
+const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
 
 const activeCapabilityFilters = new Set();
 let toastTimer = null;
+let activeEditItemId = null;
 
 function showToast(message) {
     if (!toast || !toastText) {
@@ -31,6 +38,45 @@ function updateEmptyState() {
     }
     const visibleItems = [...mediaRows].filter((item) => !item.classList.contains("hidden")).length;
     emptyState.classList.toggle("hidden", visibleItems > 0);
+}
+
+function getMediaItemNodes(itemId) {
+    if (!itemId) {
+        return [];
+    }
+    return [...document.querySelectorAll(`[data-item-id="${itemId}"]`)];
+}
+
+function getItemFieldText(itemNode, field) {
+    return itemNode.querySelector(`[data-field="${field}"]`)?.textContent?.trim() || "";
+}
+
+function normalizeArtistValue(value) {
+    const cleaned = (value || "").trim();
+    return cleaned;
+}
+
+function setItemFieldText(itemNode, field, value) {
+    const fieldNode = itemNode.querySelector(`[data-field="${field}"]`);
+    if (fieldNode) {
+        fieldNode.textContent = value;
+    }
+}
+
+function updateMediaItemDisplay(itemId, title, artist) {
+    const normalizedTitle = title.trim();
+    const normalizedArtist = normalizeArtistValue(artist);
+    const nodes = getMediaItemNodes(itemId);
+    nodes.forEach((node) => {
+        node.dataset.title = normalizedTitle.toLowerCase();
+        node.dataset.artist = normalizedArtist.toLowerCase();
+        setItemFieldText(node, "title", normalizedTitle);
+        setItemFieldText(node, "artist", normalizedArtist || "Unknown Artist");
+        const titleImage = node.querySelector("img[alt]");
+        if (titleImage) {
+            titleImage.alt = `${normalizedTitle} cover`;
+        }
+    });
 }
 
 function rowMatchesFilter(row, query, capabilityFilters) {
@@ -85,39 +131,80 @@ function setCapabilityFilter(nextFilter) {
     applyFilters();
 }
 
-function renameItem(itemNode) {
-    const titleElement = itemNode.querySelector('[data-field="title"]');
-    const currentTitle = titleElement?.textContent?.trim();
-    if (!titleElement || !currentTitle) {
+function openEditModal(itemNode) {
+    const itemId = itemNode.dataset.itemId;
+    const currentTitle = getItemFieldText(itemNode, "title");
+    const currentArtist = itemNode.dataset.artist || (getItemFieldText(itemNode, "artist") === "Unknown Artist" ? "" : getItemFieldText(itemNode, "artist"));
+    if (!itemId || !currentTitle) {
         return;
     }
-    const nextTitle = window.prompt("Rename media title", currentTitle);
-    if (!nextTitle || !nextTitle.trim()) {
+    activeEditItemId = itemId;
+    if (editItemIdInput) {
+        editItemIdInput.value = itemId;
+    }
+    if (editTitleInput) {
+        editTitleInput.value = currentTitle;
+    }
+    if (editArtistInput) {
+        editArtistInput.value = currentArtist;
+    }
+    if (editModal) {
+        editModal.classList.remove("hidden");
+        editModal.setAttribute("aria-hidden", "false");
+    }
+    window.setTimeout(() => {
+        editTitleInput?.focus();
+        editTitleInput?.select();
+    }, 0);
+}
+
+function closeEditModal() {
+    activeEditItemId = null;
+    if (editModal) {
+        editModal.classList.add("hidden");
+        editModal.setAttribute("aria-hidden", "true");
+    }
+}
+
+function saveEditModal(event) {
+    event.preventDefault();
+    if (!activeEditItemId || !editTitleInput) {
         return;
     }
-    const normalized = nextTitle.trim();
-    titleElement.textContent = normalized;
-    itemNode.dataset.title = normalized.toLowerCase();
-    showToast(`Renamed to "${normalized}"`);
+    const nextTitle = editTitleInput.value.trim();
+    if (!nextTitle) {
+        showToast("Title cannot be empty.");
+        return;
+    }
+    const nextArtist = editArtistInput?.value.trim() || "";
+    updateMediaItemDisplay(activeEditItemId, nextTitle, nextArtist);
+    showToast(`Updated "${nextTitle}" locally`);
+    closeEditModal();
     applyFilters();
 }
 
 function deleteItem(itemNode) {
-    const title = itemNode.querySelector('[data-field="title"]')?.textContent?.trim() || "item";
+    const itemId = itemNode.dataset.itemId;
+    const title = getItemFieldText(itemNode, "title") || "item";
     const confirmed = window.confirm(`Delete "${title}" from media library?`);
     if (!confirmed) {
         return;
     }
-    itemNode.remove();
+    getMediaItemNodes(itemId).forEach((node) => node.remove());
     showToast(`Deleted "${title}"`);
     updateEmptyState();
 }
 
-function addToQueue(itemNode, actionButton) {
-    const title = itemNode.querySelector('[data-field="title"]')?.textContent?.trim() || "item";
-    actionButton.disabled = true;
-    actionButton.textContent = "Queued";
-    actionButton.classList.add("opacity-70", "cursor-default");
+function addToQueue(itemNode) {
+    const itemId = itemNode.dataset.itemId;
+    const title = getItemFieldText(itemNode, "title") || "item";
+    getMediaItemNodes(itemId).forEach((node) => {
+        node.querySelectorAll('button[data-action="add-to-queue"]').forEach((button) => {
+            button.disabled = true;
+            button.textContent = "Queued";
+            button.classList.add("opacity-70", "cursor-default");
+        });
+    });
     showToast(`Added "${title}" to queue (placeholder)`);
 }
 
@@ -173,12 +260,12 @@ function handleActionClick(event) {
         return;
     }
 
-    if (action === "rename") {
-        renameItem(itemNode);
+    if (action === "edit") {
+        openEditModal(itemNode);
     } else if (action === "delete") {
         deleteItem(itemNode);
     } else if (action === "add-to-queue") {
-        addToQueue(itemNode, button);
+        addToQueue(itemNode);
     }
 }
 
@@ -193,5 +280,19 @@ filterButtons.forEach((button) => {
 });
 
 document.addEventListener("click", handleActionClick);
+editModalCloseButtons.forEach((button) => {
+    button.addEventListener("click", closeEditModal);
+});
+editModal?.addEventListener("click", (event) => {
+    if (event.target === editModal) {
+        closeEditModal();
+    }
+});
+editForm?.addEventListener("submit", saveEditModal);
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && editModal && !editModal.classList.contains("hidden")) {
+        closeEditModal();
+    }
+});
 syncFilterButtonStyles();
 updateEmptyState();

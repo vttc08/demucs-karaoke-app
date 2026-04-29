@@ -69,13 +69,21 @@
         <div class="space-y-3 md:hidden" id="media-cards-list">
             {% for item in media_items %}
             <article
-                class="media-item-card rounded-xl border border-white/10 bg-surface-container-low p-4"
+                class="media-item-card relative rounded-xl border border-white/10 bg-surface-container-low p-4 pt-12"
                 data-item-id="{{ item.id }}"
                 data-title="{{ item.title|lower }}"
                 data-artist="{{ (item.artist or '')|lower }}"
                 data-has-multi-track="{{ 'true' if item.has_multi_track else 'false' }}"
                 data-has-lyrics="{{ 'true' if item.has_lyrics else 'false' }}"
             >
+                <button
+                    type="button"
+                    data-action="edit"
+                    aria-label="Edit media details"
+                    class="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-surface-container-high/90 text-on-surface transition-transform hover:scale-105 active:scale-95"
+                >
+                    <span class="material-symbols-outlined text-[18px]">edit</span>
+                </button>
                 <div class="flex items-start gap-3">
                     <div class="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-surface-container-high">
                         {% if item.thumbnail %}
@@ -98,9 +106,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="mt-4 flex flex-wrap gap-2">
+                <div class="mt-4 flex flex-wrap items-end justify-end gap-2">
                     <button type="button" data-action="add-to-queue" class="rounded-full bg-primary px-3 py-1.5 text-xs font-black uppercase tracking-wider text-on-primary">Add to Queue</button>
-                    <button type="button" data-action="rename" class="rounded-full border border-white/15 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-on-surface">Rename</button>
                     <button type="button" data-action="delete" class="rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-error">Delete</button>
                 </div>
             </article>
@@ -161,7 +168,10 @@
                         <td class="px-4 py-3">
                             <div class="flex flex-wrap gap-1.5">
                                 <button type="button" data-action="add-to-queue" class="rounded-full bg-primary px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-primary">Add to Queue</button>
-                                <button type="button" data-action="rename" class="rounded-full border border-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-surface">Rename</button>
+                                <button type="button" data-action="edit" class="inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-surface">
+                                    <span class="material-symbols-outlined text-[14px]">edit</span>
+                                    Edit
+                                </button>
                                 <button type="button" data-action="delete" class="rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-error">Delete</button>
                             </div>
                         </td>
@@ -176,6 +186,56 @@
 
 <div id="media-toast" class="pointer-events-none fixed bottom-4 right-4 z-50 translate-y-3 rounded-lg border border-primary/30 bg-surface-container px-4 py-2 text-sm text-on-surface opacity-0 transition-all duration-200">
     <span id="media-toast-text">Updated</span>
+</div>
+
+<div id="media-edit-modal" class="fixed inset-0 z-[60] hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-surface-container-lowest/80 backdrop-blur-sm" data-edit-modal-close></div>
+    <div class="relative mx-auto flex min-h-full w-full max-w-2xl items-center px-4 py-8 sm:px-6">
+        <section class="glass-card w-full rounded-2xl border border-white/10 p-5 shadow-2xl shadow-black/40">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <p class="text-[11px] font-bold uppercase tracking-widest text-primary">Edit media</p>
+                    <h2 class="mt-1 font-headline text-xl font-black tracking-tight text-on-surface">Update title and artist</h2>
+                    <p class="mt-1 text-sm text-on-surface-variant">This editor updates the page state now; backend CRUD can land later.</p>
+                </div>
+                <button
+                    type="button"
+                    data-edit-modal-close
+                    class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-surface-container-high text-on-surface transition-transform hover:scale-105 active:scale-95"
+                    aria-label="Close editor"
+                >
+                    <span class="material-symbols-outlined text-[18px]">close</span>
+                </button>
+            </div>
+
+            <form id="media-edit-form" class="mt-5 space-y-4">
+                <input type="hidden" id="media-edit-item-id" />
+                <div class="space-y-2">
+                    <label for="media-edit-title" class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Title</label>
+                    <input
+                        id="media-edit-title"
+                        type="text"
+                        class="h-12 w-full rounded-xl border border-white/10 bg-surface-container-highest/40 px-4 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        autocomplete="off"
+                    />
+                </div>
+                <div class="space-y-2">
+                    <label for="media-edit-artist" class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Artist</label>
+                    <input
+                        id="media-edit-artist"
+                        type="text"
+                        class="h-12 w-full rounded-xl border border-white/10 bg-surface-container-highest/40 px-4 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40"
+                        autocomplete="off"
+                    />
+                </div>
+                <p class="text-xs text-on-surface-variant">Tip: use this to stage metadata cleanup before backend CRUD is wired up.</p>
+                <div class="flex flex-wrap justify-end gap-2 pt-2">
+                    <button type="button" data-edit-modal-close class="rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-on-surface">Cancel</button>
+                    <button type="submit" class="rounded-full bg-primary px-4 py-2 text-sm font-black uppercase tracking-wider text-on-primary">Save changes</button>
+                </div>
+            </form>
+        </section>
+    </div>
 </div>
 {% endblock %}
 

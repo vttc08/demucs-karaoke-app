@@ -482,6 +482,8 @@ def test_media_management_page_uses_database_rows(client):
     assert b"Real Song Missing" in content
     assert b"https://i.ytimg.com/vi/realabc12345/hqdefault.jpg" in content
 
+    assert b'data-action="edit"' in content
+    assert b'data-action="rename"' not in content
     assert b"synced" not in content.lower()
     assert b"Missing" in content
     assert b'data-has-multi-track="true"' in content
