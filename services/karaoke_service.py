@@ -13,6 +13,7 @@ from services.queue_service import QueueService
 from adapters.ffmpeg import FFmpegAdapter
 from models import QueueStatus
 from config import settings
+from services.media_naming import build_media_stem
 
 logger = logging.getLogger(__name__)
 
@@ -91,10 +92,11 @@ class KaraokeService:
                         item.id,
                         existing_media_path,
                     )
+                    media_stem = self._media_stem(item)
                     extracted_audio_path = (
                         settings.cache_path
                         / "audio"
-                        / f"{item.media.youtube_id}.m4a"
+                        / f"{media_stem}.audio.m4a"
                     )
                     audio_path = await asyncio.to_thread(
                         self.ffmpeg.extract_audio,
@@ -104,12 +106,25 @@ class KaraokeService:
                     video_path = existing_media_path
                 else:
                     # Karaoke flow prefers separate tracks for processing.
+                    media_stem = self._media_stem(item)
                     video_path = await asyncio.to_thread(
                         self.youtube_service.download_video, item.media.youtube_id
+                    )
+                    video_path = await asyncio.to_thread(
+                        self._rename_downloaded_file,
+                        video_path,
+                        media_stem,
+                        "media",
                     )
                     # Download audio only for karaoke flow
                     audio_path = await asyncio.to_thread(
                         self.youtube_service.download_audio, item.media.youtube_id
+                    )
+                    audio_path = await asyncio.to_thread(
+                        self._rename_downloaded_file,
+                        audio_path,
+                        media_stem,
+                        "audio",
                     )
                 # Karaoke flow
                 await self._process_karaoke(db, item, video_path, audio_path)
@@ -125,8 +140,15 @@ class KaraokeService:
                     )
                     return
                 # Non-karaoke flow: prefer single file with built-in audio.
+                media_stem = self._media_stem(item)
                 video_path = await asyncio.to_thread(
                     self.youtube_service.download_video_with_audio, item.media.youtube_id
+                )
+                video_path = await asyncio.to_thread(
+                    self._rename_downloaded_file,
+                    video_path,
+                    media_stem,
+                    "media",
                 )
                 self.queue_service.set_media_path(db, item_id, str(video_path))
                 await self.queue_service.update_status_async(
@@ -161,17 +183,17 @@ class KaraokeService:
     @staticmethod
     def _canonical_vocals_stem(item: QueueItem) -> str:
         """Build a stable basename for persisted vocals sidecars."""
-        if item.media and item.media.youtube_id:
-            return item.media.youtube_id
-        base = (item.media.title if item.media and item.media.title else f"queue-{item.id}").strip()
+        if item.media:
+            return KaraokeService._media_stem(item)
+        base = f"queue-{item.id}"
         cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", base).strip("-")
         return cleaned or f"queue-{item.id}"
 
     def _persist_vocals_sidecar(self, item: QueueItem, source_path: Path) -> Path:
-        """Persist vocals guide track with canonical *.vocals.<ext> naming."""
+        """Persist vocals guide track in media storage with canonical *.vocals.<ext> naming."""
         extension = source_path.suffix.lower() or ".wav"
         canonical_name = f"{self._canonical_vocals_stem(item)}.vocals{extension}"
-        target_path = settings.cache_path / canonical_name
+        target_path = settings.media_path / canonical_name
         target_path.parent.mkdir(parents=True, exist_ok=True)
         if source_path.resolve() == target_path.resolve():
             return target_path
@@ -214,7 +236,7 @@ class KaraokeService:
         )
         self.queue_service.set_vocals_path(db, item.id, str(vocals_sidecar_path))
 
-        output_path = settings.cache_path / f"{item.media.youtube_id}_karaoke.mp4"
+        output_path = settings.media_path / f"{self._media_stem(item)}.karaoke.mp4"
         await asyncio.to_thread(
             self.ffmpeg.combine_audio_video,
             video_path=video_path,
@@ -226,6 +248,33 @@ class KaraokeService:
         self.queue_service.set_media_path(db, item.id, str(output_path))
         await self.queue_service.update_status_async(db, item.id, QueueStatus.READY)
         logger.info("Karaoke processing completed item_id=%s output=%s", item.id, output_path)
+
+    @staticmethod
+    def _media_stem(item: QueueItem) -> str:
+        if item.media is None:
+            return f"queue-{item.id}"
+        return item.media.file_stem or build_media_stem(
+            item.media.title,
+            item.media.artist,
+            fallback=item.media.youtube_id or f"queue-{item.id}",
+        )
+
+    @staticmethod
+    def _rename_downloaded_file(source_path: Path, media_stem: str, media_kind: str) -> Path:
+        if media_kind == "audio":
+            target_path = source_path.with_name(f"{media_stem}.audio{source_path.suffix}")
+        elif media_kind == "media":
+            target_path = source_path.with_name(f"{media_stem}{source_path.suffix}")
+        else:
+            target_path = source_path.with_name(f"{media_stem}{source_path.suffix}")
+        if source_path == target_path or not source_path.exists():
+            return source_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if target_path.exists():
+            logger.warning("Skipping downloaded file rename due to existing target source=%s target=%s", source_path, target_path)
+            return source_path
+        shutil.move(str(source_path), str(target_path))
+        return target_path
 
     async def _separate_vocals_with_retry(self, item: QueueItem, audio_path: Path):
         """

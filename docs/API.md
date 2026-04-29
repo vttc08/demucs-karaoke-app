@@ -215,6 +215,85 @@ GET /api/queue/
 
 ---
 
+### Scan Media Library
+```
+POST /api/media/scan
+```
+
+Runs filesystem reconciliation against the configured media root.
+
+Behavior:
+- marks DB rows as `missing` when `media_path` is no longer present on disk
+- creates DB rows for on-disk primary media files not yet in `media_items`
+- refreshes sidecar paths (`vocals_path`, `lyrics_path`) from sibling files
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "summary": {
+    "scanned_files": 12,
+    "created": 2,
+    "marked_missing": 1,
+    "restored": 0,
+    "sidecars_updated": 3,
+    "skipped_rows": 0
+  }
+}
+```
+
+---
+
+### Rename Media Item
+```
+PATCH /api/media/{item_id}
+```
+
+Updates the media row title and artist. When `rename_on_disk` is true, the server also renames the media file and any discovered sidecar files so their paths continue to match the new stem.
+
+**Request Body:**
+```json
+{
+  "title": "New Title",
+  "artist": "New Artist",
+  "rename_on_disk": true
+}
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "summary": {
+    "renamed_files": 3,
+    "target_stem": "new-title-new-artist"
+  }
+}
+```
+
+---
+
+### Delete Media Item
+```
+DELETE /api/media/{item_id}
+```
+
+Deletes a media row, removes any queued items for that media if it is not currently playing, and deletes local media/sidecar files when they exist.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "summary": {
+    "deleted_files": 3,
+    "missing_files": 1,
+    "removed_queue_items": 2
+  }
+}
+```
+
+---
+
 ### Serve Media File
 ```
 GET /media/{file_path}

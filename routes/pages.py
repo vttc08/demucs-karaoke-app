@@ -5,42 +5,14 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from database import get_db
 from services.queue_service import QueueService
+from services.media_library_service import MediaLibraryService
 from services.runtime_settings_service import RuntimeSettingsService
 
 router = APIRouter(tags=["pages"])
 templates = Jinja2Templates(directory="templates")
 queue_service = QueueService()
+media_library_service = MediaLibraryService()
 runtime_settings_service = RuntimeSettingsService()
-
-MEDIA_PLACEHOLDER_ITEMS = [
-    {
-        "id": "m-starboy",
-        "title": "Starboy",
-        "artist": "The Weeknd ft. Daft Punk",
-        "status": "synced",
-        "thumbnail": "https://i.ytimg.com/vi/34Na4j8AVgA/hqdefault.jpg",
-        "has_multi_track": True,
-        "has_lyrics": True,
-    },
-    {
-        "id": "m-levitating",
-        "title": "Levitating",
-        "artist": "Dua Lipa",
-        "status": "new",
-        "thumbnail": "https://i.ytimg.com/vi/TUVcZfQe-Kw/hqdefault.jpg",
-        "has_multi_track": True,
-        "has_lyrics": True,
-    },
-    {
-        "id": "m-bohemian",
-        "title": "Bohemian Rhapsody",
-        "artist": "Queen",
-        "status": "missing",
-        "thumbnail": None,
-        "has_multi_track": False,
-        "has_lyrics": True,
-    },
-]
 
 
 @router.get("/")
@@ -82,15 +54,10 @@ async def settings_page(request: Request):
 
 
 @router.get("/media", response_class=HTMLResponse)
-async def media_management_page(request: Request):
-    """Placeholder media management page for library browsing/actions."""
-    media_items = MEDIA_PLACEHOLDER_ITEMS
-    media_stats = {
-        "total": len(media_items),
-        "with_multi_track": sum(1 for item in media_items if item["has_multi_track"]),
-        "with_lyrics": sum(1 for item in media_items if item["has_lyrics"]),
-        "missing": sum(1 for item in media_items if item["status"] == "missing"),
-    }
+async def media_management_page(request: Request, db: Session = Depends(get_db)):
+    """Media management page backed by persisted media library rows."""
+    media_items = media_library_service.list_media_items(db)
+    media_stats = media_library_service.get_media_stats(db)
     return templates.TemplateResponse(
         "media_management.html",
         {

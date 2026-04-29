@@ -5,7 +5,8 @@ This project currently uses two services:
 
 1. Main app
 - serves mobile queue page, stage page, and settings page
-- serves media library management page (`/media`) with placeholder-first UI interactions
+- serves media library management page (`/media`) with database-backed listing and placeholder CRUD actions
+- reconciles media library metadata with filesystem on startup and via manual scan API trigger
 - serves a static access-restricted gate page (`/access-restricted`) for reverse-proxy network checks
 - serves stage-focused presentation page
 - manages queue state
@@ -93,8 +94,8 @@ The stage page uses a websocket-first model:
   - optional hidden `<audio>` plays `vocals_path`
   - vocals are routed through Web Audio `GainNode` for real-time mix control.
 - Karaoke processing persists stems with explicit mapping:
-  - `no_vocals` is muxed into the final `media_path` video
-  - `vocals` is persisted separately to `vocals_path`
+  - `no_vocals` is muxed into the final `media_path` video under `media_path`
+  - `vocals` is persisted separately to `vocals_path` under `media_path`
 - Vocal mix state is runtime-only and resets when the current queue item changes.
 
 ## Stage lyrics overlay flow

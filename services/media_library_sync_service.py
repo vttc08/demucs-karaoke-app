@@ -1,0 +1,175 @@
+"""Filesystem reconciliation for persisted media library rows."""
+import logging
+from datetime import datetime
+from pathlib import Path
+
+from sqlalchemy.orm import Session
+
+from config import settings
+from models import MediaItem
+from services.queue_service import QueueService
+
+logger = logging.getLogger(__name__)
+
+_PRIMARY_MEDIA_EXTENSIONS = {
+    ".mp4",
+    ".mkv",
+    ".webm",
+    ".mov",
+    ".avi",
+    ".m4v",
+    ".mp3",
+    ".wav",
+    ".m4a",
+    ".flac",
+    ".aac",
+    ".ogg",
+    ".opus",
+}
+_VOCALS_AUDIO_EXTENSIONS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm")
+_LYRICS_EXTENSIONS = (".lrc", ".srt", ".txt")
+
+
+class MediaLibrarySyncService:
+    """Sync media_items rows with files under the configured media root."""
+
+    def __init__(self):
+        self.queue_service = QueueService()
+
+    def scan_library(self, db: Session) -> dict[str, int]:
+        """Reconcile database media rows with current filesystem state."""
+        scanned_at = datetime.utcnow()
+        media_files = self._discover_primary_media_files(settings.media_path)
+        files_by_url = {
+            self.queue_service.build_media_url(path): path
+            for path in media_files
+        }
+
+        rows = db.query(MediaItem).all()
+        rows_by_url: dict[str, MediaItem] = {}
+        skipped_rows = 0
+        for row in rows:
+            normalized_url = self._normalize_media_url(row.media_path)
+            if not normalized_url:
+                skipped_rows += 1
+                continue
+            rows_by_url[normalized_url] = row
+
+        marked_missing = 0
+        restored = 0
+        sidecars_updated = 0
+
+        for media_url, row in rows_by_url.items():
+            media_file = files_by_url.get(media_url)
+            if media_file is None:
+                if not row.missing:
+                    marked_missing += 1
+                row.missing = True
+                row.last_scanned_at = scanned_at
+                continue
+
+            if row.missing:
+                restored += 1
+            row.missing = False
+            row.last_scanned_at = scanned_at
+            row.file_stem = row.file_stem or media_file.stem
+            if self._refresh_sidecars(row, media_file):
+                sidecars_updated += 1
+
+        created = 0
+        for media_url, media_file in files_by_url.items():
+            if media_url in rows_by_url:
+                continue
+            new_item = MediaItem(
+                title=media_file.stem,
+                artist=None,
+                file_stem=media_file.stem,
+                media_path=media_url,
+                missing=False,
+                last_scanned_at=scanned_at,
+            )
+            if self._refresh_sidecars(new_item, media_file):
+                sidecars_updated += 1
+            db.add(new_item)
+            created += 1
+
+        db.commit()
+
+        summary = {
+            "scanned_files": len(media_files),
+            "created": created,
+            "marked_missing": marked_missing,
+            "restored": restored,
+            "sidecars_updated": sidecars_updated,
+            "skipped_rows": skipped_rows,
+        }
+        logger.info(
+            "Media library scan complete scanned_files=%s created=%s marked_missing=%s restored=%s sidecars_updated=%s skipped_rows=%s",
+            summary["scanned_files"],
+            summary["created"],
+            summary["marked_missing"],
+            summary["restored"],
+            summary["sidecars_updated"],
+            summary["skipped_rows"],
+        )
+        return summary
+
+    def _discover_primary_media_files(self, media_root: Path) -> list[Path]:
+        if not media_root.exists():
+            return []
+        results: list[Path] = []
+        for candidate in media_root.rglob("*"):
+            if not candidate.is_file():
+                continue
+            suffix = candidate.suffix.lower()
+            if suffix not in _PRIMARY_MEDIA_EXTENSIONS:
+                continue
+            if candidate.stem.lower().endswith(".vocals"):
+                continue
+            results.append(candidate.resolve())
+        results.sort()
+        return results
+
+    def _refresh_sidecars(self, media_item: MediaItem, media_file: Path) -> bool:
+        expected_vocals = self._find_vocals_sidecar(media_file)
+        expected_lyrics = self._find_lyrics_sidecar(media_file)
+        current_vocals = self._normalize_optional_url(media_item.vocals_path)
+        current_lyrics = self._normalize_optional_url(media_item.lyrics_path)
+        changed = current_vocals != expected_vocals or current_lyrics != expected_lyrics
+        media_item.vocals_path = expected_vocals
+        media_item.lyrics_path = expected_lyrics
+        return changed
+
+    def _find_vocals_sidecar(self, media_file: Path) -> str | None:
+        for ext in _VOCALS_AUDIO_EXTENSIONS:
+            candidate = media_file.with_name(f"{media_file.stem}.vocals{ext}")
+            if candidate.exists() and candidate.is_file():
+                return self.queue_service.build_media_url(candidate)
+        return None
+
+    def _find_lyrics_sidecar(self, media_file: Path) -> str | None:
+        for ext in _LYRICS_EXTENSIONS:
+            candidate = media_file.with_suffix(ext)
+            if candidate.exists() and candidate.is_file():
+                return self.queue_service.build_media_url(candidate)
+        return None
+
+    def _normalize_media_url(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        raw = value.strip()
+        if not raw:
+            return None
+        if raw.startswith("/media/"):
+            return raw
+        try:
+            return self.queue_service.build_media_url(Path(raw))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _normalize_optional_url(value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None

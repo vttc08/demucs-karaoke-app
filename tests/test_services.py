@@ -12,8 +12,16 @@ from services.youtube_service import YouTubeService
 from services.karaoke_service import KaraokeService
 from services.lyrics_service import LyricsService
 from services.demucs_client import DemucsClient
+from services.media_naming import build_media_stem
+from services.media_library_maintenance_service import (
+    MediaItemDeleteConflictError,
+    MediaItemNotFoundError,
+    MediaItemRenameConflictError,
+    MediaLibraryMaintenanceService,
+)
 from services.runtime_settings_service import RuntimeSettingsService
 from services.websocket_manager import ConnectionManager
+from services.media_library_sync_service import MediaLibrarySyncService
 from config import EXPLICIT_SETTINGS_FIELDS, settings
 from models import (
     Base,
@@ -101,6 +109,374 @@ def test_queue_service_updates_youtube_metadata_from_payload(db_session):
     assert stored.artist == "Resolved Artist"
     assert result.title == "Resolved Track Title"
     assert result.artist == "Resolved Artist"
+
+
+def test_media_library_sync_service_reconciles_rows_and_sidecars(db_session, tmp_path):
+    """Library scan should mark missing rows, create new rows, and refresh sidecars."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        existing_file = settings.media_path / "existing.mp4"
+        existing_vocals = settings.media_path / "existing.vocals.mp3"
+        existing_lyrics = settings.media_path / "existing.lrc"
+        existing_file.write_text("video", encoding="utf-8")
+        existing_vocals.write_text("vocals", encoding="utf-8")
+        existing_lyrics.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        new_nested_file = settings.media_path / "nested" / "new-track.mp4"
+        new_nested_file.parent.mkdir(parents=True, exist_ok=True)
+        new_nested_file.write_text("video", encoding="utf-8")
+
+        db_session.add_all(
+            [
+                MediaItem(
+                    title="Missing Row",
+                    media_path="/media/missing.mp4",
+                    missing=False,
+                ),
+                MediaItem(
+                    title="Existing Row",
+                    media_path="/media/existing.mp4",
+                    vocals_path=None,
+                    lyrics_path="/media/old-value.lrc",
+                    missing=True,
+                ),
+            ]
+        )
+        db_session.commit()
+
+        service = MediaLibrarySyncService()
+        summary = service.scan_library(db_session)
+
+        assert summary["scanned_files"] == 2
+        assert summary["created"] == 1
+        assert summary["marked_missing"] == 1
+        assert summary["restored"] == 1
+
+        missing_row = db_session.query(MediaItem).filter(MediaItem.media_path == "/media/missing.mp4").first()
+        assert missing_row is not None
+        assert missing_row.missing is True
+        assert missing_row.last_scanned_at is not None
+
+        existing_row = db_session.query(MediaItem).filter(MediaItem.media_path == "/media/existing.mp4").first()
+        assert existing_row is not None
+        assert existing_row.missing is False
+        assert existing_row.vocals_path == "/media/existing.vocals.mp3"
+        assert existing_row.lyrics_path == "/media/existing.lrc"
+
+        new_row = db_session.query(MediaItem).filter(MediaItem.media_path == "/media/nested/new-track.mp4").first()
+        assert new_row is not None
+        assert new_row.title == "new-track"
+        assert new_row.artist is None
+        assert new_row.file_stem == "new-track"
+        assert new_row.missing is False
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_library_sync_service_skips_sidecars_as_primary_media(db_session, tmp_path):
+    """Sidecar-only files should not be inserted as standalone media rows."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        (settings.media_path / "track.vocals.mp3").write_text("vocals", encoding="utf-8")
+        (settings.media_path / "track.lrc").write_text("[00:00.00]line", encoding="utf-8")
+
+        service = MediaLibrarySyncService()
+        summary = service.scan_library(db_session)
+
+        assert summary["scanned_files"] == 0
+        assert summary["created"] == 0
+        assert db_session.query(MediaItem).count() == 0
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_library_maintenance_service_deletes_files_and_queue_rows(db_session, tmp_path):
+    """Deleting a media item should remove its DB row, queue rows, and local files."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "delete-me.mp4"
+        vocals_file = settings.media_path / "delete-me.vocals.wav"
+        lyrics_file = settings.cache_path / "lyrics" / "delete-me.lrc"
+        media_file.write_text("video", encoding="utf-8")
+        vocals_file.write_text("vocals", encoding="utf-8")
+
+        media = MediaItem(
+            title="Delete Me",
+            artist="Singer",
+            media_path="/media/delete-me.mp4",
+            vocals_path="/media/delete-me.vocals.wav",
+            lyrics_path="/cache/lyrics/delete-me.lrc",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.flush()
+        db_session.add(
+            QueueItem(
+                media_id=media.id,
+                position=1000,
+                status=QueueStatus.PENDING,
+            )
+        )
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        summary = service.delete_media_item(db_session, media.id)
+
+        assert summary["deleted_files"] == 2
+        assert summary["missing_files"] == 1
+        assert summary["removed_queue_items"] == 1
+        assert not media_file.exists()
+        assert not vocals_file.exists()
+        assert not lyrics_file.exists()
+        assert db_session.query(MediaItem).filter(MediaItem.id == media.id).first() is None
+        assert db_session.query(QueueItem).filter(QueueItem.media_id == media.id).count() == 0
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_library_maintenance_service_rejects_missing_item(db_session):
+    """Deleting a missing media item should raise a not-found error."""
+    service = MediaLibraryMaintenanceService()
+
+    with pytest.raises(MediaItemNotFoundError):
+        service.delete_media_item(db_session, 9999)
+
+
+def test_media_library_maintenance_service_rejects_playing_queue_item(db_session):
+    """Deleting a currently playing media item should be blocked."""
+    media = MediaItem(
+        title="Playing Track",
+        media_path="/media/playing-track.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.flush()
+    db_session.add(
+        QueueItem(
+            media_id=media.id,
+            position=1000,
+            status=QueueStatus.PLAYING,
+        )
+    )
+    db_session.commit()
+
+    service = MediaLibraryMaintenanceService()
+
+    with pytest.raises(MediaItemDeleteConflictError):
+        service.delete_media_item(db_session, media.id)
+
+
+def test_media_library_maintenance_service_renames_metadata_and_files(db_session, tmp_path):
+    """Renaming a media item should update DB fields and disk assets."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        old_media = settings.media_path / "old-title.mp4"
+        old_vocals = settings.media_path / "old-title.vocals.wav"
+        old_lyrics = settings.cache_path / "lyrics" / "old-title.lrc"
+        old_media.write_text("video", encoding="utf-8")
+        old_vocals.write_text("vocals", encoding="utf-8")
+        old_lyrics.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        media = MediaItem(
+            title="Old Title",
+            artist="Old Artist",
+            media_path="/media/old-title.mp4",
+            vocals_path="/media/old-title.vocals.wav",
+            lyrics_path="/cache/lyrics/old-title.lrc",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        summary = service.rename_media_item(
+            db_session,
+            media.id,
+            title="New Title",
+            artist="New Artist",
+            rename_on_disk=True,
+        )
+
+        expected_stem = build_media_stem("New Title", "New Artist", fallback=media.youtube_id)
+        assert summary["renamed_files"] == 3
+        assert summary["target_stem"] == expected_stem
+        assert not old_media.exists()
+        assert not old_vocals.exists()
+        assert not old_lyrics.exists()
+
+        renamed_media = settings.media_path / f"{expected_stem}.mp4"
+        renamed_vocals = settings.media_path / f"{expected_stem}.vocals.wav"
+        renamed_lyrics = settings.cache_path / "lyrics" / f"{expected_stem}.lrc"
+        assert renamed_media.exists()
+        assert renamed_vocals.exists()
+        assert renamed_lyrics.exists()
+
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.title == "New Title"
+        assert stored.artist == "New Artist"
+        assert stored.file_stem == expected_stem
+        assert stored.media_path == f"/media/{expected_stem}.mp4"
+        assert stored.vocals_path == f"/media/{expected_stem}.vocals.wav"
+        assert stored.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_library_maintenance_service_renames_metadata_without_disk_changes(db_session, tmp_path):
+    """Renaming without disk changes should only update database fields."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        media_file = settings.media_path / "unchanged.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        media = MediaItem(
+            title="Unchanged",
+            artist="Artist",
+            media_path="/media/unchanged.mp4",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        summary = service.rename_media_item(
+            db_session,
+            media.id,
+            title="Only DB Rename",
+            artist="Artist Two",
+            rename_on_disk=False,
+        )
+
+        assert summary["renamed_files"] == 0
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.title == "Only DB Rename"
+        assert stored.artist == "Artist Two"
+        assert stored.media_path == "/media/unchanged.mp4"
+        assert media_file.exists()
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_library_maintenance_service_rejects_rename_conflicts(db_session, tmp_path):
+    """Renaming should fail when the destination asset already exists."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        conflict_stem = build_media_stem("New Title", "Artist", fallback=None)
+        conflict_media = settings.media_path / f"{conflict_stem}.mp4"
+        conflict_media.write_text("video", encoding="utf-8")
+        old_media = settings.media_path / "old-title.mp4"
+        old_media.write_text("video", encoding="utf-8")
+
+        media = MediaItem(
+            title="Old Title",
+            artist="Artist",
+            media_path="/media/old-title.mp4",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+
+        with pytest.raises(MediaItemRenameConflictError):
+            service.rename_media_item(
+                db_session,
+                media.id,
+                title="New Title",
+                artist="Artist",
+                rename_on_disk=True,
+            )
+    finally:
+        settings.media_path = original_media
+
+
+def test_queue_service_renames_existing_media_assets(db_session, tmp_path):
+    """Existing media files and sidecars should be renamed to human-readable stems."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        old_media = settings.media_path / "abc123.mp4"
+        old_vocals = settings.cache_path / "abc123.vocals.mp3"
+        old_lyrics = settings.cache_path / "lyrics" / "abc123.lrc"
+        old_media.write_text("video", encoding="utf-8")
+        old_vocals.write_text("vocals", encoding="utf-8")
+        old_lyrics.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        db_session.add(
+            MediaItem(
+                youtube_id="abc123",
+                title="Old Title",
+                artist="Old Artist",
+                media_path="/media/abc123.mp4",
+                vocals_path="/cache/abc123.vocals.mp3",
+                lyrics_path="/cache/lyrics/abc123.lrc",
+                missing=False,
+            )
+        )
+        db_session.commit()
+
+        service = QueueService()
+        result = service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id="abc123",
+                title="New Title",
+                artist="New Artist",
+                is_karaoke=True,
+                lyrics_text="[00:01.00]lyrics",
+            ),
+        )
+
+        expected_stem = build_media_stem("New Title", "New Artist", fallback="abc123")
+        stored = (
+            db_session.query(MediaItem)
+            .filter(MediaItem.youtube_id == "abc123")
+            .first()
+        )
+        assert stored is not None
+        assert stored.file_stem == expected_stem
+        assert stored.media_path == f"/media/{expected_stem}.mp4"
+        assert stored.vocals_path == f"/media/{expected_stem}.vocals.mp3"
+        assert stored.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
+        assert (settings.media_path / f"{expected_stem}.mp4").exists()
+        assert (settings.media_path / f"{expected_stem}.vocals.mp3").exists()
+        assert (settings.cache_path / "lyrics" / f"{expected_stem}.lrc").exists()
+        assert result.title == "New Title"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
 
 
 def test_media_items_has_youtube_id_index(db_session):
@@ -191,8 +567,9 @@ def test_queue_service_persists_lyrics_sidecar_from_queue_payload(db_session, tm
             ),
         )
 
-        assert created.lyrics_path == "/cache/lyrics/lyrics001.lrc"
-        lyrics_file = settings.cache_path / "lyrics" / "lyrics001.lrc"
+        expected_stem = build_media_stem("Lyrics Song", "Singer", fallback="lyrics001")
+        assert created.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
+        lyrics_file = settings.cache_path / "lyrics" / f"{expected_stem}.lrc"
         assert lyrics_file.read_text(encoding="utf-8") == "[00:01.00]Hello lyrics"
     finally:
         settings.cache_path = original_cache
@@ -206,6 +583,7 @@ def test_queue_service_repairs_swapped_vocals_and_infers_sidecar(db_session, tmp
         settings.media_path = tmp_path / "media"
         settings.media_path.mkdir(parents=True, exist_ok=True)
 
+        expected_stem = build_media_stem("Repair Song", "Singer", fallback="repair001")
         media_file = settings.media_path / "repair-song.mp4"
         vocals_file = settings.media_path / "repair-song.vocals.mp3"
         lyrics_file = settings.media_path / "repair-song.lrc"
@@ -235,8 +613,8 @@ def test_queue_service_repairs_swapped_vocals_and_infers_sidecar(db_session, tmp
             ),
         )
 
-        assert created.vocals_path == "/media/repair-song.vocals.mp3"
-        assert created.lyrics_path == "/media/repair-song.lrc"
+        assert created.vocals_path == f"/media/{expected_stem}.vocals.mp3"
+        assert created.lyrics_path == f"/media/{expected_stem}.lrc"
     finally:
         settings.media_path = original_media
 
@@ -655,34 +1033,44 @@ def test_youtube_service_uses_latest_media_path_setting(mock_ytdlp, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session):
+async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session, tmp_path):
     """Non-karaoke processing should use video+audio direct download."""
     queue_service = QueueService()
-    item = queue_service.add_to_queue(
-        db_session,
-        QueueItemCreate(
-            youtube_id="plain123",
-            title="Plain Song",
-            is_karaoke=False,
-        ),
-    )
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        downloaded_file = settings.media_path / "plain123.mp4"
+        downloaded_file.write_text("video", encoding="utf-8")
 
-    service = KaraokeService()
-    service.youtube_service = Mock()
-    service.queue_service = queue_service
-    service.youtube_service.download_video_with_audio.return_value = settings.media_path / "plain123.mp4"
+        item = queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id="plain123",
+                title="Plain Song",
+                is_karaoke=False,
+            ),
+        )
 
-    await service.process_queue_item(db_session, item.id)
+        service = KaraokeService()
+        service.youtube_service = Mock()
+        service.queue_service = queue_service
+        service.youtube_service.download_video_with_audio.return_value = downloaded_file
 
-    service.youtube_service.download_video_with_audio.assert_called_once_with("plain123")
-    service.youtube_service.download_video.assert_not_called()
-    service.youtube_service.download_audio.assert_not_called()
+        await service.process_queue_item(db_session, item.id)
 
-    updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
-    assert updated_item is not None
-    assert updated_item.status == QueueStatus.READY
-    assert updated_item.media is not None
-    assert updated_item.media.media_path == "/media/plain123.mp4"
+        service.youtube_service.download_video_with_audio.assert_called_once_with("plain123")
+        service.youtube_service.download_video.assert_not_called()
+        service.youtube_service.download_audio.assert_not_called()
+
+        updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
+        assert updated_item is not None
+        assert updated_item.status == QueueStatus.READY
+        assert updated_item.media is not None
+        expected_stem = build_media_stem("Plain Song", None, fallback="plain123")
+        assert updated_item.media.media_path == f"/media/{expected_stem}.mp4"
+    finally:
+        settings.media_path = original_media
 
 
 @pytest.mark.asyncio
@@ -696,8 +1084,9 @@ async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(d
         settings.media_path.mkdir(parents=True, exist_ok=True)
         settings.cache_path.mkdir(parents=True, exist_ok=True)
 
-        media_file = settings.media_path / "karaoke-ready.mp4"
-        lyrics_file = settings.cache_path / "lyrics" / "karaoke-ready.lrc"
+        expected_stem = build_media_stem("Karaoke Ready", "Singer", fallback="karaoke-ready")
+        media_file = settings.media_path / f"{expected_stem}.mp4"
+        lyrics_file = settings.cache_path / "lyrics" / f"{expected_stem}.lrc"
         lyrics_file.parent.mkdir(parents=True, exist_ok=True)
         media_file.write_text("video", encoding="utf-8")
         lyrics_file.write_text("[00:01.00]Existing lyrics", encoding="utf-8")
@@ -725,9 +1114,9 @@ async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(d
             healthy=True,
             detail="ok",
         )
-        service.ffmpeg.extract_audio.return_value = settings.cache_path / "audio" / "karaoke-ready.wav"
-        no_vocals_path = settings.cache_path / "stem" / "karaoke-ready.no_vocals.wav"
-        vocals_path = settings.cache_path / "stem" / "karaoke-ready.vocals.wav"
+        service.ffmpeg.extract_audio.return_value = settings.cache_path / "audio" / f"{expected_stem}.audio.wav"
+        no_vocals_path = settings.cache_path / "stem" / f"{expected_stem}.no_vocals.wav"
+        vocals_path = settings.cache_path / "stem" / f"{expected_stem}.vocals.wav"
         no_vocals_path.parent.mkdir(parents=True, exist_ok=True)
         no_vocals_path.write_text("no vocals", encoding="utf-8")
         vocals_path.write_text("vocals", encoding="utf-8")
@@ -744,7 +1133,7 @@ async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(d
         assert updated_item is not None
         assert updated_item.status == QueueStatus.READY
         assert updated_item.media is not None
-        assert updated_item.media.lyrics_path == "/cache/lyrics/karaoke-ready.lrc"
+        assert updated_item.media.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
@@ -1797,11 +2186,18 @@ def test_netease_provider_prefers_cjk_candidate_and_rejects_low_confidence():
 async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_path):
     """Karaoke processing should remux final output instead of burning subtitles."""
     queue_service = QueueService()
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    settings.media_path = tmp_path / "media"
+    settings.media_path.mkdir(parents=True, exist_ok=True)
+    settings.cache_path = tmp_path / "cache"
+    settings.cache_path.mkdir(parents=True, exist_ok=True)
     item = queue_service.add_to_queue(
         db_session,
         QueueItemCreate(
             youtube_id="kara123",
             title="Kara Song",
+            artist="Singer",
             is_karaoke=True,
         ),
     )
@@ -1811,27 +2207,32 @@ async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_p
     service.youtube_service = Mock()
     service.demucs_client = Mock()
     service.ffmpeg = Mock()
-    service.youtube_service.download_video.return_value = Path("/tmp/video.mp4")
-    service.youtube_service.download_audio.return_value = Path("/tmp/audio.wav")
-    no_vocals_file = tmp_path / "no_vocals.wav"
-    vocals_file = tmp_path / "vocals.wav"
+    expected_stem = build_media_stem("Kara Song", "Singer", fallback="kara123")
+    downloaded_video = settings.media_path / "kara123.mp4"
+    downloaded_audio = settings.media_path / "kara123.audio.m4a"
+    downloaded_video.write_text("video", encoding="utf-8")
+    downloaded_audio.write_text("audio", encoding="utf-8")
+    service.youtube_service.download_video.return_value = downloaded_video
+    service.youtube_service.download_audio.return_value = downloaded_audio
+    no_vocals_file = tmp_path / f"{expected_stem}.no_vocals.wav"
+    vocals_file = tmp_path / f"{expected_stem}.vocals.wav"
     no_vocals_file.write_bytes(b"no-vocals")
     vocals_file.write_bytes(b"vocals")
     service.demucs_client.separate_vocals = AsyncMock(
         return_value=Mock(no_vocals_path=str(no_vocals_file), vocals_path=str(vocals_file))
     )
-    original_cache = settings.cache_path
-    settings.cache_path = tmp_path
-
     try:
         await service.process_queue_item(db_session, item.id)
     finally:
         settings.cache_path = original_cache
+        settings.media_path = original_media
 
     service.ffmpeg.combine_audio_video.assert_called_once()
     updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
     assert updated_item is not None
-    assert updated_item.media.vocals_path == "/cache/kara123.vocals.wav"
+    assert updated_item.media is not None
+    assert updated_item.media.media_path == f"/media/{expected_stem}.karaoke.mp4"
+    assert updated_item.media.vocals_path == f"/media/{expected_stem}.vocals.wav"
 
 
 @pytest.mark.asyncio
@@ -1842,6 +2243,7 @@ async def test_karaoke_service_reuses_existing_media_without_redownload(db_sessi
     try:
         settings.media_path = tmp_path / "media"
         settings.media_path.mkdir(parents=True, exist_ok=True)
+        expected_stem = build_media_stem("Reuse Song", "Singer", fallback="reuse001")
         (settings.media_path / "reuse001.mp4").write_text("video", encoding="utf-8")
 
         db_session.add(
@@ -1869,6 +2271,8 @@ async def test_karaoke_service_reuses_existing_media_without_redownload(db_sessi
         updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
         assert updated_item is not None
         assert updated_item.status == QueueStatus.READY
+        assert updated_item.media is not None
+        assert updated_item.media.media_path == f"/media/{expected_stem}.mp4"
     finally:
         settings.media_path = original_media
 
@@ -1883,6 +2287,7 @@ async def test_karaoke_service_reuses_existing_karaoke_media_without_redownload(
     try:
         settings.media_path = tmp_path / "media"
         settings.media_path.mkdir(parents=True, exist_ok=True)
+        expected_stem = build_media_stem("Karaoke Reuse", "Singer", fallback="kara-reuse")
         (settings.media_path / "kara-reuse.mp4").write_text("video", encoding="utf-8")
         (settings.media_path / "kara-reuse.vocals.mp3").write_text("vocals", encoding="utf-8")
 
@@ -1916,6 +2321,9 @@ async def test_karaoke_service_reuses_existing_karaoke_media_without_redownload(
         updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
         assert updated_item is not None
         assert updated_item.status == QueueStatus.READY
+        assert updated_item.media is not None
+        assert updated_item.media.media_path == f"/media/{expected_stem}.mp4"
+        assert updated_item.media.vocals_path == f"/media/{expected_stem}.vocals.mp3"
     finally:
         settings.media_path = original_media
 

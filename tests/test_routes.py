@@ -16,6 +16,7 @@ from models import (
     RuntimeSetting,
 )
 from services import lyrics_service as lyrics_service_module
+from services.media_naming import build_media_stem
 from config import settings
 
 # Test database
@@ -257,7 +258,8 @@ def test_add_to_queue_persists_inline_lyrics_sidecar(client):
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["lyrics_path"] == "/cache/lyrics/queue-lyrics-1.lrc"
+    expected_stem = build_media_stem("Queue Lyrics", "Singer", fallback="queue-lyrics-1")
+    assert data["lyrics_path"] == f"/cache/lyrics/{expected_stem}.lrc"
 
 
 @pytest.mark.asyncio
@@ -439,11 +441,274 @@ def test_media_management_page_loads(client):
     assert b"Manage Existing Media" in response.content
 
 
+def test_media_management_page_uses_database_rows(client):
+    """Media management page should render DB-backed library rows and stats."""
+    with TestingSessionLocal() as db:
+        db.add_all(
+            [
+                MediaItem(
+                    youtube_id="realabc12345",
+                    title="Real Song One",
+                    artist="Artist One",
+                    media_path="/media/real-song-one.mp4",
+                    vocals_path="/media/real-song-one.vocals.wav",
+                    lyrics_path="/media/real-song-one.lrc",
+                    missing=False,
+                ),
+                MediaItem(
+                    youtube_id="realdef67890",
+                    title="Real Song Two",
+                    artist="Artist Two",
+                    media_path="/media/real-song-two.mp4",
+                    missing=False,
+                ),
+                MediaItem(
+                    title="Real Song Missing",
+                    artist="Artist Missing",
+                    media_path="/media/real-song-missing.mp4",
+                    lyrics_path="/media/real-song-missing.lrc",
+                    missing=True,
+                ),
+            ]
+        )
+        db.commit()
+
+    response = client.get("/media")
+    assert response.status_code == 200
+    content = response.content
+
+    assert b"Real Song One" in content
+    assert b"Artist One" in content
+    assert b"Real Song Missing" in content
+    assert b"https://i.ytimg.com/vi/realabc12345/hqdefault.jpg" in content
+    assert b'data-media-path="/media/real-song-one.mp4"' in content
+
+    assert b'data-action="edit"' in content
+    assert b'data-action="rename"' not in content
+    assert b"synced" not in content.lower()
+    assert b"Filename on disk" in content
+    assert b'id="media-edit-rename-disk" type="checkbox"' in content
+    assert b'id="media-edit-rename-disk" type="checkbox" class="peer h-5 w-5 appearance-none rounded border-2 border-outline-variant bg-transparent transition-all checked:border-secondary checked:bg-secondary" checked />' in content
+    assert b"Missing" in content
+    assert b'data-has-multi-track="true"' in content
+    assert b'data-has-lyrics="true"' in content
+    assert b'data-has-multi-track="false"' in content
+    assert b'data-has-lyrics="false"' in content
+
+    assert content.count(b">3</p>") >= 1
+    assert content.count(b">1</p>") >= 2
+    assert content.count(b">2</p>") >= 1
+
+
+def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
+    """Manual media scan route should create and mark rows from filesystem diff."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.media_path / "scan-song.mp4").write_text("video", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            db.add(
+                MediaItem(
+                    title="To Missing",
+                    media_path="/media/should-be-missing.mp4",
+                    missing=False,
+                )
+            )
+            db.commit()
+
+        response = client.post("/api/media/scan")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["summary"]["created"] == 1
+        assert payload["summary"]["marked_missing"] == 1
+
+        with TestingSessionLocal() as db:
+            created = db.query(MediaItem).filter(MediaItem.media_path == "/media/scan-song.mp4").first()
+            assert created is not None
+            assert created.title == "scan-song"
+
+            missing_row = db.query(MediaItem).filter(MediaItem.media_path == "/media/should-be-missing.mp4").first()
+            assert missing_row is not None
+            assert missing_row.missing is True
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_delete_route_removes_row_files_and_queue_items(client, tmp_path):
+    """Delete route should remove media rows, queue rows, and local files."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "delete-route.mp4"
+        vocals_file = settings.media_path / "delete-route.vocals.mp3"
+        lyrics_file = settings.cache_path / "lyrics" / "delete-route.lrc"
+        media_file.write_text("video", encoding="utf-8")
+        vocals_file.write_text("vocals", encoding="utf-8")
+        lyrics_file.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Delete Route",
+                artist="Artist",
+                media_path="/media/delete-route.mp4",
+                vocals_path="/media/delete-route.vocals.mp3",
+                lyrics_path="/cache/lyrics/delete-route.lrc",
+                missing=False,
+            )
+            db.add(media)
+            db.flush()
+            db.add(
+                QueueItem(
+                    media_id=media.id,
+                    position=1000,
+                    status=QueueStatus.PENDING,
+                )
+            )
+            db.commit()
+            media_id = media.id
+
+        response = client.delete(f"/api/media/{media_id}")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["summary"]["deleted_files"] == 3
+        assert payload["summary"]["removed_queue_items"] == 1
+
+        assert not media_file.exists()
+        assert not vocals_file.exists()
+        assert not lyrics_file.exists()
+
+        with TestingSessionLocal() as db:
+            assert db.query(MediaItem).filter(MediaItem.id == media_id).first() is None
+            assert db.query(QueueItem).filter(QueueItem.media_id == media_id).count() == 0
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_delete_route_rejects_playing_item(client):
+    """Delete route should reject items that are currently playing."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Playing Route",
+            artist="Artist",
+            media_path="/media/playing-route.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.flush()
+        db.add(
+            QueueItem(
+                media_id=media.id,
+                position=1000,
+                status=QueueStatus.PLAYING,
+            )
+        )
+        db.commit()
+        media_id = media.id
+
+    response = client.delete(f"/api/media/{media_id}")
+    assert response.status_code == 409
+    assert "currently playing" in response.json()["detail"].lower()
+
+
+def test_media_rename_route_updates_database_and_files(client, tmp_path):
+    """Rename route should update metadata and on-disk assets."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        old_media = settings.media_path / "old-route.mp4"
+        old_vocals = settings.media_path / "old-route.vocals.wav"
+        old_lyrics = settings.cache_path / "lyrics" / "old-route.lrc"
+        old_media.write_text("video", encoding="utf-8")
+        old_vocals.write_text("vocals", encoding="utf-8")
+        old_lyrics.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Old Route",
+                artist="Old Artist",
+                media_path="/media/old-route.mp4",
+                vocals_path="/media/old-route.vocals.wav",
+                lyrics_path="/cache/lyrics/old-route.lrc",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        response = client.patch(
+            f"/api/media/{media_id}",
+            json={
+                "title": "New Route",
+                "artist": "New Artist",
+                "rename_on_disk": True,
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["summary"]["renamed_files"] == 3
+
+        expected_stem = build_media_stem("New Route", "New Artist", fallback="old-route")
+        assert not old_media.exists()
+        assert not old_vocals.exists()
+        assert not old_lyrics.exists()
+        assert (settings.media_path / f"{expected_stem}.mp4").exists()
+        assert (settings.media_path / f"{expected_stem}.vocals.wav").exists()
+        assert (settings.cache_path / "lyrics" / f"{expected_stem}.lrc").exists()
+
+        with TestingSessionLocal() as db:
+            stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+            assert stored is not None
+            assert stored.title == "New Route"
+            assert stored.artist == "New Artist"
+            assert stored.media_path == f"/media/{expected_stem}.mp4"
+            assert stored.vocals_path == f"/media/{expected_stem}.vocals.wav"
+            assert stored.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
 def test_access_restricted_page_loads(client):
     """Test access restricted page renders."""
     response = client.get("/access-restricted")
     assert response.status_code == 200
     assert b"Access restricted" in response.content
+
+
+def test_app_startup_triggers_media_scan():
+    """Application lifespan should run media library scan on startup."""
+    with patch(
+        "main.media_library_sync_service.scan_library",
+        return_value={
+            "scanned_files": 0,
+            "created": 0,
+            "marked_missing": 0,
+            "restored": 0,
+            "sidecars_updated": 0,
+            "skipped_rows": 0,
+        },
+    ) as mock_scan:
+        with TestClient(app) as startup_client:
+            response = startup_client.get("/health")
+            assert response.status_code == 200
+
+    assert mock_scan.called
 
 
 def test_get_runtime_settings(client):

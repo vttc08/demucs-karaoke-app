@@ -64,6 +64,7 @@ class MediaItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     youtube_id = Column(String, nullable=True)
+    file_stem = Column(String, nullable=True, index=True)
     title = Column(String, nullable=False, index=True)
     artist = Column(String, nullable=True, index=True)
     media_path = Column(String, nullable=False, unique=True)

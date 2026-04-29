@@ -1,12 +1,14 @@
 """Queue service for managing the karaoke queue."""
 import logging
 import re
+import shutil
 from pathlib import Path
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from models import MediaItem, QueueItem, QueueItemCreate, QueueItemResponse, QueueStatus
 from config import settings
+from services.media_naming import build_media_stem
 
 logger = logging.getLogger(__name__)
 _AUDIO_SUFFIXES = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm"}
@@ -45,16 +47,39 @@ class QueueService:
                 .filter(MediaItem.youtube_id == item.youtube_id)
                 .first()
             )
+            effective_title = item.title or (media_item.title if media_item else "")
+            effective_artist = (
+                item.artist
+                if item.artist is not None
+                else (media_item.artist if media_item else None)
+            )
+            target_stem = self._allocate_media_stem(
+                db,
+                build_media_stem(
+                    effective_title,
+                    effective_artist,
+                    fallback=item.youtube_id,
+                ),
+                item.youtube_id,
+                media_item.id if media_item else None,
+            )
             if media_item is None:
                 media_item = MediaItem(
                     youtube_id=item.youtube_id,
-                    title=item.title,
-                    artist=item.artist,
-                    media_path=f"/media/{item.youtube_id}.mp4",
+                    title=self._normalize_required_metadata(item.title),
+                    artist=self._normalize_optional_metadata(item.artist),
+                    file_stem=target_stem,
+                    media_path=f"/media/{target_stem}.mp4",
                     missing=True,
                 )
                 db.add(media_item)
                 db.flush()
+            else:
+                if item.title:
+                    media_item.title = self._normalize_required_metadata(item.title)
+                if item.artist is not None:
+                    media_item.artist = self._normalize_optional_metadata(item.artist)
+                self._rehome_media_item_assets(db, media_item, target_stem)
         else:
             raise ValueError("Either youtube_id or media_item_id is required")
 
@@ -62,6 +87,13 @@ class QueueService:
             media_item.title = item.title
         if not media_item.artist and item.artist:
             media_item.artist = item.artist
+        if not media_item.file_stem:
+            media_item.file_stem = self._allocate_media_stem(
+                db,
+                build_media_stem(media_item.title, media_item.artist, fallback=media_item.youtube_id),
+                media_item.youtube_id,
+                media_item.id,
+            )
         if item.is_karaoke and item.lyrics_text:
             self._store_lyrics_sidecar(media_item, item)
 
@@ -340,7 +372,11 @@ class QueueService:
             return
 
         suffix = self._lyrics_suffix(lyrics_text, item.lyrics_format)
-        stem = media_item.youtube_id or self._sanitize_sidecar_stem(media_item.title)
+        stem = media_item.file_stem or build_media_stem(
+            media_item.title,
+            media_item.artist,
+            fallback=media_item.youtube_id,
+        )
         lyrics_dir = settings.cache_path / "lyrics"
         lyrics_dir.mkdir(parents=True, exist_ok=True)
         lyrics_path = lyrics_dir / f"{stem}{suffix}"
@@ -367,6 +403,125 @@ class QueueService:
         if re.search(r"^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]", lyrics_text, re.MULTILINE):
             return ".lrc"
         return ".txt"
+
+    @staticmethod
+    def _allocate_media_stem(
+        db: Session,
+        base_stem: str,
+        youtube_id: str | None,
+        media_id: int | None,
+    ) -> str:
+        candidate = base_stem
+        if not QueueService._media_stem_in_use(db, candidate, media_id):
+            return candidate
+        if youtube_id:
+            candidate = f"{base_stem} [{youtube_id}]"
+        return candidate
+
+    @staticmethod
+    def _media_stem_in_use(db: Session, stem: str, media_id: int | None) -> bool:
+        query = db.query(MediaItem)
+        if media_id is not None:
+            query = query.filter(MediaItem.id != media_id)
+        for media_item in query.all():
+            for media_url in (media_item.media_path, media_item.lyrics_path, media_item.vocals_path):
+                media_file = QueueService._media_url_to_file(media_url)
+                if media_file and media_file.name.startswith(stem):
+                    return True
+        return False
+
+    def _rehome_media_item_assets(
+        self, db: Session, media_item: MediaItem, target_stem: str
+    ) -> None:
+        if not target_stem:
+            return
+
+        normalized_vocals_path, normalized_lyrics_path = self._repair_sidecar_fields(
+            media_path=media_item.media_path,
+            vocals_path=media_item.vocals_path,
+            lyrics_path=media_item.lyrics_path,
+        )
+
+        updated_media_path = self._rename_media_url_field(
+            media_item.media_path,
+            target_stem,
+            media_kind="media",
+            target_root=settings.media_path,
+        )
+        if updated_media_path:
+            media_item.media_path = updated_media_path
+            media_item.missing = False
+
+        updated_vocals_path = self._rename_media_url_field(
+            normalized_vocals_path,
+            target_stem,
+            media_kind="vocals",
+            target_root=settings.media_path,
+        )
+        if updated_vocals_path:
+            media_item.vocals_path = updated_vocals_path
+
+        updated_lyrics_path = self._rename_media_url_field(
+            normalized_lyrics_path,
+            target_stem,
+            media_kind="lyrics",
+            target_root=None,
+        )
+        if updated_lyrics_path:
+            media_item.lyrics_path = updated_lyrics_path
+
+        media_item.file_stem = target_stem
+        db.flush()
+
+    def _rename_media_url_field(
+        self,
+        media_url: str | None,
+        target_stem: str,
+        media_kind: str,
+        target_root: Path | None = None,
+    ) -> str | None:
+        source_path = self._media_url_to_file(media_url)
+        if source_path is None or not source_path.exists():
+            return media_url
+
+        if media_kind == "vocals":
+            target_name = f"{target_stem}.vocals{source_path.suffix}"
+        else:
+            target_name = f"{target_stem}{source_path.suffix}"
+        target_path = (
+            (target_root or source_path.parent) / target_name
+            if target_root is not None
+            else source_path.with_name(target_name)
+        )
+        if source_path == target_path:
+            return media_url
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if target_path.exists():
+            if source_path.parent != target_path.parent and source_path.exists():
+                source_path.unlink()
+                return self.build_media_url(target_path)
+            logger.warning(
+                "Skipping media rename due to existing target path source=%s target=%s",
+                source_path,
+                target_path,
+            )
+            return media_url
+
+        shutil.move(str(source_path), str(target_path))
+        return self.build_media_url(target_path)
+
+    @staticmethod
+    def _normalize_required_metadata(value: str) -> str:
+        cleaned = value.strip()
+        return cleaned or value
+
+    @staticmethod
+    def _normalize_optional_metadata(value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
     def append_to_end(self, db: Session) -> int:
         """Return a sparse position value at queue tail."""

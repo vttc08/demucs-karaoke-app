@@ -13,10 +13,21 @@ if __name__ == "__main__":
 
 import logging
 from logging_config import configure_logging
-from routes import media_files, lyrics, pages, queue, qr as qr_routes, search, settings as settings_routes
+from routes import (
+    media_files,
+    lyrics,
+    media_library,
+    pages,
+    queue,
+    qr as qr_routes,
+    search,
+    settings as settings_routes,
+)
+from services.media_library_sync_service import MediaLibrarySyncService
 
 configure_logging()
 logger = logging.getLogger(__name__)
+media_library_sync_service = MediaLibrarySyncService()
 
 
 @asynccontextmanager
@@ -48,6 +59,20 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("No persisted runtime settings found")
 
+    db = SessionLocal()
+    try:
+        scan_summary = media_library_sync_service.scan_library(db)
+        logger.info(
+            "Startup media scan summary created=%s missing=%s restored=%s sidecars=%s scanned_files=%s",
+            scan_summary["created"],
+            scan_summary["marked_missing"],
+            scan_summary["restored"],
+            scan_summary["sidecars_updated"],
+            scan_summary["scanned_files"],
+        )
+    finally:
+        db.close()
+
     yield
     # Shutdown (cleanup if needed)
     logger.info("Shutting down karaoke application")
@@ -68,6 +93,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Include routers
 app.include_router(media_files.router)
+app.include_router(media_library.router)
 app.include_router(pages.router)
 app.include_router(lyrics.router)
 app.include_router(queue.router)

@@ -106,9 +106,13 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
        - View real-time Demucs engine health (online/offline with detail)
 
 4. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
-       - Browse existing media entries in responsive card/table layouts
-       - View title, artist, and capability badges (multi-track, lyrics)
-       - Use placeholder UI actions for rename, delete, and add-to-queue flows (integration-ready template variables)
+        - Browse existing database-backed media entries in responsive card/table layouts
+        - View title, artist, and capability badges (multi-track, lyrics)
+        - Use **Add to Queue** to enqueue a local media row through the existing queue API
+        - Use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
+        - Use **Delete** to remove the media row and any on-disk media/sidecar files
+        - Trigger **Scan Library** to reconcile DB with filesystem on demand
+        - App also performs one media-library scan on startup/restart
 
 5. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`
        - Static reverse-proxy gate page for users who are outside the approved home network
@@ -120,7 +124,8 @@ When concurrent yt-dlp search is enabled:
 - Combined results are staggered/interleaved and de-duplicated by video id
 
 When karaoke mode is enabled:
-- App removes vocals with Demucs and remuxes the output media (no subtitle burn path).
+- App removes vocals with Demucs and remuxes the output media into the media library root (no subtitle burn path).
+- Karaoke remuxes and vocals sidecars are served from `/media`, not `/cache`.
 - Lyrics workflow remains available from the queue modal (provider resolve/manual upload), and lyrics are stored as sidecars for stage overlay display.
 - If Demucs is offline/unhealthy, karaoke processing fails fast and queue UI disables karaoke toggles.
 
