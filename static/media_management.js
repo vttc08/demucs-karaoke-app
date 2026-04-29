@@ -12,7 +12,6 @@ const editArtistInput = document.getElementById("media-edit-artist");
 const editRenameDiskCheckbox = document.getElementById("media-edit-rename-disk");
 const editAiToggle = document.getElementById("media-edit-ai-toggle");
 const editLyricsToggle = document.getElementById("media-edit-lyrics-toggle");
-const editFilenameContainer = document.getElementById("media-edit-filename-container");
 const editFilenamePreview = document.getElementById("media-edit-filename-preview");
 const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
 
@@ -29,21 +28,38 @@ const previewArtistMobile = document.getElementById("media-edit-preview-artist-m
 const activeCapabilityFilters = new Set();
 let toastTimer = null;
 let activeEditItemId = null;
+let activeEditMediaPath = "";
 
 function isMobile() {
     return window.innerWidth < 640;
 }
 
+function getFilenameFromPath(mediaPath) {
+    const cleanPath = String(mediaPath || "").split("?")[0];
+    const parts = cleanPath.split("/").filter(Boolean);
+    return parts.length > 0 ? decodeURIComponent(parts[parts.length - 1]) : "";
+}
+
+function buildRenamedFilename(nextTitle, nextArtist) {
+    const currentFilename = getFilenameFromPath(activeEditMediaPath);
+    const currentExtension = currentFilename.includes(".")
+        ? `.${currentFilename.split(".").pop()}`
+        : ".mp4";
+    const title = nextTitle.trim() || "Title";
+    const artist = nextArtist.trim();
+    const clean = [artist, title].filter(Boolean).join(" - ").replace(/\s+/g, " ").trim();
+    return `${clean || "media"}${currentExtension}`;
+}
+
 function updateFilenamePreview() {
     if (!editFilenamePreview || !editTitleInput || !editArtistInput) return;
-    
-    const title = editTitleInput.value.trim() || "Title";
-    const artist = editArtistInput.value.trim() || "Artist";
-    editFilenamePreview.textContent = `${artist} - ${title}.mp4`; // Placeholder extension
 
-    if (editRenameDiskCheckbox && editFilenameContainer) {
-        editFilenameContainer.classList.toggle("hidden", !editRenameDiskCheckbox.checked);
-    }
+    const currentFilename = getFilenameFromPath(activeEditMediaPath) || "unknown";
+    const renameEnabled = Boolean(editRenameDiskCheckbox?.checked);
+    const nextFilename = buildRenamedFilename(editTitleInput.value, editArtistInput.value);
+    editFilenamePreview.textContent = renameEnabled
+        ? `Will rename to: ${nextFilename}`
+        : `Current on-disk filename: ${currentFilename}`;
 }
 
 function showToast(message) {
@@ -197,6 +213,7 @@ function openEditModal(itemNode) {
     const currentArtistText = getItemFieldText(itemNode, "artist");
     const currentArtist = currentArtistText === "Unknown Artist" ? "" : currentArtistText;
     const currentThumbnail = itemNode.dataset.thumbnail || "/static/placeholder.png";
+    activeEditMediaPath = itemNode.dataset.mediaPath || "";
     const hasMulti = itemNode.dataset.hasMultiTrack === "true";
     const hasLyrics = itemNode.dataset.hasLyrics === "true";
 

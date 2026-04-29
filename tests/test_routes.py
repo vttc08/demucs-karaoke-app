@@ -481,10 +481,12 @@ def test_media_management_page_uses_database_rows(client):
     assert b"Artist One" in content
     assert b"Real Song Missing" in content
     assert b"https://i.ytimg.com/vi/realabc12345/hqdefault.jpg" in content
+    assert b'data-media-path="/media/real-song-one.mp4"' in content
 
     assert b'data-action="edit"' in content
     assert b'data-action="rename"' not in content
     assert b"synced" not in content.lower()
+    assert b"Filename on disk" in content
     assert b'id="media-edit-rename-disk" type="checkbox"' in content
     assert b'id="media-edit-rename-disk" type="checkbox" class="peer h-5 w-5 appearance-none rounded border-2 border-outline-variant bg-transparent transition-all checked:border-secondary checked:bg-secondary" checked />' in content
     assert b"Missing" in content
