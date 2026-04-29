@@ -156,21 +156,29 @@ function handleActionClick(event) {
     if (!button) {
         return;
     }
+    const action = button.dataset.action;
+
+    if (action === "scan-library") {
+        runLibraryScan(button);
+        return;
+    }
+
+    if (action === "upload-media") {
+        showToast("Upload flow is coming soon.");
+        return;
+    }
+
     const itemNode = event.target.closest(".media-item-row, .media-item-card");
     if (!itemNode) {
         return;
     }
-    const action = button.dataset.action;
+
     if (action === "rename") {
         renameItem(itemNode);
     } else if (action === "delete") {
         deleteItem(itemNode);
     } else if (action === "add-to-queue") {
         addToQueue(itemNode, button);
-    } else if (action === "upload-media") {
-        showToast("Upload flow is coming soon.");
-    } else if (action === "scan-library") {
-        runLibraryScan(button);
     }
 }
 
