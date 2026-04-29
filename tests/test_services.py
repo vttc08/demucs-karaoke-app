@@ -16,6 +16,7 @@ from services.media_naming import build_media_stem
 from services.media_library_maintenance_service import (
     MediaItemDeleteConflictError,
     MediaItemNotFoundError,
+    MediaItemRenameConflictError,
     MediaLibraryMaintenanceService,
 )
 from services.runtime_settings_service import RuntimeSettingsService
@@ -240,6 +241,143 @@ def test_media_library_maintenance_service_rejects_playing_queue_item(db_session
 
     with pytest.raises(MediaItemDeleteConflictError):
         service.delete_media_item(db_session, media.id)
+
+
+def test_media_library_maintenance_service_renames_metadata_and_files(db_session, tmp_path):
+    """Renaming a media item should update DB fields and disk assets."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        old_media = settings.media_path / "old-title.mp4"
+        old_vocals = settings.media_path / "old-title.vocals.wav"
+        old_lyrics = settings.cache_path / "lyrics" / "old-title.lrc"
+        old_media.write_text("video", encoding="utf-8")
+        old_vocals.write_text("vocals", encoding="utf-8")
+        old_lyrics.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        media = MediaItem(
+            title="Old Title",
+            artist="Old Artist",
+            media_path="/media/old-title.mp4",
+            vocals_path="/media/old-title.vocals.wav",
+            lyrics_path="/cache/lyrics/old-title.lrc",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        summary = service.rename_media_item(
+            db_session,
+            media.id,
+            title="New Title",
+            artist="New Artist",
+            rename_on_disk=True,
+        )
+
+        expected_stem = build_media_stem("New Title", "New Artist", fallback=media.youtube_id)
+        assert summary["renamed_files"] == 3
+        assert summary["target_stem"] == expected_stem
+        assert not old_media.exists()
+        assert not old_vocals.exists()
+        assert not old_lyrics.exists()
+
+        renamed_media = settings.media_path / f"{expected_stem}.mp4"
+        renamed_vocals = settings.media_path / f"{expected_stem}.vocals.wav"
+        renamed_lyrics = settings.cache_path / "lyrics" / f"{expected_stem}.lrc"
+        assert renamed_media.exists()
+        assert renamed_vocals.exists()
+        assert renamed_lyrics.exists()
+
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.title == "New Title"
+        assert stored.artist == "New Artist"
+        assert stored.file_stem == expected_stem
+        assert stored.media_path == f"/media/{expected_stem}.mp4"
+        assert stored.vocals_path == f"/media/{expected_stem}.vocals.wav"
+        assert stored.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_library_maintenance_service_renames_metadata_without_disk_changes(db_session, tmp_path):
+    """Renaming without disk changes should only update database fields."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        media_file = settings.media_path / "unchanged.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        media = MediaItem(
+            title="Unchanged",
+            artist="Artist",
+            media_path="/media/unchanged.mp4",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        summary = service.rename_media_item(
+            db_session,
+            media.id,
+            title="Only DB Rename",
+            artist="Artist Two",
+            rename_on_disk=False,
+        )
+
+        assert summary["renamed_files"] == 0
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.title == "Only DB Rename"
+        assert stored.artist == "Artist Two"
+        assert stored.media_path == "/media/unchanged.mp4"
+        assert media_file.exists()
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_library_maintenance_service_rejects_rename_conflicts(db_session, tmp_path):
+    """Renaming should fail when the destination asset already exists."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        conflict_stem = build_media_stem("New Title", "Artist", fallback=None)
+        conflict_media = settings.media_path / f"{conflict_stem}.mp4"
+        conflict_media.write_text("video", encoding="utf-8")
+        old_media = settings.media_path / "old-title.mp4"
+        old_media.write_text("video", encoding="utf-8")
+
+        media = MediaItem(
+            title="Old Title",
+            artist="Artist",
+            media_path="/media/old-title.mp4",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+
+        with pytest.raises(MediaItemRenameConflictError):
+            service.rename_media_item(
+                db_session,
+                media.id,
+                title="New Title",
+                artist="Artist",
+                rename_on_disk=True,
+            )
+    finally:
+        settings.media_path = original_media
 
 
 def test_queue_service_renames_existing_media_assets(db_session, tmp_path):

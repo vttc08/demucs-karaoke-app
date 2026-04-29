@@ -485,6 +485,8 @@ def test_media_management_page_uses_database_rows(client):
     assert b'data-action="edit"' in content
     assert b'data-action="rename"' not in content
     assert b"synced" not in content.lower()
+    assert b'id="media-edit-rename-disk" type="checkbox"' in content
+    assert b'id="media-edit-rename-disk" type="checkbox" class="peer h-5 w-5 appearance-none rounded border-2 border-outline-variant bg-transparent transition-all checked:border-secondary checked:bg-secondary" checked />' in content
     assert b"Missing" in content
     assert b'data-has-multi-track="true"' in content
     assert b'data-has-lyrics="true"' in content
@@ -614,6 +616,70 @@ def test_media_delete_route_rejects_playing_item(client):
     response = client.delete(f"/api/media/{media_id}")
     assert response.status_code == 409
     assert "currently playing" in response.json()["detail"].lower()
+
+
+def test_media_rename_route_updates_database_and_files(client, tmp_path):
+    """Rename route should update metadata and on-disk assets."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        old_media = settings.media_path / "old-route.mp4"
+        old_vocals = settings.media_path / "old-route.vocals.wav"
+        old_lyrics = settings.cache_path / "lyrics" / "old-route.lrc"
+        old_media.write_text("video", encoding="utf-8")
+        old_vocals.write_text("vocals", encoding="utf-8")
+        old_lyrics.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Old Route",
+                artist="Old Artist",
+                media_path="/media/old-route.mp4",
+                vocals_path="/media/old-route.vocals.wav",
+                lyrics_path="/cache/lyrics/old-route.lrc",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        response = client.patch(
+            f"/api/media/{media_id}",
+            json={
+                "title": "New Route",
+                "artist": "New Artist",
+                "rename_on_disk": True,
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["summary"]["renamed_files"] == 3
+
+        expected_stem = build_media_stem("New Route", "New Artist", fallback="old-route")
+        assert not old_media.exists()
+        assert not old_vocals.exists()
+        assert not old_lyrics.exists()
+        assert (settings.media_path / f"{expected_stem}.mp4").exists()
+        assert (settings.media_path / f"{expected_stem}.vocals.wav").exists()
+        assert (settings.cache_path / "lyrics" / f"{expected_stem}.lrc").exists()
+
+        with TestingSessionLocal() as db:
+            stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+            assert stored is not None
+            assert stored.title == "New Route"
+            assert stored.artist == "New Artist"
+            assert stored.media_path == f"/media/{expected_stem}.mp4"
+            assert stored.vocals_path == f"/media/{expected_stem}.vocals.wav"
+            assert stored.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
 
 
 def test_access_restricted_page_loads(client):

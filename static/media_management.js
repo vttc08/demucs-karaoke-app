@@ -194,7 +194,8 @@ function setCapabilityFilter(nextFilter) {
 function openEditModal(itemNode) {
     const itemId = itemNode.dataset.itemId;
     const currentTitle = getItemFieldText(itemNode, "title");
-    const currentArtist = itemNode.dataset.artist || (getItemFieldText(itemNode, "artist") === "Unknown Artist" ? "" : getItemFieldText(itemNode, "artist"));
+    const currentArtistText = getItemFieldText(itemNode, "artist");
+    const currentArtist = currentArtistText === "Unknown Artist" ? "" : currentArtistText;
     const currentThumbnail = itemNode.dataset.thumbnail || "/static/placeholder.png";
     const hasMulti = itemNode.dataset.hasMultiTrack === "true";
     const hasLyrics = itemNode.dataset.hasLyrics === "true";
@@ -240,7 +241,7 @@ function openEditModal(itemNode) {
     // Set Toggles
     if (editAiToggle) editAiToggle.checked = hasMulti;
     if (editLyricsToggle) editLyricsToggle.checked = hasLyrics;
-    if (editRenameDiskCheckbox) editRenameDiskCheckbox.checked = false;
+    if (editRenameDiskCheckbox) editRenameDiskCheckbox.checked = true;
     updateFilenamePreview();
 
     if (editModal) {
@@ -264,7 +265,7 @@ function closeEditModal() {
     }
 }
 
-function saveEditModal(event) {
+async function saveEditModal(event) {
     event.preventDefault();
     if (!activeEditItemId || !editTitleInput) {
         return;
@@ -275,13 +276,46 @@ function saveEditModal(event) {
         return;
     }
     const nextArtist = editArtistInput?.value.trim() || "";
-    const nextMulti = editAiToggle?.checked || false;
-    const nextLyrics = editLyricsToggle?.checked || false;
+    const renameOnDisk = editRenameDiskCheckbox?.checked ?? true;
+    const submitButton = editForm?.querySelector('button[type="submit"]');
+    const originalButtonLabel = submitButton?.textContent || "";
 
-    updateMediaItemDisplay(activeEditItemId, nextTitle, nextArtist, nextMulti, nextLyrics);
-    showToast(`Updated "${nextTitle}" locally`);
-    closeEditModal();
-    applyFilters();
+    if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = renameOnDisk ? "Renaming..." : "Saving...";
+    }
+
+    try {
+        const response = await fetch(`/api/media/${Number(activeEditItemId)}`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                title: nextTitle,
+                artist: nextArtist || null,
+                rename_on_disk: renameOnDisk,
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "Failed to rename media item");
+        }
+
+        showToast(renameOnDisk ? `Renamed "${nextTitle}" on disk` : `Updated "${nextTitle}"`);
+        closeEditModal();
+        window.setTimeout(() => {
+            window.location.reload();
+        }, 450);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to rename media item";
+        showToast(message);
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = originalButtonLabel || "Rename";
+        }
+    }
 }
 
 async function addToQueue(itemNode) {

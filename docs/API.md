@@ -244,6 +244,35 @@ Behavior:
 
 ---
 
+### Rename Media Item
+```
+PATCH /api/media/{item_id}
+```
+
+Updates the media row title and artist. When `rename_on_disk` is true, the server also renames the media file and any discovered sidecar files so their paths continue to match the new stem.
+
+**Request Body:**
+```json
+{
+  "title": "New Title",
+  "artist": "New Artist",
+  "rename_on_disk": true
+}
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "summary": {
+    "renamed_files": 3,
+    "target_stem": "new-title-new-artist"
+  }
+}
+```
+
+---
+
 ### Delete Media Item
 ```
 DELETE /api/media/{item_id}

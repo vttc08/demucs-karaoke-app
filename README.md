@@ -109,6 +109,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
         - Browse existing database-backed media entries in responsive card/table layouts
         - View title, artist, and capability badges (multi-track, lyrics)
         - Use **Add to Queue** to enqueue a local media row through the existing queue API
+        - Use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
         - Use **Delete** to remove the media row and any on-disk media/sidecar files
         - Trigger **Scan Library** to reconcile DB with filesystem on demand
         - App also performs one media-library scan on startup/restart
