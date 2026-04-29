@@ -15,6 +15,7 @@ from services.demucs_client import DemucsClient
 from services.media_naming import build_media_stem
 from services.runtime_settings_service import RuntimeSettingsService
 from services.websocket_manager import ConnectionManager
+from services.media_library_sync_service import MediaLibrarySyncService
 from config import EXPLICIT_SETTINGS_FIELDS, settings
 from models import (
     Base,
@@ -66,6 +67,91 @@ def test_queue_service_add_to_queue(db_session):
     assert result.title == "Test Song"
     assert result.is_karaoke is True
     assert result.status == QueueStatus.PENDING
+
+
+def test_media_library_sync_service_reconciles_rows_and_sidecars(db_session, tmp_path):
+    """Library scan should mark missing rows, create new rows, and refresh sidecars."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        existing_file = settings.media_path / "existing.mp4"
+        existing_vocals = settings.media_path / "existing.vocals.mp3"
+        existing_lyrics = settings.media_path / "existing.lrc"
+        existing_file.write_text("video", encoding="utf-8")
+        existing_vocals.write_text("vocals", encoding="utf-8")
+        existing_lyrics.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        new_nested_file = settings.media_path / "nested" / "new-track.mp4"
+        new_nested_file.parent.mkdir(parents=True, exist_ok=True)
+        new_nested_file.write_text("video", encoding="utf-8")
+
+        db_session.add_all(
+            [
+                MediaItem(
+                    title="Missing Row",
+                    media_path="/media/missing.mp4",
+                    missing=False,
+                ),
+                MediaItem(
+                    title="Existing Row",
+                    media_path="/media/existing.mp4",
+                    vocals_path=None,
+                    lyrics_path="/media/old-value.lrc",
+                    missing=True,
+                ),
+            ]
+        )
+        db_session.commit()
+
+        service = MediaLibrarySyncService()
+        summary = service.scan_library(db_session)
+
+        assert summary["scanned_files"] == 2
+        assert summary["created"] == 1
+        assert summary["marked_missing"] == 1
+        assert summary["restored"] == 1
+
+        missing_row = db_session.query(MediaItem).filter(MediaItem.media_path == "/media/missing.mp4").first()
+        assert missing_row is not None
+        assert missing_row.missing is True
+        assert missing_row.last_scanned_at is not None
+
+        existing_row = db_session.query(MediaItem).filter(MediaItem.media_path == "/media/existing.mp4").first()
+        assert existing_row is not None
+        assert existing_row.missing is False
+        assert existing_row.vocals_path == "/media/existing.vocals.mp3"
+        assert existing_row.lyrics_path == "/media/existing.lrc"
+
+        new_row = db_session.query(MediaItem).filter(MediaItem.media_path == "/media/nested/new-track.mp4").first()
+        assert new_row is not None
+        assert new_row.title == "new-track"
+        assert new_row.artist is None
+        assert new_row.file_stem == "new-track"
+        assert new_row.missing is False
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_library_sync_service_skips_sidecars_as_primary_media(db_session, tmp_path):
+    """Sidecar-only files should not be inserted as standalone media rows."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        (settings.media_path / "track.vocals.mp3").write_text("vocals", encoding="utf-8")
+        (settings.media_path / "track.lrc").write_text("[00:00.00]line", encoding="utf-8")
+
+        service = MediaLibrarySyncService()
+        summary = service.scan_library(db_session)
+
+        assert summary["scanned_files"] == 0
+        assert summary["created"] == 0
+        assert db_session.query(MediaItem).count() == 0
+    finally:
+        settings.media_path = original_media
 
 
 def test_queue_service_renames_existing_media_assets(db_session, tmp_path):

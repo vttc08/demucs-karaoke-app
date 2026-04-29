@@ -215,6 +215,35 @@ GET /api/queue/
 
 ---
 
+### Scan Media Library
+```
+POST /api/media/scan
+```
+
+Runs filesystem reconciliation against the configured media root.
+
+Behavior:
+- marks DB rows as `missing` when `media_path` is no longer present on disk
+- creates DB rows for on-disk primary media files not yet in `media_items`
+- refreshes sidecar paths (`vocals_path`, `lyrics_path`) from sibling files
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "summary": {
+    "scanned_files": 12,
+    "created": 2,
+    "marked_missing": 1,
+    "restored": 0,
+    "sidecars_updated": 3,
+    "skipped_rows": 0
+  }
+}
+```
+
+---
+
 ### Serve Media File
 ```
 GET /media/{file_path}

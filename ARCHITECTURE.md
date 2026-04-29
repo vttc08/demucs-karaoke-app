@@ -6,6 +6,7 @@ This project currently uses two services:
 1. Main app
 - serves mobile queue page, stage page, and settings page
 - serves media library management page (`/media`) with database-backed listing and placeholder CRUD actions
+- reconciles media library metadata with filesystem on startup and via manual scan API trigger
 - serves a static access-restricted gate page (`/access-restricted`) for reverse-proxy network checks
 - serves stage-focused presentation page
 - manages queue state

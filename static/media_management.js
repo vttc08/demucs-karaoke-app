@@ -121,6 +121,36 @@ function addToQueue(itemNode, actionButton) {
     showToast(`Added "${title}" to queue (placeholder)`);
 }
 
+async function runLibraryScan(actionButton) {
+    if (!actionButton) {
+        return;
+    }
+    const originalLabel = actionButton.textContent;
+    actionButton.disabled = true;
+    actionButton.classList.add("opacity-70", "cursor-default");
+    actionButton.textContent = "Scanning...";
+    try {
+        const response = await fetch("/api/media/scan", { method: "POST" });
+        if (!response.ok) {
+            throw new Error(`Scan failed (${response.status})`);
+        }
+        const payload = await response.json();
+        const summary = payload?.summary || {};
+        const created = Number(summary.created || 0);
+        const markedMissing = Number(summary.marked_missing || 0);
+        showToast(`Scan complete: +${created} new, ${markedMissing} missing`);
+        window.setTimeout(() => {
+            window.location.reload();
+        }, 500);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Scan failed";
+        showToast(message);
+        actionButton.disabled = false;
+        actionButton.classList.remove("opacity-70", "cursor-default");
+        actionButton.textContent = originalLabel;
+    }
+}
+
 function handleActionClick(event) {
     const button = event.target.closest("button[data-action]");
     if (!button) {
@@ -140,7 +170,7 @@ function handleActionClick(event) {
     } else if (action === "upload-media") {
         showToast("Upload flow is coming soon.");
     } else if (action === "scan-library") {
-        showToast("Scanning library...");
+        runLibraryScan(button);
     }
 }
 

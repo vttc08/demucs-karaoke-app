@@ -492,11 +492,68 @@ def test_media_management_page_uses_database_rows(client):
     assert content.count(b">2</p>") >= 1
 
 
+def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
+    """Manual media scan route should create and mark rows from filesystem diff."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.media_path / "scan-song.mp4").write_text("video", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            db.add(
+                MediaItem(
+                    title="To Missing",
+                    media_path="/media/should-be-missing.mp4",
+                    missing=False,
+                )
+            )
+            db.commit()
+
+        response = client.post("/api/media/scan")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["summary"]["created"] == 1
+        assert payload["summary"]["marked_missing"] == 1
+
+        with TestingSessionLocal() as db:
+            created = db.query(MediaItem).filter(MediaItem.media_path == "/media/scan-song.mp4").first()
+            assert created is not None
+            assert created.title == "scan-song"
+
+            missing_row = db.query(MediaItem).filter(MediaItem.media_path == "/media/should-be-missing.mp4").first()
+            assert missing_row is not None
+            assert missing_row.missing is True
+    finally:
+        settings.media_path = original_media
+
+
 def test_access_restricted_page_loads(client):
     """Test access restricted page renders."""
     response = client.get("/access-restricted")
     assert response.status_code == 200
     assert b"Access restricted" in response.content
+
+
+def test_app_startup_triggers_media_scan():
+    """Application lifespan should run media library scan on startup."""
+    with patch(
+        "main.media_library_sync_service.scan_library",
+        return_value={
+            "scanned_files": 0,
+            "created": 0,
+            "marked_missing": 0,
+            "restored": 0,
+            "sidecars_updated": 0,
+            "skipped_rows": 0,
+        },
+    ) as mock_scan:
+        with TestClient(app) as startup_client:
+            response = startup_client.get("/health")
+            assert response.status_code == 200
+
+    assert mock_scan.called
 
 
 def test_get_runtime_settings(client):
