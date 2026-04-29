@@ -193,7 +193,7 @@
 
     <div id="queue-config-modal" class="fixed inset-0 z-[80] hidden items-end justify-center bg-background/80 p-0 backdrop-blur-sm sm:items-center sm:p-6">
         <div id="queue-config-modal-backdrop" class="absolute inset-0"></div>
-        <div class="relative flex w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-t-2xl border border-outline-variant/20 bg-surface-container-high shadow-[0_-10px_60px_rgba(143,67,251,0.2)] sm:rounded-2xl">
+        <div class="relative flex w-full max-w-4xl max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-t-2xl border border-outline-variant/20 bg-surface-container-high shadow-[0_-10px_60px_rgba(143,67,251,0.2)] sm:rounded-2xl">
             <div class="flex items-center justify-between border-b border-outline-variant/20 px-5 py-4">
                 <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">Configure Queue</h3>
                 <button
@@ -205,9 +205,9 @@
                     <span class="material-symbols-outlined text-lg">close</span>
                 </button>
             </div>
-            <div class="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 no-scrollbar">
+            <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 no-scrollbar">
                 <div class="flex items-center gap-3 rounded-xl bg-surface-container-highest/60 p-3">
-                    <div class="h-14 w-14 overflow-hidden rounded-md bg-surface-container-lowest">
+                    <div class="h-12 w-12 overflow-hidden rounded-md bg-surface-container-lowest sm:h-14 sm:w-14">
                         <img id="queue-config-song-thumb" src="/static/placeholder.png" alt="Selected song" class="h-full w-full object-cover" />
                     </div>
                     <div class="min-w-0">
@@ -216,45 +216,47 @@
                     </div>
                 </div>
 
-                <div class="space-y-3 rounded-xl bg-surface-container p-4">
-                    <div class="flex items-center justify-between gap-3">
-                        <div class="min-w-0">
-                            <div class="flex items-center gap-2">
-                                <span class="material-symbols-outlined text-tertiary text-base">psychology</span>
-                                <span class="text-sm font-bold text-on-surface">AI Karaoke Processing</span>
-                                <span id="queue-config-karaoke-status" class="hidden rounded-full border border-error/20 bg-error/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-error">Offline</span>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-2 rounded-xl bg-surface-container p-3 sm:p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-tertiary text-base">psychology</span>
+                                    <span class="text-[13px] font-bold leading-tight text-on-surface sm:text-sm">AI Karaoke</span>
+                                    <span id="queue-config-karaoke-status" class="hidden rounded-full border border-error/20 bg-error/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-error sm:px-2 sm:text-[10px]">Offline</span>
+                                </div>
+                                <p id="queue-config-karaoke-detail" class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">Remove lead vocals with Demucs.</p>
                             </div>
-                            <p id="queue-config-karaoke-detail" class="mt-1 text-xs text-on-surface-variant">Remove lead vocals using Demucs AI processing.</p>
+                            <button id="queue-config-karaoke-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-6 w-11 flex-none shrink-0 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
+                                <span class="h-4 w-4 rounded-full bg-on-surface-variant transition-transform"></span>
+                            </button>
                         </div>
-                        <button id="queue-config-karaoke-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-6 w-11 flex-none shrink-0 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
-                            <span class="h-4 w-4 rounded-full bg-on-surface-variant transition-transform"></span>
-                        </button>
+                    </div>
+
+                    <div class="space-y-2 rounded-xl bg-surface-container p-3 sm:p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-secondary text-base">lyrics</span>
+                                    <span class="text-[13px] font-bold leading-tight text-on-surface sm:text-sm">Lyrics</span>
+                                </div>
+                                <p id="queue-config-lyrics-detail" class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">Resolve synced lyrics before queueing.</p>
+                            </div>
+                            <button id="queue-config-lyrics-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-6 w-11 flex-none shrink-0 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
+                                <span class="h-4 w-4 rounded-full bg-on-surface-variant transition-transform"></span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="space-y-3 rounded-xl bg-surface-container p-4">
-                    <div class="flex items-center justify-between gap-3">
-                        <div class="min-w-0">
-                            <div class="flex items-center gap-2">
-                                <span class="material-symbols-outlined text-secondary text-base">lyrics</span>
-                                <span class="text-sm font-bold text-on-surface">Enable Lyrics</span>
-                            </div>
-                            <p id="queue-config-lyrics-detail" class="mt-1 text-xs text-on-surface-variant">Resolve synced lyrics before you add the song to the queue.</p>
-                        </div>
-                        <button id="queue-config-lyrics-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-6 w-11 flex-none shrink-0 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
-                            <span class="h-4 w-4 rounded-full bg-on-surface-variant transition-transform"></span>
-                        </button>
-                    </div>
-                </div>
-
-                <div id="queue-config-lyrics-panel" class="hidden space-y-4 rounded-xl bg-surface-container p-4">
-                    <div class="flex items-center justify-between gap-3">
+                <div id="queue-config-lyrics-panel" class="hidden space-y-4 rounded-xl bg-surface-container p-3 sm:p-4">
+                    <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined text-primary text-base">text_fields</span>
                                 <span class="text-sm font-bold text-on-surface">Lyrics lookup</span>
                             </div>
-                            <p class="mt-1 text-xs text-on-surface-variant">Search provider results, then edit or replace the synced lyrics if needed.</p>
+                            <p class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">Search, edit, or replace lyrics before adding.</p>
                         </div>
                         <span id="queue-config-lyrics-state" class="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Idle</span>
                     </div>
@@ -291,7 +293,7 @@
                             <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Lyrics editor</span>
                             <span id="queue-config-lyrics-provider" class="text-[11px] font-medium text-on-surface-variant"></span>
                         </div>
-                        <textarea id="queue-config-lyrics-textarea" rows="10" class="w-full rounded-xl bg-surface-container-highest px-3 py-3 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" placeholder="[00:12.00]Sing along..."></textarea>
+                        <textarea id="queue-config-lyrics-textarea" rows="7" class="w-full rounded-xl bg-surface-container-highest px-3 py-3 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30 sm:rows-8" placeholder="[00:12.00]Sing along..."></textarea>
                         <p class="text-xs text-on-surface-variant">Resolved lyrics will overwrite this box. You can edit it before adding to the queue.</p>
                     </div>
 
