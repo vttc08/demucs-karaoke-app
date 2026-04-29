@@ -14,6 +14,8 @@ const editAiToggle = document.getElementById("media-edit-ai-toggle");
 const editLyricsToggle = document.getElementById("media-edit-lyrics-toggle");
 const editFilenamePreview = document.getElementById("media-edit-filename-preview");
 const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
+const AUTO_RENAME_DEFAULT_HTML = '<span class="material-symbols-outlined text-[16px]">auto_fix_high</span><span>Auto</span>';
+const AUTO_RENAME_LOADING_HTML = '<span class="material-symbols-outlined animate-spin text-[16px]">sync</span><span>Inferring...</span>';
 
 // Preview elements
 const previewImg = document.getElementById("media-edit-preview-img");
@@ -60,6 +62,16 @@ function updateFilenamePreview() {
     editFilenamePreview.textContent = renameEnabled
         ? `Will rename to: ${nextFilename}`
         : `Current on-disk filename: ${currentFilename}`;
+}
+
+function syncEditPreviewLabels(title, artist) {
+    const normalizedTitle = title.trim() || "Track Title";
+    const normalizedArtist = artist.trim() || "Artist Name";
+
+    if (previewTitle) previewTitle.textContent = normalizedTitle;
+    if (previewArtist) previewArtist.textContent = normalizedArtist;
+    if (previewTitleMobile) previewTitleMobile.textContent = normalizedTitle;
+    if (previewArtistMobile) previewArtistMobile.textContent = normalizedArtist;
 }
 
 function showToast(message) {
@@ -424,6 +436,68 @@ async function deleteItem(itemNode) {
     }
 }
 
+async function autoRenameMediaItem(actionButton) {
+    if (!editTitleInput || !editArtistInput) {
+        return;
+    }
+
+    const title = editTitleInput.value.trim();
+    const artist = editArtistInput.value.trim();
+    if (!title) {
+        showToast("Add a title before using Auto.");
+        return;
+    }
+
+    const button = actionButton || document.querySelector('button[data-action="auto-rename"]');
+    if (!button || button.disabled) {
+        return;
+    }
+
+    const originalHtml = button.innerHTML;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.classList.add("opacity-70", "cursor-wait");
+    button.innerHTML = AUTO_RENAME_LOADING_HTML;
+
+    try {
+        const response = await fetch("/api/lyrics/resolve", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                title,
+                artist: artist || undefined,
+                youtube_title: title,
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "Failed to infer metadata");
+        }
+
+        const payload = await response.json();
+        const nextTitle = (payload.title || title).trim();
+        const nextArtist = (payload.artist || artist).trim();
+
+        editTitleInput.value = nextTitle;
+        editArtistInput.value = nextArtist;
+        syncEditPreviewLabels(nextTitle, nextArtist);
+        updateFilenamePreview();
+
+        showToast(nextArtist ? `Inferred "${nextArtist} - ${nextTitle}"` : `Inferred "${nextTitle}"`);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to infer metadata";
+        showToast(message);
+    } finally {
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        button.classList.remove("opacity-70", "cursor-wait");
+        button.innerHTML = originalHtml || AUTO_RENAME_DEFAULT_HTML;
+    }
+}
+
 async function runLibraryScan(actionButton) {
     if (!actionButton) {
         return;
@@ -472,7 +546,7 @@ function handleActionClick(event) {
     }
 
     if (action === "auto-rename") {
-        showToast("Auto-rename magic is coming soon.");
+        autoRenameMediaItem(button);
         return;
     }
 
