@@ -73,6 +73,7 @@
                 data-item-id="{{ item.id }}"
                 data-title="{{ item.title|lower }}"
                 data-artist="{{ (item.artist or '')|lower }}"
+                data-thumbnail="{{ item.thumbnail or '/static/placeholder.png' }}"
                 data-has-multi-track="{{ 'true' if item.has_multi_track else 'false' }}"
                 data-has-lyrics="{{ 'true' if item.has_lyrics else 'false' }}"
             >
@@ -135,6 +136,7 @@
                         data-item-id="{{ item.id }}"
                         data-title="{{ item.title|lower }}"
                         data-artist="{{ (item.artist or '')|lower }}"
+                        data-thumbnail="{{ item.thumbnail or '/static/placeholder.png' }}"
                         data-has-multi-track="{{ 'true' if item.has_multi_track else 'false' }}"
                         data-has-lyrics="{{ 'true' if item.has_lyrics else 'false' }}"
                     >
@@ -194,50 +196,164 @@
 
 <div id="media-edit-modal" class="fixed inset-0 z-[60] hidden" aria-hidden="true">
     <div class="absolute inset-0 bg-surface-container-lowest/80 backdrop-blur-sm" data-edit-modal-close></div>
-    <div class="relative mx-auto flex min-h-full w-full max-w-2xl items-center px-4 py-8 sm:px-6">
-        <section class="glass-card w-full rounded-2xl border border-white/10 p-5 shadow-2xl shadow-black/40">
-            <div class="flex items-start justify-between gap-4">
-                <div>
-                    <p class="text-[11px] font-bold uppercase tracking-widest text-primary">Edit media</p>
-                    <h2 class="mt-1 font-headline text-xl font-black tracking-tight text-on-surface">Update title and artist</h2>
-                    <p class="mt-1 text-sm text-on-surface-variant">This editor updates the page state now; backend CRUD can land later.</p>
+    <div class="relative mx-auto flex min-h-full w-full max-w-5xl items-end justify-center px-0 py-0 sm:items-center sm:px-4 sm:py-8">
+        <section class="glass-card flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden border-t border-white/10 shadow-2xl shadow-black/40 sm:rounded-2xl sm:border">
+            <div class="flex flex-1 flex-col overflow-hidden md:flex-row">
+                <!-- Left Column: Media Preview (Desktop only or top on mobile) -->
+                <div class="hidden w-full flex-col bg-surface-container-low p-8 md:flex md:w-2/5">
+                    <div class="relative aspect-square overflow-hidden rounded-xl shadow-2xl ring-1 ring-white/10">
+                        <img id="media-edit-preview-img" class="hidden h-full w-full object-cover" src="" alt="Media preview" />
+                        <div id="media-edit-preview-placeholder" class="hidden h-full w-full items-center justify-center bg-surface-container-high">
+                            <span class="material-symbols-outlined text-6xl text-on-surface-variant">music_note</span>
+                        </div>
+                        <div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/60 to-transparent"></div>
+                    </div>
+                    <div class="mt-8">
+                        <h2 id="media-edit-preview-title" class="font-headline text-3xl font-black leading-tight tracking-tight text-on-surface">Track Title</h2>
+                        <p id="media-edit-preview-artist" class="mt-1 text-lg font-medium text-primary">Artist Name</p>
+                        <div class="mt-6 flex flex-wrap gap-2">
+                            <span id="media-edit-preview-format" class="rounded-lg bg-surface-container-highest/60 px-3 py-1 text-[11px] font-bold text-on-surface-variant">FORMAT</span>
+                            <span id="media-edit-preview-duration" class="rounded-lg bg-surface-container-highest/60 px-3 py-1 text-[11px] font-bold text-on-surface-variant">00:00</span>
+                        </div>
+                    </div>
                 </div>
-                <button
-                    type="button"
-                    data-edit-modal-close
-                    class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-surface-container-high text-on-surface transition-transform hover:scale-105 active:scale-95"
-                    aria-label="Close editor"
-                >
-                    <span class="material-symbols-outlined text-[18px]">close</span>
-                </button>
-            </div>
 
-            <form id="media-edit-form" class="mt-5 space-y-4">
-                <input type="hidden" id="media-edit-item-id" />
-                <div class="space-y-2">
-                    <label for="media-edit-title" class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Title</label>
-                    <input
-                        id="media-edit-title"
-                        type="text"
-                        class="h-12 w-full rounded-xl border border-white/10 bg-surface-container-highest/40 px-4 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        autocomplete="off"
-                    />
+                <!-- Right Column: Form Body -->
+                <div class="flex flex-1 flex-col overflow-hidden bg-surface-container-high/30 backdrop-blur-3xl">
+                    <!-- Mobile Handle / Header -->
+                    <div class="flex shrink-0 items-center justify-between border-b border-white/5 px-6 py-4">
+                        <div class="sm:hidden">
+                            <div class="mx-auto mb-2 h-1.5 w-12 rounded-full bg-white/10"></div>
+                        </div>
+                        <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">Edit Media Details</h3>
+                        <button
+                            type="button"
+                            data-edit-modal-close
+                            class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-surface-container-highest/80 text-on-surface transition-transform hover:scale-105 active:scale-95"
+                        >
+                            <span class="material-symbols-outlined text-[18px]">close</span>
+                        </button>
+                    </div>
+
+                    <form id="media-edit-form" class="flex flex-1 flex-col overflow-y-auto p-6 no-scrollbar">
+                        <input type="hidden" id="media-edit-item-id" />
+                        
+                        <!-- Mobile Preview (Visible only on small screens) -->
+                        <div class="mb-8 flex items-center gap-4 rounded-2xl bg-surface-container-low p-4 md:hidden">
+                            <div class="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-surface-container-high">
+                                <img id="media-edit-preview-img-mobile" class="h-full w-full object-cover" src="" alt="Thumbnail" />
+                                <div id="media-edit-preview-placeholder-mobile" class="hidden h-full w-full items-center justify-center">
+                                    <span class="material-symbols-outlined text-2xl text-on-surface-variant">music_note</span>
+                                </div>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <h4 id="media-edit-preview-title-mobile" class="truncate font-headline text-lg font-black text-on-surface">Track Title</h4>
+                                <p id="media-edit-preview-artist-mobile" class="truncate text-sm font-medium text-on-surface-variant">Artist Name</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div class="space-y-1.5">
+                                    <label for="media-edit-title" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Track Title</label>
+                                    <div class="group relative">
+                                        <input
+                                            id="media-edit-title"
+                                            type="text"
+                                            class="h-12 w-full rounded-xl border-none bg-surface-container-highest/50 px-4 text-sm font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40"
+                                            placeholder="Enter song title"
+                                            autocomplete="off"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div class="space-y-1.5">
+                                    <label for="media-edit-artist" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Artist Name</label>
+                                    <div class="group relative">
+                                        <input
+                                            id="media-edit-artist"
+                                            type="text"
+                                            class="h-12 w-full rounded-xl border-none bg-surface-container-highest/50 px-4 text-sm font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40"
+                                            placeholder="Enter artist name"
+                                            autocomplete="off"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div class="flex gap-2">
+                                    <label class="group flex w-[70%] cursor-pointer items-center gap-3 rounded-xl bg-surface-container-highest/30 p-3 ring-1 ring-white/5 transition-colors hover:bg-surface-container-highest/50">
+                                        <div class="relative flex items-center">
+                                            <input id="media-edit-rename-disk" type="checkbox" class="peer h-5 w-5 appearance-none rounded border-2 border-outline-variant bg-transparent transition-all checked:border-secondary checked:bg-secondary" />
+                                            <span class="material-symbols-outlined pointer-events-none absolute left-0 right-0 scale-0 text-center text-xs font-bold text-surface transition-transform peer-checked:scale-100">check</span>
+                                        </div>
+                                        <span class="text-[11px] font-medium leading-tight text-on-surface select-none">Rename on disk</span>
+                                    </label>
+                                    <button type="button" data-action="auto-rename" class="flex flex-1 items-center justify-center rounded-xl bg-primary/10 px-2 text-[10px] font-black uppercase tracking-wider text-primary ring-1 ring-primary/20 hover:bg-primary/20 transition-all active:scale-95">
+                                        Auto
+                                    </button>
+                                </div>
+
+                                <div id="media-edit-filename-container" class="hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <div class="rounded-xl border border-white/5 bg-surface-container-lowest/50 p-3">
+                                        <p class="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant mb-1.5">New Filename Preview</p>
+                                        <p id="media-edit-filename-preview" class="break-all font-mono text-[11px] text-secondary"></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="h-px bg-white/5"></div>
+
+                            <div class="space-y-4">
+                                <button type="button" data-action="scan-sidecar" class="flex w-full items-center justify-between rounded-xl border border-tertiary/20 bg-tertiary/5 p-4 transition-all hover:bg-tertiary/10">
+                                    <div class="flex items-center gap-4">
+                                        <div class="rounded-full bg-tertiary/20 p-2.5 text-tertiary">
+                                            <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1">sync</span>
+                                        </div>
+                                        <div class="text-left">
+                                            <p class="text-sm font-bold text-on-surface">Sync Sidecar Files</p>
+                                            <p class="text-[11px] text-on-surface-variant">Search for vocals and lyrics components</p>
+                                        </div>
+                                    </div>
+                                    <span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+                                </button>
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="flex flex-col gap-3 rounded-xl bg-surface-container-highest/40 p-4 ring-1 ring-white/5">
+                                        <div class="flex items-center justify-between">
+                                            <span class="material-symbols-outlined text-primary">auto_fix_high</span>
+                                            <label class="relative inline-flex cursor-pointer items-center">
+                                                <input id="media-edit-ai-toggle" type="checkbox" class="peer sr-only" />
+                                                <div class="h-6 w-11 rounded-full bg-white/10 transition-colors peer-checked:bg-secondary shadow-[0_0_10px_rgba(60,227,106,0.3)] after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full"></div>
+                                            </label>
+                                        </div>
+                                        <span class="text-[11px] font-bold uppercase tracking-wider">AI Karaoke</span>
+                                    </div>
+                                    <div class="flex flex-col gap-3 rounded-xl bg-surface-container-highest/40 p-4 ring-1 ring-white/5">
+                                        <div class="flex items-center justify-between">
+                                            <span class="material-symbols-outlined text-secondary">lyrics</span>
+                                            <label class="relative inline-flex cursor-pointer items-center">
+                                                <input id="media-edit-lyrics-toggle" type="checkbox" class="peer sr-only" />
+                                                <div class="h-6 w-11 rounded-full bg-white/10 transition-colors peer-checked:bg-primary shadow-[0_0_10px_rgba(0,242,255,0.3)] after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full"></div>
+                                            </label>
+                                        </div>
+                                        <span class="text-[11px] font-bold uppercase tracking-wider">Lyrics Sync</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sticky Footer for Mobile / Bottom of Form for Desktop -->
+                        <div class="mt-auto flex items-center justify-end gap-6 border-t border-white/5 pb-2 pt-6 sm:pb-0">
+                            <button type="button" data-edit-modal-close class="text-sm font-bold text-on-surface-variant transition-colors hover:text-on-surface">Cancel</button>
+                            <button type="submit" class="neon-glow rounded-full bg-primary px-8 py-3 text-xs font-black uppercase tracking-[0.1em] text-surface transition-all hover:scale-105 active:scale-95">
+                                Save Changes
+                            </button>
+                        </div>
+                    </form>
                 </div>
-                <div class="space-y-2">
-                    <label for="media-edit-artist" class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">Artist</label>
-                    <input
-                        id="media-edit-artist"
-                        type="text"
-                        class="h-12 w-full rounded-xl border border-white/10 bg-surface-container-highest/40 px-4 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        autocomplete="off"
-                    />
-                </div>
-                <p class="text-xs text-on-surface-variant">Tip: use this to stage metadata cleanup before backend CRUD is wired up.</p>
-                <div class="flex flex-wrap justify-end gap-2 pt-2">
-                    <button type="button" data-edit-modal-close class="rounded-full border border-white/15 px-4 py-2 text-sm font-bold text-on-surface">Cancel</button>
-                    <button type="submit" class="rounded-full bg-primary px-4 py-2 text-sm font-black uppercase tracking-wider text-on-primary">Save changes</button>
-                </div>
-            </form>
+            </div>
         </section>
     </div>
 </div>
