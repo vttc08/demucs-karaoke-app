@@ -106,7 +106,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
        - View real-time Demucs engine health (online/offline with detail)
 
 4. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
-       - Browse existing media entries in responsive card/table layouts
+       - Browse existing database-backed media entries in responsive card/table layouts
        - View title, artist, and capability badges (multi-track, lyrics)
        - Use placeholder UI actions for rename, delete, and add-to-queue flows (integration-ready template variables)
 

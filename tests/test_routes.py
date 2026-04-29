@@ -441,6 +441,57 @@ def test_media_management_page_loads(client):
     assert b"Manage Existing Media" in response.content
 
 
+def test_media_management_page_uses_database_rows(client):
+    """Media management page should render DB-backed library rows and stats."""
+    with TestingSessionLocal() as db:
+        db.add_all(
+            [
+                MediaItem(
+                    youtube_id="realabc12345",
+                    title="Real Song One",
+                    artist="Artist One",
+                    media_path="/media/real-song-one.mp4",
+                    vocals_path="/media/real-song-one.vocals.wav",
+                    lyrics_path="/media/real-song-one.lrc",
+                    missing=False,
+                ),
+                MediaItem(
+                    youtube_id="realdef67890",
+                    title="Real Song Two",
+                    artist="Artist Two",
+                    media_path="/media/real-song-two.mp4",
+                    missing=False,
+                ),
+                MediaItem(
+                    title="Real Song Missing",
+                    artist="Artist Missing",
+                    media_path="/media/real-song-missing.mp4",
+                    lyrics_path="/media/real-song-missing.lrc",
+                    missing=True,
+                ),
+            ]
+        )
+        db.commit()
+
+    response = client.get("/media")
+    assert response.status_code == 200
+    content = response.content
+
+    assert b"Real Song One" in content
+    assert b"Artist One" in content
+    assert b"Real Song Missing" in content
+    assert b"https://i.ytimg.com/vi/realabc12345/hqdefault.jpg" in content
+
+    assert b'data-has-multi-track="true"' in content
+    assert b'data-has-lyrics="true"' in content
+    assert b'data-has-multi-track="false"' in content
+    assert b'data-has-lyrics="false"' in content
+
+    assert content.count(b">3</p>") >= 1
+    assert content.count(b">1</p>") >= 2
+    assert content.count(b">2</p>") >= 1
+
+
 def test_access_restricted_page_loads(client):
     """Test access restricted page renders."""
     response = client.get("/access-restricted")
