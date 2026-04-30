@@ -5,7 +5,8 @@ This project currently uses two services:
 
 1. Main app
 - serves mobile queue page, stage page, and settings page
-- serves media library management page (`/media`) with database-backed listing and placeholder CRUD actions
+- serves media library management page (`/media`) with database-backed listing and CRUD actions
+- serves upload page (`/upload`) for saving uploaded MP3/MP4 files into the media library and optionally queueing the new item
 - reconciles media library metadata with filesystem on startup and via manual scan API trigger
 - serves a static access-restricted gate page (`/access-restricted`) for reverse-proxy network checks
 - serves stage-focused presentation page
@@ -124,6 +125,16 @@ The stage page uses a websocket-first model:
   - `QueueService.add_to_queue` stores inline lyrics as a cache sidecar when karaoke is enabled and lyrics text is provided
   - YouTube-backed media rows are refreshed with the submitted title/artist so resolved lyrics metadata persists in `media_items`
   - `KaraokeService` keeps karaoke output assembly independent from subtitle burn behavior
+
+## Media upload flow
+
+- The upload page posts multipart form data to `POST /api/media/upload`.
+- Backend flow:
+  - saves the uploaded file under the configured media root using the normalized title/artist stem
+  - creates a durable `media_items` row with `media_path` pointing at the saved file
+  - optionally creates a queue row for the new media item when "Add to queue" is enabled
+  - broadcasts the new queue item so real-time clients stay in sync
+- Successful uploads redirect the browser to the media management page.
 
 ## Lyrics inference and provider flow
 

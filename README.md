@@ -106,17 +106,22 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
        - View real-time Demucs engine health (online/offline with detail)
 
 4. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
-        - Browse existing database-backed media entries in responsive card/table layouts
-        - View title, artist, and capability badges (multi-track, lyrics)
-        - Use **Add to Queue** to enqueue a local media row through the existing queue API
-        - Use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
-        - Use **Delete** to remove the media row and any on-disk media/sidecar files
-        - Trigger **Scan Library** to reconcile DB with filesystem on demand
-        - App also performs one media-library scan on startup/restart
+         - Browse existing database-backed media entries in responsive card/table layouts
+         - View title, artist, and capability badges (multi-track, lyrics)
+         - Use **Add to Queue** to enqueue a local media row through the existing queue API
+         - Use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
+         - Use **Delete** to remove the media row and any on-disk media/sidecar files
+         - Trigger **Scan Library** to reconcile DB with filesystem on demand
+         - App also performs one media-library scan on startup/restart
 
-5. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`
-       - Static reverse-proxy gate page for users who are outside the approved home network
-       - Explains the Wi-Fi / WAN IP check and common masking tools like iCloud Private Relay, Clash, and V2Ray
+5. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
+        - Upload MP3 or MP4 files into the media library with title and artist metadata
+        - Keep the default checked **Add to queue** toggle enabled to enqueue the new media item after upload
+        - Successful uploads redirect to the media management page
+
+6. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`
+        - Static reverse-proxy gate page for users who are outside the approved home network
+        - Explains the Wi-Fi / WAN IP check and common masking tools like iCloud Private Relay, Clash, and V2Ray
 
 When concurrent yt-dlp search is enabled:
 - Query without `karaoke` triggers two parallel searches: `<query>` and `<query> karaoke`

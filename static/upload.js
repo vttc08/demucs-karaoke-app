@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileSize = document.getElementById('file-size');
     const fileTypeIcon = document.getElementById('file-type-icon');
     const removeFileBtn = document.getElementById('remove-file');
+    const addToQueueToggle = document.getElementById('add-to-queue');
     
     const progressContainer = document.getElementById('progress-container');
     const progressStatus = document.getElementById('progress-status');
@@ -111,15 +112,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const title = document.getElementById('song-title').value;
         const artist = document.getElementById('artist-name').value;
-        const aiProcess = document.getElementById('ai-process').checked;
-        const syncLyrics = document.getElementById('sync-lyrics').checked;
+        const addToQueue = addToQueueToggle?.checked ?? true;
 
         const formData = new FormData();
         formData.append('file', selectedFile);
         formData.append('title', title);
         formData.append('artist', artist);
-        formData.append('ai_process', aiProcess);
-        formData.append('sync_lyrics', syncLyrics);
+        formData.append('add_to_queue', addToQueue);
 
         try {
             submitBtn.disabled = true;
@@ -138,16 +137,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
             xhr.onload = () => {
                 if (xhr.status === 200) {
-                    const response = JSON.parse(xhr.responseText);
-                    showToast('Media uploaded and queued successfully!');
-                    resetForm();
-                    // Redirect to media library after a short delay
-                    setTimeout(() => {
-                        window.location.href = '/media';
-                    }, 2000);
+                    window.location.href = '/media';
                 } else {
-                    const error = JSON.parse(xhr.responseText);
-                    showToast(error.detail || 'Upload failed', true);
+                    let errorMessage = 'Upload failed';
+                    try {
+                        const error = JSON.parse(xhr.responseText);
+                        errorMessage = error.detail || errorMessage;
+                    } catch (parseError) {
+                        console.error('Upload error response parse failed:', parseError);
+                    }
+                    showToast(errorMessage, true);
                     submitBtn.disabled = false;
                 }
             };

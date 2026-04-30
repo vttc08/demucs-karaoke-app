@@ -433,6 +433,57 @@ def test_settings_page_loads(client):
     assert b"Engine Settings" in response.content
 
 
+def test_upload_page_loads(client):
+    """Test upload page renders with queue toggle."""
+    response = client.get("/upload")
+    assert response.status_code == 200
+    assert b"Upload Media" in response.content
+    assert b'id="add-to-queue" type="checkbox"' in response.content
+    assert b"Add to queue" in response.content
+
+
+def test_upload_media_saves_file_and_queues_item(client, tmp_path):
+    """Uploaded media should be saved, catalogued, and queued when requested."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        with patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()):
+            response = client.post(
+                "/api/media/upload",
+                data={
+                    "title": "Upload Song",
+                    "artist": "Upload Artist",
+                    "add_to_queue": "true",
+                },
+                files={"file": ("upload-song.mp4", b"video-bytes", "video/mp4")},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["queued"] is True
+        assert payload["queue_item_id"] is not None
+
+        saved_file = settings.media_path / payload["filename"]
+        assert saved_file.exists()
+
+        with TestingSessionLocal() as db:
+            media_item = db.query(MediaItem).filter(MediaItem.id == payload["media_id"]).first()
+            assert media_item is not None
+            assert media_item.title == "Upload Song"
+            assert media_item.artist == "Upload Artist"
+            assert media_item.media_path == f"/media/{payload['filename']}"
+
+            queue_item = db.query(QueueItem).filter(QueueItem.id == payload["queue_item_id"]).first()
+            assert queue_item is not None
+            assert queue_item.media_id == media_item.id
+            assert queue_item.requested_karaoke is False
+    finally:
+        settings.media_path = original_media
+
+
 def test_media_management_page_loads(client):
     """Test media management page renders."""
     response = client.get("/media")
