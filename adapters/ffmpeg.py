@@ -55,3 +55,24 @@ class FFmpegAdapter:
         ]
         subprocess.run(cmd, check=True, capture_output=True)
         return output_path
+
+    def extract_thumbnail(self, source_path: Path, output_path: Path) -> Path:
+        """Extract a single frame thumbnail from a video file."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            self.ffmpeg_path,
+            "-ss",
+            "00:00:01",
+            "-i",
+            str(source_path),
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=512:-1:force_original_aspect_ratio=decrease",
+            "-q:v",
+            "2",
+            "-y",
+            str(output_path),
+        ]
+        subprocess.run(cmd, check=True, capture_output=True)
+        return output_path

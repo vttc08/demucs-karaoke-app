@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from models import MediaItem
 from services.queue_service import QueueService
+from services.media_thumbnail_service import MediaThumbnailService
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class MediaLibrarySyncService:
 
     def __init__(self):
         self.queue_service = QueueService()
+        self.thumbnail_service = MediaThumbnailService()
 
     def scan_library(self, db: Session) -> dict[str, int]:
         """Reconcile database media rows with current filesystem state."""
@@ -58,6 +60,7 @@ class MediaLibrarySyncService:
         marked_missing = 0
         restored = 0
         sidecars_updated = 0
+        thumbnails_updated = 0
 
         for media_url, row in rows_by_url.items():
             media_file = files_by_url.get(media_url)
@@ -75,6 +78,8 @@ class MediaLibrarySyncService:
             row.file_stem = row.file_stem or media_file.stem
             if self._refresh_sidecars(row, media_file):
                 sidecars_updated += 1
+            if self.thumbnail_service.ensure_thumbnail_for_media_file(media_file):
+                thumbnails_updated += 1
 
         created = 0
         for media_url, media_file in files_by_url.items():
@@ -90,6 +95,8 @@ class MediaLibrarySyncService:
             )
             if self._refresh_sidecars(new_item, media_file):
                 sidecars_updated += 1
+            if self.thumbnail_service.ensure_thumbnail_for_media_file(media_file):
+                thumbnails_updated += 1
             db.add(new_item)
             created += 1
 
@@ -101,15 +108,17 @@ class MediaLibrarySyncService:
             "marked_missing": marked_missing,
             "restored": restored,
             "sidecars_updated": sidecars_updated,
+            "thumbnails_updated": thumbnails_updated,
             "skipped_rows": skipped_rows,
         }
         logger.info(
-            "Media library scan complete scanned_files=%s created=%s marked_missing=%s restored=%s sidecars_updated=%s skipped_rows=%s",
+            "Media library scan complete scanned_files=%s created=%s marked_missing=%s restored=%s sidecars_updated=%s thumbnails_updated=%s skipped_rows=%s",
             summary["scanned_files"],
             summary["created"],
             summary["marked_missing"],
             summary["restored"],
             summary["sidecars_updated"],
+            summary["thumbnails_updated"],
             summary["skipped_rows"],
         )
         return summary

@@ -5,6 +5,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models import MediaItem
+from services.media_thumbnail_service import MediaThumbnailService
+from services.queue_service import QueueService
 
 
 class MediaLibraryService:
@@ -51,16 +53,22 @@ class MediaLibraryService:
             "artist": item.artist,
             "media_path": item.media_path,
             "status": "missing" if item.missing else "synced",
-            "thumbnail": MediaLibraryService._thumbnail_for(item.youtube_id),
+            "thumbnail": MediaLibraryService._thumbnail_for(item),
             "has_multi_track": bool(item.vocals_path and item.vocals_path.strip()),
             "has_lyrics": bool(item.lyrics_path and item.lyrics_path.strip()),
         }
 
     @staticmethod
-    def _thumbnail_for(youtube_id: str | None) -> str | None:
-        if not youtube_id:
+    def _thumbnail_for(item: MediaItem) -> str | None:
+        if item.youtube_id:
+            youtube_id = item.youtube_id.strip()
+            if youtube_id:
+                return f"https://i.ytimg.com/vi/{youtube_id}/hqdefault.jpg"
+
+        media_file = QueueService._media_url_to_file(item.media_path)
+        if media_file is None:
             return None
-        value = youtube_id.strip()
-        if not value:
+        thumbnail_path = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+        if not thumbnail_path.exists():
             return None
-        return f"https://i.ytimg.com/vi/{value}/hqdefault.jpg"
+        return MediaThumbnailService.thumbnail_url_for_media_file(media_file)

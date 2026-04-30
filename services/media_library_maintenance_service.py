@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from models import MediaItem, QueueItem, QueueStatus
 from services.media_naming import build_media_stem
+from services.media_thumbnail_service import MediaThumbnailService
 from services.queue_service import QueueService
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class MediaLibraryMaintenanceService:
 
     def __init__(self):
         self.queue_service = QueueService()
+        self.thumbnail_service = MediaThumbnailService()
 
     def delete_media_item(self, db: Session, media_item_id: int) -> dict[str, int]:
         """Delete a media item, associated queue rows, and local files."""
@@ -111,6 +113,7 @@ class MediaLibraryMaintenanceService:
         renamed_files = 0
         target_stem: str | None = None
         if rename_on_disk:
+            source_media_path = self.queue_service._media_url_to_file(media_item.media_path)
             target_stem = self.queue_service._allocate_media_stem(
                 db,
                 build_media_stem(
@@ -152,6 +155,11 @@ class MediaLibraryMaintenanceService:
                 media_item.media_path = self.queue_service.build_media_url(new_media_path)
                 media_item.missing = False
                 media_item.file_stem = target_stem
+                if source_media_path is not None:
+                    self.thumbnail_service.rename_thumbnail_for_media_file(
+                        source_media_path,
+                        new_media_path,
+                    )
             if vocals_renamed:
                 media_item.vocals_path = self.queue_service.build_media_url(new_vocals_path)
                 media_item.file_stem = target_stem
@@ -192,6 +200,8 @@ class MediaLibraryMaintenanceService:
         add_candidate(media_file)
         add_candidate(self.queue_service._media_url_to_file(media_item.vocals_path))
         add_candidate(self.queue_service._media_url_to_file(media_item.lyrics_path))
+        if media_file is not None:
+            add_candidate(MediaThumbnailService.thumbnail_path_for_media_file(media_file))
 
         if media_file is None:
             return candidates
