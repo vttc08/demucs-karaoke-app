@@ -17,6 +17,30 @@ const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]
 const AUTO_RENAME_DEFAULT_HTML = '<span class="material-symbols-outlined text-[16px]">auto_fix_high</span><span>Auto</span>';
 const AUTO_RENAME_LOADING_HTML = '<span class="material-symbols-outlined animate-spin text-[16px]">sync</span><span>Inferring...</span>';
 
+// Lyrics Manager Setup
+let lyricsManager = null;
+let lyricsUIAdapter = null;
+const editLyricsFormSection = document.getElementById("media-edit-lyrics-form-section");
+
+function initializeMediaEditLyricsManager() {
+    if (lyricsManager) return;
+    
+    lyricsManager = new LyricsManager({ apiBase: '/api' });
+    lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
+        toggleCheckbox: 'media-edit-lyrics-toggle',
+        titleInput: 'media-edit-lyrics-title',
+        artistInput: 'media-edit-lyrics-artist',
+        textarea: 'media-edit-lyrics-textarea',
+        statusDiv: 'media-edit-lyrics-status',
+        providerSpan: 'media-edit-lyrics-provider',
+        searchBtn: 'media-edit-lyrics-search-btn',
+        googleBtn: 'media-edit-lyrics-google-btn',
+        uploadBtn: 'media-edit-lyrics-upload-btn',
+        fileInput: 'media-edit-lyrics-file',
+        formSection: 'media-edit-lyrics-form-section'
+    });
+}
+
 // Preview elements
 const previewImg = document.getElementById("media-edit-preview-img");
 const previewPlaceholder = document.getElementById("media-edit-preview-placeholder");
@@ -273,6 +297,18 @@ function openEditModal(itemNode) {
     if (editRenameDiskCheckbox) editRenameDiskCheckbox.checked = true;
     updateFilenamePreview();
 
+    // Initialize lyrics manager with current metadata
+    initializeMediaEditLyricsManager();
+    if (lyricsManager) {
+        lyricsManager.state.title = currentTitle;
+        lyricsManager.state.artist = currentArtist;
+        lyricsManager.state.lyricsEnabled = hasLyrics;
+        // Show/hide lyrics form based on lyrics enabled
+        if (editLyricsFormSection) {
+            editLyricsFormSection.style.display = hasLyrics ? '' : 'none';
+        }
+    }
+
     if (editModal) {
         editModal.classList.remove("hidden");
         editModal.setAttribute("aria-hidden", "false");
@@ -315,16 +351,24 @@ async function saveEditModal(event) {
     }
 
     try {
+        const requestBody = {
+            title: nextTitle,
+            artist: nextArtist || null,
+            rename_on_disk: renameOnDisk,
+        };
+
+        // Add lyrics if available
+        if (lyricsManager && lyricsManager.state.lyricsEnabled && lyricsManager.state.lyrics) {
+            requestBody.lyrics = lyricsManager.state.lyrics;
+            requestBody.lyrics_format = lyricsManager.state.format || 'txt';
+        }
+
         const response = await fetch(`/api/media/${Number(activeEditItemId)}`, {
             method: "PATCH",
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-                title: nextTitle,
-                artist: nextArtist || null,
-                rename_on_disk: renameOnDisk,
-            }),
+            body: JSON.stringify(requestBody),
         });
 
         if (!response.ok) {
@@ -606,6 +650,25 @@ editModal?.addEventListener("click", (event) => {
     }
 });
 editForm?.addEventListener("submit", saveEditModal);
+
+// Lyrics toggle handlers
+if (editAiToggle) {
+    editAiToggle.addEventListener('change', () => {
+        if (lyricsManager) {
+            lyricsManager.setEnabled(editLyricsToggle.checked);
+        }
+        editLyricsToggle.disabled = !editAiToggle.checked;
+    });
+}
+
+if (editLyricsToggle) {
+    editLyricsToggle.addEventListener('change', () => {
+        if (lyricsManager) {
+            lyricsManager.setEnabled(editLyricsToggle.checked);
+        }
+    });
+}
+
 document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && editModal && !editModal.classList.contains("hidden")) {
         closeEditModal();
