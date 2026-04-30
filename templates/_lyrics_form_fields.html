@@ -1,0 +1,85 @@
+{# Reusable lyrics title/artist inputs and action buttons
+
+   Expected DOM structure:
+   - Inputs have id: lyrics-title, lyrics-artist
+   - Buttons have id: lyrics-search-btn, lyrics-upload-btn, lyrics-google-link
+   - Hidden file input: lyrics-file
+   - All elements should be disabled when lyrics not enabled
+   
+   Usage:
+   {% include '_lyrics_form_fields.html' with context %}
+   
+   CSS Classes Used:
+   - Tailwind utility classes for form styling
+   - rounded-full for buttons
+   - Material symbols icons via <span class="material-symbols-outlined">
+   
+   JS Integration:
+   const adapter = new LyricsUIAdapter(manager, {
+     titleInput: '#lyrics-title',
+     artistInput: '#lyrics-artist',
+     searchBtn: '#lyrics-search-btn',
+     uploadBtn: '#lyrics-upload-btn',
+     fileInput: '#lyrics-file',
+     googleLink: '#lyrics-google-link',
+     ...
+   });
+#}
+
+<div class="grid gap-3 sm:grid-cols-2">
+  <label class="flex flex-col gap-2">
+    <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Title</span>
+    <input 
+      id="lyrics-title" 
+      type="text" 
+      class="w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" 
+      disabled
+    />
+  </label>
+  <label class="flex flex-col gap-2">
+    <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Artist</span>
+    <input 
+      id="lyrics-artist" 
+      type="text" 
+      class="w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" 
+      disabled
+    />
+  </label>
+</div>
+
+<div class="flex flex-wrap items-center gap-2">
+  <button 
+    id="lyrics-search-btn" 
+    type="button" 
+    class="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-bold text-on-primary transition-all hover:brightness-110 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed" 
+    disabled
+  >
+    <span class="material-symbols-outlined text-base">search</span>
+    Manual search
+  </button>
+  <a 
+    id="lyrics-google-link" 
+    href="https://www.google.com/search?q=lyrics" 
+    target="_blank" 
+    rel="noopener noreferrer" 
+    class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface transition-all hover:brightness-110 active:scale-95"
+  >
+    <span class="material-symbols-outlined text-base">open_in_new</span>
+    Search Google
+  </a>
+  <button 
+    id="lyrics-upload-btn" 
+    type="button" 
+    class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface transition-all hover:brightness-110 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed" 
+    disabled
+  >
+    <span class="material-symbols-outlined text-base">upload_file</span>
+    Upload lyrics file
+  </button>
+  <input 
+    id="lyrics-file" 
+    type="file" 
+    class="hidden" 
+    accept=".lrc,.txt"
+  />
+</div>
