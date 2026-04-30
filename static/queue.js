@@ -42,6 +42,7 @@ const queueConfigKaraokeToggle = document.getElementById('queue-config-karaoke-t
 const queueConfigKaraokeStatus = document.getElementById('queue-config-karaoke-status');
 const queueConfigKaraokeDetail = document.getElementById('queue-config-karaoke-detail');
 const queueConfigLyricsToggle = document.getElementById('queue-config-lyrics-toggle');
+const queueConfigLyricsDetail = document.getElementById('queue-config-lyrics-detail');
 const queueToast = document.getElementById('queue-toast');
 const queueToastText = document.getElementById('queue-toast-text');
 const QUEUE_CONFIRM_DEFAULT_HTML = '<span class="material-symbols-outlined text-base" style="font-variation-settings: \'FILL\' 1">add_circle</span>Add to Queue';
@@ -126,6 +127,9 @@ function initializeLyricsManager() {
     });
     
     lyricsUIAdapter.initialize();
+    lyricsManager.on(() => {
+        syncQueueConfigModalUi();
+    });
 }
 
 searchResults.addEventListener('click', async (event) => {
@@ -385,6 +389,208 @@ function buildQueueSelection(resultElement, triggerButton) {
     };
 }
 
+function syncQueueSongTitleLink() {
+    if (!queueConfigSongTitle || !modalSelection) return;
+
+    const previewUrl = getYouTubeWatchUrl(modalSelection.videoId);
+    queueConfigSongTitle.textContent = modalSelection.title || 'Selected song';
+    queueConfigSongTitle.title = previewUrl ? 'Open in YouTube' : '';
+
+    if (previewUrl) {
+        queueConfigSongTitle.href = previewUrl;
+        queueConfigSongTitle.classList.remove('cursor-default', 'pointer-events-none');
+        queueConfigSongTitle.classList.add('cursor-pointer');
+    } else {
+        queueConfigSongTitle.removeAttribute('href');
+        queueConfigSongTitle.removeAttribute('title');
+        queueConfigSongTitle.classList.remove('cursor-pointer');
+        queueConfigSongTitle.classList.add('cursor-default', 'pointer-events-none');
+    }
+}
+
+function syncQueueConfirmState() {
+    if (!queueConfigConfirmBtn) return;
+
+    const lyricsState = lyricsManager?.state.lyricsState || 'idle';
+    const lyricsRequired = Boolean(lyricsManager?.state.lyricsEnabled);
+    const ready = !lyricsRequired
+        || ['resolved', 'not_found', 'error', 'manual'].includes(lyricsState)
+        || Boolean(lyricsManager?.getSubmissionText());
+    const waiting = lyricsRequired && lyricsState === 'loading';
+    const disabled = waiting || (lyricsRequired && !ready);
+
+    queueConfigConfirmBtn.disabled = disabled;
+    queueConfigConfirmBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+    queueConfigConfirmBtn.setAttribute('aria-busy', waiting ? 'true' : 'false');
+    queueConfigConfirmBtn.title = waiting
+        ? 'Lyrics are still resolving'
+        : lyricsRequired && !ready
+            ? 'Resolve lyrics or add your own synced lyrics before continuing'
+            : 'Add the song to the queue';
+
+    queueConfigConfirmBtn.classList.toggle('bg-primary', !disabled);
+    queueConfigConfirmBtn.classList.toggle('text-on-primary', !disabled);
+    queueConfigConfirmBtn.classList.toggle('bg-surface-container-highest', disabled);
+    queueConfigConfirmBtn.classList.toggle('text-on-surface-variant', disabled);
+
+    queueConfigConfirmBtn.innerHTML = waiting ? QUEUE_CONFIRM_LOADING_HTML : QUEUE_CONFIRM_DEFAULT_HTML;
+}
+
+async function openQueueConfigModal(resultElement, triggerButton) {
+    if (!queueConfigModal || !queueConfigConfirmBtn) {
+        await submitQueueItem(buildQueueSelection(resultElement, triggerButton), triggerButton, {
+            isKaraoke: false,
+            lyricsEnabled: false,
+        });
+        return;
+    }
+
+    initializeLyricsManager();
+    modalSelection = buildQueueSelection(resultElement, triggerButton);
+
+    const defaults = getModalDefaults();
+    modalKaraokeEnabled = defaults.karaokeEnabled;
+    lyricsManager.reset();
+    lyricsManager.setMetadata(modalSelection.title || '', modalSelection.channel || '', modalSelection.title || '');
+    lyricsManager.setEnabled(defaults.lyricsEnabled);
+
+    syncQueueSongTitleLink();
+    if (queueConfigSongChannel) queueConfigSongChannel.textContent = modalSelection.channel || '';
+    if (queueConfigSongThumb) {
+        queueConfigSongThumb.src = modalSelection.thumbnail;
+        queueConfigSongThumb.onerror = () => {
+            queueConfigSongThumb.src = '/static/placeholder.png';
+        };
+    }
+
+    queueConfigConfirmBtn.disabled = false;
+    queueConfigConfirmBtn.setAttribute('aria-disabled', 'false');
+    queueConfigConfirmBtn.setAttribute('aria-busy', 'false');
+    queueConfigConfirmBtn.title = 'Add the song to the queue';
+    queueConfigConfirmBtn.classList.remove('bg-secondary', 'text-white', 'bg-error', 'bg-surface-container-highest', 'text-on-surface-variant');
+    queueConfigConfirmBtn.classList.add('bg-primary', 'text-on-primary');
+    queueConfigConfirmBtn.innerHTML = QUEUE_CONFIRM_DEFAULT_HTML;
+    queueConfigModal.classList.remove('hidden');
+    queueConfigModal.classList.add('flex');
+    document.body.classList.add('overflow-hidden');
+
+    syncQueueConfigModalUi();
+
+    if (lyricsManager.state.lyricsEnabled && modalKaraokeEnabled && lyricsManager.shouldAutoResolve()) {
+        lyricsManager.resolve('auto').catch((error) => {
+            console.error('Lyrics auto-resolve failed:', error);
+        });
+    }
+
+    refreshDemucsHealth().then(() => {
+        if (modalSelection) {
+            syncQueueConfigModalUi();
+        }
+    });
+}
+
+function closeQueueConfigModal() {
+    if (!queueConfigModal) return;
+    if (lyricsManager) {
+        lyricsManager.reset();
+    }
+    queueConfigModal.classList.add('hidden');
+    queueConfigModal.classList.remove('flex');
+    document.body.classList.remove('overflow-hidden');
+    modalSelection = null;
+    modalKaraokeEnabled = false;
+}
+
+function displaySearchResults(results) {
+    if (results.length === 0) {
+        searchResults.innerHTML = `
+            <div class="text-center py-8">
+                <span class="material-symbols-outlined text-4xl text-on-surface-variant mb-3 block">search_off</span>
+                <p class="text-on-surface-variant">No results found</p>
+            </div>
+        `;
+        return;
+    }
+
+    searchResults.innerHTML = results.map(result => {
+        const isDownloaded = result.source === 'local' || result.downloaded;
+        const source = escapeHtml(result.source || 'youtube');
+        const videoId = escapeHtml(result.video_id || '');
+        const mediaItemId = result.media_item_id ?? '';
+        const title = escapeHtml(result.title || '');
+        const channel = escapeHtml(result.channel || '');
+        const thumbnail = escapeHtml(result.thumbnail || '/static/placeholder.png');
+
+        if (isDownloaded) {
+            return `
+                <div
+                    class="bg-surface-container-lowest hover:bg-surface-container-low p-3 rounded-lg transition-all border border-outline-variant/10"
+                    data-result-source="${source}"
+                    data-video-id="${videoId}"
+                    data-media-item-id="${mediaItemId}"
+                    data-title="${title}"
+                    data-channel="${channel}"
+                    data-thumbnail="${thumbnail}"
+                >
+                    <div class="flex items-center gap-3">
+                        <div class="relative w-12 h-12 rounded-md overflow-hidden shrink-0">
+                            <img src="${thumbnail}" alt="${title}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'">
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            ${renderSearchResultTitle(result, 'text-xs')}
+                            <p class="text-[11px] text-on-surface-variant truncate">${channel}</p>
+                            <div class="mt-1 flex items-center gap-1.5">
+                                ${result.source === 'local' ? `
+                                    <div class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 border border-primary/20">
+                                        <span class="material-symbols-outlined text-[9px] text-primary">library_music</span>
+                                        <span class="text-[7px] font-bold uppercase tracking-tighter text-primary">Local</span>
+                                    </div>
+                                ` : ''}
+                                <div class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
+                                    <span class="material-symbols-outlined text-[9px] text-secondary">download_done</span>
+                                    <span class="text-[7px] font-bold uppercase tracking-tighter text-secondary">Ready</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="add-to-queue-btn bg-primary text-on-primary px-3 py-1.5 rounded-full text-xs font-bold hover:brightness-110 active:scale-95 transition-all shrink-0" type="button">Add</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        return `
+            <div
+                class="bg-surface-container-low hover:bg-surface-container p-4 rounded-lg transition-all"
+                data-result-source="${source}"
+                data-video-id="${videoId}"
+                data-media-item-id="${mediaItemId}"
+                data-title="${title}"
+                data-channel="${channel}"
+                data-thumbnail="${thumbnail}"
+            >
+                <div class="flex items-center gap-4">
+                    <div class="relative w-20 h-14 rounded-md overflow-hidden shrink-0">
+                        <img src="${thumbnail}" alt="${title}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'">
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        ${renderSearchResultTitle(result, 'text-sm')}
+                        <p class="text-xs text-on-surface-variant truncate">${channel}</p>
+                        ${result.duration ? `<p class="text-xs text-on-surface-variant/60">${escapeHtml(result.duration)}</p>` : ''}
+                    </div>
+                    <button class="add-to-queue-btn bg-primary text-on-primary px-4 py-2 rounded-full text-sm font-bold hover:brightness-110 active:scale-95 transition-all shrink-0" type="button">Add</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function addToQueueFromModal(selection, buttonElement) {
+    return submitQueueItem(selection, buttonElement, {
+        isKaraoke: modalKaraokeEnabled,
+        lyricsEnabled: Boolean(lyricsManager?.state.lyricsEnabled),
+    });
+}
+
 function syncQueueConfigModalUi() {
     const karaokeAvailable = demucsHealth.healthy;
     const titleHints = getModalTitleHints();
@@ -413,7 +619,7 @@ function syncQueueConfigModalUi() {
     updateModalToggleAppearance(queueConfigKaraokeToggle, modalKaraokeEnabled, 'bg-tertiary');
 
     const lyricsEnabled = modalKaraokeEnabled;
-    if (!lyricsEnabled && lyricsManager) {
+    if (!lyricsEnabled && lyricsManager?.state.lyricsEnabled) {
         lyricsManager.setEnabled(false);
     }
     
@@ -425,6 +631,14 @@ function syncQueueConfigModalUi() {
     
     if (lyricsManager) {
         updateModalToggleAppearance(queueConfigLyricsToggle, lyricsManager.state.lyricsEnabled, 'bg-secondary');
+    }
+
+    if (queueConfigLyricsDetail) {
+        if (titleHints.lyricsLike) {
+            queueConfigLyricsDetail.textContent = 'This looks like a lyrics video already, so lyrics search stays off by default.';
+        } else {
+            queueConfigLyricsDetail.textContent = 'Resolve synced lyrics before you add the song to the queue.';
+        }
     }
 
     syncQueueConfirmState();
@@ -548,6 +762,9 @@ if (queueConfigLyricsToggle) {
     queueConfigLyricsToggle.addEventListener('click', () => {
         if (queueConfigLyricsToggle.disabled || !lyricsManager) return;
         const newEnabled = !lyricsManager.state.lyricsEnabled;
+        if (newEnabled && modalSelection) {
+            lyricsManager.setMetadata(modalSelection.title || '', modalSelection.channel || '', modalSelection.title || '');
+        }
         lyricsManager.setEnabled(newEnabled);
 
         if (newEnabled) {

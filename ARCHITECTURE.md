@@ -125,6 +125,9 @@ The stage page uses a websocket-first model:
   - `QueueService.add_to_queue` stores inline lyrics as a cache sidecar when karaoke is enabled and lyrics text is provided
   - YouTube-backed media rows are refreshed with the submitted title/artist so resolved lyrics metadata persists in `media_items`
   - `KaraokeService` keeps karaoke output assembly independent from subtitle burn behavior
+- Queue, upload, and media edit lyrics interactions share the same lightweight frontend manager/adapter modules:
+  - `static/lyrics-manager.js` owns lyrics state, metadata, provider lookup, uploads, and submission payloads
+  - `static/lyrics-ui.js` binds that state to page-specific DOM selectors without introducing a frontend framework
 
 ## Media upload flow
 
@@ -132,7 +135,9 @@ The stage page uses a websocket-first model:
 - Backend flow:
   - saves the uploaded file under the configured media root using the normalized title/artist stem
   - creates a durable `media_items` row with `media_path` pointing at the saved file
+  - persists submitted `lyrics_text` as a reusable lyrics sidecar on the media row
   - optionally creates a queue row for the new media item when "Add to queue" is enabled
+  - applies the upload page AI karaoke toggle only to that queued item request
   - broadcasts the new queue item so real-time clients stay in sync
 - Successful uploads redirect the browser to the media management page.
 

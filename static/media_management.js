@@ -25,20 +25,25 @@ const editLyricsFormSection = document.getElementById("media-edit-lyrics-form-se
 function initializeMediaEditLyricsManager() {
     if (lyricsManager) return;
     
-    lyricsManager = new LyricsManager({ apiBase: '/api' });
+    lyricsManager = new LyricsManager({ apiBase: window.location.origin });
     lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
-        toggleCheckbox: 'media-edit-lyrics-toggle',
-        titleInput: 'media-edit-lyrics-title',
-        artistInput: 'media-edit-lyrics-artist',
-        textarea: 'media-edit-lyrics-textarea',
-        statusDiv: 'media-edit-lyrics-status',
-        providerSpan: 'media-edit-lyrics-provider',
-        searchBtn: 'media-edit-lyrics-search-btn',
-        googleBtn: 'media-edit-lyrics-google-btn',
-        uploadBtn: 'media-edit-lyrics-upload-btn',
-        fileInput: 'media-edit-lyrics-file',
-        formSection: 'media-edit-lyrics-form-section'
+        titleInput: '#media-edit-lyrics-title',
+        artistInput: '#media-edit-lyrics-artist',
+        textarea: '#media-edit-lyrics-textarea',
+        stateLabel: '#media-edit-lyrics-status',
+        providerLabel: '#media-edit-lyrics-provider',
+        searchBtn: '#media-edit-lyrics-search-btn',
+        googleLink: '#media-edit-lyrics-google-btn',
+        uploadBtn: '#media-edit-lyrics-upload-btn',
+        fileInput: '#media-edit-lyrics-file',
+        panel: '#media-edit-lyrics-form-section'
     });
+    lyricsUIAdapter.initialize();
+}
+
+function syncMediaEditLyricsMetadata() {
+    if (!lyricsManager) return;
+    lyricsManager.setMetadata(editTitleInput?.value || "", editArtistInput?.value || "", editTitleInput?.value || "");
 }
 
 // Preview elements
@@ -300,13 +305,9 @@ function openEditModal(itemNode) {
     // Initialize lyrics manager with current metadata
     initializeMediaEditLyricsManager();
     if (lyricsManager) {
-        lyricsManager.state.title = currentTitle;
-        lyricsManager.state.artist = currentArtist;
-        lyricsManager.state.lyricsEnabled = hasLyrics;
-        // Show/hide lyrics form based on lyrics enabled
-        if (editLyricsFormSection) {
-            editLyricsFormSection.style.display = hasLyrics ? '' : 'none';
-        }
+        lyricsManager.reset();
+        lyricsManager.setMetadata(currentTitle, currentArtist, currentTitle);
+        lyricsManager.setEnabled(hasLyrics);
     }
 
     if (editModal) {
@@ -358,9 +359,13 @@ async function saveEditModal(event) {
         };
 
         // Add lyrics if available
-        if (lyricsManager && lyricsManager.state.lyricsEnabled && lyricsManager.state.lyrics) {
-            requestBody.lyrics = lyricsManager.state.lyrics;
-            requestBody.lyrics_format = lyricsManager.state.format || 'txt';
+        if (lyricsManager && lyricsManager.state.lyricsEnabled) {
+            syncMediaEditLyricsMetadata();
+            const lyricsPayload = lyricsManager.getLyricsSubmissionPayload();
+            if (lyricsPayload) {
+                requestBody.lyrics_text = lyricsPayload.lyrics_text;
+                requestBody.lyrics_format = lyricsPayload.lyrics_format;
+            }
         }
 
         const response = await fetch(`/api/media/${Number(activeEditItemId)}`, {
@@ -614,6 +619,7 @@ if (editTitleInput) {
         if (previewTitle) previewTitle.textContent = val;
         if (previewTitleMobile) previewTitleMobile.textContent = val;
         updateFilenamePreview();
+        syncMediaEditLyricsMetadata();
     });
 }
 
@@ -623,6 +629,7 @@ if (editArtistInput) {
         if (previewArtist) previewArtist.textContent = val;
         if (previewArtistMobile) previewArtistMobile.textContent = val;
         updateFilenamePreview();
+        syncMediaEditLyricsMetadata();
     });
 }
 
@@ -654,16 +661,17 @@ editForm?.addEventListener("submit", saveEditModal);
 // Lyrics toggle handlers
 if (editAiToggle) {
     editAiToggle.addEventListener('change', () => {
-        if (lyricsManager) {
-            lyricsManager.setEnabled(editLyricsToggle.checked);
+        if (editAiToggle.checked) {
+            showToast("AI karaoke is applied when adding media to the queue.");
         }
-        editLyricsToggle.disabled = !editAiToggle.checked;
     });
 }
 
 if (editLyricsToggle) {
     editLyricsToggle.addEventListener('change', () => {
+        initializeMediaEditLyricsManager();
         if (lyricsManager) {
+            syncMediaEditLyricsMetadata();
             lyricsManager.setEnabled(editLyricsToggle.checked);
         }
     });

@@ -116,6 +116,8 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
 
 5. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
         - Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files into the media library with title and artist metadata
+        - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use
+        - If **Add to queue** and **AI Karaoke** are enabled, the uploaded item is queued with karaoke processing requested
         - Keep the default checked **Add to queue** toggle enabled to enqueue the new media item after upload
         - Successful uploads redirect to the media management page
 

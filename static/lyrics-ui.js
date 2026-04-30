@@ -84,13 +84,13 @@ class LyricsUIAdapter {
   bindEventListeners() {
     // Title/artist inputs: sync to manager
     if (this.elements.titleInput) {
-      const handler = (e) => this.manager.setMetadata(e.target.value, this.elements.artistInput?.value || '');
+      const handler = (e) => this.manager.setMetadata(e.target.value, this.elements.artistInput?.value || '', this.manager.state.youtubeTitle || '');
       this.elements.titleInput.addEventListener('input', handler);
       this.eventListeners.push({ element: this.elements.titleInput, event: 'input', handler });
     }
 
     if (this.elements.artistInput) {
-      const handler = (e) => this.manager.setMetadata(this.elements.titleInput?.value || '', e.target.value);
+      const handler = (e) => this.manager.setMetadata(this.elements.titleInput?.value || '', e.target.value, this.manager.state.youtubeTitle || '');
       this.elements.artistInput.addEventListener('input', handler);
       this.eventListeners.push({ element: this.elements.artistInput, event: 'input', handler });
     }
@@ -107,9 +107,13 @@ class LyricsUIAdapter {
 
     // Search button: trigger lyrics resolution
     if (this.elements.searchBtn) {
-      const handler = (e) => {
+      const handler = async (e) => {
         e.preventDefault();
-        this.manager.resolve('manual');
+        try {
+          await this.manager.resolve('manual');
+        } catch (error) {
+          console.error('Lyrics search failed:', error);
+        }
       };
       this.elements.searchBtn.addEventListener('click', handler);
       this.eventListeners.push({ element: this.elements.searchBtn, event: 'click', handler });
@@ -130,7 +134,9 @@ class LyricsUIAdapter {
       const handler = (e) => {
         const file = e.target.files?.[0];
         if (file) {
-          this.manager.handleFileUpload(file);
+          this.manager.handleFileUpload(file).catch((error) => {
+            console.error('Lyrics upload failed:', error);
+          });
         }
       };
       this.elements.fileInput.addEventListener('change', handler);
@@ -162,6 +168,7 @@ class LyricsUIAdapter {
     this.updateSearchButton(state);
     this.updateUploadButton(state);
     this.updatePanelVisibility(state.lyricsEnabled);
+    this.updateMetadataInputs(state);
     this.updateTextareaState(state);
     this.updateInputDisabledState(state.lyricsEnabled);
     this.updateGoogleSearchLink();
@@ -249,7 +256,22 @@ class LyricsUIAdapter {
   updateTextareaState(state) {
     if (!this.elements.textarea) return;
 
+    if (this.elements.textarea.value !== (state.text || '')) {
+      this.elements.textarea.value = state.text || '';
+    }
     this.elements.textarea.disabled = !state.lyricsEnabled;
+  }
+
+  /**
+   * Keep metadata inputs in sync when providers normalize title/artist.
+   */
+  updateMetadataInputs(state) {
+    if (this.elements.titleInput && this.elements.titleInput.value !== (state.title || '')) {
+      this.elements.titleInput.value = state.title || '';
+    }
+    if (this.elements.artistInput && this.elements.artistInput.value !== (state.artist || '')) {
+      this.elements.artistInput.value = state.artist || '';
+    }
   }
 
   /**

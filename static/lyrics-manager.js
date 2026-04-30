@@ -10,11 +10,9 @@
  *   const state = lyricsManager.getState();
  */
 
-const API_BASE = window.location.origin;
-
 class LyricsManager {
   constructor(options = {}) {
-    this.apiBase = options.apiBase || API_BASE;
+    this.apiBase = options.apiBase || window.location.origin;
     this.requestId = 0;
     this.abortController = null;
     
@@ -141,6 +139,7 @@ class LyricsManager {
     this.state.title = (title || '').trim();
     this.state.artist = (artist || '').trim();
     this.state.youtubeTitle = (youtubeTitle || '').trim();
+    this.notifyListeners();
   }
 
   /**

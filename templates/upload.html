@@ -67,12 +67,12 @@
                 </div>
                 <button type="button" id="infer-metadata-btn" class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest/30 px-4 py-2 text-secondary font-bold text-on-surface-variant transition-all hover:bg-surface-container-highest/50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
                     <span class="material-symbols-outlined text-base">auto_fix_high</span>
-                    Auto
+                    Infer from filename
                 </button>
             </div>
 
             <!-- Lyrics Panel -->
-            <div class="space-y-4" id="upload-lyrics-section" style="display: none;">
+            <div class="space-y-4" id="upload-lyrics-section">
                 <p class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Lyrics (Optional)</p>
                 
                 <!-- AI Karaoke & Lyrics Toggles -->
@@ -100,7 +100,7 @@
                 </div>
 
                 <!-- Lyrics Form Fields (hidden by default) -->
-                <div id="upload-lyrics-form-section" style="display: none;">
+                <div id="upload-lyrics-form-section" class="hidden">
                     <div class="space-y-4 rounded-xl bg-surface-container-highest/30 p-4 ring-1 ring-white/5">
                         <!-- Title/Artist Inputs -->
                         <div class="grid grid-cols-2 gap-3">
@@ -132,10 +132,10 @@
                                 <span class="material-symbols-outlined text-sm">search</span>
                                 Search
                             </button>
-                            <button type="button" id="upload-lyrics-google-btn" class="inline-flex items-center gap-1 rounded-full bg-tertiary/20 px-3 py-1.5 text-[10px] font-bold text-tertiary transition-all hover:bg-tertiary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                            <a id="upload-lyrics-google-btn" href="https://www.google.com/search?q=lyrics" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 rounded-full bg-tertiary/20 px-3 py-1.5 text-[10px] font-bold text-tertiary transition-all hover:bg-tertiary/30 active:scale-95">
                                 <span class="material-symbols-outlined text-sm">open_in_new</span>
                                 Google
-                            </button>
+                            </a>
                             <button type="button" id="upload-lyrics-upload-btn" class="inline-flex items-center gap-1 rounded-full bg-primary/20 px-3 py-1.5 text-[10px] font-bold text-primary transition-all hover:bg-primary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
                                 <span class="material-symbols-outlined text-sm">upload_file</span>
                                 Upload

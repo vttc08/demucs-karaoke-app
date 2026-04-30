@@ -658,6 +658,33 @@ def test_queue_service_persists_lyrics_sidecar_from_queue_payload(db_session, tm
         settings.cache_path = original_cache
 
 
+def test_queue_service_persists_lyrics_sidecar_for_existing_media(db_session, tmp_path):
+    """Lyrics sidecar persistence should be reusable outside queue creation."""
+    original_cache = settings.cache_path
+    try:
+        settings.cache_path = tmp_path / "cache"
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        media = MediaItem(
+            title="Edited Lyrics",
+            artist="Singer",
+            file_stem="edited-lyrics",
+            media_path="/media/edited-lyrics.mp4",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.flush()
+
+        service = QueueService()
+        service.store_lyrics_sidecar(media, "Plain lyrics", lyrics_format="txt")
+
+        assert media.lyrics_path == "/cache/lyrics/edited-lyrics.txt"
+        lyrics_file = settings.cache_path / "lyrics" / "edited-lyrics.txt"
+        assert lyrics_file.read_text(encoding="utf-8") == "Plain lyrics"
+    finally:
+        settings.cache_path = original_cache
+
+
 def test_queue_service_repairs_swapped_vocals_and_infers_sidecar(db_session, tmp_path):
     """If vocals_path stores lyrics, service should recover lyrics and infer *.vocals sidecar."""
     service = QueueService()

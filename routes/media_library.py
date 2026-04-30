@@ -34,6 +34,9 @@ async def upload_media(
     title: str = Form(...),
     artist: str | None = Form(None),
     add_to_queue: bool = Form(True),
+    is_karaoke: bool = Form(False),
+    lyrics_text: str | None = Form(None),
+    lyrics_format: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     """Upload a new media file and create a library entry."""
@@ -71,6 +74,14 @@ async def upload_media(
         )
         db.add(media_item)
         db.flush()
+        if lyrics_text:
+            if lyrics_format not in (None, "lrc", "txt"):
+                raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc' or 'txt'")
+            queue_service.store_lyrics_sidecar(
+                media_item,
+                lyrics_text,
+                lyrics_format=lyrics_format,
+            )
 
         if add_to_queue:
             queued_item = queue_service.add_to_queue(
@@ -79,7 +90,9 @@ async def upload_media(
                     media_item_id=media_item.id,
                     title=media_item.title,
                     artist=media_item.artist,
-                    is_karaoke=False,
+                    is_karaoke=is_karaoke,
+                    lyrics_text=lyrics_text,
+                    lyrics_format=lyrics_format,
                 ),
             )
             await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
@@ -112,6 +125,7 @@ async def upload_media(
         "filename": filename,
         "queued": bool(add_to_queue),
         "queue_item_id": queued_item.id if queued_item else None,
+        "lyrics_path": media_item.lyrics_path,
     }
 
 
@@ -152,6 +166,13 @@ def rename_media_item(item_id: int, payload: dict, db: Session = Depends(get_db)
     if not isinstance(rename_on_disk, bool):
         raise HTTPException(status_code=400, detail="rename_on_disk must be a boolean")
 
+    lyrics_text = payload.get("lyrics_text")
+    if lyrics_text is not None and not isinstance(lyrics_text, str):
+        raise HTTPException(status_code=400, detail="lyrics_text must be a string or null")
+    lyrics_format = payload.get("lyrics_format")
+    if lyrics_format not in (None, "lrc", "txt"):
+        raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc' or 'txt'")
+
     try:
         summary = media_library_maintenance_service.rename_media_item(
             db,
@@ -160,6 +181,17 @@ def rename_media_item(item_id: int, payload: dict, db: Session = Depends(get_db)
             artist=artist,
             rename_on_disk=rename_on_disk,
         )
+        if lyrics_text:
+            media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
+            if media_item is None:
+                raise MediaItemNotFoundError(f"Media item not found: {item_id}")
+            queue_service.store_lyrics_sidecar(
+                media_item,
+                lyrics_text,
+                lyrics_format=lyrics_format,
+            )
+            db.commit()
+            summary["lyrics_path"] = media_item.lyrics_path
     except MediaItemNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except MediaItemRenameConflictError as exc:

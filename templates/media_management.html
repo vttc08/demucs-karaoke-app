@@ -353,7 +353,7 @@
                             </div>
 
                             <!-- Lyrics Form Fields (hidden by default) -->
-                            <div id="media-edit-lyrics-form-section" style="display: none;">
+                            <div id="media-edit-lyrics-form-section" class="hidden">
                                 <div class="h-px bg-white/5"></div>
                                 <div class="space-y-4 rounded-xl bg-surface-container-highest/30 p-4 ring-1 ring-white/5">
                                     <!-- Title/Artist Inputs -->
@@ -386,10 +386,10 @@
                                             <span class="material-symbols-outlined text-sm">search</span>
                                             Search
                                         </button>
-                                        <button type="button" id="media-edit-lyrics-google-btn" class="inline-flex items-center gap-1 rounded-full bg-tertiary/20 px-3 py-1.5 text-[10px] font-bold text-tertiary transition-all hover:bg-tertiary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                                        <a id="media-edit-lyrics-google-btn" href="https://www.google.com/search?q=lyrics" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 rounded-full bg-tertiary/20 px-3 py-1.5 text-[10px] font-bold text-tertiary transition-all hover:bg-tertiary/30 active:scale-95">
                                             <span class="material-symbols-outlined text-sm">open_in_new</span>
                                             Google
-                                        </button>
+                                        </a>
                                         <button type="button" id="media-edit-lyrics-upload-btn" class="inline-flex items-center gap-1 rounded-full bg-primary/20 px-3 py-1.5 text-[10px] font-bold text-primary transition-all hover:bg-primary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
                                             <span class="material-symbols-outlined text-sm">upload_file</span>
                                             Upload

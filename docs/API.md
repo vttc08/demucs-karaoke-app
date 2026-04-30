@@ -215,6 +215,38 @@ GET /api/queue/
 
 ---
 
+### Upload Media
+```
+POST /api/media/upload
+```
+
+Uploads a local media file into the library. The request is multipart form data.
+
+**Form Fields:**
+- `file` (required): MP3, MP4, WebM, MKV, MOV, AVI, or M4V file
+- `title` (required): media title
+- `artist` (optional): media artist
+- `add_to_queue` (optional, default `true`): queue the uploaded media after saving
+- `is_karaoke` (optional, default `false`): request karaoke processing for the queued item when `add_to_queue` is true
+- `lyrics_text` (optional): lyrics text to persist as a reusable sidecar
+- `lyrics_format` (optional): `lrc` or `txt`; inferred from text when omitted by queue/service paths
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "media_id": 1,
+  "filename": "artist-song.mp4",
+  "queued": true,
+  "queue_item_id": 10,
+  "lyrics_path": "/cache/lyrics/artist-song.lrc"
+}
+```
+
+When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued.
+
+---
+
 ### Scan Media Library
 ```
 POST /api/media/scan
@@ -256,9 +288,13 @@ Updates the media row title and artist. When `rename_on_disk` is true, the serve
 {
   "title": "New Title",
   "artist": "New Artist",
-  "rename_on_disk": true
+  "rename_on_disk": true,
+  "lyrics_text": "[00:01.00]Line 1",
+  "lyrics_format": "lrc"
 }
 ```
+
+`lyrics_text` and `lyrics_format` are optional. When `lyrics_text` is supplied, the media row stores a reusable lyrics sidecar and returns its path in the summary.
 
 **Response:**
 ```json

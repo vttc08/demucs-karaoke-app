@@ -490,6 +490,48 @@ def test_upload_media_saves_file_and_queues_item(client, tmp_path):
         settings.media_path = original_media
 
 
+def test_upload_media_persists_lyrics_and_queue_karaoke_flag(client, tmp_path):
+    """Uploaded lyrics should persist as a sidecar and queued uploads can request karaoke."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        with patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()):
+            response = client.post(
+                "/api/media/upload",
+                data={
+                    "title": "Upload Lyrics",
+                    "artist": "Upload Artist",
+                    "add_to_queue": "true",
+                    "is_karaoke": "true",
+                    "lyrics_text": "[00:01.00]Uploaded line",
+                    "lyrics_format": "lrc",
+                },
+                files={"file": ("upload-lyrics.mp4", b"video-bytes", "video/mp4")},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        expected_stem = build_media_stem("Upload Lyrics", "Upload Artist")
+        assert payload["lyrics_path"] == f"/cache/lyrics/{expected_stem}.lrc"
+        assert (settings.cache_path / "lyrics" / f"{expected_stem}.lrc").read_text(
+            encoding="utf-8"
+        ) == "[00:01.00]Uploaded line"
+
+        with TestingSessionLocal() as db:
+            queue_item = db.query(QueueItem).filter(QueueItem.id == payload["queue_item_id"]).first()
+            assert queue_item is not None
+            assert queue_item.requested_karaoke is True
+            assert queue_item.media.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
 @pytest.mark.parametrize(
     "filename",
     ["upload-song.webm", "upload-song.mkv", "upload-song.mov", "upload-song.avi", "upload-song.m4v"],
@@ -768,6 +810,57 @@ def test_media_rename_route_updates_database_and_files(client, tmp_path):
             assert stored.media_path == f"/media/{expected_stem}.mp4"
             assert stored.vocals_path == f"/media/{expected_stem}.vocals.wav"
             assert stored.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_rename_route_persists_lyrics_text(client, tmp_path):
+    """Media edit should be able to save lyrics text as a sidecar."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+        media_file = settings.media_path / "editable.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Editable",
+                artist="Singer",
+                file_stem="editable",
+                media_path="/media/editable.mp4",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        response = client.patch(
+            f"/api/media/{media_id}",
+            json={
+                "title": "Editable",
+                "artist": "Singer",
+                "rename_on_disk": False,
+                "lyrics_text": "Plain edited lyrics",
+                "lyrics_format": "txt",
+            },
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["summary"]["lyrics_path"] == "/cache/lyrics/editable.txt"
+        assert (settings.cache_path / "lyrics" / "editable.txt").read_text(
+            encoding="utf-8"
+        ) == "Plain edited lyrics"
+
+        with TestingSessionLocal() as db:
+            stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+            assert stored is not None
+            assert stored.lyrics_path == "/cache/lyrics/editable.txt"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache

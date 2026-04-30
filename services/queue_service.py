@@ -95,7 +95,11 @@ class QueueService:
                 media_item.id,
             )
         if item.is_karaoke and item.lyrics_text:
-            self._store_lyrics_sidecar(media_item, item)
+            self.store_lyrics_sidecar(
+                media_item,
+                item.lyrics_text,
+                lyrics_format=item.lyrics_format,
+            )
 
         db_item = QueueItem(
             media_id=media_item.id,
@@ -365,13 +369,18 @@ class QueueService:
                 logger.warning("Skipping non-local vocals path item_id=%s path=%s", item_id, vocals_path)
             db.commit()
 
-    def _store_lyrics_sidecar(self, media_item: MediaItem, item: QueueItemCreate) -> None:
-        """Persist lyrics text as a sidecar so karaoke processing can reuse it."""
-        lyrics_text = (item.lyrics_text or "").strip()
+    def store_lyrics_sidecar(
+        self,
+        media_item: MediaItem,
+        lyrics_text: str | None,
+        lyrics_format: str | None = None,
+    ) -> None:
+        """Persist lyrics text as a reusable sidecar for a media item."""
+        lyrics_text = (lyrics_text or "").strip()
         if not lyrics_text:
             return
 
-        suffix = self._lyrics_suffix(lyrics_text, item.lyrics_format)
+        suffix = self._lyrics_suffix(lyrics_text, lyrics_format)
         stem = media_item.file_stem or build_media_stem(
             media_item.title,
             media_item.artist,
