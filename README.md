@@ -115,7 +115,7 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000
          - App also performs one media-library scan on startup/restart
 
 5. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
-        - Upload MP3 or MP4 files into the media library with title and artist metadata
+        - Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files into the media library with title and artist metadata
         - Keep the default checked **Add to queue** toggle enabled to enqueue the new media item after upload
         - Successful uploads redirect to the media management page
 

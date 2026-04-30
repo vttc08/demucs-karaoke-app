@@ -11,19 +11,18 @@
         <div class="mb-8 text-center sm:text-left">
             <p class="text-[11px] font-bold uppercase tracking-widest text-primary">Archive_New_Entry</p>
             <h2 class="mt-1 font-headline text-2xl font-black tracking-tight text-on-surface sm:text-3xl">Ingest Media</h2>
-            <p class="mt-2 text-sm text-on-surface-variant">Upload MP3 or MP4 files to save them to the media library and optionally add them to the queue.</p>
+            <p class="mt-2 text-sm text-on-surface-variant">Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files to save them to the media library and optionally add them to the queue.</p>
         </div>
 
         <form id="upload-form" class="space-y-8">
             <!-- Drop Zone -->
             <div id="drop-zone" class="group relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/10 bg-surface-container-low/40 py-12 transition-all hover:border-primary/40 hover:bg-surface-container-low/60">
-                <input type="file" id="file-input" class="absolute inset-0 cursor-pointer opacity-0" accept=".mp3,.mp4" />
+                <input type="file" id="file-input" class="absolute inset-0 cursor-pointer opacity-0" accept=".mp3,.mp4,.webm,.mkv,.mov,.avi,.m4v" />
                 <div class="flex flex-col items-center text-center">
-                    <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-highest/60 text-primary transition-transform group-hover:scale-110">
+                    <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-highest/60 text-primary transition-transform duration-200 group-hover:scale-110">
                         <span class="material-symbols-outlined text-3xl">cloud_upload</span>
                     </div>
                     <p class="text-base font-bold text-on-surface" id="drop-zone-text">Drop file here or tap to select</p>
-                    <p class="mt-1 text-xs text-on-surface-variant">Supporting MP3 and MP4 (Max 50MB)</p>
                 </div>
                 <div id="file-preview" class="hidden w-full px-6">
                     <div class="flex items-center gap-4 rounded-xl bg-surface-container-highest/60 p-4">
@@ -42,29 +41,34 @@
             </div>
 
             <!-- Metadata -->
-            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                <div class="space-y-1.5">
-                    <label for="song-title" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Song Title</label>
-                    <input
-                        id="song-title"
-                        type="text"
-                        class="h-12 w-full rounded-xl border-none bg-surface-container-highest/50 px-4 text-sm font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40"
-                        placeholder="Enter track title"
-                        autocomplete="off"
-                        required
-                    />
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div class="space-y-1.5">
+                        <label for="song-title" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Song Title</label>
+                        <input
+                            id="song-title"
+                            type="text"
+                            class="h-12 w-full rounded-xl border-none bg-surface-container-highest/50 px-4 text-sm font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40"
+                            placeholder="Enter track title"
+                            autocomplete="off"
+                            required
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="artist-name" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Artist Name <span class="font-medium normal-case tracking-normal text-on-surface-variant/80">(optional)</span></label>
+                        <input
+                            id="artist-name"
+                            type="text"
+                            class="h-12 w-full rounded-xl border-none bg-surface-container-highest/50 px-4 text-sm font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40"
+                            placeholder="Leave blank if unknown"
+                            autocomplete="off"
+                        />
+                    </div>
                 </div>
-                <div class="space-y-1.5">
-                    <label for="artist-name" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Artist Name</label>
-                    <input
-                        id="artist-name"
-                        type="text"
-                        class="h-12 w-full rounded-xl border-none bg-surface-container-highest/50 px-4 text-sm font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40"
-                        placeholder="Enter artist name"
-                        autocomplete="off"
-                        required
-                    />
-                </div>
+                <button type="button" id="infer-metadata-btn" class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest/30 px-4 py-2 text-secondary font-bold text-on-surface-variant transition-all hover:bg-surface-container-highest/50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                    <span class="material-symbols-outlined text-base">auto_fix_high</span>
+                    Auto
+                </button>
             </div>
 
             <!-- Queue Option -->

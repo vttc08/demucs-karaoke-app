@@ -19,8 +19,50 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressPercent = document.getElementById('progress-percent');
     const progressBar = document.getElementById('progress-bar');
     const submitBtn = document.getElementById('submit-btn');
+    const videoExtensions = new Set(['mp4', 'webm', 'mkv', 'mov', 'avi', 'm4v']);
 
     let selectedFile = null;
+    const inferMetadataBtn = document.getElementById('infer-metadata-btn');
+
+    // --- Metadata Inference ---
+
+    function inferMetadataFromFilename(filename) {
+        const stem = filename.replace(/\.[^/.]+$/, "");
+        return stem;
+    }
+
+    async function inferMetadataViaAPI(filename) {
+        const stem = inferMetadataFromFilename(filename);
+        
+        try {
+            inferMetadataBtn.disabled = true;
+            const response = await fetch(`/api/search/infer?title=${encodeURIComponent(stem)}`);
+            if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+            }
+            const data = await response.json();
+            document.getElementById('song-title').value = data.title;
+            document.getElementById('artist-name').value = data.artist || '';
+        } catch (error) {
+            console.error('Metadata inference failed:', error);
+            showToast('Could not infer metadata from filename', true);
+        } finally {
+            inferMetadataBtn.disabled = false;
+        }
+    }
+
+    async function applyInferredMetadata(filename) {
+        await inferMetadataViaAPI(filename);
+    }
+
+    if (inferMetadataBtn) {
+        inferMetadataBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (selectedFile) {
+                applyInferredMetadata(selectedFile.name);
+            }
+        });
+    }
 
     // --- Drag & Drop Handlers ---
 
@@ -57,11 +99,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (files.length > 0) {
             const file = files[0];
             const ext = file.name.split('.').pop().toLowerCase();
-            if (['mp3', 'mp4'].includes(ext)) {
+            if (['mp3', 'mp4', 'webm', 'mkv', 'mov', 'avi', 'm4v'].includes(ext)) {
                 selectedFile = file;
                 updateFilePreview();
             } else {
-                showToast('Only MP3 and MP4 files are supported', true);
+                showToast('Supported formats: MP3, MP4, WebM, MKV, MOV, AVI, and M4V', true);
             }
         }
     }
@@ -71,21 +113,12 @@ document.addEventListener('DOMContentLoaded', () => {
             fileName.textContent = selectedFile.name;
             fileSize.textContent = (selectedFile.size / (1024 * 1024)).toFixed(2) + ' MB';
             
-            const isVideo = selectedFile.name.toLowerCase().endsWith('.mp4');
+            const ext = selectedFile.name.split('.').pop().toLowerCase();
+            const isVideo = videoExtensions.has(ext);
             fileTypeIcon.textContent = isVideo ? 'movie' : 'music_note';
             
             dropZoneText.classList.add('hidden');
             filePreview.classList.remove('hidden');
-            
-            // Try to pre-fill metadata from filename
-            const stem = selectedFile.name.replace(/\.[^/.]+$/, "");
-            const parts = stem.split(' - ');
-            if (parts.length === 2) {
-                document.getElementById('artist-name').value = parts[0].trim();
-                document.getElementById('song-title').value = parts[1].trim();
-            } else {
-                document.getElementById('song-title').value = stem;
-            }
         } else {
             dropZoneText.classList.remove('hidden');
             filePreview.classList.add('hidden');
@@ -98,6 +131,13 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedFile = null;
         fileInput.value = '';
         updateFilePreview();
+    });
+
+    dropZone.addEventListener('click', (e) => {
+        if (e.target === fileInput || e.target.closest('#remove-file')) {
+            return;
+        }
+        fileInput.click();
     });
 
     // --- Form Submission ---
@@ -137,7 +177,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
             xhr.onload = () => {
                 if (xhr.status === 200) {
-                    window.location.href = '/media';
+                    let response = {};
+                    try {
+                        response = JSON.parse(xhr.responseText);
+                    } catch (parseError) {
+                        console.error('Upload success response parse failed:', parseError);
+                    }
+
+                    const finalizeRedirect = () => {
+                        window.location.href = '/media';
+                    };
+
+                    if (response.queued && response.queue_item_id) {
+                        updateProgress(100, 'Queueing...');
+                        fetch(`/api/queue/${response.queue_item_id}/process`, { method: 'POST' })
+                            .catch((processError) => {
+                                console.warn('Queue processing trigger failed:', processError);
+                            })
+                            .finally(finalizeRedirect);
+                    } else {
+                        finalizeRedirect();
+                    }
                 } else {
                     let errorMessage = 'Upload failed';
                     try {

@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api/media", tags=["media-library"])
 media_library_sync_service = MediaLibrarySyncService()
 media_library_maintenance_service = MediaLibraryMaintenanceService()
 queue_service = QueueService()
+_UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
 
 
 @router.post("/upload")
@@ -37,8 +38,11 @@ async def upload_media(
 ):
     """Upload a new media file and create a library entry."""
     ext = Path(file.filename).suffix.lower()
-    if ext not in [".mp3", ".mp4"]:
-        raise HTTPException(status_code=400, detail="Only .mp3 and .mp4 files are supported")
+    if ext not in _UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Supported uploads are .mp3, .mp4, .webm, .mkv, .mov, .avi, and .m4v",
+        )
 
     normalized_title = queue_service._normalize_required_metadata(title)
     normalized_artist = queue_service._normalize_optional_metadata(artist)

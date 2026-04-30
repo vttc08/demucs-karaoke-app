@@ -1,4 +1,5 @@
 """Tests for API routes."""
+import re
 import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -434,12 +435,17 @@ def test_settings_page_loads(client):
 
 
 def test_upload_page_loads(client):
-    """Test upload page renders with queue toggle."""
+    """Test upload page renders with queue toggle and infer button."""
     response = client.get("/upload")
     assert response.status_code == 200
-    assert b"Upload Media" in response.content
-    assert b'id="add-to-queue" type="checkbox"' in response.content
-    assert b"Add to queue" in response.content
+    assert "Upload Media" in response.text
+    assert 'id="add-to-queue" type="checkbox"' in response.text
+    assert "Add to queue" in response.text
+    assert 'id="artist-name"' in response.text
+    assert "(optional)" in response.text
+    assert not re.search(r'<input[^>]*id="artist-name"[^>]*required', response.text)
+    assert 'id="infer-metadata-btn"' in response.text
+    assert "Infer from filename" in response.text
 
 
 def test_upload_media_saves_file_and_queues_item(client, tmp_path):
@@ -480,6 +486,38 @@ def test_upload_media_saves_file_and_queues_item(client, tmp_path):
             assert queue_item is not None
             assert queue_item.media_id == media_item.id
             assert queue_item.requested_karaoke is False
+    finally:
+        settings.media_path = original_media
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["upload-song.webm", "upload-song.mkv", "upload-song.mov", "upload-song.avi", "upload-song.m4v"],
+)
+def test_upload_media_supports_common_video_formats(client, tmp_path, filename):
+    """Common video uploads should be accepted and catalogued."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        with patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()):
+            response = client.post(
+                "/api/media/upload",
+                data={
+                    "title": "Video Upload",
+                    "artist": "",
+                    "add_to_queue": "false",
+                },
+                files={"file": (filename, b"video-bytes", "video/mp4")},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["queued"] is False
+        saved_file = settings.media_path / payload["filename"]
+        assert saved_file.exists()
+        assert saved_file.name.endswith(Path(filename).suffix)
     finally:
         settings.media_path = original_media
 
