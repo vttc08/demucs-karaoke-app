@@ -24,6 +24,32 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedFile = null;
     const inferMetadataBtn = document.getElementById('infer-metadata-btn');
 
+    // --- Lyrics Manager Setup ---
+    let lyricsManager = null;
+    let lyricsUIAdapter = null;
+    const uploadLyricsSection = document.getElementById('upload-lyrics-section');
+    const uploadAiToggle = document.getElementById('upload-ai-toggle');
+    const uploadLyricsToggle = document.getElementById('upload-lyrics-toggle');
+
+    function initializeUploadLyricsManager() {
+        if (lyricsManager) return;
+        
+        lyricsManager = new LyricsManager({ apiBase: '/api' });
+        lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
+            toggleCheckbox: 'upload-lyrics-toggle',
+            titleInput: 'upload-lyrics-title',
+            artistInput: 'upload-lyrics-artist',
+            textarea: 'upload-lyrics-textarea',
+            statusDiv: 'upload-lyrics-status',
+            providerSpan: 'upload-lyrics-provider',
+            searchBtn: 'upload-lyrics-search-btn',
+            googleBtn: 'upload-lyrics-google-btn',
+            uploadBtn: 'upload-lyrics-upload-btn',
+            fileInput: 'upload-lyrics-file',
+            formSection: 'upload-lyrics-form-section'
+        });
+    }
+
     // --- Metadata Inference ---
 
     function inferMetadataFromFilename(filename) {
@@ -62,6 +88,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 applyInferredMetadata(selectedFile.name);
             }
         });
+    }
+
+    // --- Upload Lyrics Toggle Handlers ---
+
+    // Show lyrics section when "Add to queue" is checked
+    if (addToQueueToggle) {
+        addToQueueToggle.addEventListener('change', () => {
+            if (addToQueueToggle.checked) {
+                uploadLyricsSection.style.display = '';
+                initializeUploadLyricsManager();
+                // Sync current metadata to lyrics manager
+                const title = document.getElementById('song-title').value;
+                const artist = document.getElementById('artist-name').value;
+                if (title) lyricsManager.state.title = title;
+                if (artist) lyricsManager.state.artist = artist;
+            } else {
+                uploadLyricsSection.style.display = 'none';
+            }
+        });
+    }
+
+    // AI Karaoke toggle: enable/disable lyrics toggle
+    if (uploadAiToggle) {
+        uploadAiToggle.addEventListener('change', () => {
+            if (lyricsManager) {
+                lyricsManager.setEnabled(uploadLyricsToggle.checked);
+            }
+            uploadLyricsToggle.disabled = !uploadAiToggle.checked;
+        });
+    }
+
+    // Lyrics toggle: show/hide form section
+    if (uploadLyricsToggle) {
+        uploadLyricsToggle.addEventListener('change', () => {
+            if (lyricsManager) {
+                lyricsManager.setEnabled(uploadLyricsToggle.checked);
+            }
+        });
+    }
+
+    // Show lyrics on initial load if add-to-queue is checked
+    if (addToQueueToggle?.checked) {
+        uploadLyricsSection.style.display = '';
+        initializeUploadLyricsManager();
     }
 
     // --- Drag & Drop Handlers ---
@@ -159,6 +229,12 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('title', title);
         formData.append('artist', artist);
         formData.append('add_to_queue', addToQueue);
+
+        // Add lyrics if available
+        if (lyricsManager && lyricsManager.state.lyricsEnabled && lyricsManager.state.lyrics) {
+            formData.append('lyrics', lyricsManager.state.lyrics);
+            formData.append('lyrics_format', lyricsManager.state.format || 'txt');
+        }
 
         try {
             submitBtn.disabled = true;
