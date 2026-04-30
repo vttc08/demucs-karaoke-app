@@ -68,6 +68,12 @@ async def media_management_page(request: Request, db: Session = Depends(get_db))
     )
 
 
+@router.get("/upload", response_class=HTMLResponse)
+async def upload_page(request: Request):
+    """Media upload page for adding new tracks."""
+    return templates.TemplateResponse("upload.html", {"request": request})
+
+
 @router.get("/access-restricted", response_class=HTMLResponse)
 async def access_restricted_page(request: Request):
     """Static access gate page for reverse proxy network checks."""

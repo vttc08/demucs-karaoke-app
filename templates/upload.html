@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Media - Karaoke{% endblock %}
+{% block header_icon %}cloud_upload{% endblock %}
+{% block header_title %}Upload Media{% endblock %}
+{% block header_subtitle %}Digital Archive Ingestion{% endblock %}
+
+{% block content %}
+<main class="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 pb-12 pt-28 sm:px-6 lg:px-8">
+    <section class="glass-card rounded-2xl border border-white/10 p-6 sm:p-8">
+        <div class="mb-8 text-center sm:text-left">
+            <p class="text-[11px] font-bold uppercase tracking-widest text-primary">Archive_New_Entry</p>
+            <h2 class="mt-1 font-headline text-2xl font-black tracking-tight text-on-surface sm:text-3xl">Ingest Media</h2>
+            <p class="mt-2 text-sm text-on-surface-variant">Upload MP3 or MP4 files to the digital archive. Enable AI processing for automatic vocal removal.</p>
+        </div>
+
+        <form id="upload-form" class="space-y-8">
+            <!-- Drop Zone -->
+            <div id="drop-zone" class="group relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/10 bg-surface-container-low/40 py-12 transition-all hover:border-primary/40 hover:bg-surface-container-low/60">
+                <input type="file" id="file-input" class="absolute inset-0 cursor-pointer opacity-0" accept=".mp3,.mp4" />
+                <div class="flex flex-col items-center text-center">
+                    <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-highest/60 text-primary transition-transform group-hover:scale-110">
+                        <span class="material-symbols-outlined text-3xl">cloud_upload</span>
+                    </div>
+                    <p class="text-base font-bold text-on-surface" id="drop-zone-text">Drop file here or tap to select</p>
+                    <p class="mt-1 text-xs text-on-surface-variant">Supporting MP3 and MP4 (Max 50MB)</p>
+                </div>
+                <div id="file-preview" class="hidden w-full px-6">
+                    <div class="flex items-center gap-4 rounded-xl bg-surface-container-highest/60 p-4">
+                        <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                            <span id="file-type-icon" class="material-symbols-outlined">music_note</span>
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <p id="file-name" class="truncate text-sm font-bold text-on-surface">filename.mp3</p>
+                            <p id="file-size" class="text-xs text-on-surface-variant">0.0 MB</p>
+                        </div>
+                        <button type="button" id="remove-file" class="text-on-surface-variant hover:text-error">
+                            <span class="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metadata -->
+            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                <div class="space-y-1.5">
+                    <label for="song-title" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Song Title</label>
+                    <input
+                        id="song-title"
+                        type="text"
+                        class="h-12 w-full rounded-xl border-none bg-surface-container-highest/50 px-4 text-sm font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40"
+                        placeholder="Enter track title"
+                        autocomplete="off"
+                        required
+                    />
+                </div>
+                <div class="space-y-1.5">
+                    <label for="artist-name" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Artist Name</label>
+                    <input
+                        id="artist-name"
+                        type="text"
+                        class="h-12 w-full rounded-xl border-none bg-surface-container-highest/50 px-4 text-sm font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40"
+                        placeholder="Enter artist name"
+                        autocomplete="off"
+                        required
+                    />
+                </div>
+            </div>
+
+            <!-- Processing Options -->
+            <div class="space-y-4">
+                <p class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">System_Processing_Options</p>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <label class="flex cursor-pointer items-center justify-between rounded-xl bg-surface-container-highest/30 p-4 ring-1 ring-white/5 transition-colors hover:bg-surface-container-highest/50">
+                        <div class="flex items-center gap-3">
+                            <div class="rounded-full bg-primary/10 p-2 text-primary">
+                                <span class="material-symbols-outlined text-[20px]">auto_fix_high</span>
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold text-on-surface">AI Karaoke</p>
+                                <p class="text-[10px] text-on-surface-variant">Enable Demucs vocal removal</p>
+                            </div>
+                        </div>
+                        <div class="relative inline-flex cursor-pointer items-center">
+                            <input id="ai-process" type="checkbox" class="peer sr-only" checked />
+                            <div class="h-6 w-11 rounded-full bg-white/10 transition-colors peer-checked:bg-primary after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full"></div>
+                        </div>
+                    </label>
+
+                    <label class="flex cursor-pointer items-center justify-between rounded-xl bg-surface-container-highest/30 p-4 ring-1 ring-white/5 transition-colors hover:bg-surface-container-highest/50">
+                        <div class="flex items-center gap-3">
+                            <div class="rounded-full bg-secondary/10 p-2 text-secondary">
+                                <span class="material-symbols-outlined text-[20px]">lyrics</span>
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold text-on-surface">Sync Lyrics</p>
+                                <p class="text-[10px] text-on-surface-variant">Search and download lyrics</p>
+                            </div>
+                        </div>
+                        <div class="relative inline-flex cursor-pointer items-center">
+                            <input id="sync-lyrics" type="checkbox" class="peer sr-only" checked />
+                            <div class="h-6 w-11 rounded-full bg-white/10 transition-colors peer-checked:bg-secondary after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full"></div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Upload Button & Progress -->
+            <div class="space-y-4 pt-4">
+                <div id="progress-container" class="hidden space-y-2">
+                    <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                        <span id="progress-status" class="text-primary">System_Ready</span>
+                        <span id="progress-percent" class="text-on-surface">0%</span>
+                    </div>
+                    <div class="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+                        <div id="progress-bar" class="h-full w-0 bg-primary transition-all duration-300" style="box-shadow: 0 0 10px rgba(0, 242, 255, 0.4)"></div>
+                    </div>
+                </div>
+
+                <button type="submit" id="submit-btn" class="neon-glow flex w-full items-center justify-center gap-3 rounded-xl bg-primary py-4 text-xs font-black uppercase tracking-[0.2em] text-surface transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50">
+                    <span class="material-symbols-outlined">bolt</span>
+                    Upload &amp; Process
+                </button>
+            </div>
+        </form>
+    </section>
+</main>
+
+<div id="upload-toast" class="pointer-events-none fixed bottom-4 right-4 z-50 translate-y-3 rounded-lg border border-primary/30 bg-surface-container px-4 py-2 text-sm text-on-surface opacity-0 transition-all duration-200">
+    <span id="upload-toast-text">Success</span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/upload.js"></script>
+{% endblock %}

@@ -541,7 +541,7 @@ function handleActionClick(event) {
     }
 
     if (action === "upload-media") {
-        showToast("Upload flow is coming soon.");
+        window.location.href = "/upload";
         return;
     }
 
