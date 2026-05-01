@@ -685,6 +685,41 @@ def test_queue_service_persists_lyrics_sidecar_for_existing_media(db_session, tm
         settings.cache_path = original_cache
 
 
+def test_queue_service_can_persist_media_adjacent_lyrics_sidecar(db_session, tmp_path):
+    """Media-library lyrics should be saved next to the media file for scan discovery."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        media_file = settings.media_path / "editable.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        media = MediaItem(
+            title="Editable",
+            artist="Singer",
+            file_stem="editable",
+            media_path="/media/editable.mp4",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.flush()
+
+        service = QueueService()
+        service.store_lyrics_sidecar(
+            media,
+            "[00:01.00]Media lyrics",
+            lyrics_format="lrc",
+            storage="media",
+        )
+
+        assert media.lyrics_path == "/media/editable.lrc"
+        assert (settings.media_path / "editable.lrc").read_text(
+            encoding="utf-8"
+        ) == "[00:01.00]Media lyrics"
+    finally:
+        settings.media_path = original_media
+
+
 def test_queue_service_repairs_swapped_vocals_and_infers_sidecar(db_session, tmp_path):
     """If vocals_path stores lyrics, service should recover lyrics and infer *.vocals sidecar."""
     service = QueueService()

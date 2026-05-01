@@ -517,8 +517,8 @@ def test_upload_media_persists_lyrics_and_queue_karaoke_flag(client, tmp_path):
         assert response.status_code == 200
         payload = response.json()
         expected_stem = build_media_stem("Upload Lyrics", "Upload Artist")
-        assert payload["lyrics_path"] == f"/cache/lyrics/{expected_stem}.lrc"
-        assert (settings.cache_path / "lyrics" / f"{expected_stem}.lrc").read_text(
+        assert payload["lyrics_path"] == f"/media/{expected_stem}.lrc"
+        assert (settings.media_path / f"{expected_stem}.lrc").read_text(
             encoding="utf-8"
         ) == "[00:01.00]Uploaded line"
 
@@ -526,7 +526,7 @@ def test_upload_media_persists_lyrics_and_queue_karaoke_flag(client, tmp_path):
             queue_item = db.query(QueueItem).filter(QueueItem.id == payload["queue_item_id"]).first()
             assert queue_item is not None
             assert queue_item.requested_karaoke is True
-            assert queue_item.media.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
+            assert queue_item.media.lyrics_path == f"/media/{expected_stem}.lrc"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
@@ -852,15 +852,64 @@ def test_media_rename_route_persists_lyrics_text(client, tmp_path):
 
         assert response.status_code == 200
         payload = response.json()
-        assert payload["summary"]["lyrics_path"] == "/cache/lyrics/editable.txt"
-        assert (settings.cache_path / "lyrics" / "editable.txt").read_text(
+        assert payload["summary"]["lyrics_path"] == "/media/editable.txt"
+        assert (settings.media_path / "editable.txt").read_text(
             encoding="utf-8"
         ) == "Plain edited lyrics"
 
         with TestingSessionLocal() as db:
             stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
             assert stored is not None
-            assert stored.lyrics_path == "/cache/lyrics/editable.txt"
+            assert stored.lyrics_path == "/media/editable.txt"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_scan_preserves_edited_media_adjacent_lyrics(client, tmp_path):
+    """Library scan should keep lyrics saved from the edit modal."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+        media_file = settings.media_path / "scan-edit.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Scan Edit",
+                artist="Singer",
+                file_stem="scan-edit",
+                media_path="/media/scan-edit.mp4",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        response = client.patch(
+            f"/api/media/{media_id}",
+            json={
+                "title": "Scan Edit",
+                "artist": "Singer",
+                "rename_on_disk": False,
+                "lyrics_text": "[00:01.00]Still here",
+                "lyrics_format": "lrc",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["summary"]["lyrics_path"] == "/media/scan-edit.lrc"
+
+        scan_response = client.post("/api/media/scan")
+        assert scan_response.status_code == 200
+
+        with TestingSessionLocal() as db:
+            stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+            assert stored is not None
+            assert stored.lyrics_path == "/media/scan-edit.lrc"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache

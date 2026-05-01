@@ -135,7 +135,7 @@ The stage page uses a websocket-first model:
 - Backend flow:
   - saves the uploaded file under the configured media root using the normalized title/artist stem
   - creates a durable `media_items` row with `media_path` pointing at the saved file
-  - persists submitted `lyrics_text` as a reusable lyrics sidecar on the media row
+  - persists submitted `lyrics_text` as a reusable media-adjacent lyrics sidecar on the media row
   - optionally creates a queue row for the new media item when "Add to queue" is enabled
   - applies the upload page AI karaoke toggle only to that queued item request
   - broadcasts the new queue item so real-time clients stay in sync

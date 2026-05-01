@@ -243,7 +243,7 @@ Uploads a local media file into the library. The request is multipart form data.
 }
 ```
 
-When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued.
+When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued. Upload and media-edit lyrics are saved beside the media file as `<filename>.lrc` or `<filename>.txt` so library scans can rediscover them.
 
 ---
 
@@ -294,7 +294,7 @@ Updates the media row title and artist. When `rename_on_disk` is true, the serve
 }
 ```
 
-`lyrics_text` and `lyrics_format` are optional. When `lyrics_text` is supplied, the media row stores a reusable lyrics sidecar and returns its path in the summary.
+`lyrics_text` and `lyrics_format` are optional. When `lyrics_text` is supplied, the media row stores a reusable media-adjacent lyrics sidecar and returns its path in the summary.
 
 **Response:**
 ```json

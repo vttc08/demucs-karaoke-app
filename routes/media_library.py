@@ -81,6 +81,7 @@ async def upload_media(
                 media_item,
                 lyrics_text,
                 lyrics_format=lyrics_format,
+                storage="media",
             )
 
         if add_to_queue:
@@ -91,8 +92,6 @@ async def upload_media(
                     title=media_item.title,
                     artist=media_item.artist,
                     is_karaoke=is_karaoke,
-                    lyrics_text=lyrics_text,
-                    lyrics_format=lyrics_format,
                 ),
             )
             await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
@@ -189,6 +188,7 @@ def rename_media_item(item_id: int, payload: dict, db: Session = Depends(get_db)
                 media_item,
                 lyrics_text,
                 lyrics_format=lyrics_format,
+                storage="media",
             )
             db.commit()
             summary["lyrics_path"] = media_item.lyrics_path

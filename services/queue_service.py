@@ -374,6 +374,7 @@ class QueueService:
         media_item: MediaItem,
         lyrics_text: str | None,
         lyrics_format: str | None = None,
+        storage: str = "cache",
     ) -> None:
         """Persist lyrics text as a reusable sidecar for a media item."""
         lyrics_text = (lyrics_text or "").strip()
@@ -381,14 +382,22 @@ class QueueService:
             return
 
         suffix = self._lyrics_suffix(lyrics_text, lyrics_format)
-        stem = media_item.file_stem or build_media_stem(
-            media_item.title,
-            media_item.artist,
-            fallback=media_item.youtube_id,
-        )
-        lyrics_dir = settings.cache_path / "lyrics"
-        lyrics_dir.mkdir(parents=True, exist_ok=True)
-        lyrics_path = lyrics_dir / f"{stem}{suffix}"
+        if storage == "media":
+            media_file = self._media_url_to_file(media_item.media_path)
+            if media_file is None:
+                raise ValueError(f"Cannot store media lyrics sidecar for path: {media_item.media_path}")
+            lyrics_path = media_file.with_suffix(suffix)
+        elif storage == "cache":
+            stem = media_item.file_stem or build_media_stem(
+                media_item.title,
+                media_item.artist,
+                fallback=media_item.youtube_id,
+            )
+            lyrics_path = settings.cache_path / "lyrics" / f"{stem}{suffix}"
+        else:
+            raise ValueError("lyrics sidecar storage must be 'cache' or 'media'")
+
+        lyrics_path.parent.mkdir(parents=True, exist_ok=True)
         lyrics_path.write_text(lyrics_text, encoding="utf-8")
         media_item.lyrics_path = self.build_media_url(lyrics_path)
         logger.debug(
