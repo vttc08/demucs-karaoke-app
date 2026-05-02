@@ -2,7 +2,7 @@
 import re
 import pytest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -1045,12 +1045,23 @@ def test_update_runtime_settings_persists_to_database(client):
 
 def test_get_demucs_health(client):
     """Demucs health endpoint returns current health state."""
-    response = client.get("/api/settings/demucs-health")
-    assert response.status_code == 200
-    data = response.json()
-    assert "api_url" in data
-    assert "healthy" in data
-    assert "detail" in data
+    with patch(
+        "services.runtime_settings_service.DemucsClient"
+    ) as mock_demucs_client:
+        mock_instance = Mock()
+        mock_instance.health_check.return_value = DemucsHealthResponse(
+            api_url="http://localhost:6969",
+            healthy=True,
+            detail="OK"
+        )
+        mock_demucs_client.return_value = mock_instance
+        
+        response = client.get("/api/settings/demucs-health")
+        assert response.status_code == 200
+        data = response.json()
+        assert "api_url" in data
+        assert "healthy" in data
+        assert "detail" in data
 
 
 def test_get_ytdlp_version(client):

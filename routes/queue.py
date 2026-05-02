@@ -223,7 +223,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
             """Send periodic heartbeat to keep connection alive."""
             while True:
                 try:
-                    await asyncio.sleep(30)
+                    await asyncio.sleep(settings.ws_heartbeat_interval)
                     await websocket.send_json({
                         "type": "ping",
                         "timestamp": asyncio.get_event_loop().time()
