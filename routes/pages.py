@@ -1,5 +1,5 @@
 """HTML page routes."""
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, Form, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -44,8 +44,48 @@ templates.env.filters["public_url"] = app_url
 
 @router.get("/")
 async def home(request: Request):
-    """Home page redirects to queue."""
+    """Home page redirects to login if no singer identified, else to queue."""
+    if not request.cookies.get("karaoke_singer") and not request.cookies.get("karaoke_admin"):
+        return RedirectResponse(url=app_url("/login"), status_code=302)
     return RedirectResponse(url=app_url("/queue"), status_code=302)
+
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Login and identification page."""
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@router.post("/login")
+async def login_handler(
+    request: Request,
+    response: Response,
+    type: str = Form(...),
+    username: str = Form(...),
+    password: str = Form(None),
+):
+    """Handle login and identification."""
+    if type == "admin":
+        # Simple admin check for now, can be improved later
+        # For prototype, we'll just accept any password or a simple one if provided in settings
+        # Let's just set an admin cookie for now as requested for frontend implementation
+        response = RedirectResponse(url=app_url("/queue"), status_code=302)
+        response.set_cookie(key="karaoke_admin", value="true", path="/")
+        return response
+    else:
+        # Guest identification
+        response = RedirectResponse(url=app_url("/queue"), status_code=302)
+        response.set_cookie(key="karaoke_singer", value=username, path="/")
+        return response
+
+
+@router.get("/logout")
+async def logout(request: Request):
+    """Log out and clear cookies."""
+    response = RedirectResponse(url=app_url("/login"), status_code=302)
+    response.delete_cookie(key="karaoke_singer", path="/")
+    response.delete_cookie(key="karaoke_admin", path="/")
+    return response
 
 
 @router.get("/queue", response_class=HTMLResponse)
