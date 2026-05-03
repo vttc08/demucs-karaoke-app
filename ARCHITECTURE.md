@@ -151,6 +151,21 @@ The stage page uses a websocket-first model:
   - broadcasts the new queue item so real-time clients stay in sync
 - Successful uploads redirect the browser to the media management page.
 
+## Admin authentication
+
+- Admin accounts are stored in `admin_users` and are created or updated from the server with
+  `uv run python scripts/admin_user.py create --username admin`.
+- Passwords are stored as PBKDF2-SHA256 hashes with random per-password salts. Plaintext passwords
+  are only accepted by the CLI prompt or login form and are never persisted.
+- Successful admin login creates an `admin_sessions` row. The browser receives an HttpOnly,
+  SameSite=Lax cookie containing only the random session token; the database stores a SHA-256 hash
+  of that token.
+- Logout deletes the persisted admin session and clears the cookie.
+- Guest login remains a lightweight device/stage-name identifier for the current sprint. It is not
+  an authorization boundary.
+- The current branch establishes admin credential/session storage. Settings/media/queue
+  authorization gates still need to be wired to this session service in a later refinement.
+
 ## Lyrics inference and provider flow
 
 - Lyrics logic is modularized into:

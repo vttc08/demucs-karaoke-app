@@ -62,6 +62,15 @@ For faster karaoke rendering, tune:
 6. **Initialize database**:
 Database is created automatically on first run.
 
+7. **Create an admin user**:
+Admin accounts are managed from the server, not from the browser. Create or reset an admin password
+with:
+```bash
+uv run python scripts/admin_user.py create --username admin
+```
+The password is stored in SQLite as a PBKDF2-SHA256 hash with a random salt. The login page creates
+a server-side admin session after successful authentication.
+
 ## Running
 
 ### Development mode
@@ -141,6 +150,11 @@ and `/static/...`.
 6. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`
         - Static reverse-proxy gate page for users who are outside the approved home network
         - Explains the Wi-Fi / WAN IP check and common masking tools like iCloud Private Relay, Clash, and V2Ray
+
+7. **Login Page**: Open `http://<server-ip>:8000/login`
+        - Guests can set a lightweight stage name for device identification.
+        - Admins sign in with a server-created account stored in the local database.
+        - Admin credentials cannot be created from the web UI.
 
 When concurrent yt-dlp search is enabled:
 - Query without `karaoke` triggers two parallel searches: `<query>` and `<query> karaoke`

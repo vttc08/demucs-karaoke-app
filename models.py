@@ -1,5 +1,5 @@
 """Data models and database schemas."""
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal, Optional
 from pydantic import BaseModel, model_validator
@@ -16,6 +16,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
+
+
+def utc_now() -> datetime:
+    """Return a naive UTC datetime for SQLite compatibility."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class QueueStatus(str, Enum):
@@ -71,9 +76,9 @@ class MediaItem(Base):
     lyrics_path = Column(String, nullable=True)
     vocals_path = Column(String, nullable=True)
     missing = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=utc_now, onupdate=utc_now, nullable=False
     )
     last_scanned_at = Column(DateTime, nullable=True)
     queue_items = relationship("QueueItem", back_populates="media")
@@ -87,6 +92,43 @@ class RuntimeSetting(Base):
     key = Column(String, primary_key=True, index=True)
     value = Column(String, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AdminUser(Base):
+    """Server-managed administrator account."""
+
+    __tablename__ = "admin_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, nullable=False, unique=True, index=True)
+    password_hash = Column(String, nullable=False)
+    password_salt = Column(String, nullable=False)
+    password_iterations = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(
+        DateTime, default=utc_now, onupdate=utc_now, nullable=False
+    )
+    sessions = relationship(
+        "AdminSession", back_populates="admin_user", cascade="all, delete-orphan"
+    )
+
+
+class AdminSession(Base):
+    """Persisted administrator login session."""
+
+    __tablename__ = "admin_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_user_id = Column(
+        Integer,
+        ForeignKey("admin_users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash = Column(String, nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    admin_user = relationship("AdminUser", back_populates="sessions")
 
 
 # Pydantic models for API

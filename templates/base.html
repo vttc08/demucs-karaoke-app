@@ -90,11 +90,11 @@
                 </div>
             </div>
             <nav class="flex items-center gap-2">
-                {% if request.cookies.get("karaoke_singer") or request.cookies.get("karaoke_admin") %}
+                {% if request.cookies.get("karaoke_singer") or request.cookies.get("karaoke_admin_session") %}
                 <div class="flex items-center gap-2 mr-4 px-3 py-1 rounded-full bg-surface-container-highest border border-outline-variant/30">
-                    <span class="material-symbols-outlined text-sm text-primary">{% if request.cookies.get("karaoke_admin") %}shield_person{% else %}person{% endif %}</span>
+                    <span class="material-symbols-outlined text-sm text-primary">{% if request.cookies.get("karaoke_admin_session") %}shield_person{% else %}person{% endif %}</span>
                     <span class="text-xs font-bold text-on-surface">
-                        {% if request.cookies.get("karaoke_admin") %}Admin{% else %}{{ request.cookies.get("karaoke_singer") }}{% endif %}
+                        {% if request.cookies.get("karaoke_admin_session") %}Admin{% else %}{{ request.cookies.get("karaoke_singer") }}{% endif %}
                     </span>
                     <a href="{{ app_url('/logout') }}" class="ml-1 text-on-surface-variant hover:text-error transition-colors" title="Logout">
                         <span class="material-symbols-outlined text-sm">logout</span>

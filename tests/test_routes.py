@@ -17,6 +17,7 @@ from models import (
     RuntimeSetting,
 )
 from services import lyrics_service as lyrics_service_module
+from services.auth_service import ADMIN_SESSION_COOKIE, AuthService
 from services.media_naming import build_media_stem
 from config import settings
 
@@ -432,6 +433,62 @@ def test_settings_page_loads(client):
     response = client.get("/settings")
     assert response.status_code == 200
     assert b"Engine Settings" in response.content
+
+
+def test_admin_login_rejects_invalid_credentials(client):
+    """Admin login should not grant access without valid DB credentials."""
+    response = client.post(
+        "/login",
+        data={"type": "admin", "username": "admin", "password": "wrong-password"},
+    )
+
+    assert response.status_code == 401
+    assert ADMIN_SESSION_COOKIE not in response.cookies
+    assert "Invalid admin username or password" in response.text
+
+
+def test_admin_login_sets_db_backed_session_cookie(client):
+    """Valid admin login should create an HttpOnly admin session cookie."""
+    with TestingSessionLocal() as db:
+        AuthService().create_or_update_admin(
+            db, "Admin", "correct horse battery staple"
+        )
+
+    response = client.post(
+        "/login",
+        data={
+            "type": "admin",
+            "username": "admin",
+            "password": "correct horse battery staple",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/queue"
+    assert ADMIN_SESSION_COOKIE in response.cookies
+    assert "httponly" in response.headers["set-cookie"].lower()
+    assert "samesite=lax" in response.headers["set-cookie"].lower()
+
+
+def test_logout_deletes_admin_session(client):
+    """Logout should remove the persisted admin session."""
+    service = AuthService()
+    with TestingSessionLocal() as db:
+        admin = service.create_or_update_admin(
+            db, "admin", "correct horse battery staple"
+        )
+        token, _ = service.create_admin_session(db, admin)
+
+    response = client.get(
+        "/logout",
+        cookies={ADMIN_SESSION_COOKIE: token},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    with TestingSessionLocal() as db:
+        assert service.get_admin_for_session(db, token) is None
 
 
 def test_upload_page_loads(client):

@@ -112,17 +112,23 @@
     <div class="w-full max-w-[min(100%,384px)] md:max-w-md glass-card p-4 z-10 shadow-2xl border border-white/5">
         <!-- Segmented Control (Tabs) -->
         <div class="grid grid-cols-2 tab-bar mb-6">
-            <button id="guest-tab" class="tab-button bg-surface-container-highest text-primary">
+            <button id="guest-tab" class="tab-button {% if login_mode == 'admin' %}text-on-surface-variant hover:text-on-surface{% else %}bg-surface-container-highest text-primary{% endif %}">
                 Guest
             </button>
-            <button id="admin-tab" class="tab-button text-on-surface-variant hover:text-on-surface">
+            <button id="admin-tab" class="tab-button {% if login_mode == 'admin' %}bg-surface-container-highest text-primary{% else %}text-on-surface-variant hover:text-on-surface{% endif %}">
                 Admin
             </button>
         </div>
 
         <div class="px-4 pb-8">
+            {% if error %}
+            <div class="mb-5 rounded-lg border border-red-400/40 bg-red-950/40 px-4 py-3 text-sm font-semibold text-red-100">
+                {{ error }}
+            </div>
+            {% endif %}
+
             <!-- Guest View: Stage Name -->
-            <form action="{{ app_url('/login') }}" method="POST" id="guest-form" class="space-y-6">
+            <form action="{{ app_url('/login') }}" method="POST" id="guest-form" class="{% if login_mode == 'admin' %}hidden {% endif %}space-y-6">
                 <input type="hidden" name="type" value="guest">
                 <div class="relative">
                     <label class="block text-[10px] uppercase font-bold tracking-[0.2em] text-primary/70 mb-2 ml-1">Your Stage Name</label>
@@ -137,8 +143,13 @@
             </form>
 
             <!-- Admin View (Hidden by default) -->
-            <form action="{{ app_url('/login') }}" method="POST" id="admin-form" class="hidden space-y-6">
+            <form action="{{ app_url('/login') }}" method="POST" id="admin-form" class="{% if login_mode != 'admin' %}hidden {% endif %}space-y-6">
                 <input type="hidden" name="type" value="admin">
+                {% if admin_configured is sameas false %}
+                <p class="text-sm font-semibold text-on-surface-variant">
+                    No admin account is configured. Create one on the server before signing in.
+                </p>
+                {% endif %}
                 <div class="space-y-4">
                     <div class="relative">
                         <label class="block text-[10px] uppercase font-bold tracking-[0.2em] text-primary/70 mb-2 ml-1">Username</label>

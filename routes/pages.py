@@ -1,5 +1,5 @@
 """HTML page routes."""
-from fastapi import APIRouter, Request, Depends, Form, Response
+from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -7,6 +7,7 @@ from database import get_db
 from services.queue_service import QueueService
 from services.media_library_service import MediaLibraryService
 from services.runtime_settings_service import RuntimeSettingsService
+from services.auth_service import ADMIN_SESSION_COOKIE, SESSION_DAYS, AuthService
 from config import settings
 
 router = APIRouter(tags=["pages"])
@@ -14,6 +15,7 @@ templates = Jinja2Templates(directory="templates")
 queue_service = QueueService()
 media_library_service = MediaLibraryService()
 runtime_settings_service = RuntimeSettingsService()
+auth_service = AuthService()
 
 
 def app_url(path: str | None) -> str:
@@ -43,48 +45,86 @@ templates.env.filters["public_url"] = app_url
 
 
 @router.get("/")
-async def home(request: Request):
+async def home(request: Request, db: Session = Depends(get_db)):
     """Home page redirects to login if no singer identified, else to queue."""
-    if not request.cookies.get("karaoke_singer") and not request.cookies.get("karaoke_admin"):
+    admin = auth_service.get_admin_for_session(
+        db, request.cookies.get(ADMIN_SESSION_COOKIE)
+    )
+    if not request.cookies.get("karaoke_singer") and admin is None:
         return RedirectResponse(url=app_url("/login"), status_code=302)
     return RedirectResponse(url=app_url("/queue"), status_code=302)
 
 
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
+async def login_page(request: Request, db: Session = Depends(get_db)):
     """Login and identification page."""
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "admin_configured": auth_service.count_admins(db) > 0,
+            "error": None,
+            "login_mode": "guest",
+        },
+    )
 
 
 @router.post("/login")
 async def login_handler(
     request: Request,
-    response: Response,
     type: str = Form(...),
     username: str = Form(...),
     password: str = Form(None),
+    db: Session = Depends(get_db),
 ):
     """Handle login and identification."""
     if type == "admin":
-        # Simple admin check for now, can be improved later
-        # For prototype, we'll just accept any password or a simple one if provided in settings
-        # Let's just set an admin cookie for now as requested for frontend implementation
+        admin = auth_service.authenticate_admin(db, username, password)
+        if admin is None:
+            return templates.TemplateResponse(
+                "login.html",
+                {
+                    "request": request,
+                    "admin_configured": auth_service.count_admins(db) > 0,
+                    "error": "Invalid admin username or password.",
+                    "login_mode": "admin",
+                },
+                status_code=401,
+            )
+
+        token, _ = auth_service.create_admin_session(db, admin)
         response = RedirectResponse(url=app_url("/queue"), status_code=302)
-        response.set_cookie(key="karaoke_admin", value="true", path="/")
+        response.set_cookie(
+            key=ADMIN_SESSION_COOKIE,
+            value=token,
+            httponly=True,
+            secure=request.url.scheme == "https",
+            samesite="lax",
+            max_age=SESSION_DAYS * 24 * 60 * 60,
+            path="/",
+        )
         return response
-    else:
-        # Guest identification
-        response = RedirectResponse(url=app_url("/queue"), status_code=302)
-        response.set_cookie(key="karaoke_singer", value=username, path="/")
-        return response
+
+    # Guest identification remains a lightweight display name for this sprint.
+    response = RedirectResponse(url=app_url("/queue"), status_code=302)
+    response.set_cookie(
+        key="karaoke_singer",
+        value=username.strip(),
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        path="/",
+    )
+    return response
 
 
 @router.get("/logout")
-async def logout(request: Request):
+async def logout(request: Request, db: Session = Depends(get_db)):
     """Log out and clear cookies."""
+    auth_service.delete_admin_session(db, request.cookies.get(ADMIN_SESSION_COOKIE))
     response = RedirectResponse(url=app_url("/login"), status_code=302)
     response.delete_cookie(key="karaoke_singer", path="/")
-    response.delete_cookie(key="karaoke_admin", path="/")
+    response.delete_cookie(key=ADMIN_SESSION_COOKIE, path="/")
     return response
 
 
