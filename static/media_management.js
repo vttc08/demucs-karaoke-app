@@ -1,4 +1,6 @@
 const searchInput = document.getElementById("media-search-input");
+const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
+const apiBase = window.KaraokeURLs?.basePath || "";
 const filterButtons = document.querySelectorAll(".media-cap-filter");
 const mediaRows = document.querySelectorAll(".media-item-row, .media-item-card");
 const emptyState = document.getElementById("media-empty-state");
@@ -25,7 +27,7 @@ const editLyricsFormSection = document.getElementById("media-edit-lyrics-form-se
 function initializeMediaEditLyricsManager() {
     if (lyricsManager) return;
     
-    lyricsManager = new LyricsManager({ apiBase: window.location.origin });
+    lyricsManager = new LyricsManager({ apiBase });
     lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
         titleInput: '#media-edit-lyrics-title',
         artistInput: '#media-edit-lyrics-artist',
@@ -253,7 +255,8 @@ function openEditModal(itemNode) {
     const currentTitle = getItemFieldText(itemNode, "title");
     const currentArtistText = getItemFieldText(itemNode, "artist");
     const currentArtist = currentArtistText === "Unknown Artist" ? "" : currentArtistText;
-    const currentThumbnail = itemNode.dataset.thumbnail || "/static/placeholder.png";
+    const placeholderThumbnail = appUrl("/static/placeholder.png");
+    const currentThumbnail = itemNode.dataset.thumbnail || placeholderThumbnail;
     activeEditMediaPath = itemNode.dataset.mediaPath || "";
     const hasMulti = itemNode.dataset.hasMultiTrack === "true";
     const hasLyrics = itemNode.dataset.hasLyrics === "true";
@@ -273,7 +276,7 @@ function openEditModal(itemNode) {
     }
 
     // Populate Previews
-    const hasRealThumbnail = currentThumbnail && currentThumbnail !== "/static/placeholder.png";
+    const hasRealThumbnail = currentThumbnail && currentThumbnail !== placeholderThumbnail;
 
     if (previewImg) {
         previewImg.src = hasRealThumbnail ? currentThumbnail : "";
@@ -368,7 +371,7 @@ async function saveEditModal(event) {
             }
         }
 
-        const response = await fetch(`/api/media/${Number(activeEditItemId)}`, {
+        const response = await fetch(appUrl(`/api/media/${Number(activeEditItemId)}`), {
             method: "PATCH",
             headers: {
                 "Content-Type": "application/json",
@@ -419,7 +422,7 @@ async function addToQueue(itemNode) {
             payload.artist = artist;
         }
 
-        const response = await fetch("/api/queue/", {
+        const response = await fetch(appUrl("/api/queue/"), {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -434,7 +437,7 @@ async function addToQueue(itemNode) {
 
         const item = await response.json();
         try {
-            await fetch(`/api/queue/${item.id}/process`, {
+            await fetch(appUrl(`/api/queue/${item.id}/process`), {
                 method: "POST",
             });
         } catch (processError) {
@@ -463,7 +466,7 @@ async function deleteItem(itemNode) {
     setButtonsForAction(itemId, "edit", { disabled: true });
 
     try {
-        const response = await fetch(`/api/media/${Number(itemId)}`, {
+        const response = await fetch(appUrl(`/api/media/${Number(itemId)}`), {
             method: "DELETE",
         });
 
@@ -509,7 +512,7 @@ async function autoRenameMediaItem(actionButton) {
     button.innerHTML = AUTO_RENAME_LOADING_HTML;
 
     try {
-        const response = await fetch("/api/lyrics/resolve", {
+        const response = await fetch(appUrl("/api/lyrics/resolve"), {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -556,7 +559,7 @@ async function runLibraryScan(actionButton) {
     actionButton.classList.add("opacity-70", "cursor-default");
     actionButton.textContent = "Scanning...";
     try {
-        const response = await fetch("/api/media/scan", { method: "POST" });
+        const response = await fetch(appUrl("/api/media/scan"), { method: "POST" });
         if (!response.ok) {
             throw new Error(`Scan failed (${response.status})`);
         }
@@ -590,7 +593,7 @@ function handleActionClick(event) {
     }
 
     if (action === "upload-media") {
-        window.location.href = "/upload";
+        window.location.href = appUrl("/upload");
         return;
     }
 

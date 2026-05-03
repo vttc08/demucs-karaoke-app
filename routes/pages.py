@@ -7,6 +7,7 @@ from database import get_db
 from services.queue_service import QueueService
 from services.media_library_service import MediaLibraryService
 from services.runtime_settings_service import RuntimeSettingsService
+from config import settings
 
 router = APIRouter(tags=["pages"])
 templates = Jinja2Templates(directory="templates")
@@ -15,10 +16,36 @@ media_library_service = MediaLibraryService()
 runtime_settings_service = RuntimeSettingsService()
 
 
+def app_url(path: str | None) -> str:
+    """Prefix app-local absolute URLs with the configured deployment base path."""
+    if not path:
+        return settings.karaoke_base_path or ""
+    if path.startswith(("http://", "https://", "ws://", "wss://", "//")):
+        return path
+    if not path.startswith("/"):
+        path = f"/{path}"
+    base_path = settings.karaoke_base_path
+    if base_path and (path == base_path or path.startswith(f"{base_path}/")):
+        return path
+    return f"{base_path}{path}"
+
+
+def is_active_path(request: Request, path: str) -> bool:
+    """Return whether the current request is on an app-local path."""
+    current_path = request.url.path
+    target_path = app_url(path)
+    return current_path == target_path or current_path.startswith(f"{target_path}/")
+
+
+templates.env.globals["app_url"] = app_url
+templates.env.globals["is_active_path"] = is_active_path
+templates.env.filters["public_url"] = app_url
+
+
 @router.get("/")
 async def home(request: Request):
     """Home page redirects to queue."""
-    return RedirectResponse(url="/queue", status_code=302)
+    return RedirectResponse(url=app_url("/queue"), status_code=302)
 
 
 @router.get("/queue", response_class=HTMLResponse)

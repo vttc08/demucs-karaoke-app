@@ -4,6 +4,24 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def normalize_base_path(value: str | None) -> str:
+    """Normalize an optional URL path prefix for reverse-proxy deployments."""
+    raw = (value or "").strip()
+    if raw in {"", "/"}:
+        return ""
+    if "?" in raw or "#" in raw or any(char.isspace() for char in raw):
+        raise ValueError("KARAOKE_BASE_PATH must be a URL path without query, fragment, or spaces")
+    if not raw.startswith("/"):
+        raw = f"/{raw}"
+    raw = raw.rstrip("/")
+    parts = [part for part in raw.split("/") if part]
+    if any(part in {".", ".."} for part in parts):
+        raise ValueError("KARAOKE_BASE_PATH must not contain path traversal segments")
+    if "//" in raw:
+        raise ValueError("KARAOKE_BASE_PATH must not contain empty path segments")
+    return raw
+
+
 def find_executable(name: str) -> str:
     """
     Find executable, preferring venv version.
@@ -41,6 +59,7 @@ class Settings(BaseSettings):
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
+    karaoke_base_path: str = ""
 
     # Media paths
     media_path: Path = Path("/tmp/karaoke_media")
@@ -84,6 +103,7 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.karaoke_base_path = normalize_base_path(self.karaoke_base_path)
         # Resolve executable paths on initialization
         self.ytdlp_path = find_executable(self.ytdlp_path.split('/')[-1])
         self.ffmpeg_path = find_executable(self.ffmpeg_path.split('/')[-1])

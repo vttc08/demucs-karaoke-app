@@ -5,6 +5,11 @@
 http://localhost:8000
 ```
 
+If `KARAOKE_BASE_PATH=/karaoke` is configured, prepend `/karaoke` to every app route below. For
+example, `/queue` becomes `/karaoke/queue`, `/api/queue/ws` becomes `/karaoke/api/queue/ws`, and
+`/media/song.mp4` becomes `/karaoke/media/song.mp4`. The reverse proxy should forward the preserved
+prefixed path to FastAPI.
+
 ## Endpoints
 
 ### Queue/Stage WebSocket

@@ -22,6 +22,16 @@ This project currently uses two services:
 - runs demucs two-stem vocals separation
 - returns a ZIP payload containing both `no_vocals` and `vocals` stems
 
+## Reverse proxy subpath support
+
+- The main app can be served at `/` or under a preserved proxy prefix such as `/karaoke`.
+- `KARAOKE_BASE_PATH` controls the public prefix. Empty or `/` keeps root-mode behavior.
+- When set to `/karaoke`, pages, APIs, WebSockets, static assets, and media/cache file routes are
+  registered under `/karaoke/...`.
+- The reverse proxy must preserve the prefix when forwarding to FastAPI.
+- Database values for media/cache references remain canonical (`/media/...`, `/cache/...`). Templates
+  and frontend helpers add the public prefix only when rendering browser-facing URLs.
+
 ## Real-time queue update architecture
 
 The queue page uses a hybrid update model:

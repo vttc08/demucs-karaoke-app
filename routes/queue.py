@@ -6,6 +6,7 @@ import math
 from typing import List
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
+from config import settings
 from database import SessionLocal, get_db
 from models import QueueItemCreate, QueueItemResponse, QueueStatus
 from services.lyrics_service import LyricsService

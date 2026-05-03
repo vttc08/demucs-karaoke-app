@@ -129,12 +129,12 @@
                 autoplay
                 playsinline
             >
-                <source src="{{ current.media_path }}" type="video/mp4">
+                <source src="{{ current.media_path|public_url }}" type="video/mp4">
                 Your browser does not support video playback.
             </video>
             {% if current.vocals_path %}
             <audio id="stage-vocals-player" preload="auto" crossorigin="anonymous">
-                <source src="{{ current.vocals_path }}">
+                <source src="{{ current.vocals_path|public_url }}">
             </audio>
             {% endif %}
 
@@ -270,7 +270,7 @@
 
 {% block scripts %}
 <script>
-const API_BASE = window.location.origin;
+const API_BASE = window.KaraokeURLs.basePath;
 const SERVER_STAGE_QR_URL = {{ (stage_qr_url or "") | tojson }};
 const currentItemId = {{ (current.id if current else None) | tojson }};
 const video = document.getElementById("stage-video-player");
@@ -299,7 +299,7 @@ const qrLabel = document.getElementById("stage-qr-label");
 const stageMedia = document.querySelector(".stage-media");
 const lyricsOverlay = document.getElementById("stage-lyrics-overlay");
 const lyricsLines = document.getElementById("stage-lyrics-lines");
-const QR_CODE_ENDPOINT = `${API_BASE}/api/qr`;
+const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
 const QR_IMAGE_SIZE = 320;
 let isReloading = false;
 let controlsHideTimer = null;
@@ -495,7 +495,7 @@ async function loadLyricsCues() {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/api/queue/${currentItemId}/lyrics-cues`);
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/queue/${currentItemId}/lyrics-cues`));
         if (!response.ok) {
             lyricCues = [];
             activeLyricCueIndex = null;
@@ -824,22 +824,21 @@ function renderQueuePreview(queue) {
 }
 
 async function completeCurrentSong() {
-    const response = await fetch(`${API_BASE}/api/queue/complete-current`, { method: "POST" });
+    const response = await fetch(window.KaraokeURLs.appUrl('/api/queue/complete-current'), { method: "POST" });
     if (!response.ok) {
         throw new Error("Failed to complete current song");
     }
 }
 
 async function skipCurrentSong() {
-    const response = await fetch(`${API_BASE}/api/queue/skip`, { method: "POST" });
+    const response = await fetch(window.KaraokeURLs.appUrl('/api/queue/skip'), { method: "POST" });
     if (!response.ok) {
         throw new Error("Skip failed");
     }
 }
 
 function connectStageWebSocket() {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/api/queue/ws`;
+    const wsUrl = window.KaraokeURLs.appWsUrl('/api/queue/ws');
     stageSocket = new WebSocket(wsUrl);
 
     stageSocket.onmessage = async (event) => {
@@ -860,7 +859,7 @@ function connectStageWebSocket() {
                 return;
             }
             if (messageType === "queue_item_added" || messageType === "queue_item_removed" || messageType === "queue_cleared") {
-                const queueResponse = await fetch(`${API_BASE}/api/queue/`);
+                const queueResponse = await fetch(window.KaraokeURLs.appUrl('/api/queue/'));
                 if (queueResponse.ok) {
                     const queue = await queueResponse.json();
                     renderQueuePreview(queue);
@@ -868,7 +867,7 @@ function connectStageWebSocket() {
                 return;
             }
             if (messageType === "queue_item_updated" || messageType === "queue_item_failed") {
-                const queueResponse = await fetch(`${API_BASE}/api/queue/`);
+                const queueResponse = await fetch(window.KaraokeURLs.appUrl('/api/queue/'));
                 if (queueResponse.ok) {
                     const queue = await queueResponse.json();
                     renderQueuePreview(queue);

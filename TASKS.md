@@ -57,7 +57,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [ ] modular lyrics component, reuse code in add to queue, edit and upload page 
 - [ ] queue page with users
 - [ ] frontend settings page polish
-- [ ] blueprints for subfolder custom path support
+- [x] blueprints for subfolder custom path support
 - [x] consistent themed restriction page for outside network and splash screen
 - [ ] admin login page for settings and splash
 - [ ] login page for device identification only, stored in local storage (Login Screen)

@@ -3,6 +3,8 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+    const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
+    const apiBase = window.KaraokeURLs?.basePath || "";
     const uploadForm = document.getElementById('upload-form');
     const fileInput = document.getElementById('file-input');
     const dropZone = document.getElementById('drop-zone');
@@ -34,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function initializeUploadLyricsManager() {
         if (lyricsManager) return;
         
-        lyricsManager = new LyricsManager({ apiBase: window.location.origin });
+        lyricsManager = new LyricsManager({ apiBase });
         lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
             titleInput: '#upload-lyrics-title',
             artistInput: '#upload-lyrics-artist',
@@ -70,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             inferMetadataBtn.disabled = true;
-            const response = await fetch(`/api/search/infer?title=${encodeURIComponent(stem)}`);
+            const response = await fetch(appUrl(`/api/search/infer?title=${encodeURIComponent(stem)}`));
             if (!response.ok) {
                 throw new Error(`API error: ${response.status}`);
             }
@@ -239,7 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateProgress(0, 'Connecting...');
 
             const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/api/media/upload', true);
+            xhr.open('POST', appUrl('/api/media/upload'), true);
 
             xhr.upload.onprogress = (e) => {
                 if (e.lengthComputable) {
@@ -258,12 +260,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     const finalizeRedirect = () => {
-                        window.location.href = '/media';
+                        window.location.href = appUrl('/media');
                     };
 
                     if (response.queued && response.queue_item_id) {
                         updateProgress(100, 'Queueing...');
-                        fetch(`/api/queue/${response.queue_item_id}/process`, { method: 'POST' })
+                        fetch(appUrl(`/api/queue/${response.queue_item_id}/process`), { method: 'POST' })
                             .catch((processError) => {
                                 console.warn('Queue processing trigger failed:', processError);
                             })

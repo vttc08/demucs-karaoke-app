@@ -210,7 +210,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/lyrics-manager.js"></script>
-<script src="/static/lyrics-ui.js"></script>
-<script src="/static/upload.js"></script>
+<script src="{{ app_url('/static/lyrics-manager.js') }}"></script>
+<script src="{{ app_url('/static/lyrics-ui.js') }}"></script>
+<script src="{{ app_url('/static/upload.js') }}"></script>
 {% endblock %}

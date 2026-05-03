@@ -51,6 +51,10 @@ pip install yt-dlp
 cp .env.example .env
 # Edit .env with your settings
 ```
+Set `KARAOKE_BASE_PATH=/karaoke` only when a reverse proxy forwards requests with that prefix
+preserved. Leave it empty to serve the app at `/`, which is the default and keeps existing local
+URLs unchanged.
+
 For faster karaoke rendering, tune:
 - `FFMPEG_PRESET` (default `veryfast`; faster options include `superfast`, `ultrafast`)
 - `FFMPEG_CRF` (default `23`; higher is faster/smaller but lower quality)
@@ -74,6 +78,19 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude 'lo
 ```bash
 uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+### Reverse proxy subpath
+
+To serve the app from a subpath such as `/karaoke`, set:
+
+```bash
+KARAOKE_BASE_PATH=/karaoke
+```
+
+The proxy should preserve the prefix when forwarding, so upstream requests arrive as
+`/karaoke/queue`, `/karaoke/api/queue/ws`, `/karaoke/static/...`, and `/karaoke/media/...`.
+When this variable is unset, the app continues to serve `/queue`, `/stage`, `/api/...`, `/media/...`,
+and `/static/...`.
 
 ## Usage
 

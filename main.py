@@ -78,34 +78,41 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down karaoke application")
 
 
-app = FastAPI(
-    title="Karaoke App",
-    description="Lightweight AI-powered karaoke application",
-    version="0.1.0",
-    lifespan=lifespan,
-)
+def create_app() -> FastAPI:
+    """Create the FastAPI app with an optional deployment path prefix."""
+    created_app = FastAPI(
+        title="Karaoke App",
+        description="Lightweight AI-powered karaoke application",
+        version="0.1.0",
+        lifespan=lifespan,
+    )
 
-# Ensure filesystem-backed media directories exist before mounting.
-settings.ensure_paths()
+    # Ensure filesystem-backed media directories exist before mounting.
+    settings.ensure_paths()
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+    base_path = settings.karaoke_base_path
 
-# Include routers
-app.include_router(media_files.router)
-app.include_router(media_library.router)
-app.include_router(pages.router)
-app.include_router(lyrics.router)
-app.include_router(queue.router)
-app.include_router(qr_routes.router)
-app.include_router(search.router)
-app.include_router(settings_routes.router)
+    # Mount static files and include all route groups under the same public prefix.
+    created_app.mount(f"{base_path}/static", StaticFiles(directory="static"), name="static")
+
+    created_app.include_router(media_files.router, prefix=base_path)
+    created_app.include_router(media_library.router, prefix=base_path)
+    created_app.include_router(pages.router, prefix=base_path)
+    created_app.include_router(lyrics.router, prefix=base_path)
+    created_app.include_router(queue.router, prefix=base_path)
+    created_app.include_router(qr_routes.router, prefix=base_path)
+    created_app.include_router(search.router, prefix=base_path)
+    created_app.include_router(settings_routes.router, prefix=base_path)
+
+    @created_app.get(f"{base_path}/health")
+    def health_check():
+        """Health check endpoint."""
+        return {"status": "healthy"}
+
+    return created_app
 
 
-@app.get("/health")
-def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy"}
+app = create_app()
 
 
 if __name__ == "__main__":

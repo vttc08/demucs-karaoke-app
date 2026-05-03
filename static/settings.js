@@ -1,7 +1,8 @@
-const SETTINGS_API = `${window.location.origin}/api/settings/`;
-const DEMUCS_HEALTH_API = `${window.location.origin}/api/settings/demucs-health`;
-const YTDLP_VERSION_API = `${window.location.origin}/api/settings/ytdlp/version`;
-const YTDLP_UPDATE_API = `${window.location.origin}/api/settings/ytdlp/update`;
+const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
+const SETTINGS_API = appUrl("/api/settings/");
+const DEMUCS_HEALTH_API = appUrl("/api/settings/demucs-health");
+const YTDLP_VERSION_API = appUrl("/api/settings/ytdlp/version");
+const YTDLP_UPDATE_API = appUrl("/api/settings/ytdlp/update");
 const form = document.getElementById("settings-form");
 const saveBtn = document.getElementById("save-settings-btn");
 const reloadBtn = document.getElementById("reload-settings-btn");

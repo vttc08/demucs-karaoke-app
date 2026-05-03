@@ -208,7 +208,7 @@
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 no-scrollbar">
                 <div class="flex items-center gap-3 rounded-xl bg-surface-container-highest/60 p-3">
                     <div class="h-12 w-12 overflow-hidden rounded-md bg-surface-container-lowest sm:h-14 sm:w-14">
-                        <img id="queue-config-song-thumb" src="/static/placeholder.png" alt="Selected song" class="h-full w-full object-cover" />
+                        <img id="queue-config-song-thumb" src="{{ app_url('/static/placeholder.png') }}" alt="Selected song" class="h-full w-full object-cover" />
                     </div>
                     <div class="min-w-0">
                         <a id="queue-config-song-title" class="block truncate text-sm font-bold text-on-surface hover:underline underline-offset-2" target="_blank" rel="noopener noreferrer">Selected song</a>
@@ -315,11 +315,11 @@
     <!-- Navigation hint -->
     <div class="text-center mt-8">
         <div class="flex justify-center gap-4">
-            <a href="/queue" class="inline-flex items-center gap-2 text-primary hover:text-primary/80 transition-colors px-4 py-2 rounded-full bg-primary/10">
+            <a href="{{ app_url('/queue') }}" class="inline-flex items-center gap-2 text-primary hover:text-primary/80 transition-colors px-4 py-2 rounded-full bg-primary/10">
                 <span class="material-symbols-outlined">queue_music</span>
                 <span class="font-medium">Queue</span>
             </a>
-            <a href="/stage" class="inline-flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors px-4 py-2 rounded-full">
+            <a href="{{ app_url('/stage') }}" class="inline-flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors px-4 py-2 rounded-full">
                 <span class="material-symbols-outlined">live_tv</span>
                 <span class="font-medium">Stage</span>
             </a>
@@ -333,13 +333,13 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/lyrics-manager.js"></script>
-<script src="/static/lyrics-ui.js"></script>
-<script src="/static/queue.js"></script>
+<script src="{{ app_url('/static/lyrics-manager.js') }}"></script>
+<script src="{{ app_url('/static/lyrics-ui.js') }}"></script>
+<script src="{{ app_url('/static/queue.js') }}"></script>
 <script>
 // Additional mobile-specific functionality
 function skipToSong(songId) {
-    fetch(`${API_BASE}/api/queue/skip-to/${songId}`, {
+    fetch(window.KaraokeURLs.appUrl(`/api/queue/skip-to/${songId}`), {
         method: 'POST'
     }).then(response => {
         if (response.ok) {
@@ -355,7 +355,7 @@ function skipToSong(songId) {
 }
 
 function removeSong(songId) {
-    fetch(`${API_BASE}/api/queue/${songId}`, {
+    fetch(window.KaraokeURLs.appUrl(`/api/queue/${songId}`), {
         method: 'DELETE'
     }).then(async (response) => {
         if (response.ok) {
@@ -379,7 +379,7 @@ function removeSong(songId) {
 
 document.getElementById('clear-all-btn')?.addEventListener('click', function() {
     if (confirm('Are you sure you want to clear all songs from the queue?')) {
-        fetch(`${API_BASE}/api/queue/clear`, {
+        fetch(window.KaraokeURLs.appUrl('/api/queue/clear'), {
             method: 'POST'
         }).then(response => {
             if (response.ok) {

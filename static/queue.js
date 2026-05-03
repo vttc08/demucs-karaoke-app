@@ -1,5 +1,10 @@
 // Queue page JavaScript
-const API_BASE = window.location.origin;
+const API_BASE = window.KaraokeURLs?.basePath || "";
+const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
+const appWsUrl = window.KaraokeURLs?.appWsUrl || ((path) => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}${path}`;
+});
 
 // Simple logger for frontend debugging
 const logger = {
@@ -384,7 +389,7 @@ function buildQueueSelection(resultElement, triggerButton) {
         mediaItemId: resultElement.dataset.mediaItemId || null,
         title: resultElement.dataset.title || '',
         channel: resultElement.dataset.channel || '',
-        thumbnail: resultElement.dataset.thumbnail || '/static/placeholder.png',
+        thumbnail: resultElement.dataset.thumbnail || appUrl('/static/placeholder.png'),
         triggerButton,
     };
 }
@@ -459,7 +464,7 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     if (queueConfigSongThumb) {
         queueConfigSongThumb.src = modalSelection.thumbnail;
         queueConfigSongThumb.onerror = () => {
-            queueConfigSongThumb.src = '/static/placeholder.png';
+            queueConfigSongThumb.src = appUrl('/static/placeholder.png');
         };
     }
 
@@ -519,7 +524,7 @@ function displaySearchResults(results) {
         const mediaItemId = result.media_item_id ?? '';
         const title = escapeHtml(result.title || '');
         const channel = escapeHtml(result.channel || '');
-        const thumbnail = escapeHtml(result.thumbnail || '/static/placeholder.png');
+        const thumbnail = escapeHtml(appUrl(result.thumbnail || '/static/placeholder.png'));
 
         if (isDownloaded) {
             return `
@@ -1037,8 +1042,7 @@ class QueueWebSocket {
             return;
         }
         
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/api/queue/ws`;
+        const wsUrl = appWsUrl('/api/queue/ws');
         
         console.log('[WebSocket] Connecting to', wsUrl);
         this.updateStatus('reconnecting', 'Connecting...');
@@ -1245,7 +1249,7 @@ function syncStageLyricsAvailability(queue) {
 
 // Initialize WebSocket connection
 let queueWebSocket = null;
-if (window.location.pathname === '/queue' || window.location.pathname === '/') {
+if (window.location.pathname === appUrl('/queue') || window.location.pathname === appUrl('/')) {
     queueWebSocket = new QueueWebSocket();
 }
 

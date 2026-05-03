@@ -5,14 +5,14 @@
  * It can be instantiated per-context (queue modal, upload form, media edit modal) to manage state atomically.
  * 
  * Usage:
- *   const lyricsManager = new LyricsManager({ apiBase: window.location.origin });
+ *   const lyricsManager = new LyricsManager({ apiBase: window.KaraokeURLs.basePath });
  *   await lyricsManager.resolve({ title: 'Song', artist: 'Artist' });
  *   const state = lyricsManager.getState();
  */
 
 class LyricsManager {
   constructor(options = {}) {
-    this.apiBase = options.apiBase || window.location.origin;
+    this.apiBase = options.apiBase ?? (window.KaraokeURLs?.basePath || "");
     this.requestId = 0;
     this.abortController = null;
     
