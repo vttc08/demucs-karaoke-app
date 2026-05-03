@@ -54,7 +54,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] perform crud on karaoke media
 - [x] refine UI screen: add to queue condensed (mobile)
 - [x] user can upload mp3 and mp4 videos screen: media upload (mobile+desktop)
-- [ ] modular lyrics component, reuse code in add to queue, edit and upload page 
+- [x] modular lyrics component, reuse code in add to queue, edit and upload page 
 - [ ] queue page with users
 - [ ] frontend settings page polish
 - [x] blueprints for subfolder custom path support
