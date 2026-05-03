@@ -61,6 +61,8 @@ When finished:
   - check whether there are uncommitted changes or secrets
 
 ## Testing requirements
+- Use `uv run pytest` for the full local suite. The shared pytest setup shortens the WebSocket heartbeat during tests, so do not add `WS_HEARTBEAT_INTERVAL=30` or other production heartbeat overrides when running tests.
+- When investigating slow tests, use `uv run pytest --durations=20 --durations-min=0.05` and check for heartbeat/timeouts before assuming the whole suite is slow.
 - Add or update API tests for new endpoints
 - Add service-level tests where practical
 - Prefer mock/stub subprocess calls in tests
