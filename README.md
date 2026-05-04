@@ -171,6 +171,39 @@ provider responses, and other backend content are shown as-is. The selected lang
 
 See [docs/internationalization.md](docs/internationalization.md) for adding another locale.
 
+### Frontend i18n Development
+
+When adding or modifying UI text in templates or JavaScript:
+
+1. **Add strings to the English catalog** (`locales/en.json`):
+   ```json
+   {
+     "action.queue_song": "Add to Queue",
+     "status.loading": "Loading...",
+     "error.upload_failed": "Upload failed"
+   }
+   ```
+
+2. **Translate to all supported locales** (currently `zh-CN`):
+   - Keep the same keys and placeholder format (`{key}`, `{count}`)
+   - Only translate the value, never the key
+
+3. **Use in templates** (Jinja2):
+   ```html
+   <button>{{ t("action.queue_song") }}</button>
+   ```
+
+4. **Use in JavaScript**:
+   ```javascript
+   const message = window.KaraokeI18n.t("status.loading", {item: title});
+   ```
+
+5. **Test before commit**:
+   ```bash
+   uv run pytest
+   ```
+   Tests verify that all keys exist in all locales, so missing translations will fail the build.
+
 When concurrent yt-dlp search is enabled:
 - Query without `karaoke` triggers two parallel searches: `<query>` and `<query> karaoke`
 - Query containing `karaoke` uses single-search mode

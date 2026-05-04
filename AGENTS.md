@@ -60,6 +60,17 @@ When finished:
 - commit the changes with git if the change is major
   - check whether there are uncommitted changes or secrets
 
+## Frontend internationalization (i18n)
+When making UI changes or adding new frontend features:
+- All user-facing text must use the translation system via `t("key")` helper
+- Template strings: use `{{ t("key") }}` in Jinja templates
+- JavaScript strings: use `window.KaraokeI18n.t("key", {param: value})` in static JS files
+- Never hardcode UI text; add it to `locales/en.json` first, then translate to `locales/zh-CN.json`
+- Preserve placeholder syntax: `{key}`, `{count}`, etc. in translations; don't replace them
+- Run `uv run pytest` before committing—tests verify catalog key parity across all locales
+- See [docs/internationalization.md](docs/internationalization.md) for details on adding a new language
+- The i18n helper is auto-exposed in `templates/base.html` via `window.KaraokeI18n` and via Jinja template context
+
 ## Testing requirements
 - Use `uv run pytest` for the full local suite. The shared pytest setup shortens the WebSocket heartbeat during tests, so do not add `WS_HEARTBEAT_INTERVAL=30` or other production heartbeat overrides when running tests.
 - When investigating slow tests, use `uv run pytest --durations=20 --durations-min=0.05` and check for heartbeat/timeouts before assuming the whole suite is slow.
