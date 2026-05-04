@@ -1,0 +1,32 @@
+# Internationalization
+
+The app uses a small catalog-based i18n setup for frontend UI text.
+
+## Current Locales
+
+- `en`: English fallback/source catalog
+- `zh-CN`: Simplified Chinese UI catalog
+
+Only frontend UI copy is translated. Song titles, artists, lyrics, media filenames, provider output,
+and API payload content remain unchanged.
+
+## Runtime Flow
+
+- `services/i18n_service.py` resolves locale from `karaoke_locale`, then `Accept-Language`, then `en`.
+- Templates call `t("key")`.
+- Browser scripts call `window.KaraokeI18n.t("key", params)`.
+- The header language selector posts to `POST /language`, which sets `karaoke_locale` and redirects
+  back to the current app-local page.
+
+## Add A Locale
+
+1. Add the locale code and label to `SUPPORTED_LOCALES` in `services/i18n_service.py`.
+2. Create `locales/<code>.json` with the same keys as `locales/en.json`.
+3. Translate UI strings only; keep placeholders like `{title}` and `{count}` unchanged.
+4. Run:
+
+```bash
+uv run pytest
+```
+
+The route tests include a catalog key parity check so missing translations fail fast.

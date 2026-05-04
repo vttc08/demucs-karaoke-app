@@ -5,6 +5,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
     const apiBase = window.KaraokeURLs?.basePath || "";
+    const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
     const uploadForm = document.getElementById('upload-form');
     const fileInput = document.getElementById('file-input');
     const dropZone = document.getElementById('drop-zone');
@@ -82,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
             syncUploadLyricsMetadata();
         } catch (error) {
             console.error('Metadata inference failed:', error);
-            showToast('Could not infer metadata from filename', true);
+            showToast(t('upload.infer_failed'), true);
         } finally {
             inferMetadataBtn.disabled = false;
         }
@@ -120,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (uploadAiToggle) {
         uploadAiToggle.addEventListener('change', () => {
             if (!addToQueueToggle?.checked && uploadAiToggle.checked) {
-                showToast('AI karaoke only applies when Add to queue is enabled.', true);
+                showToast(t('upload.ai_requires_queue'), true);
             }
         });
     }
@@ -167,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedFile = file;
                 updateFilePreview();
             } else {
-                showToast('Supported formats: MP3, MP4, WebM, MKV, MOV, AVI, and M4V', true);
+                showToast(t('upload.supported_formats'), true);
             }
         }
     }
@@ -210,7 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
 
         if (!selectedFile) {
-            showToast('Please select a file first', true);
+            showToast(t('upload.select_file'), true);
             return;
         }
 
@@ -238,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             submitBtn.disabled = true;
             progressContainer.classList.remove('hidden');
-            updateProgress(0, 'Connecting...');
+            updateProgress(0, t('upload.connecting'));
 
             const xhr = new XMLHttpRequest();
             xhr.open('POST', appUrl('/api/media/upload'), true);
@@ -246,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
             xhr.upload.onprogress = (e) => {
                 if (e.lengthComputable) {
                     const percent = Math.round((e.loaded / e.total) * 100);
-                    updateProgress(percent, percent < 100 ? 'Uploading...' : 'Processing...');
+                    updateProgress(percent, percent < 100 ? t('upload.uploading') : t('upload.processing'));
                 }
             };
 
@@ -264,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     };
 
                     if (response.queued && response.queue_item_id) {
-                        updateProgress(100, 'Queueing...');
+                        updateProgress(100, t('upload.queueing'));
                         fetch(appUrl(`/api/queue/${response.queue_item_id}/process`), { method: 'POST' })
                             .catch((processError) => {
                                 console.warn('Queue processing trigger failed:', processError);
@@ -274,7 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         finalizeRedirect();
                     }
                 } else {
-                    let errorMessage = 'Upload failed';
+                    let errorMessage = t('upload.upload_failed');
                     try {
                         const error = JSON.parse(xhr.responseText);
                         errorMessage = error.detail || errorMessage;
@@ -287,7 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             xhr.onerror = () => {
-                showToast('Network error occurred', true);
+                showToast(t('upload.network_error'), true);
                 submitBtn.disabled = false;
             };
 
@@ -295,7 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (err) {
             console.error('Upload error:', err);
-            showToast('An unexpected error occurred', true);
+            showToast(t('upload.unexpected_error'), true);
             submitBtn.disabled = false;
         }
     });

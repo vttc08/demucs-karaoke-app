@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}Upload Media - Karaoke{% endblock %}
+{% block title %}{{ t('upload.title') }}{% endblock %}
 {% block header_icon %}cloud_upload{% endblock %}
-{% block header_title %}Upload Media{% endblock %}
+{% block header_title %}{{ t('common.upload_media') }}{% endblock %}
 {% block header_subtitle %}Digital Archive Ingestion{% endblock %}
 
 {% block content %}
 <main class="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 pb-12 pt-28 sm:px-6 lg:px-8">
     <section class="glass-card rounded-2xl border border-white/10 p-6 sm:p-8">
         <div class="mb-8 text-center sm:text-left">
-            <p class="text-[11px] font-bold uppercase tracking-widest text-primary">Archive_New_Entry</p>
-            <h2 class="mt-1 font-headline text-2xl font-black tracking-tight text-on-surface sm:text-3xl">Ingest Media</h2>
-            <p class="mt-2 text-sm text-on-surface-variant">Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files to save them to the media library and optionally add them to the queue.</p>
+            <p class="text-[11px] font-bold uppercase tracking-widest text-primary">{{ t('upload.archive_entry') }}</p>
+            <h2 class="mt-1 font-headline text-2xl font-black tracking-tight text-on-surface sm:text-3xl">{{ t('upload.ingest') }}</h2>
+            <p class="mt-2 text-sm text-on-surface-variant">{{ t('upload.ingest_detail') }}</p>
         </div>
 
         <form id="upload-form" class="space-y-8">
@@ -22,7 +22,7 @@
                     <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-highest/60 text-primary transition-transform duration-200 group-hover:scale-110">
                         <span class="material-symbols-outlined text-3xl">cloud_upload</span>
                     </div>
-                    <p class="text-base font-bold text-on-surface" id="drop-zone-text">Drop file here or tap to select</p>
+                    <p class="text-base font-bold text-on-surface" id="drop-zone-text">{{ t('upload.drop_select') }}</p>
                 </div>
                 <div id="file-preview" class="hidden w-full px-6">
                     <div class="flex items-center gap-4 rounded-xl bg-surface-container-highest/60 p-4">
@@ -44,36 +44,36 @@
             <div class="space-y-4">
                 <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <div class="space-y-1.5">
-                        <label for="song-title" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Song Title</label>
+                        <label for="song-title" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('common.track_title') }}</label>
                         <input
                             id="song-title"
                             type="text"
                             class="h-12 w-full rounded-xl border-none bg-surface-container-highest/50 px-4 text-sm font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40"
-                            placeholder="Enter track title"
+                            placeholder="{{ t('media.enter_title') }}"
                             autocomplete="off"
                             required
                         />
                     </div>
                     <div class="space-y-1.5">
-                        <label for="artist-name" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Artist Name <span class="font-medium normal-case tracking-normal text-on-surface-variant/80">(optional)</span></label>
+                        <label for="artist-name" class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('common.artist_name') }} <span class="font-medium normal-case tracking-normal text-on-surface-variant/80">{{ t('upload.optional') }}</span></label>
                         <input
                             id="artist-name"
                             type="text"
                             class="h-12 w-full rounded-xl border-none bg-surface-container-highest/50 px-4 text-sm font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40"
-                            placeholder="Leave blank if unknown"
+                            placeholder="{{ t('upload.leave_unknown') }}"
                             autocomplete="off"
                         />
                     </div>
                 </div>
                 <button type="button" id="infer-metadata-btn" class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest/30 px-4 py-2 text-secondary font-bold text-on-surface-variant transition-all hover:bg-surface-container-highest/50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
                     <span class="material-symbols-outlined text-base">auto_fix_high</span>
-                    Infer from filename
+                    {{ t('upload.infer_filename') }}
                 </button>
             </div>
 
             <!-- Lyrics Panel -->
             <div class="space-y-4" id="upload-lyrics-section">
-                <p class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Lyrics (Optional)</p>
+                <p class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('upload.lyrics_optional') }}</p>
                 
                 <!-- AI Karaoke & Lyrics Toggles -->
                 <div class="grid grid-cols-2 gap-4">
@@ -85,7 +85,7 @@
                                 <div class="h-6 w-11 rounded-full bg-white/10 transition-colors peer-checked:bg-secondary shadow-[0_0_10px_rgba(60,227,106,0.3)] after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full"></div>
                             </label>
                         </div>
-                        <span class="text-[11px] font-bold uppercase tracking-wider">AI Karaoke</span>
+                        <span class="text-[11px] font-bold uppercase tracking-wider">{{ t('queue.ai_karaoke') }}</span>
                     </div>
                     <div class="flex flex-col gap-3 rounded-xl bg-surface-container-highest/40 p-4 ring-1 ring-white/5">
                         <div class="flex items-center justify-between">
@@ -95,7 +95,7 @@
                                 <div class="h-6 w-11 rounded-full bg-white/10 transition-colors peer-checked:bg-primary shadow-[0_0_10px_rgba(0,242,255,0.3)] after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:after:translate-x-full"></div>
                             </label>
                         </div>
-                        <span class="text-[11px] font-bold uppercase tracking-wider">Lyrics Sync</span>
+                        <span class="text-[11px] font-bold uppercase tracking-wider">{{ t('lyrics.sync') }}</span>
                     </div>
                 </div>
 
@@ -105,22 +105,22 @@
                         <!-- Title/Artist Inputs -->
                         <div class="grid grid-cols-2 gap-3">
                             <div class="space-y-1.5">
-                                <label for="upload-lyrics-title" class="ml-1 text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">Title</label>
+                                <label for="upload-lyrics-title" class="ml-1 text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('common.title') }}</label>
                                 <input
                                     id="upload-lyrics-title"
                                     type="text"
                                     class="h-10 w-full rounded-lg border-none bg-surface-container-highest/50 px-3 text-xs font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
-                                    placeholder="Song title"
+                                    placeholder="{{ t('common.track_title') }}"
                                     disabled
                                 />
                             </div>
                             <div class="space-y-1.5">
-                                <label for="upload-lyrics-artist" class="ml-1 text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">Artist</label>
+                                <label for="upload-lyrics-artist" class="ml-1 text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('common.artist') }}</label>
                                 <input
                                     id="upload-lyrics-artist"
                                     type="text"
                                     class="h-10 w-full rounded-lg border-none bg-surface-container-highest/50 px-3 text-xs font-semibold text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
-                                    placeholder="Artist name"
+                                    placeholder="{{ t('common.artist_name') }}"
                                     disabled
                                 />
                             </div>
@@ -130,7 +130,7 @@
                         <div class="flex flex-wrap gap-2">
                             <button type="button" id="upload-lyrics-search-btn" class="inline-flex items-center gap-1 rounded-full bg-secondary/20 px-3 py-1.5 text-[10px] font-bold text-secondary transition-all hover:bg-secondary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
                                 <span class="material-symbols-outlined text-sm">search</span>
-                                Search
+                                {{ t('lyrics.search') }}
                             </button>
                             <a id="upload-lyrics-google-btn" href="https://www.google.com/search?q=lyrics" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 rounded-full bg-tertiary/20 px-3 py-1.5 text-[10px] font-bold text-tertiary transition-all hover:bg-tertiary/30 active:scale-95">
                                 <span class="material-symbols-outlined text-sm">open_in_new</span>
@@ -138,7 +138,7 @@
                             </a>
                             <button type="button" id="upload-lyrics-upload-btn" class="inline-flex items-center gap-1 rounded-full bg-primary/20 px-3 py-1.5 text-[10px] font-bold text-primary transition-all hover:bg-primary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
                                 <span class="material-symbols-outlined text-sm">upload_file</span>
-                                Upload
+                                {{ t('common.upload') }}
                             </button>
                             <input type="file" id="upload-lyrics-file" class="hidden" accept=".lrc,.txt" />
                         </div>
@@ -149,13 +149,13 @@
                         <!-- Lyrics Textarea -->
                         <div class="space-y-1.5">
                             <div class="flex items-center justify-between">
-                                <label for="upload-lyrics-textarea" class="ml-1 text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">Lyrics</label>
+                                <label for="upload-lyrics-textarea" class="ml-1 text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('common.lyrics') }}</label>
                                 <span id="upload-lyrics-provider" class="text-[9px] font-semibold text-secondary"></span>
                             </div>
                             <textarea
                                 id="upload-lyrics-textarea"
                                 class="h-32 w-full rounded-lg border-none bg-surface-container-highest/50 px-3 py-2 text-xs font-mono text-on-surface ring-1 ring-white/5 transition-all focus:ring-2 focus:ring-primary/40 disabled:opacity-50 resize-none"
-                                placeholder="Lyrics will appear here..."
+                                placeholder="{{ t('upload.lyrics_placeholder') }}"
                                 disabled
                             ></textarea>
                         </div>
@@ -165,15 +165,15 @@
 
             <!-- Queue Option -->
             <div class="space-y-4">
-                <p class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Queue Options</p>
+                <p class="ml-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('upload.queue_options') }}</p>
                 <label class="flex cursor-pointer items-center justify-between rounded-xl bg-surface-container-highest/30 p-4 ring-1 ring-white/5 transition-colors hover:bg-surface-container-highest/50">
                     <div class="flex items-center gap-3">
                         <div class="rounded-full bg-primary/10 p-2 text-primary">
                             <span class="material-symbols-outlined text-[20px]">queue_music</span>
                         </div>
                         <div>
-                            <p class="text-sm font-bold text-on-surface">Add to queue</p>
-                            <p class="text-[10px] text-on-surface-variant">Queue the new upload after saving it</p>
+                            <p class="text-sm font-bold text-on-surface">{{ t('upload.add_to_queue_label') }}</p>
+                            <p class="text-[10px] text-on-surface-variant">{{ t('upload.add_queue_detail') }}</p>
                         </div>
                     </div>
                     <div class="relative inline-flex cursor-pointer items-center">
@@ -187,7 +187,7 @@
             <div class="space-y-4 pt-4">
                 <div id="progress-container" class="hidden space-y-2">
                     <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
-                        <span id="progress-status" class="text-primary">System_Ready</span>
+                        <span id="progress-status" class="text-primary">{{ t('upload.system_ready') }}</span>
                         <span id="progress-percent" class="text-on-surface">0%</span>
                     </div>
                     <div class="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
@@ -197,7 +197,7 @@
 
                 <button type="submit" id="submit-btn" class="neon-glow flex w-full items-center justify-center gap-3 rounded-xl bg-primary py-4 text-xs font-black uppercase tracking-[0.2em] text-surface transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50">
                     <span class="material-symbols-outlined">bolt</span>
-                    Upload Media
+                    {{ t('common.upload_media') }}
                 </button>
             </div>
         </form>
@@ -205,7 +205,7 @@
 </main>
 
 <div id="upload-toast" class="pointer-events-none fixed bottom-4 right-4 z-50 translate-y-3 rounded-lg border border-primary/30 bg-surface-container px-4 py-2 text-sm text-on-surface opacity-0 transition-all duration-200">
-    <span id="upload-toast-text">Success</span>
+    <span id="upload-toast-text">{{ t('common.success') }}</span>
 </div>
 {% endblock %}
 

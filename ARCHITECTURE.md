@@ -32,6 +32,19 @@ This project currently uses two services:
 - Database values for media/cache references remain canonical (`/media/...`, `/cache/...`). Templates
   and frontend helpers add the public prefix only when rendering browser-facing URLs.
 
+## Frontend internationalization
+
+- UI internationalization is intentionally lightweight and framework-free:
+  - locale catalogs live in `locales/en.json` and `locales/zh-CN.json`
+  - `services/i18n_service.py` resolves the active locale and provides English fallback
+  - Jinja templates use the global `t("key")` helper for server-rendered UI copy
+  - `templates/base.html` exposes the same catalogs to JavaScript through `window.KaraokeI18n`
+- The active locale is resolved from the `karaoke_locale` cookie, then `Accept-Language`, then English.
+- `POST /language` validates the requested language, stores the cookie, and redirects only to app-local
+  paths so language switching works under `KARAOKE_BASE_PATH` without open redirects.
+- Only frontend UI elements are translated. Backend content such as song titles, artist names, lyrics,
+  filenames, provider output, and API payload data stays in its original language.
+
 ## Real-time queue update architecture
 
 The queue page uses a hybrid update model:

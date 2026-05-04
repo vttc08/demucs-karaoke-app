@@ -1,4 +1,5 @@
 const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
+const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
 const SETTINGS_API = appUrl("/api/settings/");
 const DEMUCS_HEALTH_API = appUrl("/api/settings/demucs-health");
 const YTDLP_VERSION_API = appUrl("/api/settings/ytdlp/version");
@@ -100,13 +101,13 @@ function setEngineStatus(state, detail, persist = true) {
     }
 
     if (state === "online") {
-        engineStatusText.textContent = "AI Engine: Online";
+        engineStatusText.textContent = t("settings.engine_online");
     } else if (state === "offline") {
-        engineStatusText.textContent = "AI Engine: Offline";
+        engineStatusText.textContent = t("settings.engine_offline");
     } else if (state === "checking") {
-        engineStatusText.textContent = "AI Engine: Checking";
+        engineStatusText.textContent = t("settings.engine_checking");
     } else {
-        engineStatusText.textContent = "AI Engine: Unknown";
+        engineStatusText.textContent = t("settings.engine_unknown");
     }
 
     engineStatusDot.classList.remove("bg-primary", "bg-error", "bg-warning", "bg-outline");
@@ -127,7 +128,7 @@ function setEngineStatus(state, detail, persist = true) {
 }
 
 function applyDemucsHealthToUI(health, persist = true) {
-    const detail = health.detail || (health.healthy ? "Healthy" : "Unavailable");
+    const detail = health.detail || (health.healthy ? t("settings.healthy") : t("settings.unavailable"));
     setEngineStatus(health.healthy ? "online" : "offline", detail, persist);
 }
 
@@ -161,18 +162,18 @@ async function checkYtdlpVersion() {
         return;
     }
     setYtdlpActionsState(true);
-    setYtdlpStatus("Checking yt-dlp version...");
+    setYtdlpStatus(t("settings.checking_ytdlp"));
     try {
         const response = await fetch(YTDLP_VERSION_API);
         if (!response.ok) {
             const errorPayload = await response.json();
-            throw new Error(errorPayload.detail || "Failed to check yt-dlp version");
+            throw new Error(errorPayload.detail || t("settings.check_ytdlp_failed"));
         }
         const data = await response.json();
         ytdlpVersionText.textContent = data.version;
-        setYtdlpStatus(`Current version: ${data.version}`);
+        setYtdlpStatus(t("settings.current_version", { version: data.version }));
     } catch (error) {
-        setYtdlpStatus(String(error.message || "Failed to check yt-dlp version"), true);
+        setYtdlpStatus(String(error.message || t("settings.check_ytdlp_failed")), true);
     } finally {
         setYtdlpActionsState(false);
     }
@@ -183,25 +184,25 @@ async function updateYtdlp() {
         return;
     }
     setYtdlpActionsState(true);
-    setYtdlpStatus("Updating yt-dlp via -U...");
+    setYtdlpStatus(t("settings.updating_ytdlp"));
     try {
         const response = await fetch(YTDLP_UPDATE_API, {method: "POST"});
         if (!response.ok) {
             const errorPayload = await response.json();
-            throw new Error(errorPayload.detail || "Failed to update yt-dlp");
+            throw new Error(errorPayload.detail || t("settings.update_ytdlp_failed"));
         }
         const data = await response.json();
         ytdlpVersionText.textContent = data.after_version;
         if (data.updated) {
-            setYtdlpStatus(`Updated ${data.before_version} -> ${data.after_version}`);
-            showSaveFeedback("yt-dlp updated successfully.", false);
+            setYtdlpStatus(t("settings.updated_ytdlp", { before: data.before_version, after: data.after_version }));
+            showSaveFeedback(t("settings.updated_ytdlp_success"), false);
         } else {
-            setYtdlpStatus(`Already up to date (${data.after_version})`);
-            showSaveFeedback("yt-dlp is already up to date.", false);
+            setYtdlpStatus(t("settings.already_current_version", { version: data.after_version }));
+            showSaveFeedback(t("settings.ytdlp_already_current"), false);
         }
     } catch (error) {
-        setYtdlpStatus(String(error.message || "Failed to update yt-dlp"), true);
-        showSaveFeedback(String(error.message || "Failed to update yt-dlp"), true);
+        setYtdlpStatus(String(error.message || t("settings.update_ytdlp_failed")), true);
+        showSaveFeedback(String(error.message || t("settings.update_ytdlp_failed")), true);
     } finally {
         setYtdlpActionsState(false);
     }
@@ -240,18 +241,18 @@ function updateDemucsOutputUi() {
 
 async function loadSettings() {
     setFormState(true);
-    setStatus("Loading settings...");
+    setStatus(t("settings.loading"));
     try {
         const response = await fetch(SETTINGS_API);
         if (!response.ok) {
-            throw new Error("Failed to load settings");
+            throw new Error(t("settings.load_failed"));
         }
         const data = await response.json();
         applySettingsToForm(data);
-        setStatus("Settings loaded");
+        setStatus(t("settings.loaded"));
         return true;
     } catch (error) {
-        setStatus(error.message || "Unable to load settings", true);
+        setStatus(error.message || t("settings.load_unable"), true);
         return false;
     } finally {
         setFormState(false);
@@ -264,9 +265,9 @@ async function saveSettings() {
     }
 
     setFormState(true);
-    setStatus("Saving settings...");
-    showSaveFeedback("Saving settings...", false);
-    setEngineStatus("checking", "Checking Demucs health...", false);
+    setStatus(t("settings.saving"));
+    showSaveFeedback(t("settings.saving"), false);
+    setEngineStatus("checking", t("settings.checking_demucs"), false);
 
     const payload = {
         demucs_api_url: fields.demucs_api_url.value.trim(),
@@ -297,7 +298,7 @@ async function saveSettings() {
         });
         if (!response.ok) {
             const errorPayload = await response.json();
-            throw new Error(errorPayload.detail || "Failed to save settings");
+            throw new Error(errorPayload.detail || t("settings.save_failed"));
         }
         const updated = await response.json();
         applySettingsToForm(updated);
@@ -305,47 +306,47 @@ async function saveSettings() {
             healthy: Boolean(updated.demucs_healthy),
             detail: updated.demucs_health_detail,
         });
-        setStatus(updated.demucs_healthy ? "Settings saved" : "Settings saved (Demucs offline)", !updated.demucs_healthy);
+        setStatus(updated.demucs_healthy ? t("settings.saved") : t("settings.saved_demucs_offline"), !updated.demucs_healthy);
         showSaveFeedback(
             updated.demucs_healthy
-                ? "Settings saved successfully."
-                : "Settings saved. Demucs is currently offline.",
+                ? t("settings.saved_success")
+                : t("settings.saved_offline_detail"),
             !updated.demucs_healthy,
         );
     } catch (error) {
-        setStatus(error.message || "Unable to save settings", true);
-        showSaveFeedback(String(error.message || "Unable to save settings"), true);
-        setEngineStatus("offline", String(error.message || "Save failed"));
+        setStatus(error.message || t("settings.save_unable"), true);
+        showSaveFeedback(String(error.message || t("settings.save_unable")), true);
+        setEngineStatus("offline", String(error.message || t("settings.save_failed_short")));
     } finally {
         setFormState(false);
     }
 }
 
 async function refreshDemucsHealth() {
-    setEngineStatus("checking", "Checking Demucs health...", false);
+    setEngineStatus("checking", t("settings.checking_demucs"), false);
     try {
         const response = await fetch(DEMUCS_HEALTH_API);
         if (!response.ok) {
-            throw new Error("Unable to fetch Demucs health");
+            throw new Error(t("settings.demucs_health_fetch_failed"));
         }
         const health = await response.json();
         applyDemucsHealthToUI(health);
     } catch (error) {
         applyDemucsHealthToUI({
             healthy: false,
-            detail: String(error.message || "Health check failed"),
+            detail: String(error.message || t("settings.health_check_failed")),
         });
     }
 }
 
 async function reloadEngineStatus() {
-    setStatus("Refreshing status...");
+    setStatus(t("settings.refreshing_status"));
     const loaded = await loadSettings();
     if (!loaded) {
         return;
     }
     await refreshDemucsHealth();
-    setStatus("Status refreshed");
+    setStatus(t("settings.status_refreshed"));
 }
 
 if (saveBtn) {

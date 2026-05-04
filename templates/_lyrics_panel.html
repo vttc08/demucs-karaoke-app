@@ -25,18 +25,18 @@
     <div class="min-w-0">
       <div class="flex items-center gap-2">
         <span class="material-symbols-outlined text-primary text-base">text_fields</span>
-        <span class="text-sm font-bold text-on-surface">Lyrics lookup</span>
+        <span class="text-sm font-bold text-on-surface">{{ t('lyrics.lookup') }}</span>
       </div>
-      <p class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">Search, edit, or replace lyrics before adding.</p>
+      <p class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">{{ t('lyrics.lookup_detail') }}</p>
     </div>
-    <span id="lyrics-state" class="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Idle</span>
+    <span id="lyrics-state" class="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.idle') }}</span>
   </div>
 
   <!-- Form fields (title, artist, action buttons) -->
   {% include '_lyrics_form_fields.html' with context %}
 
   <!-- Status and help text -->
-  <p id="lyrics-help" class="text-xs text-on-surface-variant">Search or upload lyrics to continue.</p>
+  <p id="lyrics-help" class="text-xs text-on-surface-variant">{{ t('lyrics.help_default') }}</p>
 
   <!-- Textarea editor -->
   {% include '_lyrics_textarea.html' with context %}

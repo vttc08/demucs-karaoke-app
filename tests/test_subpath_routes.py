@@ -65,9 +65,18 @@ def test_app_serves_pages_assets_api_and_websocket_under_configured_subpath(tmp_
         queue_html = queue_page.text
         assert 'href="/karaoke/queue"' in queue_html
         assert 'href="/queue"' not in queue_html
+        assert 'action="/karaoke/language"' in queue_html
         assert "/karaoke/static/app-urls.js" in queue_html
         assert "/karaoke/static/queue.js" in queue_html
         assert 'window.KARAOKE_BASE_PATH = "/karaoke";' in queue_html
+
+        language_response = client.post(
+            "/karaoke/language",
+            data={"language": "zh-CN", "next": "/karaoke/stage"},
+            follow_redirects=False,
+        )
+        assert language_response.status_code == 302
+        assert language_response.headers["location"] == "/karaoke/stage"
 
         assert client.get("/karaoke/stage").status_code == 200
         assert client.get("/karaoke/settings").status_code == 200

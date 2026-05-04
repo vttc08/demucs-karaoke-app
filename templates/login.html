@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html class="dark" lang="en">
+<html class="dark" lang="{{ current_locale(request) }}">
 <head>
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-    <title>NEON PULSE - Enter the Stage</title>
+    <title>{{ t('login.title') }}</title>
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -88,9 +88,9 @@
             <span class="material-symbols-outlined text-primary text-4xl">mic_external_on</span>
         </div>
         <h1 class="font-headline text-4xl md:text-6xl font-black text-white tracking-tighter leading-tight">
-            Enter the <span class="text-transparent bg-clip-text bg-gradient-to-r from-primary to-primary-container">Pulse</span>
+            {{ t('login.enter_pulse') }}
         </h1>
-        <p class="text-on-surface-variant mt-4 font-medium tracking-wide text-sm md:text-base">Admin access for session controls</p>
+        <p class="text-on-surface-variant mt-4 font-medium tracking-wide text-sm md:text-base">{{ t('login.admin_access') }}</p>
     </div>
 
     <!-- Login Container -->
@@ -106,26 +106,26 @@
                 <input type="hidden" name="type" value="admin">
                 {% if admin_configured is sameas false %}
                 <p class="text-sm font-semibold text-on-surface-variant">
-                    No admin account is configured. Create one on the server before signing in.
+                    {{ t('login.no_admin') }}
                 </p>
                 {% endif %}
                 <div class="space-y-4">
                     <div class="relative">
-                        <label class="block text-[10px] uppercase font-bold tracking-[0.2em] text-primary/70 mb-2 ml-1">Username</label>
+                        <label class="block text-[10px] uppercase font-bold tracking-[0.2em] text-primary/70 mb-2 ml-1">{{ t('login.username') }}</label>
                         <input name="username" class="form-input placeholder:text-outline font-medium" type="text" required/>
                     </div>
                     <div class="relative">
-                        <label class="block text-[10px] uppercase font-bold tracking-[0.2em] text-primary/70 mb-2 ml-1">Password</label>
+                        <label class="block text-[10px] uppercase font-bold tracking-[0.2em] text-primary/70 mb-2 ml-1">{{ t('login.password') }}</label>
                         <input name="password" class="form-input placeholder:text-outline font-medium" type="password" required/>
                     </div>
                 </div>
                 <button type="submit" class="w-full py-3 rounded-2xl bg-tertiary-container text-on-tertiary-container font-headline font-black text-base uppercase tracking-widest active:scale-95 transition-transform hover:brightness-110">
-                    Access Control
+                    {{ t('login.access_control') }}
                 </button>
             </form>
             <div class="mt-5 text-center">
                 <a href="{{ app_url('/queue') }}" class="text-sm font-semibold text-on-surface-variant transition-colors hover:text-primary">
-                    Continue to guest queue
+                    {{ t('login.continue_guest') }}
                 </a>
             </div>
         </div>
@@ -133,7 +133,7 @@
 
     <!-- Footer Decorative Elements -->
     <div class="mt-12 z-10 flex flex-col items-center gap-6">
-        <p class="text-on-surface-variant text-sm font-medium">Use this page for admin access only</p>
+        <p class="text-on-surface-variant text-sm font-medium">{{ t('login.admin_only') }}</p>
     </div>
 
     <!-- Asymmetric Decorative Element -->

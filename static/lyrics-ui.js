@@ -194,7 +194,8 @@ class LyricsUIAdapter {
     if (!this.elements.providerLabel) return;
 
     if (provider) {
-      this.elements.providerLabel.textContent = `${provider}${isSynced ? ' • synced' : ' • plain'}`;
+      const mode = isSynced ? this.t('lyrics.timed') : this.t('lyrics.plain');
+      this.elements.providerLabel.textContent = `${provider} • ${mode}`;
     } else {
       this.elements.providerLabel.textContent = '';
     }
@@ -222,11 +223,11 @@ class LyricsUIAdapter {
     this.elements.searchBtn.classList.toggle('cursor-not-allowed', !state.lyricsEnabled);
     
     if (isLoading) {
-      this.elements.searchBtn.title = 'Cancel the current lookup and search again';
+      this.elements.searchBtn.title = this.t('lyrics.search_again');
     } else if (!state.lyricsEnabled) {
-      this.elements.searchBtn.title = 'Enable lyrics first';
+      this.elements.searchBtn.title = this.t('lyrics.enable_first');
     } else {
-      this.elements.searchBtn.title = 'Search with the current title and artist';
+      this.elements.searchBtn.title = this.t('lyrics.search_current');
     }
   }
 
@@ -376,5 +377,9 @@ class LyricsUIAdapter {
         }, 2200);
       }
     }
+  }
+
+  t(key, params = {}) {
+    return window.KaraokeI18n?.t(key, params) || key;
   }
 }

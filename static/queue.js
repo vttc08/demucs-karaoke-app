@@ -5,6 +5,7 @@ const appWsUrl = window.KaraokeURLs?.appWsUrl || ((path) => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}${path}`;
 });
+const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
 
 // Simple logger for frontend debugging
 const logger = {
@@ -52,8 +53,8 @@ const queueConfigLyricsToggle = document.getElementById('queue-config-lyrics-tog
 const queueConfigLyricsDetail = document.getElementById('queue-config-lyrics-detail');
 const queueToast = document.getElementById('queue-toast');
 const queueToastText = document.getElementById('queue-toast-text');
-const QUEUE_CONFIRM_DEFAULT_HTML = '<span class="material-symbols-outlined text-base" style="font-variation-settings: \'FILL\' 1">add_circle</span>Add to Queue';
-const QUEUE_CONFIRM_LOADING_HTML = '<span class="material-symbols-outlined animate-spin text-base">sync</span>Resolving lyrics...';
+const QUEUE_CONFIRM_DEFAULT_HTML = `<span class="material-symbols-outlined text-base" style="font-variation-settings: 'FILL' 1">add_circle</span>${t('common.add_to_queue')}`;
+const QUEUE_CONFIRM_LOADING_HTML = `<span class="material-symbols-outlined animate-spin text-base">sync</span>${t('lyrics.searching_providers')}`;
 const KARAOKE_TITLE_HINT_RE = /\b(karaoke|ktv|sing[-\s]?along|off[-\s]?vocal|no[-\s]?vocal|instrumental|noraebang)\b/i;
 const LYRICS_TITLE_HINT_RE = /\b(lyrics?|lyric\s+video|with\s+lyrics)\b/i;
 let stageRemotePaused = false;
@@ -62,7 +63,7 @@ let stageRemoteLyricsAvailable = false;
 let stageRemoteVocalsEnabled = true;
 let stageRemoteVocalsVolume = 1.0;
 let stageRemoteVocalsAvailable = false;
-let demucsHealth = { healthy: true, detail: 'Health unknown' };
+let demucsHealth = { healthy: true, detail: t('settings.engine_unknown') };
 let modalSelection = null;
 let modalKaraokeEnabled = false;
 let queueToastTimer = null;
@@ -168,11 +169,11 @@ async function performSearch() {
     if (!query) return;
 
     searchBtn.disabled = true;
-    searchBtn.textContent = 'Searching...';
+    searchBtn.textContent = t('lyrics.searching');
     searchResults.innerHTML = `
         <div class="glass-card p-6 rounded-lg text-center">
             <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3"></div>
-            <p class="text-on-surface-variant">Searching local library...</p>
+            <p class="text-on-surface-variant">${t('queue.searching_local')}</p>
         </div>
     `;
 
@@ -204,7 +205,7 @@ async function performSearch() {
             loadingDiv.innerHTML = `
                 <div class="flex items-center justify-center gap-2">
                     <div class="animate-spin w-4 h-4 border border-primary border-t-transparent rounded-full"></div>
-                    <p class="text-xs text-on-surface-variant">Also searching YouTube...</p>
+                    <p class="text-xs text-on-surface-variant">${t('queue.searching_youtube_also')}</p>
                 </div>
             `;
             searchResults.appendChild(loadingDiv);
@@ -213,7 +214,7 @@ async function performSearch() {
             searchResults.innerHTML = `
                 <div class="glass-card p-6 rounded-lg text-center">
                     <div class="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-3"></div>
-                    <p class="text-on-surface-variant">Searching YouTube...</p>
+                    <p class="text-on-surface-variant">${t('queue.searching_youtube')}</p>
                 </div>
             `;
         }
@@ -238,7 +239,7 @@ async function performSearch() {
                 const errorDiv = document.createElement('div');
                 errorDiv.className = 'bg-tertiary/10 border border-tertiary/20 p-3 rounded-lg text-center';
                 errorDiv.innerHTML = `
-                    <p class="text-[12px] text-tertiary font-medium">YouTube search unavailable</p>
+                    <p class="text-[12px] text-tertiary font-medium">${t('queue.youtube_unavailable')}</p>
                 `;
                 searchResults.appendChild(errorDiv);
                 return;
@@ -287,7 +288,7 @@ async function performSearch() {
                 searchResults.innerHTML = `
                     <div class="text-center py-8">
                         <span class="material-symbols-outlined text-4xl text-on-surface-variant mb-3 block">search_off</span>
-                        <p class="text-on-surface-variant">No results found</p>
+                        <p class="text-on-surface-variant">${t('queue.no_results')}</p>
                     </div>
                 `;
             } else {
@@ -302,16 +303,16 @@ async function performSearch() {
         searchResults.innerHTML = `
             <div class="bg-error/10 border border-error/20 p-4 rounded-lg text-center">
                 <span class="material-symbols-outlined text-error text-2xl mb-2">error</span>
-                <p class="text-error font-medium mb-2">Search failed: ${error.message}</p>
+                <p class="text-error font-medium mb-2">${t('queue.search_failed_detail', { message: error.message })}</p>
                 <button class="bg-error text-white px-4 py-2 rounded-full text-sm font-bold hover:brightness-110 active:scale-95 transition-all" onclick="performSearch()">
-                    Retry
+                    ${t('queue.retry')}
                 </button>
             </div>
         `;
         console.error('Search error:', error);
     } finally {
         searchBtn.disabled = false;
-        searchBtn.textContent = 'Search';
+        searchBtn.textContent = t('common.search');
     }
 }
 
@@ -363,11 +364,11 @@ async function refreshDemucsHealth() {
     try {
         const response = await fetch(`${API_BASE}/api/settings/demucs-health`);
         if (!response.ok) {
-            throw new Error('Demucs health check failed');
+            throw new Error(t('queue.demucs_health_failed'));
         }
         demucsHealth = await response.json();
     } catch (error) {
-        demucsHealth = { healthy: false, detail: String(error.message || 'Demucs unavailable') };
+        demucsHealth = { healthy: false, detail: String(error.message || t('queue.demucs_unavailable')) };
     }
 }
 
@@ -400,8 +401,8 @@ function syncQueueSongTitleLink() {
     if (!queueConfigSongTitle || !modalSelection) return;
 
     const previewUrl = getYouTubeWatchUrl(modalSelection.videoId);
-    queueConfigSongTitle.textContent = modalSelection.title || 'Selected song';
-    queueConfigSongTitle.title = previewUrl ? 'Open in YouTube' : '';
+    queueConfigSongTitle.textContent = modalSelection.title || t('queue.selected_song');
+    queueConfigSongTitle.title = previewUrl ? t('queue.open_youtube') : '';
 
     if (previewUrl) {
         queueConfigSongTitle.href = previewUrl;
@@ -430,10 +431,10 @@ function syncQueueConfirmState() {
     queueConfigConfirmBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
     queueConfigConfirmBtn.setAttribute('aria-busy', waiting ? 'true' : 'false');
     queueConfigConfirmBtn.title = waiting
-        ? 'Lyrics are still resolving'
+        ? t('queue.lyrics_resolving')
         : lyricsRequired && !ready
-            ? 'Resolve lyrics or add your own synced lyrics before continuing'
-            : 'Add the song to the queue';
+            ? t('queue.resolve_before_continue')
+            : t('queue.add_song_to_queue');
 
     queueConfigConfirmBtn.classList.toggle('bg-primary', !disabled);
     queueConfigConfirmBtn.classList.toggle('text-on-primary', !disabled);
@@ -513,7 +514,7 @@ function displaySearchResults(results) {
         searchResults.innerHTML = `
             <div class="text-center py-8">
                 <span class="material-symbols-outlined text-4xl text-on-surface-variant mb-3 block">search_off</span>
-                <p class="text-on-surface-variant">No results found</p>
+                <p class="text-on-surface-variant">${t('queue.no_results')}</p>
             </div>
         `;
         return;
@@ -555,7 +556,7 @@ function displaySearchResults(results) {
                                 ` : ''}
                                 <div class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
                                     <span class="material-symbols-outlined text-[9px] text-secondary">download_done</span>
-                                    <span class="text-[7px] font-bold uppercase tracking-tighter text-secondary">Ready</span>
+                                    <span class="text-[7px] font-bold uppercase tracking-tighter text-secondary">${t('common.ready')}</span>
                                 </div>
                             </div>
                         </div>
@@ -615,11 +616,11 @@ function syncQueueConfigModalUi() {
     }
     if (queueConfigKaraokeDetail) {
         if (!karaokeAvailable) {
-            queueConfigKaraokeDetail.textContent = `Demucs offline: ${demucsHealth.detail}`;
+            queueConfigKaraokeDetail.textContent = t('queue.demucs_offline', { detail: demucsHealth.detail });
         } else if (titleHints.karaokeLike) {
-            queueConfigKaraokeDetail.textContent = 'This looks like a karaoke version already, so Demucs stays off by default.';
+            queueConfigKaraokeDetail.textContent = t('queue.karaoke_already_detail');
         } else {
-            queueConfigKaraokeDetail.textContent = 'Remove lead vocals using Demucs AI processing.';
+            queueConfigKaraokeDetail.textContent = t('queue.remove_vocals_ai');
         }
     }
 
@@ -642,9 +643,9 @@ function syncQueueConfigModalUi() {
 
     if (queueConfigLyricsDetail) {
         if (titleHints.lyricsLike) {
-            queueConfigLyricsDetail.textContent = 'This looks like a lyrics video already, so lyrics search stays off by default.';
+            queueConfigLyricsDetail.textContent = t('queue.lyrics_already_detail');
         } else {
-            queueConfigLyricsDetail.textContent = 'Resolve synced lyrics before you add the song to the queue.';
+            queueConfigLyricsDetail.textContent = t('queue.lyrics_detail');
         }
     }
 
@@ -674,7 +675,7 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
     }
 
     if (isKaraoke && !demucsHealth.healthy) {
-        alert(`Karaoke mode is unavailable: ${demucsHealth.detail}`);
+        alert(t('queue.karaoke_unavailable', { detail: demucsHealth.detail }));
         return;
     }
 
@@ -709,7 +710,7 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Failed to add to queue');
+            throw new Error(error.detail || t('media.queue_failed'));
         }
 
         const item = await response.json();
@@ -742,11 +743,11 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
         console.error('Add to queue error:', error);
         
         // Show error message
-        alert(`Failed to add to queue: ${error.message}`);
+        alert(t('queue.add_failed_detail', { message: error.message }));
         
         // Reset button after 2 seconds
         setTimeout(() => {
-            button.innerHTML = '<span class="material-symbols-outlined text-base" style="font-variation-settings: \'FILL\' 1">add_circle</span>Add to Queue';
+            button.innerHTML = QUEUE_CONFIRM_DEFAULT_HTML;
             button.disabled = false;
             button.classList.remove('bg-error', 'text-white');
             button.classList.add('bg-primary', 'text-on-primary');
@@ -759,7 +760,7 @@ if (queueConfigKaraokeToggle) {
         if (queueConfigKaraokeToggle.disabled) return;
         modalKaraokeEnabled = !modalKaraokeEnabled;
         if (modalKaraokeEnabled && getModalTitleHints().karaokeLike) {
-            showQueueToast('This looks like a karaoke version already.');
+            showQueueToast(t('queue.karaoke_already'));
         }
         syncQueueConfigModalUi();
     });
@@ -776,7 +777,7 @@ if (queueConfigLyricsToggle) {
 
         if (newEnabled) {
             if (getModalTitleHints().lyricsLike) {
-                showQueueToast('This looks like a lyrics video already.');
+                showQueueToast(t('queue.lyrics_already'));
             }
             if (lyricsManager.shouldAutoResolve()) {
                 lyricsManager.resolve('auto');
@@ -867,8 +868,8 @@ function updateQueueDisplay(queue) {
                 <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">
                     <span class="material-symbols-outlined text-4xl text-on-surface-variant">queue_music</span>
                 </div>
-                <p class="text-on-surface-variant text-lg font-medium">Queue is empty</p>
-                <p class="text-on-surface-variant/60 text-sm">Search and add songs to get started!</p>
+                <p class="text-on-surface-variant text-lg font-medium">${t('queue.empty')}</p>
+                <p class="text-on-surface-variant/60 text-sm">${t('queue.add_started')}</p>
             </div>
         `;
         return;
@@ -882,7 +883,7 @@ function updateQueueDisplay(queue) {
                         <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">play_arrow</span>
                     </button>
                     ` : item.status === 'playing' ? `
-                    <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="Currently playing">
+                    <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="${t('queue.playing')}">
                         <span class="material-symbols-outlined">equalizer</span>
                     </button>
                     ` : isAdminUser ? `
@@ -908,7 +909,7 @@ function updateQueueDisplay(queue) {
                     ${item.is_karaoke ? `
                     <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
                         <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>
-                        <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">Karaoke</span>
+                        <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">${t('app.karaoke')}</span>
                     </div>
                     ` : ''}
                 </div>
@@ -925,42 +926,42 @@ function getStatusInfo(status) {
         case 'playing':
             return {
                 icon: '<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>',
-                label: 'Playing',
+                label: t('queue.playing'),
                 bgClass: 'bg-primary/10 border border-primary/20',
                 textClass: 'text-primary'
             };
         case 'processing':
             return {
                 icon: '<span class="material-symbols-outlined text-[12px] text-tertiary animate-spin">auto_fix_high</span>',
-                label: 'Processing AI',
+                label: t('queue.processing_ai'),
                 bgClass: 'bg-tertiary/10 border border-tertiary/20',
                 textClass: 'text-tertiary'
             };
         case 'downloading':
             return {
                 icon: '<span class="material-symbols-outlined text-[12px] text-tertiary animate-pulse">download</span>',
-                label: 'Downloading',
+                label: t('queue.downloading'),
                 bgClass: 'bg-tertiary/10 border border-tertiary/20',
                 textClass: 'text-tertiary'
             };
         case 'failed':
             return {
                 icon: '<span class="material-symbols-outlined text-[12px] text-error">error</span>',
-                label: 'Failed',
+                label: t('common.failed'),
                 bgClass: 'bg-error/10 border border-error/20',
                 textClass: 'text-error'
             };
         case 'ready':
             return {
                 icon: '<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>',
-                label: 'Ready',
+                label: t('common.ready'),
                 bgClass: 'bg-secondary/10 border border-secondary/20',
                 textClass: 'text-secondary'
             };
         default:
             return {
                 icon: '',
-                label: 'In Queue',
+                label: t('queue.in_queue'),
                 bgClass: 'bg-on-surface/5 border border-on-surface/10',
                 textClass: 'text-on-surface-variant'
             };
@@ -1003,7 +1004,7 @@ class QueueWebSocket {
         switch (status) {
             case 'connected':
                 this.statusIndicator.className = 'inline-flex items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary';
-                this.statusIndicator.innerHTML = '<span class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span><span>Live</span>';
+                this.statusIndicator.innerHTML = `<span class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span><span>${t('queue.live')}</span>`;
                 this.statusIndicator.style.display = 'inline-flex';
                 setTimeout(() => {
                     this.statusIndicator.style.display = 'none';
@@ -1016,12 +1017,12 @@ class QueueWebSocket {
                 break;
             case 'disconnected':
                 this.statusIndicator.className = 'inline-flex items-center gap-1.5 rounded-full border border-error/35 bg-error/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-error';
-                this.statusIndicator.innerHTML = '<span class="material-symbols-outlined text-[12px]">portable_wifi_off</span><span>Offline</span>';
+                this.statusIndicator.innerHTML = `<span class="material-symbols-outlined text-[12px]">portable_wifi_off</span><span>${t('queue.offline')}</span>`;
                 this.statusIndicator.style.display = 'inline-flex';
                 break;
             case 'fallback':
                 this.statusIndicator.className = 'inline-flex items-center gap-1.5 rounded-full border border-outline-variant/40 bg-surface-container-high px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant';
-                this.statusIndicator.innerHTML = '<span class="material-symbols-outlined text-[12px]">schedule</span><span>Polling</span>';
+                this.statusIndicator.innerHTML = `<span class="material-symbols-outlined text-[12px]">schedule</span><span>${t('queue.polling')}</span>`;
                 this.statusIndicator.style.display = 'inline-flex';
                 break;
         }
@@ -1036,7 +1037,7 @@ class QueueWebSocket {
         updateStageRemoteLyricsUi();
         updateStageRemoteVocalsUi();
         if (stageRemoteStatus) {
-            stageRemoteStatus.textContent = connected ? 'Connected' : 'Offline';
+            stageRemoteStatus.textContent = connected ? t('queue.connected') : t('queue.offline');
         }
     }
     
@@ -1059,7 +1060,7 @@ class QueueWebSocket {
                 this.isReconnecting = false;
                 this.reconnectAttempts = 0;
                 this.reconnectDelay = 1000;
-                this.updateStatus('connected', '● Live');
+                this.updateStatus('connected', `● ${t('queue.live')}`);
                 
                 // Stop polling when WebSocket is connected
                 if (refreshInterval) {
@@ -1197,7 +1198,7 @@ class QueueWebSocket {
 function updateStageRemotePlayPauseUi() {
     if (!stageRemotePlayPauseIcon || !stageRemotePlayPauseLabel) return;
     stageRemotePlayPauseIcon.textContent = stageRemotePaused ? 'play_arrow' : 'pause';
-    stageRemotePlayPauseLabel.textContent = stageRemotePaused ? 'Play' : 'Pause';
+    stageRemotePlayPauseLabel.textContent = stageRemotePaused ? t('common.play') : t('stage.pause');
 }
 
 function updateStageRemoteVocalsUi() {
@@ -1212,7 +1213,7 @@ function updateStageRemoteVocalsUi() {
         stageRemoteVocalsToggleIcon.textContent = stageRemoteVocalsEnabled ? 'mic' : 'mic_off';
     }
     if (stageRemoteVocalsToggleLabel) {
-        stageRemoteVocalsToggleLabel.textContent = stageRemoteVocalsEnabled ? 'Vocals On' : 'Vocals Off';
+        stageRemoteVocalsToggleLabel.textContent = stageRemoteVocalsEnabled ? t('stage.vocals_on') : t('stage.vocals_off');
     }
 }
 
@@ -1224,7 +1225,7 @@ function updateStageRemoteLyricsUi() {
         stageRemoteLyricsToggleIcon.textContent = stageRemoteLyricsEnabled ? 'subtitles' : 'subtitles_off';
     }
     if (stageRemoteLyricsToggleLabel) {
-        stageRemoteLyricsToggleLabel.textContent = stageRemoteLyricsAvailable ? (stageRemoteLyricsEnabled ? 'Lyrics On' : 'Lyrics Off') : 'No Lyrics';
+        stageRemoteLyricsToggleLabel.textContent = stageRemoteLyricsAvailable ? (stageRemoteLyricsEnabled ? t('stage.lyrics_on') : t('stage.lyrics_off')) : t('stage.no_lyrics');
     }
 }
 
@@ -1269,7 +1270,7 @@ if (stageRemotePlayPauseBtn) {
             timestamp: Date.now(),
         });
         if (!sent) {
-            alert('Stage control is offline');
+            alert(t('queue.stage_offline'));
             return;
         }
         stageRemotePaused = !stageRemotePaused;
@@ -1289,7 +1290,7 @@ if (stageRemoteSkipBtn) {
             timestamp: Date.now(),
         });
         if (!sent) {
-            alert('Stage control is offline');
+            alert(t('queue.stage_offline'));
         }
     });
 }
@@ -1306,7 +1307,7 @@ if (stageRemoteResyncBtn) {
             timestamp: Date.now(),
         });
         if (!sent) {
-            alert('Stage control is offline');
+            alert(t('queue.stage_offline'));
         }
     });
 }
@@ -1315,7 +1316,7 @@ if (stageRemoteLyricsToggleBtn) {
     stageRemoteLyricsToggleBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
         if (!stageRemoteLyricsAvailable) {
-            alert('Current song has no lyrics track');
+            alert(t('queue.no_lyrics_track'));
             return;
         }
         const nextEnabled = !stageRemoteLyricsEnabled;
@@ -1329,7 +1330,7 @@ if (stageRemoteLyricsToggleBtn) {
             timestamp: Date.now(),
         });
         if (!sent) {
-            alert('Stage control is offline');
+            alert(t('queue.stage_offline'));
             return;
         }
         stageRemoteLyricsEnabled = nextEnabled;
@@ -1341,7 +1342,7 @@ if (stageRemoteVocalsToggleBtn) {
     stageRemoteVocalsToggleBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
         if (!stageRemoteVocalsAvailable) {
-            alert('Current song has no vocals sidecar track');
+            alert(t('queue.no_vocals_track'));
             return;
         }
         const nextEnabled = !stageRemoteVocalsEnabled;
@@ -1355,7 +1356,7 @@ if (stageRemoteVocalsToggleBtn) {
             timestamp: Date.now(),
         });
         if (!sent) {
-            alert('Stage control is offline');
+            alert(t('queue.stage_offline'));
             return;
         }
         stageRemoteVocalsEnabled = nextEnabled;
@@ -1435,8 +1436,8 @@ window.addEventListener('queue_item_removed', (event) => {
                         <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">
                             <span class="material-symbols-outlined text-4xl text-on-surface-variant">queue_music</span>
                         </div>
-                        <p class="text-on-surface-variant text-lg font-medium">Queue is empty</p>
-                        <p class="text-on-surface-variant/60 text-sm">Search and add songs to get started!</p>
+                        <p class="text-on-surface-variant text-lg font-medium">${t('queue.empty')}</p>
+                        <p class="text-on-surface-variant/60 text-sm">${t('queue.add_started')}</p>
                     </div>
                 `;
             }
@@ -1469,8 +1470,8 @@ window.addEventListener('queue_cleared', (event) => {
                                     <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">
                                         <span class="material-symbols-outlined text-4xl text-on-surface-variant">queue_music</span>
                                     </div>
-                                    <p class="text-on-surface-variant text-lg font-medium">Queue is empty</p>
-                                    <p class="text-on-surface-variant/60 text-sm">Search and add songs to get started!</p>
+                                    <p class="text-on-surface-variant text-lg font-medium">${t('queue.empty')}</p>
+                                    <p class="text-on-surface-variant/60 text-sm">${t('queue.add_started')}</p>
                                 </div>
                             `;
                         }
@@ -1498,7 +1499,7 @@ window.addEventListener('queue_item_failed', (event) => {
         <div class="flex items-start gap-3">
             <span class="material-symbols-outlined">error</span>
             <div>
-                <p class="font-medium">Processing Failed</p>
+                <p class="font-medium">${t('queue.processing_failed')}</p>
                 <p class="text-sm opacity-90">${escapeHtml(error)}</p>
             </div>
         </div>

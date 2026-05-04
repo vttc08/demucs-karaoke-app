@@ -73,6 +73,24 @@ GET /health
 
 ---
 
+### Set Frontend Language
+```
+POST /language
+```
+
+Stores the selected frontend UI language in the `karaoke_locale` cookie and redirects back to an
+app-local page. Supported values are currently:
+- `en`
+- `zh-CN`
+
+**Form fields:**
+- `language` (required): target locale code
+- `next` (optional): app-local redirect path after the cookie is set
+
+External redirect targets are ignored and fall back to `/queue`.
+
+---
+
 ### Search YouTube
 ```
 GET /api/search/?q=<query>

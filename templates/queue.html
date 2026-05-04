@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}Karaoke Queue{% endblock %}
+{% block title %}{{ t('queue.title') }}{% endblock %}
 {% block header_icon %}music_note{% endblock %}
-{% block header_title %}Karaoke{% endblock %}
-{% block header_subtitle %}Queue Manager{% endblock %}
+{% block header_title %}{{ t('app.karaoke') }}{% endblock %}
+{% block header_subtitle %}{{ t('header.queue_manager') }}{% endblock %}
 
 {% block content %}
 <main
@@ -14,9 +14,9 @@
 >
     <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
         <div class="min-w-0">
-            <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">Tonight</span>
+            <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.tonight') }}</span>
             <h2 class="truncate font-headline text-xl font-black tracking-tight text-on-surface">
-                Hi, <span id="queue-singer-name">{{ singer_name or "Guest" }}</span>
+                {{ t('queue.hi_name') }} <span id="queue-singer-name">{{ singer_name or t('common.guest') }}</span>
             </h2>
         </div>
         <button
@@ -25,7 +25,7 @@
             class="inline-flex h-10 items-center gap-2 rounded-full bg-surface-container-highest px-3 text-sm font-bold text-on-surface transition-colors hover:text-primary active:scale-95"
         >
             <span class="material-symbols-outlined text-base">edit</span>
-            Edit
+            {{ t('common.edit') }}
         </button>
     </section>
 
@@ -35,7 +35,7 @@
             <input 
                 id="search-input"
                 class="w-full bg-surface-container border-none h-16 pl-4 pr-24 rounded-full text-on-surface focus:ring-2 focus:ring-primary/30 transition-all font-body text-lg shadow-inner focus:outline-none" 
-                placeholder="Search local library + YouTube..." 
+                placeholder="{{ t('queue.search_placeholder') }}"
                 type="text"
                 autocomplete="off"
             />
@@ -55,8 +55,8 @@
     <section class="flex flex-col gap-6">
         <div class="flex items-end justify-between gap-3 px-2">
             <div>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">Up Next</span>
-                <h2 class="font-headline font-black text-3xl tracking-tight text-on-surface">Stage Queue</h2>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.up_next') }}</span>
+                <h2 class="font-headline font-black text-3xl tracking-tight text-on-surface">{{ t('queue.stage') }} {{ t('app.karaoke') }}</h2>
             </div>
             <div class="flex items-center gap-2">
                 <span
@@ -69,7 +69,7 @@
                     id="clear-all-btn"
                     class="text-secondary font-bold text-sm px-4 py-2 hover:bg-secondary/10 rounded-full transition-colors"
                 >
-                    Clear All
+                    {{ t('queue.clear_all') }}
                 </button>
                 {% endif %}
             </div>
@@ -93,27 +93,27 @@
                             {% if item.status.value == 'playing' %}bg-primary/10 border border-primary/20{% elif item.status.value == 'processing' %}bg-tertiary/10 border border-tertiary/20{% elif item.status.value == 'downloading' %}bg-tertiary/10 border border-tertiary/20{% elif item.status.value == 'failed' %}bg-error/10 border border-error/20{% else %}bg-on-surface/5 border border-on-surface/10{% endif %}">
                             {% if item.status.value == 'playing' %}
                                 <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-primary">Playing</span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-primary">{{ t('queue.playing') }}</span>
                             {% elif item.status.value == 'processing' %}
                                 <span class="material-symbols-outlined text-[12px] text-tertiary animate-spin">auto_fix_high</span>
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-tertiary">Processing AI</span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-tertiary">{{ t('queue.processing_ai') }}</span>
                             {% elif item.status.value == 'downloading' %}
                                 <span class="material-symbols-outlined text-[12px] text-tertiary animate-pulse">download</span>
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-tertiary">Downloading</span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-tertiary">{{ t('queue.downloading') }}</span>
                             {% elif item.status.value == 'failed' %}
                                 <span class="material-symbols-outlined text-[12px] text-error">error</span>
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-error">Failed</span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-error">{{ t('common.failed') }}</span>
                             {% elif item.status.value == 'ready' %}
                                 <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-secondary">Ready</span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-secondary">{{ t('common.ready') }}</span>
                             {% else %}
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant">In Queue</span>
+                                <span class="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant">{{ t('queue.in_queue') }}</span>
                             {% endif %}
                         </div>
                         {% if item.is_karaoke %}
                         <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
                             <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>
-                            <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">Karaoke</span>
+                            <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">{{ t('app.karaoke') }}</span>
                         </div>
                         {% endif %}
                     </div>
@@ -124,7 +124,7 @@
                             <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">play_arrow</span>
                         </button>
                         {% elif item.status.value == 'playing' %}
-                        <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="Currently playing">
+                        <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="{{ t('queue.playing') }}">
                             <span class="material-symbols-outlined">equalizer</span>
                         </button>
                         {% elif is_admin %}
@@ -143,8 +143,8 @@
                     <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">
                         <span class="material-symbols-outlined text-4xl text-on-surface-variant">queue_music</span>
                     </div>
-                    <p class="text-on-surface-variant text-lg font-medium">Queue is empty</p>
-                    <p class="text-on-surface-variant/60 text-sm">Search and add songs to get started!</p>
+                    <p class="text-on-surface-variant text-lg font-medium">{{ t('queue.empty') }}</p>
+                    <p class="text-on-surface-variant/60 text-sm">{{ t('queue.add_started') }}</p>
                 </div>
             {% endif %}
         </div>
@@ -153,10 +153,10 @@
     <section class="flex flex-col gap-4 rounded-xl bg-surface-container-low p-4">
         <div class="flex items-center justify-between gap-3">
             <div>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">Remote</span>
-                <h2 class="font-headline font-black text-2xl tracking-tight text-on-surface">Stage Controls</h2>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.remote') }}</span>
+                <h2 class="font-headline font-black text-2xl tracking-tight text-on-surface">{{ t('queue.stage_controls') }}</h2>
             </div>
-            <span id="stage-remote-status" class="text-xs text-on-surface-variant">Connecting...</span>
+            <span id="stage-remote-status" class="text-xs text-on-surface-variant">{{ t('queue.connecting') }}</span>
         </div>
         <div class="flex items-center gap-3">
             <button
@@ -165,7 +165,7 @@
                 disabled
             >
                 <span id="stage-remote-play-pause-icon" class="material-symbols-outlined text-base">play_arrow</span>
-                <span id="stage-remote-play-pause-label">Play</span>
+                <span id="stage-remote-play-pause-label">{{ t('common.play') }}</span>
             </button>
             <button
                 id="stage-remote-skip-btn"
@@ -173,7 +173,7 @@
                 disabled
             >
                 <span class="material-symbols-outlined text-base">skip_next</span>
-                Skip
+                {{ t('common.skip') }}
             </button>
             <button
                 id="stage-remote-resync-btn"
@@ -181,7 +181,7 @@
                 disabled
             >
                 <span class="material-symbols-outlined text-base">sync</span>
-                Resync
+                {{ t('stage.resync') }}
             </button>
         </div>
         <div class="flex flex-wrap items-center gap-3">
@@ -191,10 +191,10 @@
                 disabled
             >
                 <span id="stage-remote-vocals-toggle-icon" class="material-symbols-outlined text-base">mic</span>
-                <span id="stage-remote-vocals-toggle-label">Vocals On</span>
+                <span id="stage-remote-vocals-toggle-label">{{ t('stage.vocals_on') }}</span>
             </button>
             <label class="flex items-center gap-2 text-sm text-on-surface-variant">
-                <span>Vocal Vol</span>
+                <span>{{ t('queue.vocal_vol') }}</span>
                 <input
                     id="stage-remote-vocals-volume-slider"
                     type="range"
@@ -212,7 +212,7 @@
                 disabled
             >
                 <span id="stage-remote-lyrics-toggle-icon" class="material-symbols-outlined text-base">subtitles</span>
-                <span id="stage-remote-lyrics-toggle-label">Lyrics On</span>
+                <span id="stage-remote-lyrics-toggle-label">{{ t('stage.lyrics_on') }}</span>
             </button>
         </div>
     </section>
@@ -221,12 +221,12 @@
         <div id="queue-config-modal-backdrop" class="absolute inset-0"></div>
         <div class="relative flex w-full max-w-4xl max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-t-2xl border border-outline-variant/20 bg-surface-container-high shadow-[0_-10px_60px_rgba(143,67,251,0.2)] sm:rounded-2xl">
             <div class="flex items-center justify-between border-b border-outline-variant/20 px-5 py-4">
-                <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">Configure Queue</h3>
+                <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('queue.config') }}</h3>
                 <button
                     id="queue-config-close-btn"
                     type="button"
                     class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-on-surface"
-                    aria-label="Close configuration"
+                    aria-label="{{ t('queue.close_config') }}"
                 >
                     <span class="material-symbols-outlined text-lg">close</span>
                 </button>
@@ -234,10 +234,10 @@
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 no-scrollbar">
                 <div class="flex items-center gap-3 rounded-xl bg-surface-container-highest/60 p-3">
                     <div class="h-12 w-12 overflow-hidden rounded-md bg-surface-container-lowest sm:h-14 sm:w-14">
-                        <img id="queue-config-song-thumb" src="{{ app_url('/static/placeholder.png') }}" alt="Selected song" class="h-full w-full object-cover" />
+                        <img id="queue-config-song-thumb" src="{{ app_url('/static/placeholder.png') }}" alt="{{ t('queue.selected_song') }}" class="h-full w-full object-cover" />
                     </div>
                     <div class="min-w-0">
-                        <a id="queue-config-song-title" class="block truncate text-sm font-bold text-on-surface hover:underline underline-offset-2" target="_blank" rel="noopener noreferrer">Selected song</a>
+                        <a id="queue-config-song-title" class="block truncate text-sm font-bold text-on-surface hover:underline underline-offset-2" target="_blank" rel="noopener noreferrer">{{ t('queue.selected_song') }}</a>
                         <p id="queue-config-song-channel" class="truncate text-xs text-on-surface-variant"></p>
                     </div>
                 </div>
@@ -248,10 +248,10 @@
                             <div class="min-w-0">
                                 <div class="flex items-center gap-2">
                                     <span class="material-symbols-outlined text-tertiary text-base">psychology</span>
-                                    <span class="text-[13px] font-bold leading-tight text-on-surface sm:text-sm">AI Karaoke</span>
-                                    <span id="queue-config-karaoke-status" class="hidden rounded-full border border-error/20 bg-error/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-error sm:px-2 sm:text-[10px]">Offline</span>
+                                    <span class="text-[13px] font-bold leading-tight text-on-surface sm:text-sm">{{ t('queue.ai_karaoke') }}</span>
+                                    <span id="queue-config-karaoke-status" class="hidden rounded-full border border-error/20 bg-error/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-error sm:px-2 sm:text-[10px]">{{ t('queue.offline') }}</span>
                                 </div>
-                                <p id="queue-config-karaoke-detail" class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">Remove lead vocals with Demucs.</p>
+                                <p id="queue-config-karaoke-detail" class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">{{ t('queue.remove_vocals') }}</p>
                             </div>
                             <button id="queue-config-karaoke-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-6 w-11 flex-none shrink-0 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
                                 <span class="h-4 w-4 rounded-full bg-on-surface-variant transition-transform"></span>
@@ -264,9 +264,9 @@
                             <div class="min-w-0">
                                 <div class="flex items-center gap-2">
                                     <span class="material-symbols-outlined text-secondary text-base">lyrics</span>
-                                    <span class="text-[13px] font-bold leading-tight text-on-surface sm:text-sm">Lyrics</span>
+                                    <span class="text-[13px] font-bold leading-tight text-on-surface sm:text-sm">{{ t('common.lyrics') }}</span>
                                 </div>
-                                <p id="queue-config-lyrics-detail" class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">Resolve synced lyrics before queueing.</p>
+                                <p id="queue-config-lyrics-detail" class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">{{ t('queue.lyrics_detail') }}</p>
                             </div>
                             <button id="queue-config-lyrics-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-6 w-11 flex-none shrink-0 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
                                 <span class="h-4 w-4 rounded-full bg-on-surface-variant transition-transform"></span>
@@ -280,20 +280,20 @@
                         <div class="min-w-0">
                             <div class="flex items-center gap-2">
                                 <span class="material-symbols-outlined text-primary text-base">text_fields</span>
-                                <span class="text-sm font-bold text-on-surface">Lyrics lookup</span>
+                                <span class="text-sm font-bold text-on-surface">{{ t('lyrics.lookup') }}</span>
                             </div>
-                            <p class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">Search, edit, or replace lyrics before adding.</p>
+                            <p class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">{{ t('lyrics.lookup_detail') }}</p>
                         </div>
-                        <span id="queue-config-lyrics-state" class="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">Idle</span>
+                        <span id="queue-config-lyrics-state" class="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.idle') }}</span>
                     </div>
 
                     <div class="grid gap-3 sm:grid-cols-2">
                         <label class="flex flex-col gap-2">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Title</span>
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('common.title') }}</span>
                             <input id="queue-config-lyrics-title" type="text" class="w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" />
                         </label>
                         <label class="flex flex-col gap-2">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Artist</span>
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('common.artist') }}</span>
                             <input id="queue-config-lyrics-artist" type="text" class="w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30" />
                         </label>
                     </div>
@@ -301,38 +301,38 @@
                     <div class="flex flex-wrap items-center gap-2">
                         <button id="queue-config-lyrics-search-btn" type="button" class="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-bold text-on-primary transition-all hover:brightness-110 active:scale-95">
                             <span class="material-symbols-outlined text-base">search</span>
-                            Manual search
+                            {{ t('common.manual_search') }}
                         </button>
                         <a id="queue-config-lyrics-google-link" href="https://www.google.com/search?q=lyrics" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface transition-all hover:brightness-110 active:scale-95">
                             <span class="material-symbols-outlined text-base">open_in_new</span>
-                            Search Google
+                            {{ t('lyrics.google') }}
                         </a>
                         <button id="queue-config-lyrics-upload-btn" type="button" class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface transition-all hover:brightness-110 active:scale-95">
                             <span class="material-symbols-outlined text-base">upload_file</span>
-                            Upload lyrics file
+                            {{ t('common.upload_lyrics_file') }}
                         </button>
                         <input id="queue-config-lyrics-file" type="file" class="hidden" />
                     </div>
 
                     <div class="space-y-2">
                         <div class="flex items-center justify-between gap-3">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Lyrics editor</span>
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.editor') }}</span>
                             <span id="queue-config-lyrics-provider" class="text-[11px] font-medium text-on-surface-variant"></span>
                         </div>
-                        <textarea id="queue-config-lyrics-textarea" rows="7" class="w-full rounded-xl bg-surface-container-highest px-3 py-3 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30 sm:rows-8" placeholder="[00:12.00]Sing along..."></textarea>
-                        <p class="text-xs text-on-surface-variant">Resolved lyrics will overwrite this box. You can edit it before adding to the queue.</p>
+                        <textarea id="queue-config-lyrics-textarea" rows="7" class="w-full rounded-xl bg-surface-container-highest px-3 py-3 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30 sm:rows-8" placeholder="{{ t('lyrics.placeholder') }}"></textarea>
+                        <p class="text-xs text-on-surface-variant">{{ t('lyrics.resolved_overwrite') }}</p>
                     </div>
 
-                    <p id="queue-config-lyrics-help" class="text-xs text-on-surface-variant">The Add to Queue button unlocks after lyrics are resolved, fail, or you provide your own lyrics in the editor.</p>
+                    <p id="queue-config-lyrics-help" class="text-xs text-on-surface-variant">{{ t('queue.confirm_unlock') }}</p>
                 </div>
             </div>
             <div class="flex flex-col gap-2 border-t border-outline-variant/20 px-5 py-4 sm:flex-row sm:justify-end">
                 <button id="queue-config-cancel-btn" type="button" class="rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface-variant transition-colors hover:text-on-surface">
-                    Cancel
+                    {{ t('common.cancel') }}
                 </button>
                 <button id="queue-config-confirm-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black uppercase tracking-tight text-on-primary transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:shadow-none disabled:opacity-100 disabled:hover:brightness-100">
                     <span class="material-symbols-outlined text-base" style="font-variation-settings: 'FILL' 1">add_circle</span>
-                    Add to Queue
+                    {{ t('common.add_to_queue') }}
                 </button>
             </div>
         </div>
@@ -343,11 +343,11 @@
         <div class="flex justify-center gap-4">
             <a href="{{ app_url('/queue') }}" class="inline-flex items-center gap-2 text-primary hover:text-primary/80 transition-colors px-4 py-2 rounded-full bg-primary/10">
                 <span class="material-symbols-outlined">queue_music</span>
-                <span class="font-medium">Queue</span>
+                <span class="font-medium">{{ t('app.karaoke') }}</span>
             </a>
             <a href="{{ app_url('/stage') }}" class="inline-flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors px-4 py-2 rounded-full">
                 <span class="material-symbols-outlined">live_tv</span>
-                <span class="font-medium">Stage</span>
+                <span class="font-medium">{{ t('queue.stage') }}</span>
             </a>
         </div>
     </div>
@@ -358,26 +358,26 @@
     <form id="singer-name-form" class="relative w-full max-w-md rounded-t-2xl border border-outline-variant/20 bg-surface-container-high p-5 shadow-[0_-10px_60px_rgba(0,242,255,0.12)] sm:rounded-2xl" autocomplete="off">
         <div class="mb-5 flex items-start justify-between gap-4">
             <div>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">Stage name</span>
-                <h2 class="font-headline text-2xl font-black tracking-tight text-on-surface">What should we call you?</h2>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.stage_name') }}</span>
+                <h2 class="font-headline text-2xl font-black tracking-tight text-on-surface">{{ t('queue.what_call') }}</h2>
             </div>
             <button
                 id="singer-name-close-btn"
                 type="button"
                 class="inline-flex h-9 w-9 flex-none items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-on-surface"
-                aria-label="Close stage name prompt"
+                aria-label="{{ t('queue.close_config') }}"
             >
                 <span class="material-symbols-outlined text-lg">close</span>
             </button>
         </div>
         <label class="flex flex-col gap-2">
-            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Name</span>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('common.name') }}</span>
             <input
                 id="singer-name-input"
                 class="h-12 rounded-xl border border-outline-variant/30 bg-surface-container-highest px-4 text-base font-semibold text-on-surface outline-none transition focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
                 name="singer_name"
                 maxlength="40"
-                placeholder="Guest"
+                placeholder="{{ t('common.guest') }}"
                 type="text"
             />
         </label>
@@ -387,21 +387,21 @@
                 type="button"
                 class="rounded-full bg-surface-container-highest px-4 py-2.5 text-sm font-bold text-on-surface-variant transition-colors hover:text-on-surface"
             >
-                Skip
+                {{ t('common.skip') }}
             </button>
             <button
                 type="submit"
                 class="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black uppercase tracking-tight text-on-primary transition-all hover:brightness-110 active:scale-95"
             >
                 <span class="material-symbols-outlined text-base">check</span>
-                Save
+                {{ t('common.save') }}
             </button>
         </div>
     </form>
 </div>
 
 <div id="queue-toast" class="pointer-events-none fixed bottom-4 right-4 z-50 translate-y-3 rounded-lg border border-primary/30 bg-surface-container px-4 py-2 text-sm text-on-surface opacity-0 transition-all duration-200" role="status" aria-live="polite">
-    <span id="queue-toast-text">Updated</span>
+    <span id="queue-toast-text">{{ t('common.updated') }}</span>
 </div>
 {% endblock %}
 
@@ -422,7 +422,7 @@ function sanitizeSingerName(value) {
 }
 
 function randomGuestName() {
-    return `Guest ${Math.floor(1000 + Math.random() * 9000)}`;
+    return `${window.KaraokeI18n?.t('common.guest') || 'Guest'} ${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
 function saveSingerName(name) {
@@ -507,11 +507,11 @@ function skipToSong(songId) {
             // WebSocket will handle the update, no need to reload
             console.log('Skipped to song:', songId);
         } else {
-            alert('Failed to skip to song');
+            alert(window.KaraokeI18n?.t('queue.skip_to_failed') || 'Failed to skip to song');
         }
     }).catch(error => {
         console.error('Error:', error);
-        alert('Failed to skip to song');
+        alert(window.KaraokeI18n?.t('queue.skip_to_failed') || 'Failed to skip to song');
     });
 }
 
@@ -523,7 +523,7 @@ function removeSong(songId) {
             // WebSocket will handle the update, no need to reload
             console.log('Removed song:', songId);
         } else {
-            let detail = 'Failed to remove song';
+            let detail = window.KaraokeI18n?.t('queue.remove_failed') || 'Failed to remove song';
             try {
                 const payload = await response.json();
                 if (payload?.detail) detail = payload.detail;
@@ -534,7 +534,7 @@ function removeSong(songId) {
         }
     }).catch(error => {
         console.error('Error:', error);
-        alert('Failed to remove song');
+        alert(window.KaraokeI18n?.t('queue.remove_failed') || 'Failed to remove song');
     });
 }
 
@@ -547,11 +547,11 @@ document.getElementById('clear-all-btn')?.addEventListener('click', function() {
                 // WebSocket will handle the update, no need to reload
                 console.log('Queue cleared');
             } else {
-                alert('Failed to clear queue');
+                alert(window.KaraokeI18n?.t('queue.clear_failed') || 'Failed to clear queue');
             }
         }).catch(error => {
             console.error('Error:', error);
-            alert('Failed to clear queue');
+            alert(window.KaraokeI18n?.t('queue.clear_failed') || 'Failed to clear queue');
         });
     }
 });

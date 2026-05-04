@@ -9,6 +9,7 @@ Lightweight AI-powered karaoke application for home use.
 - **Karaoke Mode**: Vocal removal + optional sidecar lyrics overlay
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
+- **Frontend Language Switching**: English and Simplified Chinese UI labels with a header selector
 
 ## Requirements
 
@@ -160,6 +161,15 @@ and `/static/...`.
         - Guest identification happens inline on the queue page.
         - Admins sign in with a server-created account stored in the local database.
         - Admin credentials cannot be created from the web UI.
+
+### Language switching
+
+The shared page header includes a language selector. The app currently supports English (`en`) and
+Simplified Chinese (`zh-CN`) for frontend UI labels only. Song titles, artists, lyrics, filenames,
+provider responses, and other backend content are shown as-is. The selected language is stored in a
+`karaoke_locale` cookie and applies to server-rendered templates and dynamic frontend messages.
+
+See [docs/internationalization.md](docs/internationalization.md) for adding another locale.
 
 When concurrent yt-dlp search is enabled:
 - Query without `karaoke` triggers two parallel searches: `<query>` and `<query> karaoke`

@@ -17,15 +17,15 @@
 
 <div class="space-y-2">
   <div class="flex items-center justify-between gap-3">
-    <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Lyrics editor</span>
+    <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.editor') }}</span>
     <span id="lyrics-provider" class="text-[11px] font-medium text-on-surface-variant"></span>
   </div>
   <textarea 
     id="lyrics-textarea" 
     rows="7" 
     class="w-full rounded-xl bg-surface-container-highest px-3 py-3 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30 sm:rows-8" 
-    placeholder="[00:12.00]Sing along..."
+    placeholder="{{ t('lyrics.placeholder') }}"
     disabled
   ></textarea>
-  <p class="text-xs text-on-surface-variant">Resolved lyrics will overwrite this box. You can edit it before adding to the queue.</p>
+  <p class="text-xs text-on-surface-variant">{{ t('lyrics.resolved_overwrite') }}</p>
 </div>

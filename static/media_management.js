@@ -1,6 +1,7 @@
 const searchInput = document.getElementById("media-search-input");
 const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
 const apiBase = window.KaraokeURLs?.basePath || "";
+const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
 const filterButtons = document.querySelectorAll(".media-cap-filter");
 const mediaRows = document.querySelectorAll(".media-item-row, .media-item-card");
 const emptyState = document.getElementById("media-empty-state");
@@ -16,8 +17,8 @@ const editAiToggle = document.getElementById("media-edit-ai-toggle");
 const editLyricsToggle = document.getElementById("media-edit-lyrics-toggle");
 const editFilenamePreview = document.getElementById("media-edit-filename-preview");
 const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
-const AUTO_RENAME_DEFAULT_HTML = '<span class="material-symbols-outlined text-[16px]">auto_fix_high</span><span>Auto</span>';
-const AUTO_RENAME_LOADING_HTML = '<span class="material-symbols-outlined animate-spin text-[16px]">sync</span><span>Inferring...</span>';
+const AUTO_RENAME_DEFAULT_HTML = `<span class="material-symbols-outlined text-[16px]">auto_fix_high</span><span>${t('common.auto')}</span>`;
+const AUTO_RENAME_LOADING_HTML = `<span class="material-symbols-outlined animate-spin text-[16px]">sync</span><span>${t('media.inferring')}</span>`;
 
 // Lyrics Manager Setup
 let lyricsManager = null;
@@ -78,7 +79,7 @@ function buildRenamedFilename(nextTitle, nextArtist) {
     const currentExtension = currentFilename.includes(".")
         ? `.${currentFilename.split(".").pop()}`
         : ".mp4";
-    const title = nextTitle.trim() || "Title";
+    const title = nextTitle.trim() || t("common.title");
     const artist = nextArtist.trim();
     const clean = [artist, title].filter(Boolean).join(" - ").replace(/\s+/g, " ").trim();
     return `${clean || "media"}${currentExtension}`;
@@ -87,17 +88,17 @@ function buildRenamedFilename(nextTitle, nextArtist) {
 function updateFilenamePreview() {
     if (!editFilenamePreview || !editTitleInput || !editArtistInput) return;
 
-    const currentFilename = getFilenameFromPath(activeEditMediaPath) || "unknown";
+    const currentFilename = getFilenameFromPath(activeEditMediaPath) || t("common.unknown");
     const renameEnabled = Boolean(editRenameDiskCheckbox?.checked);
     const nextFilename = buildRenamedFilename(editTitleInput.value, editArtistInput.value);
     editFilenamePreview.textContent = renameEnabled
-        ? `Will rename to: ${nextFilename}`
-        : `Current on-disk filename: ${currentFilename}`;
+        ? t("media.will_rename_to", { filename: nextFilename })
+        : t("media.current_filename", { filename: currentFilename });
 }
 
 function syncEditPreviewLabels(title, artist) {
-    const normalizedTitle = title.trim() || "Track Title";
-    const normalizedArtist = artist.trim() || "Artist Name";
+    const normalizedTitle = title.trim() || t("common.track_title");
+    const normalizedArtist = artist.trim() || t("common.artist_name");
 
     if (previewTitle) previewTitle.textContent = normalizedTitle;
     if (previewArtist) previewArtist.textContent = normalizedArtist;
@@ -178,7 +179,7 @@ function updateMediaItemDisplay(itemId, title, artist, hasMulti, hasLyrics) {
         node.dataset.hasLyrics = String(hasLyrics);
 
         setItemFieldText(node, "title", normalizedTitle);
-        setItemFieldText(node, "artist", normalizedArtist || "Unknown Artist");
+        setItemFieldText(node, "artist", normalizedArtist || t("common.unknown_artist"));
         
         // Update Chips (using escaping for the slash in class selector)
         const multiChip = node.querySelector('.rounded-full.bg-secondary\\/10');
@@ -254,7 +255,7 @@ function openEditModal(itemNode) {
     const itemId = itemNode.dataset.itemId;
     const currentTitle = getItemFieldText(itemNode, "title");
     const currentArtistText = getItemFieldText(itemNode, "artist");
-    const currentArtist = currentArtistText === "Unknown Artist" ? "" : currentArtistText;
+    const currentArtist = currentArtistText === t("common.unknown_artist") || currentArtistText === "Unknown Artist" ? "" : currentArtistText;
     const placeholderThumbnail = appUrl("/static/placeholder.png");
     const currentThumbnail = itemNode.dataset.thumbnail || placeholderThumbnail;
     activeEditMediaPath = itemNode.dataset.mediaPath || "";
@@ -295,9 +296,9 @@ function openEditModal(itemNode) {
     }
 
     if (previewTitle) previewTitle.textContent = currentTitle;
-    if (previewArtist) previewArtist.textContent = currentArtist || "Unknown Artist";
+    if (previewArtist) previewArtist.textContent = currentArtist || t("common.unknown_artist");
     if (previewTitleMobile) previewTitleMobile.textContent = currentTitle;
-    if (previewArtistMobile) previewArtistMobile.textContent = currentArtist || "Unknown Artist";
+    if (previewArtistMobile) previewArtistMobile.textContent = currentArtist || t("common.unknown_artist");
 
     // Set Toggles
     if (editAiToggle) editAiToggle.checked = hasMulti;
@@ -341,7 +342,7 @@ async function saveEditModal(event) {
     }
     const nextTitle = editTitleInput.value.trim();
     if (!nextTitle) {
-        showToast("Title cannot be empty.");
+        showToast(t("media.title_empty"));
         return;
     }
     const nextArtist = editArtistInput?.value.trim() || "";
@@ -351,7 +352,7 @@ async function saveEditModal(event) {
 
     if (submitButton) {
         submitButton.disabled = true;
-        submitButton.textContent = renameOnDisk ? "Renaming..." : "Saving...";
+        submitButton.textContent = renameOnDisk ? t("media.renaming") : t("media.saving");
     }
 
     try {
@@ -381,20 +382,20 @@ async function saveEditModal(event) {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || "Failed to rename media item");
+            throw new Error(error.detail || t("media.rename_failed"));
         }
 
-        showToast(renameOnDisk ? `Renamed "${nextTitle}" on disk` : `Updated "${nextTitle}"`);
+        showToast(renameOnDisk ? t("media.renamed_disk", { title: nextTitle }) : t("media.updated_title", { title: nextTitle }));
         closeEditModal();
         window.setTimeout(() => {
             window.location.reload();
         }, 450);
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to rename media item";
+        const message = error instanceof Error ? error.message : t("media.rename_failed");
         showToast(message);
         if (submitButton) {
             submitButton.disabled = false;
-            submitButton.textContent = originalButtonLabel || "Rename";
+            submitButton.textContent = originalButtonLabel || t("common.rename");
         }
     }
 }
@@ -403,14 +404,14 @@ async function addToQueue(itemNode) {
     const itemId = itemNode.dataset.itemId;
     const title = getItemFieldText(itemNode, "title") || "item";
     const artistText = getItemFieldText(itemNode, "artist");
-    const artist = artistText && artistText !== "Unknown Artist" ? artistText : "";
+    const artist = artistText && artistText !== t("common.unknown_artist") && artistText !== "Unknown Artist" ? artistText : "";
 
     if (itemNode.dataset.missing === "true") {
-        showToast("This media item is missing from disk.");
+        showToast(t("media.missing_from_disk"));
         return;
     }
 
-    setButtonsForAction(itemId, "add-to-queue", { disabled: true, label: "Adding..." });
+    setButtonsForAction(itemId, "add-to-queue", { disabled: true, label: t("media.adding") });
 
     try {
         const payload = {
@@ -432,7 +433,7 @@ async function addToQueue(itemNode) {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || "Failed to add to queue");
+            throw new Error(error.detail || t("media.queue_failed"));
         }
 
         const item = await response.json();
@@ -444,24 +445,24 @@ async function addToQueue(itemNode) {
             console.warn("Queue processing trigger failed:", processError);
         }
 
-        showToast(`Queued "${title}"`);
-        setButtonsForAction(itemId, "add-to-queue", { disabled: true, label: "Queued" });
+        showToast(t("media.queued", { title }));
+        setButtonsForAction(itemId, "add-to-queue", { disabled: true, label: t("media.queued_label") });
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to add to queue";
+        const message = error instanceof Error ? error.message : t("media.queue_failed");
         showToast(message);
-        setButtonsForAction(itemId, "add-to-queue", { disabled: false, label: "Add to Queue" });
+        setButtonsForAction(itemId, "add-to-queue", { disabled: false, label: t("common.add_to_queue") });
     }
 }
 
 async function deleteItem(itemNode) {
     const itemId = itemNode.dataset.itemId;
     const title = getItemFieldText(itemNode, "title") || "item";
-    const confirmed = window.confirm(`Delete "${title}" from media library?`);
+    const confirmed = window.confirm(t("media.confirm_delete", { title }));
     if (!confirmed) {
         return;
     }
 
-    setButtonsForAction(itemId, "delete", { disabled: true, label: "Deleting..." });
+    setButtonsForAction(itemId, "delete", { disabled: true, label: t("media.deleting") });
     setButtonsForAction(itemId, "add-to-queue", { disabled: true });
     setButtonsForAction(itemId, "edit", { disabled: true });
 
@@ -472,18 +473,18 @@ async function deleteItem(itemNode) {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || "Failed to delete media item");
+            throw new Error(error.detail || t("media.delete_failed"));
         }
 
-        showToast(`Deleted "${title}"`);
+        showToast(t("media.deleted", { title }));
         window.setTimeout(() => {
             window.location.reload();
         }, 450);
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to delete media item";
+        const message = error instanceof Error ? error.message : t("media.delete_failed");
         showToast(message);
-        setButtonsForAction(itemId, "delete", { disabled: false, label: "Delete" });
-        setButtonsForAction(itemId, "add-to-queue", { disabled: false, label: "Add to Queue" });
+        setButtonsForAction(itemId, "delete", { disabled: false, label: t("common.delete") });
+        setButtonsForAction(itemId, "add-to-queue", { disabled: false, label: t("common.add_to_queue") });
         setButtonsForAction(itemId, "edit", { disabled: false });
     }
 }
@@ -496,7 +497,7 @@ async function autoRenameMediaItem(actionButton) {
     const title = editTitleInput.value.trim();
     const artist = editArtistInput.value.trim();
     if (!title) {
-        showToast("Add a title before using Auto.");
+        showToast(t("media.add_title_before_auto"));
         return;
     }
 
@@ -526,7 +527,7 @@ async function autoRenameMediaItem(actionButton) {
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || "Failed to infer metadata");
+            throw new Error(error.detail || t("media.infer_failed"));
         }
 
         const payload = await response.json();
@@ -538,9 +539,9 @@ async function autoRenameMediaItem(actionButton) {
         syncEditPreviewLabels(nextTitle, nextArtist);
         updateFilenamePreview();
 
-        showToast(nextArtist ? `Inferred "${nextArtist} - ${nextTitle}"` : `Inferred "${nextTitle}"`);
+        showToast(nextArtist ? t("media.inferred_artist_title", { artist: nextArtist, title: nextTitle }) : t("media.inferred_title", { title: nextTitle }));
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to infer metadata";
+        const message = error instanceof Error ? error.message : t("media.infer_failed");
         showToast(message);
     } finally {
         button.disabled = false;
@@ -557,22 +558,22 @@ async function runLibraryScan(actionButton) {
     const originalLabel = actionButton.textContent;
     actionButton.disabled = true;
     actionButton.classList.add("opacity-70", "cursor-default");
-    actionButton.textContent = "Scanning...";
+    actionButton.textContent = t("media.scanning");
     try {
         const response = await fetch(appUrl("/api/media/scan"), { method: "POST" });
         if (!response.ok) {
-            throw new Error(`Scan failed (${response.status})`);
+            throw new Error(t("media.scan_failed_status", { status: response.status }));
         }
         const payload = await response.json();
         const summary = payload?.summary || {};
         const created = Number(summary.created || 0);
         const markedMissing = Number(summary.marked_missing || 0);
-        showToast(`Scan complete: +${created} new, ${markedMissing} missing`);
+        showToast(t("media.scan_complete", { created, missing: markedMissing }));
         window.setTimeout(() => {
             window.location.reload();
         }, 500);
     } catch (error) {
-        const message = error instanceof Error ? error.message : "Scan failed";
+        const message = error instanceof Error ? error.message : t("media.scan_failed");
         showToast(message);
         actionButton.disabled = false;
         actionButton.classList.remove("opacity-70", "cursor-default");
@@ -618,7 +619,7 @@ function handleActionClick(event) {
 
 if (editTitleInput) {
     editTitleInput.addEventListener("input", (e) => {
-        const val = e.target.value.trim() || "Track Title";
+        const val = e.target.value.trim() || t("common.track_title");
         if (previewTitle) previewTitle.textContent = val;
         if (previewTitleMobile) previewTitleMobile.textContent = val;
         updateFilenamePreview();
@@ -628,7 +629,7 @@ if (editTitleInput) {
 
 if (editArtistInput) {
     editArtistInput.addEventListener("input", (e) => {
-        const val = e.target.value.trim() || "Artist Name";
+        const val = e.target.value.trim() || t("common.artist_name");
         if (previewArtist) previewArtist.textContent = val;
         if (previewArtistMobile) previewArtistMobile.textContent = val;
         updateFilenamePreview();
@@ -665,7 +666,7 @@ editForm?.addEventListener("submit", saveEditModal);
 if (editAiToggle) {
     editAiToggle.addEventListener('change', () => {
         if (editAiToggle.checked) {
-            showToast("AI karaoke is applied when adding media to the queue.");
+            showToast(t("media.ai_applies_on_queue"));
         }
     });
 }

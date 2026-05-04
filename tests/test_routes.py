@@ -1,4 +1,5 @@
 """Tests for API routes."""
+import json
 import re
 import pytest
 from pathlib import Path
@@ -18,6 +19,7 @@ from models import (
 )
 from services import lyrics_service as lyrics_service_module
 from services.auth_service import ADMIN_SESSION_COOKIE, AuthService
+from services.i18n_service import LOCALE_COOKIE
 from services.media_naming import build_media_stem
 from config import settings
 
@@ -431,6 +433,51 @@ def test_queue_page_loads(client):
     assert 'aria-label="Media Library"' in response.text
     assert 'aria-label="Upload Media"' in response.text
     assert "shield_person" not in response.text
+
+
+def test_queue_page_renders_simplified_chinese_locale(client):
+    """Queue page should use the selected frontend locale cookie."""
+    response = client.get("/queue", cookies={LOCALE_COOKIE: "zh-CN"})
+
+    assert response.status_code == 200
+    assert '<html class="dark" lang="zh-CN">' in response.text
+    assert "卡拉 OK 队列" in response.text
+    assert "搜索本地媒体库和 YouTube" in response.text
+    assert "简体中文" in response.text
+
+
+def test_language_route_sets_cookie_and_redirects_locally(client):
+    """Language selection should persist in a cookie and return to the requested page."""
+    response = client.post(
+        "/language",
+        data={"language": "zh-CN", "next": "/media"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/media"
+    assert response.cookies.get(LOCALE_COOKIE) == "zh-CN"
+
+
+def test_language_route_rejects_external_redirect_targets(client):
+    """Language route should not redirect to external URLs."""
+    response = client.post(
+        "/language",
+        data={"language": "zh-CN", "next": "https://example.com/phish"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/queue"
+
+
+def test_locale_catalogs_have_matching_keys():
+    """Every supported locale should expose the same UI translation keys."""
+    locale_dir = Path("locales")
+    english_keys = set(json.loads((locale_dir / "en.json").read_text(encoding="utf-8")))
+    chinese_keys = set(json.loads((locale_dir / "zh-CN.json").read_text(encoding="utf-8")))
+
+    assert chinese_keys == english_keys
 
 
 def test_queue_page_shows_admin_queue_controls(client):

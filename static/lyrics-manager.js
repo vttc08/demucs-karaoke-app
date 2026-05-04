@@ -206,7 +206,7 @@ class LyricsManager {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.detail || 'Lyrics search failed');
+        throw new Error(error.detail || LyricsManager.t('lyrics.search_failed'));
       }
 
       const result = await response.json();
@@ -327,14 +327,14 @@ class LyricsManager {
    */
   static getStatusLabel(state) {
     const labels = {
-      idle: 'Idle',
-      loading: 'Searching',
-      resolved: 'Resolved',
-      not_found: 'Not found',
-      error: 'Error',
-      manual: 'Manual',
+      idle: LyricsManager.t('lyrics.idle'),
+      loading: LyricsManager.t('lyrics.searching'),
+      resolved: LyricsManager.t('lyrics.resolved'),
+      not_found: LyricsManager.t('lyrics.not_found'),
+      error: LyricsManager.t('lyrics.status_error'),
+      manual: LyricsManager.t('lyrics.manual'),
     };
-    return labels[state] || 'Unknown';
+    return labels[state] || LyricsManager.t('common.unknown');
   }
 
   /**
@@ -357,15 +357,19 @@ class LyricsManager {
    */
   static getHelpText(state, isSynced = false) {
     const texts = {
-      idle: 'Search or upload lyrics to continue.',
-      loading: 'Searching lyrics providers...',
-      not_found: 'No lyrics were found. Use the editor below or upload an LRC file.',
-      error: 'Lyrics search failed. Use the editor below or upload an LRC file.',
+      idle: LyricsManager.t('lyrics.help_default'),
+      loading: LyricsManager.t('lyrics.help_loading'),
+      not_found: LyricsManager.t('lyrics.help_not_found'),
+      error: LyricsManager.t('lyrics.help_error'),
       resolved: isSynced
-        ? 'Resolved synced lyrics are ready. Edit the box below before adding to the queue.'
-        : 'Resolved plain lyrics are ready. Edit the box below before adding to the queue.',
-      manual: 'Your editor content is ready to be queued.',
+        ? LyricsManager.t('lyrics.help_resolved_timed')
+        : LyricsManager.t('lyrics.help_resolved_plain'),
+      manual: LyricsManager.t('lyrics.help_manual'),
     };
     return texts[state] || texts.idle;
+  }
+
+  static t(key, params = {}) {
+    return window.KaraokeI18n?.t(key, params) || key;
   }
 }

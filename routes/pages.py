@@ -1,7 +1,10 @@
 """HTML page routes."""
+from urllib.parse import urlparse
+
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
 from sqlalchemy.orm import Session
 from database import get_db
 from routes.auth import get_admin_user
@@ -9,6 +12,14 @@ from services.queue_service import QueueService
 from services.media_library_service import MediaLibraryService
 from services.runtime_settings_service import RuntimeSettingsService
 from services.auth_service import ADMIN_SESSION_COOKIE, SESSION_DAYS, AuthService
+from services.i18n_service import (
+    LOCALE_COOKIE,
+    catalog_payload,
+    normalize_locale,
+    resolve_locale,
+    supported_locale_options,
+    translate,
+)
 from config import settings
 
 router = APIRouter(tags=["pages"])
@@ -43,6 +54,61 @@ def is_active_path(request: Request, path: str) -> bool:
 templates.env.globals["app_url"] = app_url
 templates.env.globals["is_active_path"] = is_active_path
 templates.env.filters["public_url"] = app_url
+
+
+@pass_context
+def t(context, key: str, **params) -> str:
+    """Translate a frontend UI string in templates."""
+    return translate(resolve_locale(context.get("request")), key, **params)
+
+
+def current_locale(request: Request) -> str:
+    """Return the active locale code for templates."""
+    return resolve_locale(request)
+
+
+def safe_next_url(next_url: str | None) -> str:
+    """Constrain language redirects to app-local paths."""
+    if not next_url:
+        return app_url("/queue")
+    parsed = urlparse(next_url)
+    if parsed.scheme or parsed.netloc:
+        return app_url("/queue")
+    path = parsed.path or "/queue"
+    base_path = settings.karaoke_base_path
+    if base_path:
+        if not (path == base_path or path.startswith(f"{base_path}/")):
+            return app_url("/queue")
+    elif not path.startswith("/"):
+        return app_url("/queue")
+    suffix = f"?{parsed.query}" if parsed.query else ""
+    return f"{path}{suffix}"
+
+
+templates.env.globals["t"] = t
+templates.env.globals["current_locale"] = current_locale
+templates.env.globals["supported_locales"] = supported_locale_options
+templates.env.globals["i18n_catalogs"] = catalog_payload
+
+
+@router.post("/language")
+async def set_language(
+    request: Request,
+    language: str = Form(...),
+    next: str = Form("/queue"),
+):
+    """Persist the selected frontend language in a browser cookie."""
+    locale = normalize_locale(language) or "en"
+    response = RedirectResponse(url=safe_next_url(next), status_code=302)
+    response.set_cookie(
+        key=LOCALE_COOKIE,
+        value=locale,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        max_age=365 * 24 * 60 * 60,
+        path="/",
+    )
+    return response
 
 
 @router.get("/")
@@ -81,7 +147,7 @@ async def login_handler(
                 {
                     "request": request,
                     "admin_configured": auth_service.count_admins(db) > 0,
-                    "error": "Invalid admin username or password.",
+                    "error": translate(resolve_locale(request), "login.invalid_admin"),
                 },
                 status_code=401,
             )

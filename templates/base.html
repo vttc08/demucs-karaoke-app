@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html class="dark" lang="en">
+<html class="dark" lang="{{ current_locale(request) }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Karaoke{% endblock %}</title>
+    <title>{% block title %}{{ t('app.karaoke') }}{% endblock %}</title>
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -85,26 +85,42 @@
                     <span class="material-symbols-outlined text-primary text-lg">{% block header_icon %}music_note{% endblock %}</span>
                 </div>
                 <div class="min-w-0">
-                    <h1 class="truncate font-headline font-bold text-lg text-on-surface">{% block header_title %}Karaoke{% endblock %}</h1>
-                    <p class="truncate text-xs text-on-surface-variant font-medium">{% block header_subtitle %}Queue Manager{% endblock %}</p>
+                    <h1 class="truncate font-headline font-bold text-lg text-on-surface">{% block header_title %}{{ t('app.karaoke') }}{% endblock %}</h1>
+                    <p class="truncate text-xs text-on-surface-variant font-medium">{% block header_subtitle %}{{ t('header.queue_manager') }}{% endblock %}</p>
                 </div>
             </div>
             <nav class="flex shrink-0 items-center gap-1 sm:gap-2">
-                <a href="{{ app_url('/queue') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/queue') or request.url.path == app_url('/') %}bg-primary/10{% endif %}" aria-label="Queue">
+                <form action="{{ app_url('/language') }}" method="post" class="mr-1">
+                    <input type="hidden" name="next" value="{{ request.url.path }}">
+                    <label class="sr-only" for="language-select">{{ t('app.language') }}</label>
+                    <select
+                        id="language-select"
+                        name="language"
+                        class="h-9 rounded-full border border-primary/20 bg-surface-container-high px-2 text-xs font-bold text-on-surface outline-none transition focus:ring-2 focus:ring-primary/30"
+                        aria-label="{{ t('app.language') }}"
+                        onchange="this.form.submit()"
+                    >
+                        {% for locale in supported_locales() %}
+                        <option value="{{ locale.code }}" {% if locale.code == current_locale(request) %}selected{% endif %}>{{ locale.label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="sr-only">{{ t('language.submit') }}</button>
+                </form>
+                <a href="{{ app_url('/queue') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/queue') or request.url.path == app_url('/') %}bg-primary/10{% endif %}" aria-label="{{ t('queue.title') }}">
                     <span class="material-symbols-outlined">queue_music</span>
                 </a>
-                <a href="{{ app_url('/stage') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/stage') %}bg-primary/10{% endif %}" aria-label="Stage View">
+                <a href="{{ app_url('/stage') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/stage') %}bg-primary/10{% endif %}" aria-label="{{ t('stage.title') }}">
                     <span class="material-symbols-outlined">live_tv</span>
                 </a>
                 {% if request.cookies.get("karaoke_admin_session") %}
-                <a href="{{ app_url('/settings') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/settings') %}bg-primary/10{% endif %}" aria-label="Settings">
+                <a href="{{ app_url('/settings') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/settings') %}bg-primary/10{% endif %}" aria-label="{{ t('nav.settings') }}">
                     <span class="material-symbols-outlined">settings</span>
                 </a>
                 {% endif %}
-                <a href="{{ app_url('/media') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/media') %}bg-primary/10{% endif %}" aria-label="Media Library">
+                <a href="{{ app_url('/media') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/media') %}bg-primary/10{% endif %}" aria-label="{{ t('media.library') }}">
                     <span class="material-symbols-outlined">folder_open</span>
                 </a>
-                <a href="{{ app_url('/upload') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/upload') %}bg-primary/10{% endif %}" aria-label="Upload Media">
+                <a href="{{ app_url('/upload') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/upload') %}bg-primary/10{% endif %}" aria-label="{{ t('common.upload_media') }}">
                     <span class="material-symbols-outlined">cloud_upload</span>
                 </a>
             </nav>
@@ -113,6 +129,21 @@
     {% block content %}{% endblock %}
     <script>
         window.KARAOKE_BASE_PATH = {{ app_url('') | tojson }};
+        window.KARAOKE_LOCALE = {{ current_locale(request) | tojson }};
+        window.KARAOKE_I18N_CATALOGS = {{ i18n_catalogs() | tojson }};
+        window.KaraokeI18n = {
+            locale: window.KARAOKE_LOCALE || "en",
+            catalogs: window.KARAOKE_I18N_CATALOGS || {},
+            t(key, params = {}) {
+                const active = this.catalogs[this.locale] || {};
+                const fallback = this.catalogs.en || {};
+                let value = active[key] || fallback[key] || key;
+                Object.entries(params || {}).forEach(([name, replacement]) => {
+                    value = value.replaceAll(`{${name}}`, String(replacement ?? ""));
+                });
+                return value;
+            },
+        };
     </script>
     <script src="{{ app_url('/static/app-urls.js') }}"></script>
     {% block scripts %}{% endblock %}
