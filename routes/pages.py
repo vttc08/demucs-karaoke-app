@@ -45,13 +45,8 @@ templates.env.filters["public_url"] = app_url
 
 
 @router.get("/")
-async def home(request: Request, db: Session = Depends(get_db)):
-    """Home page redirects to login if no singer identified, else to queue."""
-    admin = auth_service.get_admin_for_session(
-        db, request.cookies.get(ADMIN_SESSION_COOKIE)
-    )
-    if not request.cookies.get("karaoke_singer") and admin is None:
-        return RedirectResponse(url=app_url("/login"), status_code=302)
+async def home(request: Request):
+    """Home page redirects to the queue without forcing guest identification."""
     return RedirectResponse(url=app_url("/queue"), status_code=302)
 
 
@@ -110,7 +105,6 @@ async def login_handler(
     response.set_cookie(
         key="karaoke_singer",
         value=username.strip(),
-        httponly=True,
         secure=request.url.scheme == "https",
         samesite="lax",
         path="/",
@@ -132,8 +126,15 @@ async def logout(request: Request, db: Session = Depends(get_db)):
 async def queue_page(request: Request, db: Session = Depends(get_db)):
     """Mobile queue page."""
     queue_items = queue_service.get_queue(db)
+    singer_name = (request.cookies.get("karaoke_singer") or "").strip()
     return templates.TemplateResponse(
-        "queue.html", {"request": request, "queue": queue_items}
+        "queue.html",
+        {
+            "request": request,
+            "queue": queue_items,
+            "singer_name": singer_name,
+            "needs_singer_name": not singer_name,
+        },
     )
 
 
@@ -155,8 +156,13 @@ async def stage_page(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/settings", response_class=HTMLResponse)
-async def settings_page(request: Request):
+async def settings_page(request: Request, db: Session = Depends(get_db)):
     """Settings page for runtime app configuration."""
+    admin = auth_service.get_admin_for_session(
+        db, request.cookies.get(ADMIN_SESSION_COOKIE)
+    )
+    if admin is None:
+        return RedirectResponse(url=app_url("/login"), status_code=302)
     return templates.TemplateResponse("settings.html", {"request": request})
 
 

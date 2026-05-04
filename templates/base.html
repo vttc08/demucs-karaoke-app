@@ -107,9 +107,11 @@
                 <a href="{{ app_url('/stage') }}" class="text-primary active:scale-95 transition-transform p-2 hover:bg-primary/10 rounded-full {% if is_active_path(request, '/stage') %}bg-primary/10{% endif %}" aria-label="Stage View">
                     <span class="material-symbols-outlined">live_tv</span>
                 </a>
+                {% if request.cookies.get("karaoke_admin_session") %}
                 <a href="{{ app_url('/settings') }}" class="text-primary active:scale-95 transition-transform p-2 hover:bg-primary/10 rounded-full {% if is_active_path(request, '/settings') %}bg-primary/10{% endif %}" aria-label="Settings">
                     <span class="material-symbols-outlined">settings</span>
                 </a>
+                {% endif %}
                 <a href="{{ app_url('/media') }}" class="text-primary active:scale-95 transition-transform p-2 hover:bg-primary/10 rounded-full {% if is_active_path(request, '/media') %}bg-primary/10{% endif %}" aria-label="Media Library">
                     <span class="material-symbols-outlined">folder_open</span>
                 </a>

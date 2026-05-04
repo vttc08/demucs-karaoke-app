@@ -6,7 +6,28 @@
 {% block header_subtitle %}Queue Manager{% endblock %}
 
 {% block content %}
-<main class="pt-28 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-8 sm:px-6 lg:px-8">
+<main
+    class="pt-28 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-8 sm:px-6 lg:px-8"
+    data-singer-name="{{ singer_name }}"
+    data-needs-singer-name="{{ 'true' if needs_singer_name else 'false' }}"
+>
+    <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+        <div class="min-w-0">
+            <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">Tonight</span>
+            <h2 class="truncate font-headline text-xl font-black tracking-tight text-on-surface">
+                Hi, <span id="queue-singer-name">{{ singer_name or "Guest" }}</span>
+            </h2>
+        </div>
+        <button
+            id="queue-singer-edit-btn"
+            type="button"
+            class="inline-flex h-10 items-center gap-2 rounded-full bg-surface-container-highest px-3 text-sm font-bold text-on-surface transition-colors hover:text-primary active:scale-95"
+        >
+            <span class="material-symbols-outlined text-base">edit</span>
+            Edit
+        </button>
+    </section>
+
     <!-- Search Section -->
     <section class="flex flex-col gap-4">
         <div class="relative group">
@@ -327,6 +348,53 @@
     </div>
 </main>
 
+<div id="singer-name-modal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-background/75 p-0 backdrop-blur-sm sm:items-center sm:p-6">
+    <div id="singer-name-modal-backdrop" class="absolute inset-0"></div>
+    <form id="singer-name-form" class="relative w-full max-w-md rounded-t-2xl border border-outline-variant/20 bg-surface-container-high p-5 shadow-[0_-10px_60px_rgba(0,242,255,0.12)] sm:rounded-2xl" autocomplete="off">
+        <div class="mb-5 flex items-start justify-between gap-4">
+            <div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">Stage name</span>
+                <h2 class="font-headline text-2xl font-black tracking-tight text-on-surface">What should we call you?</h2>
+            </div>
+            <button
+                id="singer-name-close-btn"
+                type="button"
+                class="inline-flex h-9 w-9 flex-none items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-on-surface"
+                aria-label="Close stage name prompt"
+            >
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+        <label class="flex flex-col gap-2">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">Name</span>
+            <input
+                id="singer-name-input"
+                class="h-12 rounded-xl border border-outline-variant/30 bg-surface-container-highest px-4 text-base font-semibold text-on-surface outline-none transition focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+                name="singer_name"
+                maxlength="40"
+                placeholder="Guest"
+                type="text"
+            />
+        </label>
+        <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+                id="singer-name-skip-btn"
+                type="button"
+                class="rounded-full bg-surface-container-highest px-4 py-2.5 text-sm font-bold text-on-surface-variant transition-colors hover:text-on-surface"
+            >
+                Skip
+            </button>
+            <button
+                type="submit"
+                class="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black uppercase tracking-tight text-on-primary transition-all hover:brightness-110 active:scale-95"
+            >
+                <span class="material-symbols-outlined text-base">check</span>
+                Save
+            </button>
+        </div>
+    </form>
+</div>
+
 <div id="queue-toast" class="pointer-events-none fixed bottom-4 right-4 z-50 translate-y-3 rounded-lg border border-primary/30 bg-surface-container px-4 py-2 text-sm text-on-surface opacity-0 transition-all duration-200" role="status" aria-live="polite">
     <span id="queue-toast-text">Updated</span>
 </div>
@@ -337,6 +405,94 @@
 <script src="{{ app_url('/static/lyrics-ui.js') }}"></script>
 <script src="{{ app_url('/static/queue.js') }}"></script>
 <script>
+function getCookieValue(name) {
+    const match = document.cookie
+        .split('; ')
+        .find((cookie) => cookie.startsWith(`${name}=`));
+    return match ? decodeURIComponent(match.split('=').slice(1).join('=')) : '';
+}
+
+function sanitizeSingerName(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+}
+
+function randomGuestName() {
+    return `Guest ${Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+function saveSingerName(name) {
+    const finalName = sanitizeSingerName(name) || randomGuestName();
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `karaoke_singer=${encodeURIComponent(finalName)}; Max-Age=31536000; Path=/; SameSite=Lax${secure}`;
+    const label = document.getElementById('queue-singer-name');
+    if (label) label.textContent = finalName;
+    return finalName;
+}
+
+function openSingerNameModal() {
+    const modal = document.getElementById('singer-name-modal');
+    const input = document.getElementById('singer-name-input');
+    if (!modal) return;
+    const main = document.querySelector('main[data-singer-name]');
+    const currentName = sanitizeSingerName(getCookieValue('karaoke_singer') || main?.dataset.singerName || '');
+    if (input) {
+        input.value = currentName;
+        window.setTimeout(() => input.focus(), 60);
+    }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.body.classList.add('overflow-hidden');
+}
+
+function closeSingerNameModal(assignFallback = false) {
+    if (assignFallback && !sanitizeSingerName(getCookieValue('karaoke_singer'))) {
+        saveSingerName(randomGuestName());
+    }
+    const modal = document.getElementById('singer-name-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    document.body.classList.remove('overflow-hidden');
+}
+
+function initializeSingerNamePrompt() {
+    const main = document.querySelector('main[data-singer-name]');
+    const modal = document.getElementById('singer-name-modal');
+    const form = document.getElementById('singer-name-form');
+    const input = document.getElementById('singer-name-input');
+    const editBtn = document.getElementById('queue-singer-edit-btn');
+    const closeBtn = document.getElementById('singer-name-close-btn');
+    const skipBtn = document.getElementById('singer-name-skip-btn');
+    const backdrop = document.getElementById('singer-name-modal-backdrop');
+    if (!main || !modal) return;
+
+    const existingName = sanitizeSingerName(getCookieValue('karaoke_singer') || main.dataset.singerName || '');
+    if (existingName) {
+        saveSingerName(existingName);
+    }
+
+    form?.addEventListener('submit', (event) => {
+        event.preventDefault();
+        saveSingerName(input?.value || '');
+        closeSingerNameModal(false);
+    });
+    editBtn?.addEventListener('click', openSingerNameModal);
+    closeBtn?.addEventListener('click', () => closeSingerNameModal(true));
+    skipBtn?.addEventListener('click', () => closeSingerNameModal(true));
+    backdrop?.addEventListener('click', () => closeSingerNameModal(true));
+    window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
+            closeSingerNameModal(true);
+        }
+    });
+
+    if (main.dataset.needsSingerName === 'true' && !existingName) {
+        window.setTimeout(openSingerNameModal, 250);
+    }
+}
+
+initializeSingerNamePrompt();
+
 // Additional mobile-specific functionality
 function skipToSong(songId) {
     fetch(window.KaraokeURLs.appUrl(`/api/queue/skip-to/${songId}`), {

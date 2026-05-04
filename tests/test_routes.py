@@ -81,6 +81,18 @@ def client():
     Base.metadata.drop_all(bind=engine)
 
 
+def authenticate_admin_client(client: TestClient) -> str:
+    """Attach a valid admin session cookie to the test client."""
+    service = AuthService()
+    with TestingSessionLocal() as db:
+        admin = service.create_or_update_admin(
+            db, "admin", "correct horse battery staple"
+        )
+        token, _ = service.create_admin_session(db, admin)
+    client.cookies.set(ADMIN_SESSION_COOKIE, token)
+    return token
+
+
 def test_health_check(client):
     """Test health check endpoint."""
     response = client.get("/health")
@@ -407,6 +419,8 @@ def test_queue_page_loads(client):
     response = client.get("/queue")
     assert response.status_code == 200
     assert b"Karaoke Queue" in response.content
+    assert b'id="queue-singer-name"' in response.content
+    assert b'id="singer-name-modal"' in response.content
     assert b"queue-config-modal" in response.content
     assert b"Configure Queue" in response.content
     assert b"queue-toast" in response.content
@@ -428,11 +442,24 @@ def test_playback_page_is_removed(client):
     assert response.status_code == 404
 
 
-def test_settings_page_loads(client):
-    """Test settings page renders."""
+def test_settings_page_requires_admin(client):
+    """Settings page should redirect non-admin guests to admin login."""
+    response = client.get("/settings", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login"
+
+
+def test_settings_page_loads_for_admin(client):
+    """Test settings page renders for a valid admin session."""
+    authenticate_admin_client(client)
     response = client.get("/settings")
     assert response.status_code == 200
-    assert b"Engine Settings" in response.content
+    assert b"Admin Settings" in response.content
+    assert b"Admin session" in response.content
+    assert b"Log out" in response.content
+    assert b">Save<" in response.content
+    assert b">Refresh<" in response.content
+    assert b"Admin Access" not in response.content
 
 
 def test_admin_login_rejects_invalid_credentials(client):
@@ -1001,6 +1028,7 @@ def test_app_startup_triggers_media_scan():
 
 def test_get_runtime_settings(client):
     """Runtime settings endpoint should return current values."""
+    authenticate_admin_client(client)
     response = client.get("/api/settings/")
     assert response.status_code == 200
     data = response.json()
@@ -1024,8 +1052,16 @@ def test_get_runtime_settings(client):
     assert "stage_qr_url" in data
 
 
+def test_runtime_settings_api_requires_admin(client):
+    """Settings management API should reject guests."""
+    response = client.get("/api/settings/")
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
+
+
 def test_update_runtime_settings(client):
     """Runtime settings endpoint should apply updates."""
+    authenticate_admin_client(client)
     response = client.patch(
         "/api/settings/",
         json={
@@ -1069,6 +1105,7 @@ def test_update_runtime_settings(client):
 
 def test_update_runtime_settings_persists_to_database(client):
     """Runtime settings updates should be written to the database."""
+    authenticate_admin_client(client)
     with patch(
         "routes.settings.runtime_settings_service.get_demucs_health",
         return_value=DemucsHealthResponse(
@@ -1123,6 +1160,7 @@ def test_get_demucs_health(client):
 
 def test_get_ytdlp_version(client):
     """yt-dlp version endpoint should return current version."""
+    authenticate_admin_client(client)
     with patch(
         "routes.settings.runtime_settings_service.get_ytdlp_version",
         return_value={"version": "2026.03.01", "binary_path": "/usr/bin/yt-dlp"},
@@ -1136,6 +1174,7 @@ def test_get_ytdlp_version(client):
 
 def test_get_ytdlp_version_error(client):
     """yt-dlp version endpoint should map runtime errors to 400."""
+    authenticate_admin_client(client)
     with patch(
         "routes.settings.runtime_settings_service.get_ytdlp_version",
         side_effect=RuntimeError("yt-dlp version check failed"),
@@ -1147,6 +1186,7 @@ def test_get_ytdlp_version_error(client):
 
 def test_update_ytdlp(client):
     """yt-dlp update endpoint should return update result."""
+    authenticate_admin_client(client)
     with patch(
         "routes.settings.runtime_settings_service.update_ytdlp",
         return_value={
@@ -1166,6 +1206,7 @@ def test_update_ytdlp(client):
 
 def test_update_ytdlp_error(client):
     """yt-dlp update endpoint should map runtime errors to 400."""
+    authenticate_admin_client(client)
     with patch(
         "routes.settings.runtime_settings_service.update_ytdlp",
         side_effect=RuntimeError("yt-dlp update failed"),
@@ -1177,6 +1218,7 @@ def test_update_ytdlp_error(client):
 
 def test_update_runtime_settings_rejects_invalid_crf(client):
     """Runtime settings endpoint should validate ffmpeg_crf."""
+    authenticate_admin_client(client)
     response = client.patch("/api/settings/", json={"ffmpeg_crf": 60})
     assert response.status_code == 400
     assert "ffmpeg_crf" in response.json()["detail"]

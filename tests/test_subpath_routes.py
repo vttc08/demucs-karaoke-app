@@ -52,7 +52,7 @@ def test_app_serves_pages_assets_api_and_websocket_under_configured_subpath(tmp_
 
         root_redirect = client.get("/karaoke/", follow_redirects=False)
         assert root_redirect.status_code == 302
-        assert root_redirect.headers["location"] == "/karaoke/login"
+        assert root_redirect.headers["location"] == "/karaoke/queue"
 
         assert client.get("/queue").status_code == 404
 

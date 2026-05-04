@@ -104,6 +104,8 @@ and `/static/...`.
 ## Usage
 
 1. **Queue Page** (Mobile): Open `http://<server-ip>:8000/queue`
+    - First-time guests see a dismissible stage-name prompt on the queue page instead of a blocking login page
+    - Guests can skip naming and continue as a generated `Guest ####` name, or edit their name from the queue greeting
     - Search for songs (local library full-text on title/artist + YouTube in parallel)
     - Or paste a YouTube link / video id directly to add external search results
     - Local matches are preferred in results; duplicate YouTube matches are hidden
@@ -122,7 +124,9 @@ and `/static/...`.
    - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling
 
 3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
+       - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
        - View current runtime settings
+       - Log out of the active admin session from the settings page
         - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and outbound proxy URL
        - Enable/disable concurrent yt-dlp search mode
        - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
@@ -152,7 +156,7 @@ and `/static/...`.
         - Explains the Wi-Fi / WAN IP check and common masking tools like iCloud Private Relay, Clash, and V2Ray
 
 7. **Login Page**: Open `http://<server-ip>:8000/login`
-        - Guests can set a lightweight stage name for device identification.
+        - Guest identification happens inline on the queue page.
         - Admins sign in with a server-created account stored in the local database.
         - Admin credentials cannot be created from the web UI.
 

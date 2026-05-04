@@ -339,13 +339,13 @@ async function refreshDemucsHealth() {
 }
 
 async function reloadEngineStatus() {
-    setStatus("Reloading engine status...");
+    setStatus("Refreshing status...");
     const loaded = await loadSettings();
     if (!loaded) {
         return;
     }
     await refreshDemucsHealth();
-    setStatus("Engine status refreshed");
+    setStatus("Status refreshed");
 }
 
 if (saveBtn) {

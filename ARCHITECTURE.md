@@ -162,9 +162,11 @@ The stage page uses a websocket-first model:
   of that token.
 - Logout deletes the persisted admin session and clears the cookie.
 - Guest login remains a lightweight device/stage-name identifier for the current sprint. It is not
-  an authorization boundary.
-- The current branch establishes admin credential/session storage. Settings/media/queue
-  authorization gates still need to be wired to this session service in a later refinement.
+  an authorization boundary. First-time guests are prompted inline on the queue page, can dismiss the
+  prompt to receive a generated guest name, and can edit that name from the queue greeting.
+- The current branch establishes admin credential/session storage. The settings page and settings
+  management APIs require an active admin session. Media/queue authorization gates still need to be
+  wired to this session service in a later refinement.
 
 ## Lyrics inference and provider flow
 
