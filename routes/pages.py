@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from database import get_db
+from routes.auth import get_admin_user
 from services.queue_service import QueueService
 from services.media_library_service import MediaLibraryService
 from services.runtime_settings_service import RuntimeSettingsService
@@ -59,7 +60,6 @@ async def login_page(request: Request, db: Session = Depends(get_db)):
             "request": request,
             "admin_configured": auth_service.count_admins(db) > 0,
             "error": None,
-            "login_mode": "guest",
         },
     )
 
@@ -82,7 +82,6 @@ async def login_handler(
                     "request": request,
                     "admin_configured": auth_service.count_admins(db) > 0,
                     "error": "Invalid admin username or password.",
-                    "login_mode": "admin",
                 },
                 status_code=401,
             )
@@ -127,6 +126,7 @@ async def queue_page(request: Request, db: Session = Depends(get_db)):
     """Mobile queue page."""
     queue_items = queue_service.get_queue(db)
     singer_name = (request.cookies.get("karaoke_singer") or "").strip()
+    is_admin = get_admin_user(request, db) is not None
     return templates.TemplateResponse(
         "queue.html",
         {
@@ -134,6 +134,7 @@ async def queue_page(request: Request, db: Session = Depends(get_db)):
             "queue": queue_items,
             "singer_name": singer_name,
             "needs_singer_name": not singer_name,
+            "is_admin": is_admin,
         },
     )
 
@@ -171,12 +172,14 @@ async def media_management_page(request: Request, db: Session = Depends(get_db))
     """Media management page backed by persisted media library rows."""
     media_items = media_library_service.list_media_items(db)
     media_stats = media_library_service.get_media_stats(db)
+    is_admin = get_admin_user(request, db) is not None
     return templates.TemplateResponse(
         "media_management.html",
         {
             "request": request,
             "media_items": media_items,
             "media_stats": media_stats,
+            "is_admin": is_admin,
         },
     )
 

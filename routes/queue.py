@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import SessionLocal, get_db
 from models import QueueItemCreate, QueueItemResponse, QueueStatus
+from routes.auth import require_admin_user
 from services.lyrics_service import LyricsService
 from services.queue_service import QueueService
 from services.websocket_manager import manager
@@ -151,7 +152,11 @@ async def skip_to_item(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{item_id}")
-async def remove_item(item_id: int, db: Session = Depends(get_db)):
+async def remove_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
     """Remove an item from the queue."""
     item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
     if not item:
@@ -170,7 +175,10 @@ async def remove_item(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/clear")
-async def clear_queue(db: Session = Depends(get_db)):
+async def clear_queue(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
     """Clear all items from the queue except currently playing."""
     # Remove all items except the currently playing one
     db.query(QueueItem).filter(QueueItem.status != "playing").delete()

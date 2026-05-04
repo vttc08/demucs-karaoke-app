@@ -22,6 +22,8 @@ const searchInput = document.getElementById('search-input');
 const searchBtn = document.getElementById('search-btn');
 const searchResults = document.getElementById('search-results');
 const queueList = document.getElementById('queue-list');
+const mainElement = document.querySelector('main[data-is-admin]');
+const isAdminUser = mainElement?.dataset.isAdmin === 'true';
 const stageRemoteStatus = document.getElementById('stage-remote-status');
 const stageRemotePlayPauseBtn = document.getElementById('stage-remote-play-pause-btn');
 const stageRemotePlayPauseIcon = document.getElementById('stage-remote-play-pause-icon');
@@ -874,6 +876,21 @@ function updateQueueDisplay(queue) {
     
     queueList.innerHTML = queue.map(item => {
         const statusInfo = getStatusInfo(item.status);
+        const actionHtml = item.status === 'ready' ? `
+                    <button class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_0_15px_rgba(0,242,255,0.3)] active:scale-90 transition-all neon-glow"
+                            onclick="skipToSong('${item.id}')">
+                        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">play_arrow</span>
+                    </button>
+                    ` : item.status === 'playing' ? `
+                    <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="Currently playing">
+                        <span class="material-symbols-outlined">equalizer</span>
+                    </button>
+                    ` : isAdminUser ? `
+                    <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors"
+                            onclick="removeSong('${item.id}')">
+                        <span class="material-symbols-outlined">remove</span>
+                    </button>
+                    ` : '<span class="w-10 h-10" aria-hidden="true"></span>';
         return `
             <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-status="${item.status}">
                 <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 ${item.status !== 'playing' ? 'grayscale-[50%]' : ''}">
@@ -896,21 +913,7 @@ function updateQueueDisplay(queue) {
                     ` : ''}
                 </div>
                 <div class="flex flex-col gap-2">
-                    ${item.status === 'ready' ? `
-                    <button class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_0_15px_rgba(0,242,255,0.3)] active:scale-90 transition-all neon-glow" 
-                            onclick="skipToSong('${item.id}')">
-                        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">play_arrow</span>
-                    </button>
-                    ` : item.status === 'playing' ? `
-                    <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="Currently playing">
-                        <span class="material-symbols-outlined">equalizer</span>
-                    </button>
-                    ` : `
-                    <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors" 
-                            onclick="removeSong('${item.id}')">
-                        <span class="material-symbols-outlined">remove</span>
-                    </button>
-                    `}
+                    ${actionHtml}
                 </div>
             </div>
         `;

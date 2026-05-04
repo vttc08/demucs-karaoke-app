@@ -10,6 +10,7 @@
     class="pt-28 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-8 sm:px-6 lg:px-8"
     data-singer-name="{{ singer_name }}"
     data-needs-singer-name="{{ 'true' if needs_singer_name else 'false' }}"
+    data-is-admin="{{ 'true' if is_admin else 'false' }}"
 >
     <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
         <div class="min-w-0">
@@ -63,12 +64,14 @@
                     class="hidden items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider"
                     aria-live="polite"
                 ></span>
-                <button 
+                {% if is_admin %}
+                <button
                     id="clear-all-btn"
                     class="text-secondary font-bold text-sm px-4 py-2 hover:bg-secondary/10 rounded-full transition-colors"
                 >
                     Clear All
                 </button>
+                {% endif %}
             </div>
         </div>
         
@@ -124,11 +127,13 @@
                         <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="Currently playing">
                             <span class="material-symbols-outlined">equalizer</span>
                         </button>
-                        {% else %}
+                        {% elif is_admin %}
                         <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors" 
                                 onclick="removeSong('{{ item.id }}')">
                             <span class="material-symbols-outlined">remove</span>
                         </button>
+                        {% else %}
+                        <span class="w-10 h-10" aria-hidden="true"></span>
                         {% endif %}
                     </div>
                 </div>

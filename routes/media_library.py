@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
 from models import MediaItem, QueueItemCreate
+from routes.auth import require_admin_user
 from services.media_library_maintenance_service import (
     MediaItemDeleteConflictError,
     MediaItemNotFoundError,
@@ -136,7 +137,11 @@ def scan_media_library(db: Session = Depends(get_db)):
 
 
 @router.delete("/{item_id}")
-def delete_media_item(item_id: int, db: Session = Depends(get_db)):
+def delete_media_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
     """Delete a media item and its on-disk files."""
     try:
         summary = media_library_maintenance_service.delete_media_item(db, item_id)

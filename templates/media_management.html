@@ -117,7 +117,9 @@
                 </div>
                 <div class="mt-4 flex flex-wrap items-end justify-end gap-2">
                     <button type="button" data-action="add-to-queue" {% if item.status == "missing" %}disabled{% endif %} class="rounded-full bg-primary px-3 py-1.5 text-xs font-black uppercase tracking-wider text-on-primary {% if item.status == 'missing' %}cursor-not-allowed opacity-60{% endif %}">Add to Queue</button>
+                    {% if is_admin %}
                     <button type="button" data-action="delete" class="rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-error">Delete</button>
+                    {% endif %}
                 </div>
             </article>
             {% endfor %}
@@ -184,7 +186,9 @@
                                     <span class="material-symbols-outlined text-[14px]">edit</span>
                                     Edit
                                 </button>
+                                {% if is_admin %}
                                 <button type="button" data-action="delete" class="rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-error">Delete</button>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>

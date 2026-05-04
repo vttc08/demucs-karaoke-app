@@ -113,6 +113,7 @@ and `/static/...`.
     - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, a Google search link, an editable lyrics box, and lyrics file upload before adding to queue; resolved metadata is saved back into the media entry before queueing
     - Confirm to add to queue
     - Use remote stage controls, including lyrics on/off, for the currently playing item
+    - Admin users can clear queued songs and remove individual queued items; guest users can add songs but cannot perform destructive queue actions
     - Queue status updates in real time (downloading, processing, ready, playing, failed)
    
 2. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
@@ -140,7 +141,7 @@ and `/static/...`.
          - View title, artist, and capability badges (multi-track, lyrics)
          - Use **Add to Queue** to enqueue a local media row through the existing queue API
          - Use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
-         - Use **Delete** to remove the media row and any on-disk media/sidecar files
+         - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
          - Trigger **Scan Library** to reconcile DB with filesystem on demand
          - App also performs one media-library scan on startup/restart
 

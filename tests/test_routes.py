@@ -426,6 +426,26 @@ def test_queue_page_loads(client):
     assert b"queue-toast" in response.content
     assert b"queue-config-lyrics-detail" in response.content
     assert b"flex-none shrink-0" in response.content
+    assert 'id="clear-all-btn"' not in response.text
+    assert 'aria-label="Settings"' not in response.text
+    assert 'aria-label="Media Library"' in response.text
+    assert 'aria-label="Upload Media"' in response.text
+    assert "shield_person" not in response.text
+
+
+def test_queue_page_shows_admin_queue_controls(client):
+    """Admin queue page should show destructive queue controls."""
+    authenticate_admin_client(client)
+    client.post(
+        "/api/queue/",
+        json={"youtube_id": "admin-ui-del", "title": "Admin UI Delete", "is_karaoke": False},
+    )
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert 'id="clear-all-btn"' in response.text
+    assert "removeSong(" in response.text
 
 
 def test_stage_page_loads(client):
@@ -460,6 +480,10 @@ def test_settings_page_loads_for_admin(client):
     assert b">Save<" in response.content
     assert b">Refresh<" in response.content
     assert b"Admin Access" not in response.content
+    assert 'aria-label="Settings"' in response.text
+    assert 'aria-label="Media Library"' in response.text
+    assert 'aria-label="Upload Media"' in response.text
+    assert "shield_person" not in response.text
 
 
 def test_admin_login_rejects_invalid_credentials(client):
@@ -472,6 +496,17 @@ def test_admin_login_rejects_invalid_credentials(client):
     assert response.status_code == 401
     assert ADMIN_SESSION_COOKIE not in response.cookies
     assert "Invalid admin username or password" in response.text
+
+
+def test_login_page_is_admin_only(client):
+    """Login page should not show guest identification controls."""
+    response = client.get("/login")
+
+    assert response.status_code == 200
+    assert 'id="admin-form"' in response.text
+    assert 'id="guest-form"' not in response.text
+    assert "Guest" not in response.text
+    assert "Continue to guest queue" in response.text
 
 
 def test_admin_login_sets_db_backed_session_cookie(client):
@@ -699,6 +734,7 @@ def test_media_management_page_uses_database_rows(client):
     assert b'data-media-path="/media/real-song-one.mp4"' in content
 
     assert b'data-action="edit"' in content
+    assert b'data-action="delete"' not in content
     assert b'data-action="rename"' not in content
     assert b"synced" not in content.lower()
     assert b"Filename on disk" in content
@@ -713,6 +749,26 @@ def test_media_management_page_uses_database_rows(client):
     assert content.count(b">3</p>") >= 1
     assert content.count(b">1</p>") >= 2
     assert content.count(b">2</p>") >= 1
+
+
+def test_media_management_page_shows_delete_for_admin(client):
+    """Admin media library should include delete actions."""
+    authenticate_admin_client(client)
+    with TestingSessionLocal() as db:
+        db.add(
+            MediaItem(
+                title="Admin Delete Song",
+                artist="Artist",
+                media_path="/media/admin-delete-song.mp4",
+                missing=False,
+            )
+        )
+        db.commit()
+
+    response = client.get("/media")
+
+    assert response.status_code == 200
+    assert b'data-action="delete"' in response.content
 
 
 def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
@@ -754,6 +810,7 @@ def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
 
 def test_media_delete_route_removes_row_files_and_queue_items(client, tmp_path):
     """Delete route should remove media rows, queue rows, and local files."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     original_cache = settings.cache_path
     try:
@@ -811,6 +868,7 @@ def test_media_delete_route_removes_row_files_and_queue_items(client, tmp_path):
 
 def test_media_delete_route_rejects_playing_item(client):
     """Delete route should reject items that are currently playing."""
+    authenticate_admin_client(client)
     with TestingSessionLocal() as db:
         media = MediaItem(
             title="Playing Route",
@@ -833,6 +891,24 @@ def test_media_delete_route_rejects_playing_item(client):
     response = client.delete(f"/api/media/{media_id}")
     assert response.status_code == 409
     assert "currently playing" in response.json()["detail"].lower()
+
+
+def test_media_delete_route_requires_admin(client):
+    """Guest users should not be able to delete media through the API."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Guest Delete Blocked",
+            media_path="/media/guest-delete-blocked.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        media_id = media.id
+
+    response = client.delete(f"/api/media/{media_id}")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
 
 
 def test_media_rename_route_updates_database_and_files(client, tmp_path):
@@ -1442,6 +1518,22 @@ def test_get_queue_item_lyrics_cues_returns_404_without_lyrics(client):
     assert "Lyrics not available" in response.json()["detail"]
 
 
+def test_queue_destructive_routes_require_admin(client):
+    """Guest users should not be able to remove or clear queue items."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-del", "title": "Guest Delete", "is_karaoke": False},
+    ).json()
+
+    remove_response = client.delete(f"/api/queue/{created['id']}")
+    clear_response = client.post("/api/queue/clear")
+
+    assert remove_response.status_code == 403
+    assert remove_response.json()["detail"] == "Admin session required"
+    assert clear_response.status_code == 403
+    assert clear_response.json()["detail"] == "Admin session required"
+
+
 def test_websocket_connect_and_receive_connected_message(client):
     """WebSocket endpoint should accept connections and send initial connected payload."""
     with client.websocket_connect("/api/queue/ws") as websocket:
@@ -1476,6 +1568,7 @@ def test_websocket_broadcasts_queue_item_added_event(client):
 
 def test_websocket_broadcasts_queue_item_removed_event(client):
     """Deleting a queue item should broadcast queue_item_removed."""
+    authenticate_admin_client(client)
     created = client.post(
         "/api/queue/",
         json={"youtube_id": "ws-del", "title": "WS Remove", "is_karaoke": False},
@@ -1535,6 +1628,7 @@ def test_websocket_broadcasts_current_item_changed_on_skip(client):
 
 def test_websocket_broadcasts_queue_cleared(client):
     """Clearing queue should broadcast queue_cleared."""
+    authenticate_admin_client(client)
     client.post(
         "/api/queue/",
         json={"youtube_id": "ws-clear-1", "title": "WS Clear 1", "is_karaoke": False},
