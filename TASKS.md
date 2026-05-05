@@ -59,13 +59,19 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [ ] frontend settings page polish
 - [x] blueprints for subfolder custom path support
 - [x] consistent themed restriction page for outside network and splash screen
-- [ ] admin login page for settings and splash
-- [ ] login page for device identification only, stored in local storage (Login Screen)
+- [x] admin login page for settings and splash
+- [x] login page for device identification only, stored in local storage (Login Screen)
 - [ ] real time join and enqueue feature
 - [ ] admin has ability to remove, skip or reorder queue
 - [ ] fix multi track audio sync issues
+- [ ] show users in queue
+- [ ] users can change only their own added songs
+- [ ] show progress for ytdlp and demucs
 - [x] customize lyric tracks behavior
 - [x] lyrics-assisted add-to-queue flow with manual lyrics override
+- [ ] lyrics display page/modal for current song (synced and unsynced) (lyrics viewer screen)
+- [ ] i frame only video previewer and editor (vibestudio editor)
+- [ ] add vocals to existing karaoke video (audio synchronization)
 - [ ] oidc authelia support
 - [ ] batching demucs using load balancer and split file into small segments for batch processing
 
