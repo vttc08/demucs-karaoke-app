@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from config import settings
 from database import ensure_auxiliary_schema, get_db
+from services.auth_service import ADMIN_SESSION_COOKIE, AuthService
 from main import create_app
 from models import Base
 
@@ -77,6 +78,18 @@ def test_app_serves_pages_assets_api_and_websocket_under_configured_subpath(tmp_
         )
         assert language_response.status_code == 302
         assert language_response.headers["location"] == "/karaoke/stage"
+
+        stage_redirect = client.get("/karaoke/stage", follow_redirects=False)
+        assert stage_redirect.status_code == 302
+        assert stage_redirect.headers["location"] == "/karaoke/login"
+
+        service = AuthService()
+        with testing_session_local() as db:
+            admin = service.create_or_update_admin(
+                db, "admin", "correct horse battery staple"
+            )
+            token, _ = service.create_admin_session(db, admin)
+        client.cookies.set(ADMIN_SESSION_COOKIE, token)
 
         assert client.get("/karaoke/stage").status_code == 200
         assert client.get("/karaoke/settings").status_code == 200

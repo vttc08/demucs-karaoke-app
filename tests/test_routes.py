@@ -430,6 +430,7 @@ def test_queue_page_loads(client):
     assert b"flex-none shrink-0" in response.content
     assert 'id="clear-all-btn"' not in response.text
     assert 'aria-label="Settings"' not in response.text
+    assert 'aria-label="Stage View"' not in response.text
     assert 'aria-label="Media Library"' in response.text
     assert 'aria-label="Upload Media"' in response.text
     assert "shield_person" not in response.text
@@ -493,10 +494,19 @@ def test_queue_page_shows_admin_queue_controls(client):
     assert response.status_code == 200
     assert 'id="clear-all-btn"' in response.text
     assert "removeSong(" in response.text
+    assert 'aria-label="Stage View"' in response.text
 
 
-def test_stage_page_loads(client):
-    """Test stage page renders."""
+def test_stage_page_requires_admin(client):
+    """Guest users should be redirected away from the stage page."""
+    response = client.get("/stage", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login"
+
+
+def test_stage_page_loads_for_admin(client):
+    """Test stage page renders for a valid admin session."""
+    authenticate_admin_client(client)
     response = client.get("/stage")
     assert response.status_code == 200
     assert b"Stage View" in response.content

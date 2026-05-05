@@ -178,9 +178,9 @@ The stage page uses a websocket-first model:
   an authorization boundary. First-time guests are prompted inline on the queue page, can dismiss the
   prompt to receive a generated guest name, and can edit that name from the queue greeting.
 - The current branch establishes admin credential/session storage. The settings page and settings
-  management APIs require an active admin session. Queue clear/remove actions and media delete
-  actions are also restricted to admins in both the UI and API. Other media/queue authorization gates
-  can still be refined in a later pass.
+  management APIs require an active admin session. The stage page and stage navbar entry are also
+  admin-only. Queue clear/remove actions and media delete actions are also restricted to admins in
+  both the UI and API. Other media/queue authorization gates can still be refined in a later pass.
 
 ## Lyrics inference and provider flow
 

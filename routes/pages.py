@@ -208,6 +208,8 @@ async def queue_page(request: Request, db: Session = Depends(get_db)):
 @router.get("/stage", response_class=HTMLResponse)
 async def stage_page(request: Request, db: Session = Depends(get_db)):
     """Presentation-first stage player page."""
+    if get_admin_user(request, db) is None:
+        return RedirectResponse(url=app_url("/login"), status_code=302)
     current_item = queue_service.get_current_or_promote_next(db)
     queue_items = queue_service.get_queue(db)
     runtime_settings = runtime_settings_service.get_settings()
