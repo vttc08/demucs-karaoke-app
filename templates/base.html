@@ -93,17 +93,23 @@
                 <form action="{{ app_url('/language') }}" method="post" class="mr-1">
                     <input type="hidden" name="next" value="{{ request.url.path }}">
                     <label class="sr-only" for="language-select">{{ t('app.language') }}</label>
-                    <select
-                        id="language-select"
-                        name="language"
-                        class="h-9 rounded-full border border-primary/20 bg-surface-container-high px-2 text-xs font-bold text-on-surface outline-none transition focus:ring-2 focus:ring-primary/30"
-                        aria-label="{{ t('app.language') }}"
-                        onchange="this.form.submit()"
-                    >
-                        {% for locale in supported_locales() %}
-                        <option value="{{ locale.code }}" {% if locale.code == current_locale(request) %}selected{% endif %}>{{ locale.label }}</option>
-                        {% endfor %}
-                    </select>
+                    <div class="relative inline-flex h-9 w-16 items-center justify-center rounded-full bg-surface-container-high/70 text-primary transition-colors hover:bg-primary/10">
+                        <span class="material-symbols-outlined pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[14px]">language</span>
+                        <select
+                            id="language-select"
+                            name="language"
+                            class="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent text-transparent outline-none"
+                            aria-label="{{ t('app.language') }}"
+                            onchange="this.form.submit()"
+                        >
+                            {% for locale in supported_locales() %}
+                            <option value="{{ locale.code }}" {% if locale.code == current_locale(request) %}selected{% endif %}>
+                                {% if locale.code == 'en' %}EN{% else %}ZH{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[14px] text-on-surface-variant">expand_more</span>
+                    </div>
                     <button type="submit" class="sr-only">{{ t('language.submit') }}</button>
                 </form>
                 <a href="{{ app_url('/queue') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/queue') or request.url.path == app_url('/') %}bg-primary/10{% endif %}" aria-label="{{ t('queue.title') }}">
@@ -113,18 +119,10 @@
                 <a href="{{ app_url('/stage') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/stage') %}bg-primary/10{% endif %}" aria-label="{{ t('stage.title') }}">
                     <span class="material-symbols-outlined">live_tv</span>
                 </a>
-                {% endif %}
-                {% if request.cookies.get("karaoke_admin_session") %}
                 <a href="{{ app_url('/settings') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/settings') %}bg-primary/10{% endif %}" aria-label="{{ t('nav.settings') }}">
                     <span class="material-symbols-outlined">settings</span>
                 </a>
                 {% endif %}
-                <a href="{{ app_url('/media') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/media') %}bg-primary/10{% endif %}" aria-label="{{ t('media.library') }}">
-                    <span class="material-symbols-outlined">folder_open</span>
-                </a>
-                <a href="{{ app_url('/upload') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/upload') %}bg-primary/10{% endif %}" aria-label="{{ t('common.upload_media') }}">
-                    <span class="material-symbols-outlined">cloud_upload</span>
-                </a>
             </nav>
         </div>
     </header>

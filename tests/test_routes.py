@@ -428,11 +428,14 @@ def test_queue_page_loads(client):
     assert b"queue-toast" in response.content
     assert b"queue-config-lyrics-detail" in response.content
     assert b"flex-none shrink-0" in response.content
+    assert 'id="queue-library-shortcuts"' in response.text
+    assert 'href="/media"' in response.text
+    assert 'href="/upload"' in response.text
     assert 'id="clear-all-btn"' not in response.text
     assert 'aria-label="Settings"' not in response.text
     assert 'aria-label="Stage View"' not in response.text
-    assert 'aria-label="Media Library"' in response.text
-    assert 'aria-label="Upload Media"' in response.text
+    assert 'aria-label="Media Library"' not in response.text
+    assert 'aria-label="Upload Media"' not in response.text
     assert "shield_person" not in response.text
 
 
@@ -444,7 +447,7 @@ def test_queue_page_renders_simplified_chinese_locale(client):
     assert '<html class="dark" lang="zh-CN">' in response.text
     assert "卡拉 OK 队列" in response.text
     assert "搜索本地媒体库和 YouTube" in response.text
-    assert "简体中文" in response.text
+    assert 'id="language-select"' in response.text
 
 
 def test_language_route_sets_cookie_and_redirects_locally(client):
@@ -495,6 +498,9 @@ def test_queue_page_shows_admin_queue_controls(client):
     assert 'id="clear-all-btn"' in response.text
     assert "removeSong(" in response.text
     assert 'aria-label="Stage View"' in response.text
+    assert 'aria-label="Settings"' in response.text
+    assert 'aria-label="Media Library"' not in response.text
+    assert 'aria-label="Upload Media"' not in response.text
 
 
 def test_stage_page_requires_admin(client):
@@ -538,8 +544,8 @@ def test_settings_page_loads_for_admin(client):
     assert b">Refresh<" in response.content
     assert b"Admin Access" not in response.content
     assert 'aria-label="Settings"' in response.text
-    assert 'aria-label="Media Library"' in response.text
-    assert 'aria-label="Upload Media"' in response.text
+    assert 'aria-label="Media Library"' not in response.text
+    assert 'aria-label="Upload Media"' not in response.text
     assert "shield_person" not in response.text
 
 

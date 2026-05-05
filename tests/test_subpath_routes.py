@@ -70,6 +70,9 @@ def test_app_serves_pages_assets_api_and_websocket_under_configured_subpath(tmp_
         assert "/karaoke/static/app-urls.js" in queue_html
         assert "/karaoke/static/queue.js" in queue_html
         assert 'window.KARAOKE_BASE_PATH = "/karaoke";' in queue_html
+        assert 'id="queue-library-shortcuts"' in queue_html
+        assert 'href="/karaoke/media"' in queue_html
+        assert 'href="/karaoke/upload"' in queue_html
 
         language_response = client.post(
             "/karaoke/language",

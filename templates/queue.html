@@ -46,7 +46,38 @@
                 <span class="material-symbols-outlined text-base">search</span>
             </button>
         </div>
-        
+        <div id="queue-library-shortcuts" class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <a
+                href="{{ app_url('/media') }}"
+                class="group inline-flex items-center justify-between rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-4 py-3 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+            >
+                <span class="flex min-w-0 items-center gap-3">
+                    <span class="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <span class="material-symbols-outlined text-[18px]">folder_open</span>
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block truncate text-sm font-bold text-on-surface">{{ t('media.library') }}</span>
+                        <span class="block truncate text-[11px] text-on-surface-variant">{{ t('media.manage_detail') }}</span>
+                    </span>
+                </span>
+                <span class="material-symbols-outlined text-base text-on-surface-variant transition-transform group-hover:translate-x-0.5">chevron_right</span>
+            </a>
+            <a
+                href="{{ app_url('/upload') }}"
+                class="group inline-flex items-center justify-between rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-4 py-3 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+            >
+                <span class="flex min-w-0 items-center gap-3">
+                    <span class="flex h-9 w-9 items-center justify-center rounded-full bg-secondary/10 text-secondary">
+                        <span class="material-symbols-outlined text-[18px]">cloud_upload</span>
+                    </span>
+                    <span class="min-w-0">
+                        <span class="block truncate text-sm font-bold text-on-surface">{{ t('common.upload_media') }}</span>
+                        <span class="block truncate text-[11px] text-on-surface-variant">{{ t('upload.ingest_detail') }}</span>
+                    </span>
+                </span>
+                <span class="material-symbols-outlined text-base text-on-surface-variant transition-transform group-hover:translate-x-0.5">chevron_right</span>
+            </a>
+        </div>
         <!-- Search Results -->
         <div id="search-results" class="flex flex-col gap-3"></div>
     </section>
