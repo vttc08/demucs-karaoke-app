@@ -27,10 +27,11 @@ which browser event caused the drift.
   - Stage consumes `stage_control_command` and `stage_state_update`.
 - Resync now performs a hard local recovery:
   - pause both media clocks,
+  - reload both media sources with cache-busting to reset decoder/media-pipeline state,
   - seek both to the same precise timestamp,
   - wait for seek/readiness,
   - resume the video and vocals from the same timeline,
-  - retry once with a reloaded vocals element if the explicit recovery operation fails,
+  - retry once if the explicit recovery operation fails,
   - fall back to a full stage reload only if the manual recovery attempt cannot complete.
 
 ## Why sync can still fail
@@ -56,7 +57,8 @@ long enough fallbacks for busy devices. A short timeout can resume before both e
 
 ## 5. Refresh works because it rebuilds the media graph
 A full `/stage` reload reinitializes both elements and the Web Audio graph. Manual Resync should
-approximate that reset in-place, with page reload kept as a last-resort fallback.
+approximate that reset in-place by reloading the media sources before seeking, with page reload kept
+as a last-resort fallback.
 
 ## Implemented recovery approach
 
@@ -75,8 +77,8 @@ approximate that reset in-place, with page reload kept as a last-resort fallback
 3. Hard relock is now only user-initiated through Resync or through an explicit remote Resync command.
 
 ## Priority C: fallback behavior
-1. If the explicit hard relock operation throws or cannot complete, the vocals element reloads with
-   cache busting and retries once at the same timestamp.
+1. If the explicit hard relock operation throws or cannot complete, both media sources reload with
+   cache busting and retry once at the same timestamp.
 2. If that retry fails, `/stage` reloads as the known-good recovery path.
 
 ## Validation checklist
