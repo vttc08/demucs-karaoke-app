@@ -33,6 +33,8 @@ which browser event caused the drift.
   - resume the video and vocals from the same timeline,
   - retry once if the explicit recovery operation fails,
   - fall back to a full stage reload only if the manual recovery attempt cannot complete.
+- For multi-track items, stage also runs one automatic hard resync at the beginning of playback so
+  each item starts from the same reset path as the manual button.
 
 ## Why sync can still fail
 
@@ -68,6 +70,7 @@ as a last-resort fallback.
 3. Queue-originated resync remains compatible and tells the stage client to recover its local
    current timestamp.
 4. Stage hard recovery serializes each sync operation so overlapping media events do not fight.
+5. Multi-track item startup runs one local hard resync before normal steady-state sync takes over.
 
 ## Priority B: conservative drift handling
 1. Mild drift is corrected with a follower seek.

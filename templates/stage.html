@@ -327,6 +327,7 @@ let lyricsAnimationFrame = null;
 let syncOperationId = 0;
 let lastHandledSyncVersion = 0;
 let hardSyncInProgress = false;
+let initialMultitrackResyncCompleted = !vocalsAvailable;
 const SOFT_DRIFT_THRESHOLD_SECONDS = 0.12;
 const MEDIA_SEEK_TIMEOUT_MS = 1200;
 const MEDIA_READY_TIMEOUT_MS = 1200;
@@ -865,6 +866,21 @@ async function forceResyncPlayback(broadcast = true, syncVersion = null) {
     });
 }
 
+async function runInitialMultitrackResync() {
+    if (!video || !vocalsAvailable || initialMultitrackResyncCompleted || hardSyncInProgress) {
+        return false;
+    }
+    initialMultitrackResyncCompleted = true;
+    await hardResyncPlayback({
+        targetTime: video.currentTime || 0,
+        shouldPausePlayback: false,
+        broadcast: false,
+        reloadMedia: true,
+        reason: "initial-multitrack-start",
+    });
+    return true;
+}
+
 function applyStageStateFromServer(data) {
     if (!data || typeof data !== "object") return;
     if (typeof data.sync_version === "number" && Number.isFinite(data.sync_version)) {
@@ -1147,6 +1163,9 @@ if (video) {
     video.addEventListener("play", showStageControls);
     video.addEventListener("pause", showStageControls);
     video.addEventListener("play", async () => {
+        if (await runInitialMultitrackResync()) {
+            return;
+        }
         if (hardSyncInProgress) {
             return;
         }
@@ -1387,11 +1406,16 @@ connectStageWebSocket();
 
 if (video && !video.paused) {
     if (vocalsAvailable) {
-        ensureAudioGraph()
-            .then(() => {
-                syncVocalsToVideo(true);
-                startSyncTimer();
-                startLyricsTicker();
+        runInitialMultitrackResync()
+            .then((didResync) => {
+                if (didResync) {
+                    return;
+                }
+                return ensureAudioGraph().then(() => {
+                    syncVocalsToVideo(true);
+                    startSyncTimer();
+                    startLyricsTicker();
+                });
             })
             .catch((error) => {
                 console.warn("Failed to bootstrap vocals playback:", error);
