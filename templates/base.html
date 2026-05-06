@@ -119,6 +119,9 @@
                 <a href="{{ app_url('/stage') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/stage') %}bg-primary/10{% endif %}" aria-label="{{ t('stage.title') }}">
                     <span class="material-symbols-outlined">live_tv</span>
                 </a>
+                <a href="{{ app_url('/media') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/media') %}bg-primary/10{% endif %}" aria-label="{{ t('media.library') }}">
+                    <span class="material-symbols-outlined">folder_open</span>
+                </a>
                 <a href="{{ app_url('/settings') }}" class="text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/settings') %}bg-primary/10{% endif %}" aria-label="{{ t('nav.settings') }}">
                     <span class="material-symbols-outlined">settings</span>
                 </a>
