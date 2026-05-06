@@ -39,7 +39,7 @@ Allowed `command` values:
 - `play`
 - `pause`
 - `skip`
-- `resync` (force stage client(s) to re-align local video/vocals at current playback timestamp)
+- `resync` (force stage client(s) to hard-recover local video/vocals alignment; optional numeric `seek_time` and boolean `is_paused`)
 - `seek` (requires numeric `seek_time` in seconds; optional boolean `is_paused`)
 - `set_vocals_enabled` (requires boolean `vocals_enabled`)
 - `set_vocals_volume` (requires numeric `vocals_volume` between `0.0` and `1.0`)
@@ -54,7 +54,7 @@ Allowed `command` values:
   - `current_item_changed`
   - `queue_item_failed`
 - Stage control:
-  - `stage_control_command` with `{command, source}` and optional seek payload (`seek_time`, `is_paused`)
+  - `stage_control_command` with `{command, source}`, optional seek payload (`seek_time`, `is_paused`), and `sync_version` for resync commands
   - `stage_state_update` with `{is_paused, vocals_enabled, vocals_volume, lyrics_enabled, source}`
 
 ---
@@ -666,6 +666,7 @@ When the current item includes `vocals_path`, stage playback uses sidecar dual-t
 - base media from `media_path`
 - optional guide vocals from `vocals_path`
 - real-time vocals on/off + volume control synchronized over websocket
+- manual Resync performs a hard local relock for browsers that drift between the separate media clocks
 
 ### Settings Page (Mobile/Desktop)
 ```

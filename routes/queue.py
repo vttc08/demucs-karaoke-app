@@ -321,7 +321,29 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                     if isinstance(is_paused, bool):
                         await manager.set_stage_paused(is_paused=is_paused, source=source)
                 elif command == "resync":
-                    await manager.broadcast_stage_control_command(command=command, source=source)
+                    extra_data = {"sync_version": manager.next_stage_sync_version()}
+                    raw_seek_time = payload.get("seek_time")
+                    if isinstance(raw_seek_time, (int, float)):
+                        seek_time = float(raw_seek_time)
+                        if seek_time < 0.0 or not math.isfinite(seek_time):
+                            await manager.send_personal_message(
+                                {
+                                    "type": "error",
+                                    "data": {"detail": "seek_time must be a non-negative finite number"},
+                                    "timestamp": asyncio.get_event_loop().time(),
+                                },
+                                websocket,
+                            )
+                            continue
+                        extra_data["seek_time"] = seek_time
+                    is_paused = payload.get("is_paused")
+                    if isinstance(is_paused, bool):
+                        extra_data["is_paused"] = is_paused
+                    await manager.broadcast_stage_control_command(
+                        command=command,
+                        source=source,
+                        extra_data=extra_data,
+                    )
                 elif command == "set_vocals_enabled":
                     vocals_enabled = payload.get("vocals_enabled")
                     if not isinstance(vocals_enabled, bool):

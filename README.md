@@ -121,7 +121,7 @@ and `/static/...`.
 2. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
      - Requires an admin session created by the server-managed admin login flow
      - Presentation-first stage output with fullscreen-optimized player
-     - Minimal controls overlay (play/pause, skip, resync, fullscreen)
+     - Minimal controls overlay (play/pause, skip, hard resync, fullscreen)
      - Toggle the lyrics overlay on or off while playback is running
     - Compact "up next" chips without queue-management actions
     - Auto-advances when song ends

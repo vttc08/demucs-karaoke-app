@@ -324,6 +324,14 @@ let seekBroadcastUnlockTimer = null;
 let lyricCues = [];
 let activeLyricCueIndex = null;
 let lyricsAnimationFrame = null;
+let syncOperationId = 0;
+let lastHandledSyncVersion = 0;
+let relockTimer = null;
+const SOFT_DRIFT_THRESHOLD_SECONDS = 0.12;
+const HARD_DRIFT_THRESHOLD_SECONDS = 0.25;
+const MEDIA_SEEK_TIMEOUT_MS = 1200;
+const MEDIA_READY_TIMEOUT_MS = 1200;
+const RELOCK_DEBOUNCE_MS = 180;
 
 function safeReload() {
     if (isReloading) return;
@@ -583,7 +591,11 @@ function syncVocalsToVideo(forceSeek = false) {
         return;
     }
     const drift = Math.abs((vocalsAudio.currentTime || 0) - (video.currentTime || 0));
-    if (forceSeek || drift > 0.12) {
+    if (!forceSeek && drift > HARD_DRIFT_THRESHOLD_SECONDS) {
+        scheduleHardRelock("drift");
+        return;
+    }
+    if (forceSeek || drift > SOFT_DRIFT_THRESHOLD_SECONDS) {
         vocalsAudio.currentTime = video.currentTime || 0;
     }
     vocalsAudio.play().catch((error) => {
@@ -600,6 +612,23 @@ function stopSyncTimer() {
     if (!syncTimer) return;
     window.clearInterval(syncTimer);
     syncTimer = null;
+}
+
+function scheduleHardRelock(reason = "media-event") {
+    if (!video || video.paused) return;
+    if (relockTimer) {
+        window.clearTimeout(relockTimer);
+    }
+    relockTimer = window.setTimeout(() => {
+        relockTimer = null;
+        hardResyncPlayback({
+            targetTime: video.currentTime || 0,
+            shouldPausePlayback: false,
+            broadcast: false,
+            reason,
+            fallbackReload: false,
+        });
+    }, RELOCK_DEBOUNCE_MS);
 }
 
 function suppressSeekBroadcastTemporarily() {
@@ -635,13 +664,53 @@ function seekMediaElement(mediaElement, seekTime) {
         };
         mediaElement.addEventListener("seeked", settle, { once: true });
         mediaElement.addEventListener("error", settle, { once: true });
-        window.setTimeout(settle, 350);
+        window.setTimeout(settle, MEDIA_SEEK_TIMEOUT_MS);
         try {
             mediaElement.currentTime = targetTime;
         } catch (_) {
             settle();
         }
     });
+}
+
+function waitForMediaReady(mediaElement, timeoutMs = MEDIA_READY_TIMEOUT_MS) {
+    return new Promise((resolve) => {
+        if (!mediaElement || mediaElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            resolve();
+            return;
+        }
+        let settled = false;
+        const settle = () => {
+            if (settled) return;
+            settled = true;
+            mediaElement.removeEventListener("canplay", settle);
+            mediaElement.removeEventListener("loadeddata", settle);
+            mediaElement.removeEventListener("error", settle);
+            resolve();
+        };
+        mediaElement.addEventListener("canplay", settle, { once: true });
+        mediaElement.addEventListener("loadeddata", settle, { once: true });
+        mediaElement.addEventListener("error", settle, { once: true });
+        window.setTimeout(settle, timeoutMs);
+    });
+}
+
+async function reloadVocalsMedia(targetTime) {
+    if (!vocalsAvailable || !vocalsAudio) return;
+    const source = vocalsAudio.querySelector("source");
+    const sourceUrl = source?.getAttribute("src") || vocalsAudio.currentSrc || vocalsAudio.src;
+    if (!sourceUrl) return;
+    vocalsAudio.pause();
+    const bustedUrl = new URL(sourceUrl, window.location.href);
+    bustedUrl.searchParams.set("_sync", String(Date.now()));
+    if (source) {
+        source.setAttribute("src", bustedUrl.toString());
+    } else {
+        vocalsAudio.src = bustedUrl.toString();
+    }
+    vocalsAudio.load();
+    await waitForMediaReady(vocalsAudio);
+    await seekMediaElement(vocalsAudio, targetTime);
 }
 
 async function seekAndResyncPlayback(targetTime, shouldPausePlayback) {
@@ -678,28 +747,145 @@ async function seekAndResyncPlayback(targetTime, shouldPausePlayback) {
     }
 }
 
-async function forceResyncPlayback(broadcast = true) {
+async function hardResyncPlayback({
+    targetTime = null,
+    shouldPausePlayback = null,
+    broadcast = false,
+    syncVersion = null,
+    reloadVocals = false,
+    fallbackReload = true,
+    reason = "manual",
+    attempt = 0,
+} = {}) {
     if (!video) return;
-    const shouldPausePlayback = video.paused;
-    if (!shouldPausePlayback) {
-        video.pause();
-        if (vocalsAudio && !vocalsAudio.paused) {
-            vocalsAudio.pause();
+    if (typeof syncVersion === "number" && syncVersion <= lastHandledSyncVersion) {
+        return;
+    }
+    if (typeof syncVersion === "number") {
+        lastHandledSyncVersion = syncVersion;
+    }
+
+    const operationId = ++syncOperationId;
+    const pauseAfterRelock = typeof shouldPausePlayback === "boolean" ? shouldPausePlayback : video.paused;
+    const seekTime = Math.max(0, Number.isFinite(targetTime) ? targetTime : (video.currentTime || 0));
+
+    suppressSeekBroadcastTemporarily();
+    stopSyncTimer();
+    stopLyricsTicker();
+    if (relockTimer) {
+        window.clearTimeout(relockTimer);
+        relockTimer = null;
+    }
+    video.pause();
+    if (vocalsAudio && !vocalsAudio.paused) {
+        vocalsAudio.pause();
+    }
+
+    try {
+        if (reloadVocals) {
+            await reloadVocalsMedia(seekTime);
         }
-        await new Promise((resolve) => window.setTimeout(resolve, 80));
+        const seeks = [seekMediaElement(video, seekTime)];
+        if (vocalsAvailable && vocalsAudio) {
+            seeks.push(seekMediaElement(vocalsAudio, seekTime));
+        }
+        await Promise.all(seeks);
+        const readiness = [waitForMediaReady(video)];
+        if (vocalsAvailable && vocalsAudio) {
+            readiness.push(waitForMediaReady(vocalsAudio));
+        }
+        await Promise.all(readiness);
+        if (operationId !== syncOperationId) return;
+
+        updateLyricsForTime(seekTime);
+        if (pauseAfterRelock) {
+            updatePlayPauseUi();
+            showStageControls();
+            return;
+        }
+
+        await ensureAudioGraph();
+        await video.play();
+        if (vocalsAvailable && vocalsAudio) {
+            vocalsAudio.currentTime = video.currentTime || seekTime;
+            await vocalsAudio.play();
+        }
+        startSyncTimer();
+        startLyricsTicker();
+        await new Promise((resolve) => window.setTimeout(resolve, 140));
+        if (operationId !== syncOperationId) return;
+
+        const drift = vocalsAvailable && vocalsAudio
+            ? Math.abs((vocalsAudio.currentTime || 0) - (video.currentTime || 0))
+            : 0;
+        if (drift > HARD_DRIFT_THRESHOLD_SECONDS) {
+            if (attempt === 0) {
+                await hardResyncPlayback({
+                    targetTime: video.currentTime || seekTime,
+                    shouldPausePlayback: false,
+                    broadcast: false,
+                    reloadVocals: true,
+                    fallbackReload,
+                    reason: `${reason}:reload-vocals`,
+                    attempt: attempt + 1,
+                });
+                return;
+            }
+            if (fallbackReload) {
+                safeReload();
+                return;
+            }
+        }
+    } catch (error) {
+        console.warn("Hard playback resync failed:", { reason, attempt, error });
+        if (attempt === 0) {
+            await hardResyncPlayback({
+                targetTime: video.currentTime || seekTime,
+                shouldPausePlayback: pauseAfterRelock,
+                broadcast: false,
+                reloadVocals: true,
+                fallbackReload,
+                reason: `${reason}:retry`,
+                attempt: attempt + 1,
+            });
+            return;
+        }
+        if (fallbackReload) {
+            safeReload();
+            return;
+        }
+    } finally {
+        updatePlayPauseUi();
+        showStageControls();
     }
-    const seekTime = Math.max(0, Math.floor(video.currentTime || 0));
-    await seekAndResyncPlayback(seekTime, shouldPausePlayback);
+
+}
+
+async function forceResyncPlayback(broadcast = true, syncVersion = null) {
+    if (!video) return;
     if (broadcast) {
-        sendStageCommand("seek", {
-            seek_time: seekTime,
-            is_paused: shouldPausePlayback,
+        const sent = sendStageCommand("resync", {
+            seek_time: video.currentTime || 0,
+            is_paused: video.paused,
         });
+        if (sent) {
+            return;
+        }
     }
+    await hardResyncPlayback({
+        targetTime: video.currentTime || 0,
+        shouldPausePlayback: video.paused,
+        broadcast: false,
+        syncVersion,
+        reason: "manual",
+    });
 }
 
 function applyStageStateFromServer(data) {
     if (!data || typeof data !== "object") return;
+    if (typeof data.sync_version === "number" && Number.isFinite(data.sync_version)) {
+        lastHandledSyncVersion = Math.max(lastHandledSyncVersion, data.sync_version);
+    }
     if (typeof data.vocals_enabled === "boolean") {
         mixState.vocals_enabled = data.vocals_enabled;
     }
@@ -879,7 +1065,16 @@ function connectStageWebSocket() {
                 const command = message?.data?.command;
                 if (!video) return;
                 if (command === "resync") {
-                    await forceResyncPlayback(false);
+                    const seekTime = message?.data?.seek_time;
+                    const remotePaused = message?.data?.is_paused;
+                    const syncVersion = message?.data?.sync_version;
+                    await hardResyncPlayback({
+                        targetTime: (typeof seekTime === "number" && Number.isFinite(seekTime)) ? seekTime : (video.currentTime || 0),
+                        shouldPausePlayback: typeof remotePaused === "boolean" ? remotePaused : video.paused,
+                        broadcast: false,
+                        syncVersion: (typeof syncVersion === "number" && Number.isFinite(syncVersion)) ? syncVersion : null,
+                        reason: "remote-resync",
+                    });
                 } else if (command === "seek") {
                     const seekTime = message?.data?.seek_time;
                     const remotePaused = message?.data?.is_paused;
@@ -976,6 +1171,20 @@ if (video) {
     video.addEventListener("pause", () => {
         stopSyncTimer();
         stopLyricsTicker();
+        if (vocalsAudio && !vocalsAudio.paused) {
+            vocalsAudio.pause();
+        }
+    });
+    video.addEventListener("playing", () => syncVocalsToVideo(true));
+    video.addEventListener("canplay", () => syncVocalsToVideo(false));
+    video.addEventListener("seeked", () => syncVocalsToVideo(true));
+    video.addEventListener("ratechange", () => scheduleHardRelock("ratechange"));
+    video.addEventListener("waiting", () => {
+        if (vocalsAudio && !vocalsAudio.paused) {
+            vocalsAudio.pause();
+        }
+    });
+    video.addEventListener("stalled", () => {
         if (vocalsAudio && !vocalsAudio.paused) {
             vocalsAudio.pause();
         }
@@ -1147,6 +1356,11 @@ if (vocalsAudio) {
     vocalsAudio.addEventListener("ended", () => {
         syncVocalsToVideo(true);
     });
+    vocalsAudio.addEventListener("playing", () => syncVocalsToVideo(false));
+    vocalsAudio.addEventListener("canplay", () => syncVocalsToVideo(false));
+    vocalsAudio.addEventListener("seeked", () => syncVocalsToVideo(false));
+    vocalsAudio.addEventListener("waiting", () => scheduleHardRelock("vocals-waiting"));
+    vocalsAudio.addEventListener("stalled", () => scheduleHardRelock("vocals-stalled"));
 }
 
 window.addEventListener("keydown", async (event) => {

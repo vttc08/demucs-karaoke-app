@@ -1,101 +1,88 @@
 # Stage sync analysis (video + vocals sidecar)
 
 ## Scope
-This document reviews the current multi-track stage playback implementation and explains why desync can still happen, especially in the reported flow:
+This document reviews the current multi-track stage playback behavior where the base track and
+vocals sidecar can become audibly out of sync.
 
-1. Fresh `/stage` load is in sync.
-2. Pause playback.
-3. Connection drops/reconnects.
-4. Resume playback.
-5. Vocals become desynced.
-6. Resync button does not reliably recover.
-7. Full `/stage` refresh reliably recovers.
+The original investigation focused on a pause + websocket disconnect/reconnect flow. New testing
+shows a more useful browser split:
+
+1. Firefox desktop/mobile can keep the two tracks aligned reliably.
+2. Chromium-family browsers such as Chrome and Brave can drift inconsistently.
+3. The exact trigger is not reproducible enough to treat reconnect as the root cause.
+4. A full `/stage` refresh reliably recovers because it rebuilds both media elements.
+
+The practical requirement is that the manual Resync button must recover playback regardless of
+which browser event caused the drift.
 
 ## Current implementation summary
 - Stage uses two media elements:
   - `#stage-video-player` for base playback.
-  - `#stage-vocals-player` for guide vocals via Web Audio `GainNode`.
+  - `#stage-vocals-player` for guide vocals routed through Web Audio `GainNode`.
 - Sync is maintained by:
   - event-based nudges (`play`, `seeking`, command handlers), and
   - interval correction every `250ms` (`syncVocalsToVideo`).
 - Remote control uses websocket `stage_command` via `/api/queue/ws`.
   - Server (`routes/queue.py`) validates and broadcasts commands via `services/websocket_manager.py`.
   - Stage consumes `stage_control_command` and `stage_state_update`.
-- Resync currently performs pause + seek + optional resume and floors time to the previous second.
+- Resync now performs a hard local recovery:
+  - pause both media clocks,
+  - seek both to the same precise timestamp,
+  - wait for seek/readiness,
+  - resume the video and vocals from the same timeline,
+  - retry once with a reloaded vocals element if severe drift remains,
+  - fall back to a full stage reload if in-place recovery fails.
 
-## Why sync still fails
+## Why sync can still fail
 
 ## 1. Dual media elements = dual clocks
-`<video>` and `<audio>` are decoded and scheduled independently. Even when sourced from matching media, they can drift under buffering/jitter/scheduling pressure. Periodic correction reduces drift but does not remove its root.
+`<video>` and `<audio>` are decoded and scheduled independently. Even when sourced from matching
+media, they can drift under buffering, decoder, or scheduling pressure. Firefox appears to handle
+this project workload well; Chromium does not always keep the two clocks aligned.
 
-## 2. Reconnect path restores pause state, not timeline authority
-Current shared stage state is mainly `{ is_paused, vocals_enabled, vocals_volume }`. There is no authoritative timeline payload (e.g., `current_time`, `sync_version`, `issued_at`) in reconnect bootstrap. After disconnect/reconnect, clients can be "correctly paused/resumed" while still misaligned in timeline details.
+## 2. Chromium behavior is the primary observed risk
+The issue is browser-family-specific in current testing. That makes reconnect a possible stressor,
+not the proven cause. Reconnect can still expose stale pause/play state, but the recovery logic must
+handle arbitrary Chromium media-clock drift.
 
-## 3. Resync command does not carry a server-authoritative target timestamp
-`resync` is broadcast as a command, and each stage computes its own local target from local `video.currentTime`. If local timing is already in a bad state, each client can resync to a slightly different or stale point. This weakens determinism after reconnect scenarios.
+## 3. Soft correction is not enough for severe drift
+Setting `vocalsAudio.currentTime = video.currentTime` while playback is running can be too weak once
+Chromium has entered a bad decode/scheduling state. A severe drift needs a paused hard relock, not a
+running nudge.
 
-## 4. Seek completion is approximated with timeout fallback
-The seek helper resolves on `seeked`/`error`, but also has a fixed timeout fallback (`350ms`). Under network/decoder pressure this can resolve before both elements are truly ready, so resume can happen from partially settled states.
+## 4. Seek completion is asynchronous
+`currentTime` assignment only starts a seek. Recovery should wait for seek/readiness events and use
+long enough fallbacks for busy devices. A short timeout can resume before both elements have settled.
 
-## 5. Missing event-driven recovery on buffer/decoder transitions
-There is no dedicated synchronization policy for `waiting`, `stalled`, and `playing` transitions across both elements. In real-world jitter, one element can stall/continue differently, and interval-based correction can lag behind these transitions.
+## 5. Refresh works because it rebuilds the media graph
+A full `/stage` reload reinitializes both elements and the Web Audio graph. Manual Resync should
+approximate that reset in-place, with page reload kept as a last-resort fallback.
 
-## 6. Refresh works because it rebuilds a clean aligned graph
-A full `/stage` reload reinitializes both elements from fresh load state and immediately applies startup sync logic. That hard reset clears accumulated async/order artifacts that in-session resync currently may not fully reset.
+## Implemented recovery approach
 
-## Relevant Web API behavior
-- `HTMLMediaElement.currentTime` seek is asynchronous and media state-dependent.
-- `seeked` indicates seek operation completion but does not by itself guarantee stable decode/ready state for both media elements at the same instant.
-- `waiting`/`stalled` indicate buffer starvation and should be treated as sync risk points.
-- Web Audio contexts may be suspended/resumed by browser policy and lifecycle transitions; resume timing affects play order.
+## Priority A: hard manual recovery
+1. Resync commands carry a monotonic `sync_version` for client de-duplication.
+2. Stage-originated resync can include `seek_time` and `is_paused`.
+3. Queue-originated resync remains compatible and tells the stage client to recover its local
+   current timestamp.
+4. Stage hard recovery serializes each sync operation so overlapping media events do not fight.
 
-## Proposed fixes (prioritized)
+## Priority B: Chromium drift handling
+1. Mild drift is corrected with a follower seek.
+2. Severe drift (`>250ms`) schedules a hard relock.
+3. Buffer and decoder transitions (`waiting`, `stalled`, `playing`, `canplay`, `seeked`,
+   `ratechange`) are treated as sync risk points.
 
-## Priority A (recommended first): make sync deterministic on reconnect/resync
-1. Introduce authoritative sync state on server:
-   - `sync_version` (monotonic integer)
-   - `sync_time` (seconds)
-   - `is_paused`
-   - `issued_at` (server timestamp)
-2. Include that state in websocket `connected` bootstrap and dedicated `stage_sync_update` broadcasts.
-3. Change `resync` protocol to carry explicit target timeline (`target_time`) from sender/server, not per-client local derivation.
-4. On receiving sync update, stage should always run a single hard-lock routine:
-   - pause both
-   - seek both to `target_time`
-   - wait for both `seeked` + minimum readiness condition (`readyState` threshold)
-   - resume according to authoritative `is_paused`
+## Priority C: fallback behavior
+1. If a hard relock still leaves severe drift, the vocals element reloads with cache busting and
+   retries once at the same timestamp.
+2. If retry fails, `/stage` reloads as the known-good recovery path.
 
-## Priority B: improve runtime drift correction behavior
-1. Keep interval correction, but add event-driven checkpoints:
-   - `playing`, `waiting`, `stalled`, `seeking`, `seeked`, `ratechange`
-2. On `waiting/stalled` of either element:
-   - pause follower element
-   - perform follower re-lock after `playing/canplay`.
-3. Tighten "hard relock" threshold for severe drift (e.g., `>250ms`) using pause+seek, not just follower seek while running.
-
-## Priority C: observability for intermittent failures
-1. Add lightweight sync telemetry (debug mode):
-   - drift samples, command id/version, seek start/end, readyState snapshots.
-2. Correlate reconnect events with first post-reconnect drift sample.
-3. Record whether resync completed with both elements in expected state.
-
-## Priority D (fallback architecture)
-If browser-side dual-element sync remains unstable on target devices/networks:
-- use deterministic pre-muxed playback paths where possible (single media timeline for stage),
-- keep sidecar vocals control only when environment quality is adequate.
-
-## Suggested implementation sequence
-1. Add server sync model (`sync_version`, `sync_time`, `is_paused`) and broadcast contract.
-2. Update stage client to consume authoritative sync payload and use one hard-lock routine.
-3. Add buffer event handling (`waiting/stalled/playing`) and re-lock behavior.
-4. Add debug telemetry toggles.
-5. Validate against the reported pause/disconnect/resume scenario before further tuning.
-
-## Validation checklist for the reported issue
+## Validation checklist
 1. Start track and confirm initial sync.
-2. Pause on stage.
-3. Force websocket drop/reconnect window.
-4. Resume from queue and from stage separately.
-5. Trigger Resync from queue and stage.
-6. Confirm no audible drift for at least 60 seconds after resume.
-7. Repeat across Chrome + mobile browser target.
+2. Trigger Resync from the stage page while playing.
+3. Trigger Resync from the queue page while playing.
+4. Pause, resume, and trigger Resync again.
+5. Repeat in Chrome/Brave desktop and mobile.
+6. Confirm Firefox remains stable.
+7. Confirm no audible drift for at least 60 seconds after recovery.

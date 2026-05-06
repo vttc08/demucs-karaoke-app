@@ -1605,6 +1605,7 @@ def test_websocket_connect_and_receive_connected_message(client):
         assert "connection_count" in message["data"]
         assert "stage_state" in message["data"]
         assert message["data"]["stage_state"]["lyrics_enabled"] is True
+        assert isinstance(message["data"]["stage_state"]["sync_version"], int)
 
 
 def test_websocket_broadcasts_queue_item_added_event(client):
@@ -1836,7 +1837,7 @@ def test_websocket_stage_command_seek_rejects_invalid_time(client):
 
 
 def test_websocket_stage_command_resync_broadcasts_control(client):
-    """Resync stage command should broadcast control command."""
+    """Resync stage command should broadcast control command with a sync version."""
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         with client.websocket_connect("/api/queue/ws") as receiver:
@@ -1856,6 +1857,38 @@ def test_websocket_stage_command_resync_broadcasts_control(client):
             assert control_event["type"] == "stage_control_command"
             assert control_event["data"]["command"] == "resync"
             assert control_event["data"]["source"] == "queue"
+            assert isinstance(control_event["data"]["sync_version"], int)
+
+
+def test_websocket_stage_command_resync_accepts_optional_timeline(client):
+    """Resync can carry a concrete timeline when sent by the stage client."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "resync",
+                        "source": "stage",
+                        "seek_time": 12.75,
+                        "is_paused": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            control_event = receiver.receive_json()
+            if control_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                control_event = receiver.receive_json()
+            assert control_event["type"] == "stage_control_command"
+            assert control_event["data"]["command"] == "resync"
+            assert control_event["data"]["source"] == "stage"
+            assert control_event["data"]["seek_time"] == 12.75
+            assert control_event["data"]["is_paused"] is False
+            assert isinstance(control_event["data"]["sync_version"], int)
 
 
 def test_websocket_stage_command_set_vocals_enabled_broadcasts_state(client):

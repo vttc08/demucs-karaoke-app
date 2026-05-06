@@ -19,6 +19,7 @@ class ConnectionManager:
             "vocals_volume": 1.0,
             "lyrics_enabled": True,
         }
+        self._sync_version = 0
     
     async def connect(self, websocket: WebSocket):
         """Accept and register a new WebSocket connection."""
@@ -163,7 +164,14 @@ class ConnectionManager:
 
     def get_stage_state(self) -> dict:
         """Return a copy of current in-memory stage state."""
-        return dict(self._stage_state)
+        state = dict(self._stage_state)
+        state["sync_version"] = self._sync_version
+        return state
+
+    def next_stage_sync_version(self) -> int:
+        """Return the next monotonic resync version for client-side de-duplication."""
+        self._sync_version += 1
+        return self._sync_version
 
     async def set_stage_paused(self, is_paused: bool, source: str = "unknown"):
         """Set paused flag and broadcast full stage state."""

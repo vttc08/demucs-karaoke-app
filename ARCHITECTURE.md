@@ -64,8 +64,9 @@ The stage page uses a websocket-first model:
 - `services/websocket_manager.py` tracks active connections and broadcasts queue events.
 - `routes/queue.py` also accepts client `stage_command` messages (`play`, `pause`, `skip`).
 - `routes/queue.py` also accepts `seek` stage commands for synchronized timeline jumps across stage clients.
-- `routes/queue.py` also accepts `resync` stage commands so remote controls can force local
-  video/vocals realignment on stage clients.
+- `routes/queue.py` also accepts `resync` stage commands so remote controls can force hard local
+  video/vocals recovery on stage clients. Resync broadcasts include a monotonic `sync_version`, and
+  stage-originated resync may include `seek_time`/`is_paused` for a concrete recovery timeline.
 - `routes/queue.py` also accepts stage mix commands (`set_vocals_enabled`, `set_vocals_volume`)
   for runtime-only vocal assist control.
 - `routes/queue.py` also accepts `set_lyrics_enabled` for runtime-only lyrics overlay visibility.
@@ -117,6 +118,10 @@ The stage page uses a websocket-first model:
   - `<video>` plays `media_path`
   - optional hidden `<audio>` plays `vocals_path`
   - vocals are routed through Web Audio `GainNode` for real-time mix control.
+- Because the base media and vocals sidecar use separate browser media clocks, browser behavior can
+  differ. Firefox has tested stable; Chromium-family browsers can drift inconsistently. Manual
+  Resync therefore performs a hard relock with retry and page-reload fallback instead of only nudging
+  the vocals element while playback continues.
 - Karaoke processing persists stems with explicit mapping:
   - `no_vocals` is muxed into the final `media_path` video under `media_path`
   - `vocals` is persisted separately to `vocals_path` under `media_path`
