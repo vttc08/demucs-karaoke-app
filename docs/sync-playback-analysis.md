@@ -30,8 +30,8 @@ which browser event caused the drift.
   - seek both to the same precise timestamp,
   - wait for seek/readiness,
   - resume the video and vocals from the same timeline,
-  - retry once with a reloaded vocals element if severe drift remains,
-  - fall back to a full stage reload if in-place recovery fails.
+  - retry once with a reloaded vocals element if the explicit recovery operation fails,
+  - fall back to a full stage reload only if the manual recovery attempt cannot complete.
 
 ## Why sync can still fail
 
@@ -67,16 +67,17 @@ approximate that reset in-place, with page reload kept as a last-resort fallback
    current timestamp.
 4. Stage hard recovery serializes each sync operation so overlapping media events do not fight.
 
-## Priority B: Chromium drift handling
+## Priority B: conservative drift handling
 1. Mild drift is corrected with a follower seek.
-2. Severe drift (`>250ms`) schedules a hard relock.
-3. Buffer and decoder transitions (`waiting`, `stalled`, `playing`, `canplay`, `seeked`,
-   `ratechange`) are treated as sync risk points.
+2. Automatic hard relock on buffer/decoder events is intentionally disabled. A previous attempt to
+   trigger hard relock from `waiting`, `stalled`, `playing`, `canplay`, `seeked`, `ratechange`, and
+   severe drift made playback stutter and could override the Pause button.
+3. Hard relock is now only user-initiated through Resync or through an explicit remote Resync command.
 
 ## Priority C: fallback behavior
-1. If a hard relock still leaves severe drift, the vocals element reloads with cache busting and
-   retries once at the same timestamp.
-2. If retry fails, `/stage` reloads as the known-good recovery path.
+1. If the explicit hard relock operation throws or cannot complete, the vocals element reloads with
+   cache busting and retries once at the same timestamp.
+2. If that retry fails, `/stage` reloads as the known-good recovery path.
 
 ## Validation checklist
 1. Start track and confirm initial sync.
