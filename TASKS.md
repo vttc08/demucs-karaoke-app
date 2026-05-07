@@ -54,7 +54,10 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] perform crud on karaoke media
 - [x] refine UI screen: add to queue condensed (mobile)
 - [x] user can upload mp3 and mp4 videos screen: media upload (mobile+desktop)
-- [x] modular lyrics component, reuse code in add to queue, edit and upload page 
+- [x] modular lyrics component, reuse code in add to queue, edit and upload page
+- [ ] bug: when skipping (via command or song complete), if video is in fullscreen, it exits fullscreen
+- [ ] bug: when it's initially at queue, the websocket doesn't trigger and new songs added to queue aren't played immediatelyf
+- [ ] can address above 2 with always on media, always playing sound/looping video and switch as karaoke tracks come through
 - [ ] queue page with users
 - [ ] frontend settings page polish
 - [x] blueprints for subfolder custom path support
@@ -64,6 +67,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [ ] real time join and enqueue feature
 - [ ] admin has ability to remove, skip or reorder queue
 - [ ] fix multi track audio sync issues
+- [ ] support playback of MP3 (default to cover bg)
 - [ ] show users in queue
 - [ ] users can change only their own added songs
 - [ ] show progress for ytdlp and demucs
