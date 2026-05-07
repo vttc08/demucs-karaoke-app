@@ -121,10 +121,12 @@ and `/static/...`.
 2. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
      - Requires an admin session created by the server-managed admin login flow
      - Presentation-first stage output with fullscreen-optimized player
+     - Always-on playback shell: queue items switch in-place without full page reload, so fullscreen is preserved during track transitions
+     - When the queue is empty, stage loops lobby media; when a song becomes playable, stage switches to it automatically and returns to lobby when queue drains
      - Minimal controls overlay (play/pause, skip, hard resync, fullscreen)
      - Toggle the lyrics overlay on or off while playback is running
     - Compact "up next" chips without queue-management actions
-    - Auto-advances when song ends
+     - Auto-advances when song ends
    - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling
 
 3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
@@ -133,8 +135,9 @@ and `/static/...`.
        - Log out of the active admin session from the settings page
         - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and outbound proxy URL
        - Enable/disable concurrent yt-dlp search mode
-       - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
-       - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
+        - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
+        - Configure **Stage Lobby Media URL** (`/media/...` or `/cache/...`) for empty-queue loop playback
+        - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
       - Apply settings immediately without restarting the app (for processing/runtime behavior)
        - Persist changes to the database so settings survive app reloads and restarts
        - View real-time Demucs engine health (online/offline with detail)

@@ -11,6 +11,7 @@ from routes.auth import get_admin_user
 from services.queue_service import QueueService
 from services.media_library_service import MediaLibraryService
 from services.runtime_settings_service import RuntimeSettingsService
+from services.stage_lobby_service import StageLobbyService
 from services.auth_service import ADMIN_SESSION_COOKIE, SESSION_DAYS, AuthService
 from services.i18n_service import (
     LOCALE_COOKIE,
@@ -27,6 +28,7 @@ templates = Jinja2Templates(directory="templates")
 queue_service = QueueService()
 media_library_service = MediaLibraryService()
 runtime_settings_service = RuntimeSettingsService()
+stage_lobby_service = StageLobbyService()
 auth_service = AuthService()
 
 
@@ -213,6 +215,7 @@ async def stage_page(request: Request, db: Session = Depends(get_db)):
     current_item = queue_service.get_current_or_promote_next(db)
     queue_items = queue_service.get_queue(db)
     runtime_settings = runtime_settings_service.get_settings()
+    lobby_media_url = stage_lobby_service.resolve_lobby_media_url()
     return templates.TemplateResponse(
         "stage.html",
         {
@@ -220,6 +223,7 @@ async def stage_page(request: Request, db: Session = Depends(get_db)):
             "current": current_item,
             "queue": queue_items,
             "stage_qr_url": runtime_settings.stage_qr_url,
+            "stage_lobby_media_url": lobby_media_url,
         },
     )
 

@@ -121,7 +121,6 @@
 {% block content %}
 <div id="stage-page" class="min-h-screen bg-surface pt-20">
     <main class="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[1800px] flex-col gap-4 px-3 pb-3 sm:px-4 sm:pb-4">
-        {% if current %}
         <section class="stage-media relative flex-1 overflow-hidden rounded-xl bg-black">
             <video
                 id="stage-video-player"
@@ -129,14 +128,12 @@
                 autoplay
                 playsinline
             >
-                <source src="{{ current.media_path|public_url }}" type="video/mp4">
+                <source src="{{ (current.media_path if current else stage_lobby_media_url)|public_url }}" type="video/mp4">
                 {{ t('stage.video_unsupported') }}
             </video>
-            {% if current.vocals_path %}
             <audio id="stage-vocals-player" preload="auto" crossorigin="anonymous">
-                <source src="{{ current.vocals_path|public_url }}">
+                <source src="{{ current.vocals_path|public_url if current and current.vocals_path else '' }}">
             </audio>
-            {% endif %}
 
             <div id="stage-lyrics-overlay" class="stage-lyrics-overlay hidden" aria-live="polite">
                 <div id="stage-lyrics-lines" class="stage-lyrics-lines"></div>
@@ -146,13 +143,11 @@
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
                         <p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-on-surface-variant">{{ t('stage.now_playing') }}</p>
-                        <h2 class="mt-1 truncate text-lg font-semibold text-on-surface sm:text-2xl">{{ current.title }}</h2>
-                        {% if current.artist %}
-                        <p class="truncate text-sm text-on-surface-variant">{{ current.artist }}</p>
-                        {% endif %}
+                        <h2 id="now-playing-title" class="mt-1 truncate text-lg font-semibold text-on-surface sm:text-2xl">{{ current.title if current else t('stage.lobby_title') }}</h2>
+                        <p id="now-playing-artist" class="truncate text-sm text-on-surface-variant">{{ current.artist if current and current.artist else t('stage.lobby_artist') }}</p>
                     </div>
-                    <span class="inline-flex shrink-0 items-center rounded-full bg-black/50 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-on-surface">
-                        {{ t('app.karaoke') if current.is_karaoke else t('app.original') }}
+                    <span id="now-playing-badge" class="inline-flex shrink-0 items-center rounded-full bg-black/50 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-on-surface">
+                        {{ t('app.karaoke') if current and current.is_karaoke else (t('app.original') if current else t('stage.lobby_badge')) }}
                     </span>
                 </div>
             </div>
@@ -186,7 +181,7 @@
                             id="lyrics-toggle-btn"
                             class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 disabled:cursor-not-allowed disabled:opacity-50"
                             title="{{ t('stage.toggle_lyrics') }}"
-                            {% if not current.lyrics_path %}disabled{% endif %}
+                            {% if not current or not current.lyrics_path %}disabled{% endif %}
                         >
                             <span id="lyrics-toggle-icon" class="material-symbols-outlined text-base">subtitles</span>
                             <span id="lyrics-toggle-label">{{ t('stage.lyrics_on') }}</span>
@@ -204,7 +199,7 @@
                             id="stage-vocals-toggle-btn"
                             class="inline-flex items-center gap-1.5 rounded-full bg-surface-container-high/75 px-3 py-1.5 text-xs font-semibold text-on-surface transition hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-50"
                             title="{{ t('stage.toggle_guide_vocals') }}"
-                            {% if not current.vocals_path %}disabled{% endif %}
+                            {% if not current or not current.vocals_path %}disabled{% endif %}
                         >
                             <span id="stage-vocals-toggle-icon" class="material-symbols-outlined text-sm">mic</span>
                             <span id="stage-vocals-toggle-label">{{ t('stage.vocals_on') }}</span>
@@ -219,7 +214,7 @@
                                 max="100"
                                 value="100"
                                 step="1"
-                                {% if not current.vocals_path %}disabled{% endif %}
+                                {% if not current or not current.vocals_path %}disabled{% endif %}
                             />
                         </label>
                     </div>
@@ -257,13 +252,6 @@
                 {% endif %}
             </div>
         </aside>
-        {% else %}
-        <section class="stage-chrome flex flex-1 flex-col items-center justify-center rounded-xl bg-surface-container-low p-8 text-center">
-            <span class="material-symbols-outlined mb-4 text-6xl text-on-surface-variant/80">queue_music</span>
-            <h2 class="text-2xl font-semibold text-on-surface sm:text-3xl">{{ t('stage.empty') }}</h2>
-            <p class="mt-2 max-w-xl text-on-surface-variant">{{ t('stage.empty_detail') }}</p>
-        </section>
-        {% endif %}
     </main>
 </div>
 {% endblock %}
@@ -273,9 +261,21 @@
 const API_BASE = window.KaraokeURLs.basePath;
 const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
 const SERVER_STAGE_QR_URL = {{ (stage_qr_url or "") | tojson }};
-const currentItemId = {{ (current.id if current else None) | tojson }};
+const STAGE_LOBBY_MEDIA_URL = {{ stage_lobby_media_url|public_url|tojson }};
+let currentItemId = {{ (current.id if current else None) | tojson }};
+const INITIAL_CURRENT_ITEM = {{ {
+    "id": (current.id if current else None),
+    "title": (current.title if current else None),
+    "artist": (current.artist if current else None),
+    "is_karaoke": (current.is_karaoke if current else False),
+    "media_path": (current.media_path|public_url if current else None),
+    "vocals_path": (current.vocals_path|public_url if current and current.vocals_path else None),
+}|tojson }};
 const video = document.getElementById("stage-video-player");
 const vocalsAudio = document.getElementById("stage-vocals-player");
+const nowPlayingTitle = document.getElementById("now-playing-title");
+const nowPlayingArtist = document.getElementById("now-playing-artist");
+const nowPlayingBadge = document.getElementById("now-playing-badge");
 const queuePreview = document.getElementById("queue-preview");
 const upNextCount = document.getElementById("up-next-count");
 const playPauseBtn = document.getElementById("play-pause-btn");
@@ -302,7 +302,6 @@ const lyricsOverlay = document.getElementById("stage-lyrics-overlay");
 const lyricsLines = document.getElementById("stage-lyrics-lines");
 const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
 const QR_IMAGE_SIZE = 320;
-let isReloading = false;
 let controlsHideTimer = null;
 let isQrVisible = false;
 let stageSocket = null;
@@ -332,10 +331,9 @@ const SOFT_DRIFT_THRESHOLD_SECONDS = 0.12;
 const MEDIA_SEEK_TIMEOUT_MS = 1200;
 const MEDIA_READY_TIMEOUT_MS = 1200;
 const MEDIA_METADATA_TIMEOUT_MS = 1500;
+let hasCurrentQueueItem = Boolean(currentItemId);
 
 function safeReload() {
-    if (isReloading) return;
-    isReloading = true;
     window.location.reload();
 }
 
@@ -524,6 +522,8 @@ async function loadLyricsCues() {
         lyricsState.available = lyricCues.length > 0;
         if (!lyricsState.available) {
             lyricsState.enabled = false;
+        } else if (!lyricsState.enabled) {
+            lyricsState.enabled = true;
         }
         activeLyricCueIndex = null;
         updateLyricsUi();
@@ -537,6 +537,116 @@ async function loadLyricsCues() {
         updateLyricsUi();
         renderLyricsWindow(null);
     }
+}
+
+function updateNowPlayingMeta(item) {
+    if (!nowPlayingTitle || !nowPlayingArtist || !nowPlayingBadge) {
+        return;
+    }
+    if (!item || !item.id) {
+        nowPlayingTitle.textContent = t("stage.lobby_title");
+        nowPlayingArtist.textContent = t("stage.lobby_artist");
+        nowPlayingBadge.textContent = t("stage.lobby_badge");
+        return;
+    }
+    nowPlayingTitle.textContent = item.title || t("stage.lobby_title");
+    nowPlayingArtist.textContent = item.artist || t("stage.lobby_artist");
+    nowPlayingBadge.textContent = item.is_karaoke ? t("app.karaoke") : t("app.original");
+}
+
+function updatePlaybackModeFlags(item) {
+    hasCurrentQueueItem = Boolean(item && item.id);
+    if (video) {
+        video.loop = !hasCurrentQueueItem;
+    }
+    if (skipBtn) {
+        skipBtn.disabled = !hasCurrentQueueItem;
+    }
+}
+
+function setAudioSource(mediaElement, src) {
+    if (!mediaElement) return;
+    const source = mediaElement.querySelector("source");
+    if (source) {
+        source.setAttribute("src", src || "");
+    } else {
+        mediaElement.src = src || "";
+    }
+}
+
+function resetSyncStateForSourceSwap() {
+    syncOperationId += 1;
+    hardSyncInProgress = false;
+    stopSyncTimer();
+    stopLyricsTicker();
+    suppressSeekBroadcast = false;
+    if (seekBroadcastUnlockTimer) {
+        window.clearTimeout(seekBroadcastUnlockTimer);
+        seekBroadcastUnlockTimer = null;
+    }
+}
+
+async function applyCurrentPlaybackItem(item) {
+    if (!video) return;
+    const nextMediaSrc = item?.media_path || STAGE_LOBBY_MEDIA_URL;
+    if (!nextMediaSrc) return;
+    const nextVocalsSrc = item?.vocals_path || "";
+    const nextItemId = item?.id ?? null;
+    const sourceChanged = currentItemId !== nextItemId || video.currentSrc !== new URL(nextMediaSrc, window.location.href).toString();
+    currentItemId = nextItemId;
+    updatePlaybackModeFlags(item);
+    updateNowPlayingMeta(item);
+    vocalsAvailable = Boolean(nextVocalsSrc);
+    if (!sourceChanged) {
+        updateVocalsUi();
+        await loadLyricsCues();
+        return;
+    }
+    resetSyncStateForSourceSwap();
+    if (vocalsAudio) {
+        vocalsAudio.pause();
+        vocalsAudio.currentTime = 0;
+        setAudioSource(vocalsAudio, nextVocalsSrc);
+    }
+    video.pause();
+    setAudioSource(video, nextMediaSrc);
+    video.load();
+    if (vocalsAudio) {
+        vocalsAudio.load();
+    }
+    initialMultitrackResyncCompleted = !vocalsAvailable;
+    updateVocalsUi();
+    await loadLyricsCues();
+    try {
+        await ensureAudioGraph();
+        await video.play();
+        if (vocalsAvailable) {
+            syncVocalsToVideo(true);
+            startSyncTimer();
+        } else if (vocalsAudio) {
+            vocalsAudio.pause();
+            vocalsAudio.currentTime = 0;
+        }
+        startLyricsTicker();
+    } catch (error) {
+        console.warn("Failed to start switched playback source:", error);
+    } finally {
+        updatePlayPauseUi();
+        showStageControls();
+    }
+}
+
+async function refreshStageState() {
+    const [currentResponse, queueResponse] = await Promise.all([
+        fetch(window.KaraokeURLs.appUrl("/api/queue/current")),
+        fetch(window.KaraokeURLs.appUrl("/api/queue/")),
+    ]);
+    const currentItem = currentResponse.ok ? await currentResponse.json() : null;
+    if (queueResponse.ok) {
+        const queue = await queueResponse.json();
+        renderQueuePreview(queue);
+    }
+    await applyCurrentPlaybackItem(currentItem);
 }
 
 function updatePlayPauseUi() {
@@ -1042,7 +1152,7 @@ function connectStageWebSocket() {
                 return;
             }
             if (messageType === "current_item_changed") {
-                safeReload();
+                await refreshStageState();
                 return;
             }
             if (messageType === "queue_item_added" || messageType === "queue_item_removed" || messageType === "queue_cleared") {
@@ -1088,8 +1198,6 @@ function connectStageWebSocket() {
                     syncVocalsToVideo(true);
                 } else if (command === "pause" && !video.paused) {
                     video.pause();
-                } else if (command === "skip") {
-                    safeReload();
                 }
                 updatePlayPauseUi();
                 showStageControls();
@@ -1143,6 +1251,9 @@ function sendStageCommand(command, extraData = {}) {
 
 if (video) {
     video.addEventListener("ended", async () => {
+        if (!hasCurrentQueueItem) {
+            return;
+        }
         stopSyncTimer();
         stopLyricsTicker();
         if (vocalsAudio) {
@@ -1154,7 +1265,7 @@ if (video) {
         } catch (error) {
             console.error("Failed to advance after playback ended:", error);
         } finally {
-            safeReload();
+            await refreshStageState();
         }
     });
 
@@ -1261,10 +1372,11 @@ if (skipBtn) {
         try {
             if (!sendStageCommand("skip")) {
                 await skipCurrentSong();
-                safeReload();
+                await refreshStageState();
             }
         } catch (error) {
             console.error("Skip failed:", error);
+        } finally {
             skipBtn.disabled = false;
         }
     });
@@ -1401,31 +1513,11 @@ updateFullscreenUi();
 updateVocalsUi();
 updateLyricsUi();
 updateQrOverlayContent();
-loadLyricsCues();
 connectStageWebSocket();
-
-if (video && !video.paused) {
-    if (vocalsAvailable) {
-        runInitialMultitrackResync()
-            .then((didResync) => {
-                if (didResync) {
-                    return;
-                }
-                return ensureAudioGraph().then(() => {
-                    syncVocalsToVideo(true);
-                    startSyncTimer();
-                    startLyricsTicker();
-                });
-            })
-            .catch((error) => {
-                console.warn("Failed to bootstrap vocals playback:", error);
-                startLyricsTicker();
-            });
-    } else {
-        startLyricsTicker();
-    }
-} else if (video) {
-    updateLyricsForTime(video.currentTime || 0);
-}
+updateNowPlayingMeta(INITIAL_CURRENT_ITEM);
+updatePlaybackModeFlags(INITIAL_CURRENT_ITEM);
+refreshStageState().catch((error) => {
+    console.warn("Failed to refresh initial stage state:", error);
+});
 </script>
 {% endblock %}

@@ -57,6 +57,10 @@ The stage page uses a websocket-first model:
 - Primary: WebSocket push and control commands at `/api/queue/ws`
 - Reconnect behavior: automatic reconnect loop from page script
 - No periodic polling loop on `/stage`
+- Stage now switches media sources in-place (no full-page reload) so fullscreen remains active across
+  skip/end/current-item transitions.
+- Stage keeps an always-on lobby loop media source when no queue item is playing and switches back to
+  lobby automatically after the queue drains.
 
 ### WebSocket server flow
 
@@ -93,6 +97,9 @@ The stage page uses a websocket-first model:
 - Background processing status changes are broadcast from `QueueService.update_status_async`:
   - `queue_item_updated`
   - `queue_item_failed`
+- When a background status update marks an item `READY` and no queue item is currently `PLAYING`,
+  `QueueService` auto-promotes the next ready item to `PLAYING` and broadcasts `current_item_changed`
+  immediately.
 
 ### WebSocket client flow
 
@@ -105,6 +112,17 @@ The stage page uses a websocket-first model:
   mix commands and mirror live `stage_state_update` broadcasts.
 - Queue page includes a lyrics overlay toggle that mirrors the stage lyrics visibility state.
 - Stage page consumes websocket queue events and stage-control events to stay in sync without polling.
+- Stage page refreshes queue/current state over API and applies source changes to existing media
+  elements instead of reloading the page.
+
+## Stage lobby media fallback
+
+- Runtime settings include `stage_lobby_media_path` for optional empty-queue loop media.
+- The stage route resolves lobby playback in this order:
+  1. Configured media URL exists (`/media/...` or `/cache/...`) -> use it.
+  2. Otherwise generate one deterministic fallback loop media file in `media_path`
+     (`stage-lobby-fallback.mp4`) via ffmpeg and use it.
+- This keeps stage output continuously playable while queue items are unavailable.
 
 ## Sidecar multi-track playback
 
@@ -267,6 +285,7 @@ This is applied at command build time, so new operations use updated proxy setti
   - `media_path`
   - `cache_path`
   - `stage_qr_url`
+  - `stage_lobby_media_path`
 
 ## Concurrent search mode
 

@@ -24,6 +24,7 @@ from services.websocket_manager import ConnectionManager
 from services.media_library_sync_service import MediaLibrarySyncService
 from services.media_library_service import MediaLibraryService
 from services.media_thumbnail_service import MediaThumbnailService
+from services.stage_lobby_service import StageLobbyService
 from services.auth_service import AuthService
 from config import EXPLICIT_SETTINGS_FIELDS, settings
 from models import (
@@ -860,10 +861,42 @@ async def test_queue_service_update_status_async_broadcasts(db_session):
     with patch("services.websocket_manager.manager", manager):
         await service.update_status_async(db_session, created.id, QueueStatus.READY)
 
-    assert len(socket.messages) == 1
-    assert socket.messages[0]["type"] == "queue_item_updated"
-    assert socket.messages[0]["data"]["id"] == created.id
-    assert socket.messages[0]["data"]["status"] == "ready"
+    updated_events = [msg for msg in socket.messages if msg["type"] == "queue_item_updated"]
+    assert len(updated_events) == 1
+    assert updated_events[0]["data"]["id"] == created.id
+    assert updated_events[0]["data"]["status"] == "ready"
+
+
+@pytest.mark.asyncio
+async def test_queue_service_update_status_async_promotes_ready_item_when_idle(db_session):
+    """READY status should auto-promote to PLAYING when nothing is currently playing."""
+    service = QueueService()
+    created = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="auto-promote", title="Auto Promote", is_karaoke=False),
+    )
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self):
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    socket = DummySocket()
+    manager.active_connections.append(socket)
+
+    with patch("services.websocket_manager.manager", manager):
+        await service.update_status_async(db_session, created.id, QueueStatus.READY)
+
+    row = db_session.query(QueueItem).filter(QueueItem.id == created.id).first()
+    assert row is not None
+    assert row.status == QueueStatus.PLAYING
+    assert any(
+        msg["type"] == "current_item_changed" and msg["data"]["id"] == created.id
+        for msg in socket.messages
+    )
 
 
 def test_queue_service_skip_current_item_promotes_next_ready(db_session):
@@ -1266,7 +1299,7 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session,
 
         updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
         assert updated_item is not None
-        assert updated_item.status == QueueStatus.READY
+        assert updated_item.status == QueueStatus.PLAYING
         assert updated_item.media is not None
         expected_stem = build_media_stem("Plain Song", None, fallback="plain123")
         assert updated_item.media.media_path == f"/media/{expected_stem}.mp4"
@@ -1332,7 +1365,7 @@ async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(d
 
         updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
         assert updated_item is not None
-        assert updated_item.status == QueueStatus.READY
+        assert updated_item.status == QueueStatus.PLAYING
         assert updated_item.media is not None
         assert updated_item.media.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
     finally:
@@ -2471,7 +2504,7 @@ async def test_karaoke_service_reuses_existing_media_without_redownload(db_sessi
         service.youtube_service.download_video_with_audio.assert_not_called()
         updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
         assert updated_item is not None
-        assert updated_item.status == QueueStatus.READY
+        assert updated_item.status == QueueStatus.PLAYING
         assert updated_item.media is not None
         assert updated_item.media.media_path == f"/media/{expected_stem}.mp4"
     finally:
@@ -2521,7 +2554,7 @@ async def test_karaoke_service_reuses_existing_karaoke_media_without_redownload(
         service.ffmpeg.extract_audio.assert_not_called()
         updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
         assert updated_item is not None
-        assert updated_item.status == QueueStatus.READY
+        assert updated_item.status == QueueStatus.PLAYING
         assert updated_item.media is not None
         assert updated_item.media.media_path == f"/media/{expected_stem}.mp4"
         assert updated_item.media.vocals_path == f"/media/{expected_stem}.vocals.mp3"
@@ -2599,7 +2632,7 @@ async def test_karaoke_service_retries_demucs_with_downloaded_audio_after_500(
         assert service.demucs_client.separate_vocals.await_count == 2
         updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
         assert updated_item is not None
-        assert updated_item.status == QueueStatus.READY
+        assert updated_item.status == QueueStatus.PLAYING
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
@@ -3127,6 +3160,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
     """Updating settings with a DB session should persist selected values."""
     service = RuntimeSettingsService()
     original_stage_qr_url = settings.stage_qr_url
+    original_stage_lobby_media_path = settings.stage_lobby_media_path
     original_concurrent = settings.concurrent_ytdlp_search_enabled
     original_netease = settings.lyrics_provider_netease_enabled
     original_lrclib = settings.lyrics_provider_lrclib_enabled
@@ -3146,6 +3180,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
                     lyrics_provider_netease_enabled=False,
                     lyrics_provider_lrclib_enabled=True,
                     stage_qr_url="https://karaoke.test/stage",
+                    stage_lobby_media_path="/media/stage-lobby.mp4",
                 ),
                 db_session,
             )
@@ -3154,6 +3189,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert result.lyrics_provider_netease_enabled is False
         assert result.lyrics_provider_lrclib_enabled is True
         assert result.stage_qr_url == "https://karaoke.test/stage"
+        assert result.stage_lobby_media_path == "/media/stage-lobby.mp4"
 
         stored = {
             row.key: row.value
@@ -3163,8 +3199,10 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert stored["lyrics_provider_netease_enabled"] == "false"
         assert stored["lyrics_provider_lrclib_enabled"] == "true"
         assert stored["stage_qr_url"] == "https://karaoke.test/stage"
+        assert stored["stage_lobby_media_path"] == "/media/stage-lobby.mp4"
     finally:
         settings.stage_qr_url = original_stage_qr_url
+        settings.stage_lobby_media_path = original_stage_lobby_media_path
         settings.concurrent_ytdlp_search_enabled = original_concurrent
         settings.lyrics_provider_netease_enabled = original_netease
         settings.lyrics_provider_lrclib_enabled = original_lrclib
@@ -3182,6 +3220,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
             [
                 RuntimeSetting(key="demucs_model", value="persisted-model"),
                 RuntimeSetting(key="stage_qr_url", value="https://karaoke.test/stage"),
+                RuntimeSetting(key="stage_lobby_media_path", value="/media/stage-lobby.mp4"),
                 RuntimeSetting(key="ffmpeg_preset", value="veryslow"),
             ]
         )
@@ -3189,13 +3228,16 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
 
         settings.demucs_model = "temporary-model"
         settings.stage_qr_url = ""
+        settings.stage_lobby_media_path = ""
 
         applied = service.load_persisted_settings(db_session)
 
         assert "demucs_model" in applied
         assert "stage_qr_url" in applied
+        assert "stage_lobby_media_path" in applied
         assert settings.demucs_model == "persisted-model"
         assert settings.stage_qr_url == "https://karaoke.test/stage"
+        assert settings.stage_lobby_media_path == "/media/stage-lobby.mp4"
 
         explicit_field = next(
             field
@@ -3317,3 +3359,49 @@ def test_queue_service_build_media_url_for_media_and_cache(tmp_path):
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
+
+
+def test_stage_lobby_service_uses_configured_media_when_present(tmp_path):
+    """Configured lobby media URL should be used when the file exists."""
+    service = StageLobbyService()
+    original_media = settings.media_path
+    original_lobby = settings.stage_lobby_media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        lobby_file = settings.media_path / "custom-lobby.mp4"
+        lobby_file.write_text("lobby", encoding="utf-8")
+        settings.stage_lobby_media_path = "/media/custom-lobby.mp4"
+
+        resolved = service.resolve_lobby_media_url()
+        assert resolved == "/media/custom-lobby.mp4"
+    finally:
+        settings.media_path = original_media
+        settings.stage_lobby_media_path = original_lobby
+
+
+def test_stage_lobby_service_generates_fallback_when_missing(tmp_path):
+    """Missing configured lobby media should trigger fallback generation path."""
+    service = StageLobbyService()
+    original_media = settings.media_path
+    original_lobby = settings.stage_lobby_media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.stage_lobby_media_path = "/media/missing-lobby.mp4"
+
+        fallback = settings.media_path / service.FALLBACK_FILE_NAME
+
+        def _fake_run(*_, **__):
+            fallback.write_text("generated", encoding="utf-8")
+            return Mock(returncode=0)
+
+        with patch("services.stage_lobby_service.subprocess.run", side_effect=_fake_run) as mock_run:
+            resolved = service.resolve_lobby_media_url()
+
+        assert resolved == f"/media/{service.FALLBACK_FILE_NAME}"
+        assert fallback.exists()
+        assert mock_run.called
+    finally:
+        settings.media_path = original_media
+        settings.stage_lobby_media_path = original_lobby

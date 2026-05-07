@@ -39,6 +39,7 @@ const fields = {
     lyrics_provider_lrclib_enabled: document.getElementById("lyrics_provider_lrclib_enabled"),
     ffmpeg_path: document.getElementById("ffmpeg_path"),
     stage_qr_url: document.getElementById("stage_qr_url"),
+    stage_lobby_media_path: document.getElementById("stage_lobby_media_path"),
 };
 
 function setStatus(message, isError = false) {
@@ -227,6 +228,9 @@ function applySettingsToForm(data) {
     if (fields.stage_qr_url) {
         fields.stage_qr_url.value = data.stage_qr_url || "";
     }
+    if (fields.stage_lobby_media_path) {
+        fields.stage_lobby_media_path.value = data.stage_lobby_media_path || "";
+    }
     updateDemucsOutputUi();
 }
 
@@ -285,6 +289,7 @@ async function saveSettings() {
         lyrics_provider_lrclib_enabled: fields.lyrics_provider_lrclib_enabled.checked,
         ffmpeg_path: fields.ffmpeg_path.value.trim(),
         stage_qr_url: fields.stage_qr_url ? fields.stage_qr_url.value.trim() : "",
+        stage_lobby_media_path: fields.stage_lobby_media_path ? fields.stage_lobby_media_path.value.trim() : "",
     };
     if (fields.demucs_output_format.value === "mp3") {
         payload.demucs_mp3_bitrate = Number(fields.demucs_mp3_bitrate.value);

@@ -230,6 +230,7 @@ class RuntimeSettingsResponse(BaseModel):
     media_path: str
     cache_path: str
     stage_qr_url: str
+    stage_lobby_media_path: str
 
 
 class RuntimeSettingsUpdateRequest(BaseModel):
@@ -251,6 +252,7 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     media_path: Optional[str] = None
     cache_path: Optional[str] = None
     stage_qr_url: Optional[str] = None
+    stage_lobby_media_path: Optional[str] = None
 
 
 class YtDlpVersionResponse(BaseModel):

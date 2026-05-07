@@ -283,6 +283,31 @@ class QueueService:
 
         return self._to_response(next_ready)
 
+    def promote_next_ready_if_idle(self, db: Session) -> Optional[QueueItemResponse]:
+        """Promote the next READY item to PLAYING when no PLAYING item exists."""
+        current = (
+            db.query(QueueItem)
+            .filter(QueueItem.status == QueueStatus.PLAYING)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
+            .first()
+        )
+        if current:
+            return None
+
+        next_ready = (
+            db.query(QueueItem)
+            .filter(QueueItem.status == QueueStatus.READY)
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
+            .first()
+        )
+        if not next_ready:
+            return None
+
+        next_ready.status = QueueStatus.PLAYING
+        db.commit()
+        db.refresh(next_ready)
+        return self._to_response(next_ready)
+
     async def update_status_async(
         self, db: Session, item_id: int, status: QueueStatus, error: str = None
     ):
@@ -313,6 +338,11 @@ class QueueService:
                 await manager.broadcast_queue_item_updated(
                     response.model_dump(mode="json")
                 )
+
+            if status == QueueStatus.READY:
+                promoted = self.promote_next_ready_if_idle(db)
+                if promoted:
+                    await manager.broadcast_current_item_changed(promoted.id, None)
 
     def update_status(
         self, db: Session, item_id: int, status: QueueStatus, error: str = None

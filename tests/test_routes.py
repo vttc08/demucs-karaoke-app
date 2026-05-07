@@ -61,6 +61,7 @@ def client():
     original_media_path = settings.media_path
     original_cache_path = settings.cache_path
     original_stage_qr_url = settings.stage_qr_url
+    original_stage_lobby_media_path = settings.stage_lobby_media_path
 
     Base.metadata.create_all(bind=engine)
     ensure_auxiliary_schema(engine)
@@ -80,6 +81,7 @@ def client():
     settings.media_path = original_media_path
     settings.cache_path = original_cache_path
     settings.stage_qr_url = original_stage_qr_url
+    settings.stage_lobby_media_path = original_stage_lobby_media_path
     Base.metadata.drop_all(bind=engine)
 
 
@@ -499,7 +501,7 @@ def test_queue_page_shows_admin_queue_controls(client):
     assert "removeSong(" in response.text
     assert 'aria-label="Stage View"' in response.text
     assert 'aria-label="Settings"' in response.text
-    assert 'aria-label="Media Library"' not in response.text
+    assert 'aria-label="Media Library"' in response.text
     assert 'aria-label="Upload Media"' not in response.text
 
 
@@ -513,10 +515,15 @@ def test_stage_page_requires_admin(client):
 def test_stage_page_loads_for_admin(client):
     """Test stage page renders for a valid admin session."""
     authenticate_admin_client(client)
-    response = client.get("/stage")
+    with patch(
+        "routes.pages.stage_lobby_service.resolve_lobby_media_url",
+        return_value="/media/stage-lobby-fallback.mp4",
+    ):
+        response = client.get("/stage")
     assert response.status_code == 200
     assert b"Stage View" in response.content
-    assert b"Queue Empty" in response.content or b"Now Playing" in response.content
+    assert b"Now Playing" in response.content
+    assert b'id="stage-video-player"' in response.content
 
 
 def test_playback_page_is_removed(client):
@@ -544,7 +551,7 @@ def test_settings_page_loads_for_admin(client):
     assert b">Refresh<" in response.content
     assert b"Admin Access" not in response.content
     assert 'aria-label="Settings"' in response.text
-    assert 'aria-label="Media Library"' not in response.text
+    assert 'aria-label="Media Library"' in response.text
     assert 'aria-label="Upload Media"' not in response.text
     assert "shield_person" not in response.text
 
@@ -1189,6 +1196,7 @@ def test_get_runtime_settings(client):
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
     assert "stage_qr_url" in data
+    assert "stage_lobby_media_path" in data
 
 
 def test_runtime_settings_api_requires_admin(client):
@@ -1220,6 +1228,7 @@ def test_update_runtime_settings(client):
             "lyrics_provider_lrclib_enabled": True,
             "ffmpeg_path": "ffmpeg",
             "stage_qr_url": "https://karaoke.test/queue",
+            "stage_lobby_media_path": "/media/stage-lobby.mp4",
         },
     )
     assert response.status_code == 200
@@ -1238,6 +1247,7 @@ def test_update_runtime_settings(client):
     assert data["lyrics_provider_netease_enabled"] is False
     assert data["lyrics_provider_lrclib_enabled"] is True
     assert data["stage_qr_url"] == "https://karaoke.test/queue"
+    assert data["stage_lobby_media_path"] == "/media/stage-lobby.mp4"
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
 
@@ -1257,6 +1267,7 @@ def test_update_runtime_settings_persists_to_database(client):
             "/api/settings/",
             json={
                 "stage_qr_url": "https://karaoke.test/queue",
+                "stage_lobby_media_path": "/media/stage-lobby.mp4",
                 "concurrent_ytdlp_search_enabled": True,
             },
         )
@@ -1265,11 +1276,16 @@ def test_update_runtime_settings_persists_to_database(client):
     db = TestingSessionLocal()
     try:
         stage_qr = db.query(RuntimeSetting).filter(RuntimeSetting.key == "stage_qr_url").first()
+        stage_lobby = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "stage_lobby_media_path"
+        ).first()
         concurrent = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "concurrent_ytdlp_search_enabled"
         ).first()
         assert stage_qr is not None
         assert stage_qr.value == "https://karaoke.test/queue"
+        assert stage_lobby is not None
+        assert stage_lobby.value == "/media/stage-lobby.mp4"
         assert concurrent is not None
         assert concurrent.value == "true"
     finally:

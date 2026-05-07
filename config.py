@@ -97,6 +97,7 @@ class Settings(BaseSettings):
     log_format: str = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
     log_to_file_in_reload: bool = False
     stage_qr_url: str = ""
+    stage_lobby_media_path: str = ""
     
     # WebSocket
     ws_heartbeat_interval: int = 30

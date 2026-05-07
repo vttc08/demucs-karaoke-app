@@ -3,6 +3,7 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from unittest.mock import patch
 
 from config import settings
 from database import ensure_auxiliary_schema, get_db
@@ -94,7 +95,11 @@ def test_app_serves_pages_assets_api_and_websocket_under_configured_subpath(tmp_
             token, _ = service.create_admin_session(db, admin)
         client.cookies.set(ADMIN_SESSION_COOKIE, token)
 
-        assert client.get("/karaoke/stage").status_code == 200
+        with patch(
+            "routes.pages.stage_lobby_service.resolve_lobby_media_url",
+            return_value="/media/stage-lobby-fallback.mp4",
+        ):
+            assert client.get("/karaoke/stage").status_code == 200
         assert client.get("/karaoke/settings").status_code == 200
         assert client.get("/karaoke/media").status_code == 200
         assert client.get("/karaoke/upload").status_code == 200

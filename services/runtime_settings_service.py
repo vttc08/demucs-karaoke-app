@@ -51,6 +51,7 @@ class RuntimeSettingsService:
         "media_path",
         "cache_path",
         "stage_qr_url",
+        "stage_lobby_media_path",
     )
     YTDLP_COMMAND_TIMEOUT_SECONDS = 60
 
@@ -87,6 +88,7 @@ class RuntimeSettingsService:
             media_path=str(settings.media_path),
             cache_path=str(settings.cache_path),
             stage_qr_url=settings.stage_qr_url,
+            stage_lobby_media_path=settings.stage_lobby_media_path,
         )
 
     def get_settings(self) -> RuntimeSettingsResponse:
@@ -260,6 +262,11 @@ class RuntimeSettingsService:
             settings.stage_qr_url = payload.stage_qr_url.strip()
             updated_fields.append("stage_qr_url")
 
+        if payload.stage_lobby_media_path is not None:
+            snapshot.setdefault("stage_lobby_media_path", settings.stage_lobby_media_path)
+            settings.stage_lobby_media_path = payload.stage_lobby_media_path.strip()
+            updated_fields.append("stage_lobby_media_path")
+
         try:
             settings.ensure_paths()
             if db is not None and updated_fields:
@@ -326,6 +333,8 @@ class RuntimeSettingsService:
             settings.cache_path = Path(raw_value)
         elif field_name == "stage_qr_url":
             settings.stage_qr_url = raw_value
+        elif field_name == "stage_lobby_media_path":
+            settings.stage_lobby_media_path = raw_value
         else:
             raise ValueError(f"Unknown persisted runtime setting: {field_name}")
 
