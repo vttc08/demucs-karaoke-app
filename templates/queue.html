@@ -121,7 +121,7 @@
                         <p class="text-xs text-on-surface-variant truncate">{{ item.artist }}</p>
                         {% endif %}
                         {% if item.requested_by_name %}
-                        <p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">{{ t('queue.requested_by', {'name': item.requested_by_name}) }}</p>
+                        <p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">{{ t('queue.requested_by', name=item.requested_by_name) }}</p>
                         {% endif %}
                         <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full 
                             {% if item.status.value == 'playing' %}bg-primary/10 border border-primary/20{% elif item.status.value == 'processing' %}bg-tertiary/10 border border-tertiary/20{% elif item.status.value == 'downloading' %}bg-tertiary/10 border border-tertiary/20{% elif item.status.value == 'failed' %}bg-error/10 border border-error/20{% else %}bg-on-surface/5 border border-on-surface/10{% endif %}">

@@ -479,6 +479,21 @@ def test_queue_page_renders_simplified_chinese_locale(client):
     assert 'id="language-select"' in response.text
 
 
+def test_queue_page_renders_requester_label(client):
+    """Queue page should render requester labels without template errors."""
+    client.cookies.set("karaoke_singer", "Alex")
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "queue-ui-requester", "title": "Requester UI", "is_karaoke": False},
+    )
+    assert created.status_code == 200
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert "Requested by Alex" in response.text
+
+
 def test_language_route_sets_cookie_and_redirects_locally(client):
     """Language selection should persist in a cookie and return to the requested page."""
     response = client.post(
