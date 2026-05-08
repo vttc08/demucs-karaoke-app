@@ -15,6 +15,7 @@ def init_db():
     """Initialize database tables."""
     _migrate_legacy_queue_items_if_needed()
     Base.metadata.create_all(bind=engine)
+    _ensure_queue_items_columns()
     _migrate_media_items_file_stems_if_needed()
     ensure_auxiliary_schema()
 
@@ -151,6 +152,30 @@ def _migrate_media_items_file_stems_if_needed():
             media_item.file_stem = desired_stem
             service._rehome_media_item_assets(db, media_item, desired_stem)
         db.commit()
+
+
+def _ensure_queue_items_columns(bind_engine=None):
+    """Ensure incremental queue-item columns exist on older SQLite databases."""
+    target_engine = bind_engine or engine
+    inspector = inspect(target_engine)
+    if "queue_items" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("queue_items")}
+    statements = []
+    if "user_id" not in columns:
+        statements.append("ALTER TABLE queue_items ADD COLUMN user_id TEXT")
+    if "session_id" not in columns:
+        statements.append("ALTER TABLE queue_items ADD COLUMN session_id TEXT")
+    if "requester_name" not in columns:
+        statements.append("ALTER TABLE queue_items ADD COLUMN requester_name TEXT")
+
+    if not statements:
+        return
+
+    with target_engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
 
 
 def ensure_auxiliary_schema(bind_engine=None):

@@ -9,6 +9,7 @@ Lightweight AI-powered karaoke application for home use.
 - **Karaoke Mode**: Vocal removal + optional sidecar lyrics overlay
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
+- **Live Queue Presence**: Queue page shows active guests and join toasts in real time
 - **Frontend Language Switching**: English and Simplified Chinese UI labels with a header selector
 
 ## Requirements
@@ -107,14 +108,16 @@ and `/static/...`.
 1. **Queue Page** (Mobile): Open `http://<server-ip>:8000/queue`
      - First-time guests see a dismissible stage-name prompt on the queue page instead of a blocking login page
      - Guests can skip naming and continue as a generated `Guest ####` name, or edit their name from the queue greeting
+     - See who is currently on the queue page in a live roster, with a small toast when new guests join
      - Search for songs (local library full-text on title/artist + YouTube in parallel)
      - Use the library and upload shortcuts under search to browse local media or add your own files
      - Or paste a YouTube link / video id directly to add external search results
      - Local matches are preferred in results; duplicate YouTube matches are hidden
      - Tap **Add** on a result to open the queue configuration interaction
     - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, a Google search link, an editable lyrics box, and lyrics file upload before adding to queue; resolved metadata is saved back into the media entry before queueing
-    - Confirm to add to queue
-    - Use remote stage controls, including lyrics on/off, for the currently playing item
+     - Confirm to add to queue
+     - Queue items show who requested them
+     - Use remote stage controls, including lyrics on/off, for the currently playing item
     - Admin users can clear queued songs and remove individual queued items; guest users can add songs but cannot perform destructive queue actions
     - Queue status updates in real time (downloading, processing, ready, playing, failed)
    

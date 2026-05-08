@@ -4,7 +4,7 @@ import json
 import logging
 import math
 from typing import List
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from config import settings
 from database import SessionLocal, get_db
@@ -22,6 +22,16 @@ queue_service = QueueService()
 lyrics_service = LyricsService()
 
 
+def _normalize_presence_value(value: str | None, *, max_length: int = 80) -> str | None:
+    """Normalize cookie or websocket presence values."""
+    if not isinstance(value, str):
+        return None
+    normalized = " ".join(value.split()).strip()
+    if not normalized:
+        return None
+    return normalized[:max_length]
+
+
 def _process_item_background(item_id: int):
     """Process queue item in a dedicated background session."""
     from services.karaoke_service import KaraokeService
@@ -36,10 +46,26 @@ def _process_item_background(item_id: int):
 
 
 @router.post("/", response_model=QueueItemResponse)
-async def add_to_queue(item: QueueItemCreate, db: Session = Depends(get_db)):
+async def add_to_queue(
+    item: QueueItemCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     """Add item to queue."""
     try:
-        response = queue_service.add_to_queue(db, item)
+        response = queue_service.add_to_queue(
+            db,
+            item,
+            requester_id=_normalize_presence_value(
+                request.cookies.get("karaoke_guest_id")
+            ),
+            requester_session_id=_normalize_presence_value(
+                request.cookies.get("karaoke_queue_tab_id")
+            ),
+            requester_name=_normalize_presence_value(
+                request.cookies.get("karaoke_singer"), max_length=40
+            ),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # Broadcast immediately after adding
@@ -51,6 +77,12 @@ async def add_to_queue(item: QueueItemCreate, db: Session = Depends(get_db)):
 def get_queue(db: Session = Depends(get_db)):
     """Get all items in queue."""
     return queue_service.get_queue(db)
+
+
+@router.get("/presence")
+def get_queue_presence():
+    """Return the current in-memory queue presence roster."""
+    return {"users": manager.get_queue_presence_snapshot()}
 
 
 @router.get("/current", response_model=QueueItemResponse | None)
@@ -249,6 +281,56 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
             # Handle pong response
             if data.get("type") == "pong":
                 logger.debug("Received pong from client")
+                continue
+
+            if data.get("type") in {"presence_hello", "presence_update"}:
+                payload = data.get("data")
+                if not isinstance(payload, dict):
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "data": {"detail": "Invalid presence payload"},
+                            "timestamp": asyncio.get_event_loop().time(),
+                        },
+                        websocket,
+                    )
+                    continue
+
+                if payload.get("page") != "queue":
+                    continue
+
+                guest_id = _normalize_presence_value(payload.get("guest_id"))
+                display_name = _normalize_presence_value(
+                    payload.get("display_name"), max_length=40
+                )
+                tab_id = _normalize_presence_value(payload.get("tab_id"))
+                if not guest_id or not tab_id or not display_name:
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "data": {
+                                "detail": "presence messages require guest_id, display_name, and tab_id"
+                            },
+                            "timestamp": asyncio.get_event_loop().time(),
+                        },
+                        websocket,
+                    )
+                    continue
+
+                if data.get("type") == "presence_hello":
+                    await manager.register_queue_presence(
+                        websocket,
+                        guest_id=guest_id,
+                        display_name=display_name,
+                        tab_id=tab_id,
+                    )
+                else:
+                    await manager.update_queue_presence(
+                        websocket,
+                        guest_id=guest_id,
+                        display_name=display_name,
+                        tab_id=tab_id,
+                    )
                 continue
 
             if data.get("type") == "stage_command":

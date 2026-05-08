@@ -53,9 +53,30 @@ Allowed `command` values:
   - `queue_cleared`
   - `current_item_changed`
   - `queue_item_failed`
+- Queue presence:
+  - `presence_snapshot` with `{users: [...]}` after queue clients send `presence_hello`
+  - `user_joined`
+  - `user_updated`
+  - `user_left`
 - Stage control:
   - `stage_control_command` with `{command, source}`, optional seek payload (`seek_time`, `is_paused`), and `sync_version` for resync commands
   - `stage_state_update` with `{is_paused, vocals_enabled, vocals_volume, lyrics_enabled, source}`
+
+**Queue presence client message:**
+```json
+{
+  "type": "presence_hello",
+  "data": {
+    "guest_id": "guest-123",
+    "display_name": "Alex",
+    "tab_id": "tab-123",
+    "page": "queue"
+  },
+  "timestamp": 1712345678901
+}
+```
+
+`presence_update` uses the same payload shape and refreshes the visible name for an already-connected guest.
 
 ---
 
@@ -142,6 +163,7 @@ POST /api/queue/
   "media_item_id": null,
   "title": "Song Title",
   "artist": "Artist Name",
+  "requested_by_name": "Alex",
   "is_karaoke": true,
   "lyrics_text": "[00:01.00]Line 1",
   "lyrics_format": "lrc"
@@ -173,6 +195,11 @@ When `lyrics_text` is supplied for karaoke items, the app persists it as a reusa
   "created_at": "2024-01-01T00:00:00"
 }
 ```
+
+Guest identity is read server-side from queue-page cookies when available:
+- `karaoke_guest_id`
+- `karaoke_queue_tab_id`
+- `karaoke_singer`
 
 ---
 
@@ -225,6 +252,7 @@ GET /api/queue/
     "youtube_id": "dQw4w9WgXcQ",
     "title": "Song Title",
     "artist": "Artist Name",
+    "requested_by_name": "Alex",
     "is_karaoke": true,
     "status": "ready",
     "media_path": "/media/dQw4w9WgXcQ.mp4",
@@ -234,6 +262,29 @@ GET /api/queue/
     "created_at": "2024-01-01T00:00:00"
   }
 ]
+```
+
+---
+
+### Get Queue Presence
+```
+GET /api/queue/presence
+```
+
+Returns the current in-memory roster of active `/queue` viewers. This is mainly used as the fallback source when WebSocket reconnect attempts are exhausted.
+
+**Response:**
+```json
+{
+  "users": [
+    {
+      "guest_id": "guest-123",
+      "display_name": "Alex",
+      "joined_at": "2026-05-07T00:00:00+00:00",
+      "connection_count": 1
+    }
+  ]
+}
 ```
 
 ---

@@ -80,6 +80,30 @@ def test_queue_service_add_to_queue(db_session):
     assert result.status == QueueStatus.PENDING
 
 
+def test_queue_service_add_to_queue_stores_requester_metadata(db_session):
+    """Queue items should preserve requester identity and display name."""
+    service = QueueService()
+
+    result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="requester123",
+            title="Requester Song",
+            is_karaoke=False,
+        ),
+        requester_id="guest-123",
+        requester_session_id="tab-123",
+        requester_name="Alex",
+    )
+
+    stored = db_session.query(QueueItem).filter(QueueItem.id == result.id).first()
+    assert stored is not None
+    assert stored.user_id == "guest-123"
+    assert stored.session_id == "tab-123"
+    assert stored.requester_name == "Alex"
+    assert result.requested_by_name == "Alex"
+
+
 def test_auth_service_stores_salted_password_hash(db_session):
     """Admin passwords should be stored as salted hashes, not plaintext."""
     service = AuthService()
@@ -896,6 +920,98 @@ async def test_queue_service_update_status_async_promotes_ready_item_when_idle(d
     assert any(
         msg["type"] == "current_item_changed" and msg["data"]["id"] == created.id
         for msg in socket.messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_connection_manager_presence_registers_and_updates():
+    """Presence registration should snapshot, join, update, and leave correctly."""
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self, name):
+            self.name = name
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    first = DummySocket("first")
+    second = DummySocket("second")
+
+    manager.active_connections.extend([first, second])
+
+    await manager.register_queue_presence(
+        first, guest_id="guest-1", display_name="Alex", tab_id="tab-1"
+    )
+    assert first.messages[-1]["type"] == "presence_snapshot"
+    assert first.messages[-1]["data"]["users"][0]["display_name"] == "Alex"
+
+    await manager.register_queue_presence(
+        second, guest_id="guest-2", display_name="Blair", tab_id="tab-2"
+    )
+    assert any(message["type"] == "user_joined" for message in first.messages)
+    assert second.messages[-1]["type"] == "presence_snapshot"
+
+    await manager.update_queue_presence(
+        second, guest_id="guest-2", display_name="Blair Renamed", tab_id="tab-2"
+    )
+    assert any(
+        message["type"] == "user_updated"
+        and message["data"]["display_name"] == "Blair Renamed"
+        for message in first.messages
+    )
+
+    await manager.disconnect(second)
+    assert any(
+        message["type"] == "user_left"
+        and message["data"]["guest_id"] == "guest-2"
+        for message in first.messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_connection_manager_presence_deduplicates_tabs_until_last_disconnect():
+    """A guest should stay present until their last active tab disconnects."""
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self, name):
+            self.name = name
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    observer = DummySocket("observer")
+    first_tab = DummySocket("tab1")
+    second_tab = DummySocket("tab2")
+    manager.active_connections.extend([observer, first_tab, second_tab])
+
+    await manager.register_queue_presence(
+        observer, guest_id="observer", display_name="Observer", tab_id="obs-tab"
+    )
+    await manager.register_queue_presence(
+        first_tab, guest_id="guest-1", display_name="Alex", tab_id="tab-1"
+    )
+    await manager.register_queue_presence(
+        second_tab, guest_id="guest-1", display_name="Alex", tab_id="tab-2"
+    )
+
+    snapshot = manager.get_queue_presence_snapshot()
+    alex = next(user for user in snapshot if user["guest_id"] == "guest-1")
+    assert alex["connection_count"] == 2
+
+    await manager.disconnect(first_tab)
+    assert not any(
+        message["type"] == "user_left" and message["data"]["guest_id"] == "guest-1"
+        for message in observer.messages
+    )
+
+    await manager.disconnect(second_tab)
+    assert any(
+        message["type"] == "user_left" and message["data"]["guest_id"] == "guest-1"
+        for message in observer.messages
     )
 
 

@@ -51,6 +51,7 @@ The queue page uses a hybrid update model:
 
 - Primary: WebSocket push at `/api/queue/ws`
 - Fallback: periodic polling from `static/queue.js` when WebSocket reconnect attempts are exhausted
+- Presence roster fallback: `GET /api/queue/presence` on the same polling interval when WebSocket is unavailable
 
 The stage page uses a websocket-first model:
 
@@ -66,7 +67,11 @@ The stage page uses a websocket-first model:
 
 - `routes/queue.py` hosts the WebSocket endpoint and heartbeat loop (server `ping`, client `pong`).
 - `services/websocket_manager.py` tracks active connections and broadcasts queue events.
+- `services/websocket_manager.py` also tracks in-memory queue presence keyed by guest id and deduplicates multiple browser tabs for the same guest.
 - `routes/queue.py` also accepts client `stage_command` messages (`play`, `pause`, `skip`).
+- `routes/queue.py` also accepts queue-page presence messages:
+  - `presence_hello` for initial roster registration
+  - `presence_update` when a guest renames themselves
 - `routes/queue.py` also accepts `seek` stage commands for synchronized timeline jumps across stage clients.
 - `routes/queue.py` also accepts `resync` stage commands so remote controls can force hard local
   video/vocals recovery on stage clients. Resync broadcasts include a monotonic `sync_version`, and
@@ -94,6 +99,11 @@ The stage page uses a websocket-first model:
   - `queue_item_removed`
   - `queue_cleared`
   - `current_item_changed`
+- Queue presence broadcasts are queue-page only:
+  - `presence_snapshot`
+  - `user_joined`
+  - `user_updated`
+  - `user_left`
 - Background processing status changes are broadcast from `QueueService.update_status_async`:
   - `queue_item_updated`
   - `queue_item_failed`
@@ -106,11 +116,14 @@ The stage page uses a websocket-first model:
 - `static/queue.js` maintains a single `QueueWebSocket` connection.
 - On disconnect, it retries with exponential backoff (1s, 2s, 4s, 8s up to max attempts).
 - If retries fail, it falls back to polling every 15s.
+- Queue clients send guest presence metadata (`guest_id`, display name, tab id) after connect and when the local singer name changes.
+- Presence join toasts are only shown for incremental `user_joined` events, not for the initial roster snapshot.
 - Queue actions no longer rely on full-page reloads; UI updates are driven by pushed events.
 - Queue page now includes stage remote controls that send websocket `stage_command` messages.
 - Queue page includes stage vocal-assist controls (toggle + volume slider) that send websocket
   mix commands and mirror live `stage_state_update` broadcasts.
 - Queue page includes a lyrics overlay toggle that mirrors the stage lyrics visibility state.
+- Queue page also renders a live "Here Now" roster from presence events and shows requester labels on queue items.
 - Stage page consumes websocket queue events and stage-control events to stay in sync without polling.
 - Stage page refreshes queue/current state over API and applies source changes to existing media
   elements instead of reloading the page.
@@ -200,6 +213,9 @@ The stage page uses a websocket-first model:
 - Guest login remains a lightweight device/stage-name identifier for the current sprint. It is not
   an authorization boundary. First-time guests are prompted inline on the queue page, can dismiss the
   prompt to receive a generated guest name, and can edit that name from the queue greeting.
+- Queue presence uses a separate browser guest id cookie plus a per-tab id so active queue viewers can
+  be tracked in real time without treating multiple tabs as separate people. Queue ownership persists
+  `user_id`, `session_id`, and a display-name snapshot on each queue row.
 - The current branch establishes admin credential/session storage. The settings page and settings
   management APIs require an active admin session. The stage page and stage navbar entry are also
   admin-only. Queue clear/remove actions and media delete actions are also restricted to admins in

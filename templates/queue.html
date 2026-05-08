@@ -11,6 +11,7 @@
     data-singer-name="{{ singer_name }}"
     data-needs-singer-name="{{ 'true' if needs_singer_name else 'false' }}"
     data-is-admin="{{ 'true' if is_admin else 'false' }}"
+    data-guest-id="{{ request.cookies.get('karaoke_guest_id', '') }}"
 >
     <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
         <div class="min-w-0">
@@ -93,6 +94,17 @@
                 {% endif %}
             </div>
         </div>
+
+        <div class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.live') }}</span>
+                    <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('queue.here_now') }}</h3>
+                </div>
+                <span id="queue-presence-count" class="rounded-full bg-surface-container-highest px-3 py-1 text-xs font-bold text-on-surface-variant">{{ t('queue.no_one_here') }}</span>
+            </div>
+            <div id="queue-presence-list" class="mt-4 flex flex-wrap gap-2"></div>
+        </div>
         
         <div id="queue-list" class="flex flex-col gap-4">
             {% if queue %}
@@ -107,6 +119,9 @@
                         <h3 class="font-bold {% if item.status.value == 'playing' %}text-on-surface{% else %}text-on-surface/80{% endif %} truncate">{{ item.title }}</h3>
                         {% if item.artist %}
                         <p class="text-xs text-on-surface-variant truncate">{{ item.artist }}</p>
+                        {% endif %}
+                        {% if item.requested_by_name %}
+                        <p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">{{ t('queue.requested_by', {'name': item.requested_by_name}) }}</p>
                         {% endif %}
                         <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full 
                             {% if item.status.value == 'playing' %}bg-primary/10 border border-primary/20{% elif item.status.value == 'processing' %}bg-tertiary/10 border border-tertiary/20{% elif item.status.value == 'downloading' %}bg-tertiary/10 border border-tertiary/20{% elif item.status.value == 'failed' %}bg-error/10 border border-error/20{% else %}bg-on-surface/5 border border-on-surface/10{% endif %}">
@@ -450,6 +465,9 @@ function saveSingerName(name) {
     document.cookie = `karaoke_singer=${encodeURIComponent(finalName)}; Max-Age=31536000; Path=/; SameSite=Lax${secure}`;
     const label = document.getElementById('queue-singer-name');
     if (label) label.textContent = finalName;
+    if (window.queueWebSocket && typeof window.queueWebSocket.sendPresenceUpdate === 'function') {
+        window.queueWebSocket.sendPresenceUpdate();
+    }
     return finalName;
 }
 

@@ -58,17 +58,17 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] bug: when skipping (via command or song complete), if video is in fullscreen, it exits fullscreen
 - [x] bug: when it's initially at queue, the websocket doesn't trigger and new songs added to queue aren't played immediatelyf
 - [x] can address above 2 with always on media, always playing sound/looping video and switch as karaoke tracks come through
-- [ ] queue page with users
+- [x] queue page with users
 - [ ] frontend settings page polish
 - [x] blueprints for subfolder custom path support
 - [x] consistent themed restriction page for outside network and splash screen
 - [x] admin login page for settings and splash
 - [x] login page for device identification only, stored in local storage (Login Screen)
-- [ ] real time join and enqueue feature
+- [x] real time join and enqueue feature
 - [ ] admin has ability to remove, skip or reorder queue
 - [ ] fix multi track audio sync issues
 - [ ] support playback of MP3 (default to cover bg)
-- [ ] show users in queue
+- [x] show users in queue
 - [ ] users can change only their own added songs
 - [ ] show progress for ytdlp and demucs
 - [x] customize lyric tracks behavior

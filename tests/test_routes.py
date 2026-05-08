@@ -247,6 +247,33 @@ def test_add_to_queue(client):
     assert data["status"] == "pending"
 
 
+def test_add_to_queue_uses_guest_cookies_for_requester(client):
+    """Queue add should expose requester label from guest cookies."""
+    client.cookies.set("karaoke_guest_id", "guest-123")
+    client.cookies.set("karaoke_queue_tab_id", "tab-123")
+    client.cookies.set("karaoke_singer", "Alex")
+
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "test123-requester",
+            "title": "Requester Song",
+            "is_karaoke": False,
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["requested_by_name"] == "Alex"
+
+    with TestingSessionLocal() as db:
+        row = db.query(QueueItem).filter(QueueItem.id == data["id"]).first()
+        assert row is not None
+        assert row.user_id == "guest-123"
+        assert row.session_id == "tab-123"
+        assert row.requester_name == "Alex"
+
+
 def test_add_to_queue_non_karaoke(client):
     """Non-karaoke queue items should be accepted without burn settings."""
     response = client.post(
@@ -1613,6 +1640,28 @@ def test_queue_destructive_routes_require_admin(client):
     assert clear_response.json()["detail"] == "Admin session required"
 
 
+def test_get_queue_presence_route_returns_users(client):
+    """Presence route should expose the current in-memory roster."""
+    from routes.queue import manager
+
+    manager._queue_presence = {
+        "guest-1": {
+            "display_name": "Alex",
+            "joined_at": "2026-05-07T00:00:00",
+            "tab_ids": {"tab-1"},
+        }
+    }
+    try:
+        response = client.get("/api/queue/presence")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["users"][0]["guest_id"] == "guest-1"
+        assert payload["users"][0]["display_name"] == "Alex"
+        assert payload["users"][0]["connection_count"] == 1
+    finally:
+        manager._queue_presence.clear()
+
+
 def test_websocket_connect_and_receive_connected_message(client):
     """WebSocket endpoint should accept connections and send initial connected payload."""
     with client.websocket_connect("/api/queue/ws") as websocket:
@@ -1622,6 +1671,167 @@ def test_websocket_connect_and_receive_connected_message(client):
         assert "stage_state" in message["data"]
         assert message["data"]["stage_state"]["lyrics_enabled"] is True
         assert isinstance(message["data"]["stage_state"]["sync_version"], int)
+
+
+def test_websocket_presence_hello_returns_snapshot(client):
+    """Presence hello should register a queue viewer and return a snapshot."""
+    with client.websocket_connect("/api/queue/ws") as websocket:
+        connected = websocket.receive_json()
+        assert connected["type"] == "connected"
+
+        websocket.send_json(
+            {
+                "type": "presence_hello",
+                "data": {
+                    "guest_id": "guest-1",
+                    "display_name": "Alex",
+                    "tab_id": "tab-1",
+                    "page": "queue",
+                },
+            }
+        )
+
+        snapshot = websocket.receive_json()
+        assert snapshot["type"] == "presence_snapshot"
+        assert snapshot["data"]["users"][0]["display_name"] == "Alex"
+
+
+def test_websocket_presence_join_update_and_leave(client):
+    """Presence lifecycle events should broadcast to other queue viewers."""
+    with client.websocket_connect("/api/queue/ws") as first:
+        assert first.receive_json()["type"] == "connected"
+        first.send_json(
+            {
+                "type": "presence_hello",
+                "data": {
+                    "guest_id": "guest-1",
+                    "display_name": "Alex",
+                    "tab_id": "tab-1",
+                    "page": "queue",
+                },
+            }
+        )
+        assert first.receive_json()["type"] == "presence_snapshot"
+
+        with client.websocket_connect("/api/queue/ws") as second:
+            assert second.receive_json()["type"] == "connected"
+            second.send_json(
+                {
+                    "type": "presence_hello",
+                    "data": {
+                        "guest_id": "guest-2",
+                        "display_name": "Blair",
+                        "tab_id": "tab-2",
+                        "page": "queue",
+                    },
+                }
+            )
+            assert second.receive_json()["type"] == "presence_snapshot"
+
+            joined = first.receive_json()
+            while joined["type"] == "ping":
+                first.send_json({"type": "pong"})
+                joined = first.receive_json()
+            assert joined["type"] == "user_joined"
+            assert joined["data"]["display_name"] == "Blair"
+
+            second.send_json(
+                {
+                    "type": "presence_update",
+                    "data": {
+                        "guest_id": "guest-2",
+                        "display_name": "Blair Renamed",
+                        "tab_id": "tab-2",
+                        "page": "queue",
+                    },
+                }
+            )
+
+            assert second.receive_json()["type"] == "presence_snapshot"
+            updated = first.receive_json()
+            while updated["type"] == "ping":
+                first.send_json({"type": "pong"})
+                updated = first.receive_json()
+            assert updated["type"] == "user_updated"
+            assert updated["data"]["display_name"] == "Blair Renamed"
+
+        left = first.receive_json()
+        while left["type"] == "ping":
+            first.send_json({"type": "pong"})
+            left = first.receive_json()
+        assert left["type"] == "user_left"
+        assert left["data"]["guest_id"] == "guest-2"
+
+
+def test_websocket_presence_deduplicates_multiple_tabs(client):
+    """Same guest in two tabs should only leave after the final disconnect."""
+    with client.websocket_connect("/api/queue/ws") as observer:
+        assert observer.receive_json()["type"] == "connected"
+        observer.send_json(
+            {
+                "type": "presence_hello",
+                "data": {
+                    "guest_id": "observer",
+                    "display_name": "Observer",
+                    "tab_id": "obs-1",
+                    "page": "queue",
+                },
+            }
+        )
+        assert observer.receive_json()["type"] == "presence_snapshot"
+
+        with client.websocket_connect("/api/queue/ws") as first_tab:
+            assert first_tab.receive_json()["type"] == "connected"
+            first_tab.send_json(
+                {
+                    "type": "presence_hello",
+                    "data": {
+                        "guest_id": "guest-1",
+                        "display_name": "Alex",
+                        "tab_id": "tab-1",
+                        "page": "queue",
+                    },
+                }
+            )
+            assert first_tab.receive_json()["type"] == "presence_snapshot"
+            joined = observer.receive_json()
+            while joined["type"] == "ping":
+                observer.send_json({"type": "pong"})
+                joined = observer.receive_json()
+            assert joined["type"] == "user_joined"
+
+            with client.websocket_connect("/api/queue/ws") as second_tab:
+                assert second_tab.receive_json()["type"] == "connected"
+                second_tab.send_json(
+                    {
+                        "type": "presence_hello",
+                        "data": {
+                            "guest_id": "guest-1",
+                            "display_name": "Alex",
+                            "tab_id": "tab-2",
+                            "page": "queue",
+                        },
+                    }
+                )
+                snapshot = second_tab.receive_json()
+                assert snapshot["type"] == "presence_snapshot"
+                guest = next(
+                    user for user in snapshot["data"]["users"] if user["guest_id"] == "guest-1"
+                )
+                assert guest["connection_count"] == 2
+
+            response = client.get("/api/queue/presence")
+            assert response.status_code == 200
+            users = response.json()["users"]
+            guest = next(user for user in users if user["guest_id"] == "guest-1")
+            assert guest["connection_count"] == 1
+
+        left = observer.receive_json()
+        while left["type"] == "ping":
+            observer.send_json({"type": "pong"})
+            left = observer.receive_json()
+        assert left["type"] == "user_left"
+        assert left["data"]["guest_id"] == "guest-1"
 
 
 def test_websocket_broadcasts_queue_item_added_event(client):

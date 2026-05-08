@@ -20,7 +20,13 @@ class QueueService:
     POSITION_STEP = 1000
 
     def add_to_queue(
-        self, db: Session, item: QueueItemCreate
+        self,
+        db: Session,
+        item: QueueItemCreate,
+        *,
+        requester_id: str | None = None,
+        requester_session_id: str | None = None,
+        requester_name: str | None = None,
     ) -> QueueItemResponse:
         """
         Add item to queue.
@@ -105,6 +111,9 @@ class QueueService:
             media_id=media_item.id,
             position=self.append_to_end(db),
             requested_karaoke=item.is_karaoke,
+            user_id=self._normalize_optional_metadata(requester_id),
+            session_id=self._normalize_optional_metadata(requester_session_id),
+            requester_name=self._normalize_optional_metadata(requester_name),
             status=QueueStatus.PENDING,
         )
         db.add(db_item)
@@ -644,6 +653,7 @@ class QueueService:
             youtube_id=media.youtube_id or "",
             title=media.title,
             artist=media.artist,
+            requested_by_name=item.requester_name,
             is_karaoke=bool(item.requested_karaoke),
             status=QueueStatus(item.status),
             media_path=media_path,

@@ -25,6 +25,8 @@ const searchResults = document.getElementById('search-results');
 const queueList = document.getElementById('queue-list');
 const mainElement = document.querySelector('main[data-is-admin]');
 const isAdminUser = mainElement?.dataset.isAdmin === 'true';
+const queuePresenceList = document.getElementById('queue-presence-list');
+const queuePresenceCount = document.getElementById('queue-presence-count');
 const stageRemoteStatus = document.getElementById('stage-remote-status');
 const stageRemotePlayPauseBtn = document.getElementById('stage-remote-play-pause-btn');
 const stageRemotePlayPauseIcon = document.getElementById('stage-remote-play-pause-icon');
@@ -67,6 +69,119 @@ let demucsHealth = { healthy: true, detail: t('settings.engine_unknown') };
 let modalSelection = null;
 let modalKaraokeEnabled = false;
 let queueToastTimer = null;
+let queuePresenceUsers = [];
+
+function getCookieValue(name) {
+    const match = document.cookie
+        .split('; ')
+        .find((cookie) => cookie.startsWith(`${name}=`));
+    return match ? decodeURIComponent(match.split('=').slice(1).join('=')) : '';
+}
+
+function sanitizePresenceValue(value, maxLength = 80) {
+    return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function setCookieValue(name, value, maxAge = 31536000) {
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAge}; Path=/; SameSite=Lax${secure}`;
+}
+
+function ensureGuestId() {
+    const current = sanitizePresenceValue(getCookieValue('karaoke_guest_id'));
+    if (current) {
+        return current;
+    }
+    const guestId = (window.crypto?.randomUUID?.() || `guest-${Date.now()}-${Math.random().toString(16).slice(2)}`).slice(0, 80);
+    setCookieValue('karaoke_guest_id', guestId);
+    return guestId;
+}
+
+function ensureQueueTabId() {
+    const current = sanitizePresenceValue(sessionStorage.getItem('karaoke_queue_tab_id'));
+    if (current) {
+        setCookieValue('karaoke_queue_tab_id', current);
+        return current;
+    }
+    const tabId = (window.crypto?.randomUUID?.() || `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`).slice(0, 80);
+    sessionStorage.setItem('karaoke_queue_tab_id', tabId);
+    setCookieValue('karaoke_queue_tab_id', tabId);
+    return tabId;
+}
+
+function getCurrentSingerName() {
+    const labelName = sanitizePresenceValue(document.getElementById('queue-singer-name')?.textContent, 40);
+    const cookieName = sanitizePresenceValue(getCookieValue('karaoke_singer'), 40);
+    const datasetName = sanitizePresenceValue(mainElement?.dataset.singerName, 40);
+    return cookieName || datasetName || labelName || t('common.guest');
+}
+
+function renderPresenceList() {
+    if (!queuePresenceList || !queuePresenceCount) {
+        return;
+    }
+
+    if (!queuePresenceUsers.length) {
+        queuePresenceCount.textContent = t('queue.no_one_here');
+        queuePresenceList.innerHTML = `<p class="text-sm text-on-surface-variant">${t('queue.presence_waiting')}</p>`;
+        return;
+    }
+
+    queuePresenceCount.textContent = t('queue.people_here_count', { count: queuePresenceUsers.length });
+    queuePresenceList.innerHTML = queuePresenceUsers.map((user) => `
+        <span class="inline-flex items-center gap-2 rounded-full border border-outline-variant/20 bg-surface-container-highest px-3 py-2 text-sm font-semibold text-on-surface">
+            <span class="h-2 w-2 rounded-full bg-primary"></span>
+            <span>${escapeHtml(user.display_name || t('common.guest'))}</span>
+            ${user.connection_count > 1 ? `<span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">x${user.connection_count}</span>` : ''}
+        </span>
+    `).join('');
+}
+
+function upsertPresenceUser(user) {
+    if (!user || !user.guest_id) {
+        return;
+    }
+    const nextUser = {
+        guest_id: user.guest_id,
+        display_name: sanitizePresenceValue(user.display_name, 40) || t('common.guest'),
+        joined_at: user.joined_at || null,
+        connection_count: Number.isFinite(Number(user.connection_count)) ? Number(user.connection_count) : 1,
+    };
+    const index = queuePresenceUsers.findIndex((entry) => entry.guest_id === nextUser.guest_id);
+    if (index >= 0) {
+        queuePresenceUsers[index] = { ...queuePresenceUsers[index], ...nextUser };
+    } else {
+        queuePresenceUsers.push(nextUser);
+    }
+    queuePresenceUsers.sort((a, b) => {
+        const joinedA = String(a.joined_at || '');
+        const joinedB = String(b.joined_at || '');
+        if (joinedA !== joinedB) {
+            return joinedA.localeCompare(joinedB);
+        }
+        return String(a.display_name || '').localeCompare(String(b.display_name || ''));
+    });
+    renderPresenceList();
+}
+
+function removePresenceUser(guestId) {
+    queuePresenceUsers = queuePresenceUsers.filter((user) => user.guest_id !== guestId);
+    renderPresenceList();
+}
+
+async function refreshPresenceFallback() {
+    try {
+        const response = await fetch(`${API_BASE}/api/queue/presence`);
+        if (!response.ok) {
+            throw new Error(`Presence refresh failed: ${response.status}`);
+        }
+        const payload = await response.json();
+        queuePresenceUsers = Array.isArray(payload.users) ? payload.users : [];
+        renderPresenceList();
+    } catch (error) {
+        logger.warn('Presence fallback refresh failed:', error);
+    }
+}
 
 function showQueueToast(message) {
     if (!queueToast || !queueToastText) {
@@ -902,6 +1017,7 @@ function updateQueueDisplay(queue) {
                 <div class="flex-1 min-w-0">
                     <h3 class="font-bold ${item.status === 'playing' ? 'text-on-surface' : 'text-on-surface/80'} truncate">${escapeHtml(item.title)}</h3>
                     ${item.artist ? `<p class="text-xs text-on-surface-variant truncate">${escapeHtml(item.artist)}</p>` : ''}
+                    ${item.requested_by_name ? `<p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">${escapeHtml(t('queue.requested_by', { name: item.requested_by_name }))}</p>` : ''}
                     <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${statusInfo.bgClass}">
                         ${statusInfo.icon}
                         <span class="text-[10px] font-black uppercase tracking-tighter ${statusInfo.textClass}">${statusInfo.label}</span>
@@ -986,6 +1102,8 @@ class QueueWebSocket {
         this.isReconnecting = false;
         this.heartbeatTimeout = null;
         this.statusIndicator = null;
+        this.guestId = ensureGuestId();
+        this.tabId = ensureQueueTabId();
         
         this.createStatusIndicator();
         this.connect();
@@ -1067,6 +1185,7 @@ class QueueWebSocket {
                     clearInterval(refreshInterval);
                     refreshInterval = null;
                 }
+                this.sendPresenceHello();
             };
             
             this.ws.onmessage = (event) => {
@@ -1125,14 +1244,43 @@ class QueueWebSocket {
     
     fallbackToPolling() {
         console.log('[WebSocket] Falling back to polling mode');
+        refreshPresenceFallback();
         // Start the traditional polling interval
         if (!refreshInterval) {
             refreshInterval = setInterval(() => {
                 if (document.visibilityState === 'visible') {
                     refreshQueue();
+                    refreshPresenceFallback();
                 }
             }, 15000); // 15 seconds in fallback mode
         }
+    }
+
+    buildPresencePayload() {
+        this.guestId = ensureGuestId();
+        this.tabId = ensureQueueTabId();
+        return {
+            guest_id: this.guestId,
+            display_name: getCurrentSingerName(),
+            tab_id: this.tabId,
+            page: 'queue',
+        };
+    }
+
+    sendPresenceHello() {
+        return this.send({
+            type: 'presence_hello',
+            data: this.buildPresencePayload(),
+            timestamp: Date.now(),
+        });
+    }
+
+    sendPresenceUpdate() {
+        return this.send({
+            type: 'presence_update',
+            data: this.buildPresencePayload(),
+            timestamp: Date.now(),
+        });
     }
     
     handleMessage(message) {
@@ -1144,6 +1292,22 @@ class QueueWebSocket {
                 if (message.data && message.data.stage_state) {
                     window.dispatchEvent(new CustomEvent('stage_state_update', { detail: message.data.stage_state }));
                 }
+                break;
+            case 'presence_snapshot':
+                queuePresenceUsers = Array.isArray(message.data?.users) ? message.data.users : [];
+                renderPresenceList();
+                break;
+            case 'user_joined':
+                upsertPresenceUser(message.data);
+                if (message.data?.guest_id && message.data.guest_id !== this.guestId) {
+                    showQueueToast(t('queue.user_joined', { name: message.data.display_name || t('common.guest') }));
+                }
+                break;
+            case 'user_updated':
+                upsertPresenceUser(message.data);
+                break;
+            case 'user_left':
+                removePresenceUser(message.data?.guest_id);
                 break;
             case 'ping':
                 // Respond to server ping
@@ -1255,6 +1419,7 @@ function syncStageLyricsAvailability(queue) {
 let queueWebSocket = null;
 if (window.location.pathname === appUrl('/queue') || window.location.pathname === appUrl('/')) {
     queueWebSocket = new QueueWebSocket();
+    window.queueWebSocket = queueWebSocket;
 }
 
 if (stageRemotePlayPauseBtn) {

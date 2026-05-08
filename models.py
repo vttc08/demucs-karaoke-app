@@ -51,6 +51,7 @@ class QueueItem(Base):
     requested_karaoke = Column(Boolean, default=False, nullable=False)
     user_id = Column(String, nullable=True)
     session_id = Column(String, nullable=True)
+    requester_name = Column(String, nullable=True)
     status = Column(String, default=QueueStatus.PENDING)
     error = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -200,6 +201,7 @@ class QueueItemResponse(BaseModel):
     youtube_id: str
     title: str
     artist: Optional[str] = None
+    requested_by_name: Optional[str] = None
     is_karaoke: bool
     status: QueueStatus
     media_path: Optional[str] = None
