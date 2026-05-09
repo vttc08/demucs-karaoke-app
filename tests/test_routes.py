@@ -461,6 +461,7 @@ def test_queue_page_loads(client):
     assert 'href="/media"' in response.text
     assert 'href="/upload"' in response.text
     assert 'id="clear-all-btn"' not in response.text
+    assert "skipToSong(" not in response.text
     assert 'aria-label="Settings"' not in response.text
     assert 'aria-label="Stage View"' not in response.text
     assert 'aria-label="Media Library"' not in response.text
@@ -492,6 +493,14 @@ def test_queue_page_renders_requester_label(client):
 
     assert response.status_code == 200
     assert "Requested by Alex" in response.text
+
+
+def test_queue_page_uses_dash_in_default_guest_name(client):
+    """Default generated guest names should not contain spaces."""
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert "`${window.KaraokeI18n?.t('common.guest') || 'Guest'}-${Math.floor(1000 + Math.random() * 9000)}`" in response.text
 
 
 def test_language_route_sets_cookie_and_redirects_locally(client):
@@ -541,6 +550,7 @@ def test_queue_page_shows_admin_queue_controls(client):
     assert response.status_code == 200
     assert 'id="clear-all-btn"' in response.text
     assert "removeSong(" in response.text
+    assert "skipToSong(" not in response.text
     assert 'aria-label="Stage View"' in response.text
     assert 'aria-label="Settings"' in response.text
     assert 'aria-label="Media Library"' in response.text

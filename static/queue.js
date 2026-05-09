@@ -992,12 +992,7 @@ function updateQueueDisplay(queue) {
     
     queueList.innerHTML = queue.map(item => {
         const statusInfo = getStatusInfo(item.status);
-        const actionHtml = item.status === 'ready' ? `
-                    <button class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_0_15px_rgba(0,242,255,0.3)] active:scale-90 transition-all neon-glow"
-                            onclick="skipToSong('${item.id}')">
-                        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">play_arrow</span>
-                    </button>
-                    ` : item.status === 'playing' ? `
+        const actionHtml = item.status === 'playing' ? `
                     <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="${t('queue.playing')}">
                         <span class="material-symbols-outlined">equalizer</span>
                     </button>

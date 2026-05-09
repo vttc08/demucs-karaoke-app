@@ -152,12 +152,7 @@
                         {% endif %}
                     </div>
                     <div class="flex flex-col gap-2">
-                        {% if item.status.value == 'ready' %}
-                        <button class="w-10 h-10 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-[0_0_15px_rgba(0,242,255,0.3)] active:scale-90 transition-all neon-glow" 
-                                onclick="skipToSong('{{ item.id }}')">
-                            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">play_arrow</span>
-                        </button>
-                        {% elif item.status.value == 'playing' %}
+                        {% if item.status.value == 'playing' %}
                         <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="{{ t('queue.playing') }}">
                             <span class="material-symbols-outlined">equalizer</span>
                         </button>
@@ -456,7 +451,7 @@ function sanitizeSingerName(value) {
 }
 
 function randomGuestName() {
-    return `${window.KaraokeI18n?.t('common.guest') || 'Guest'} ${Math.floor(1000 + Math.random() * 9000)}`;
+    return `${window.KaraokeI18n?.t('common.guest') || 'Guest'}-${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
 function saveSingerName(name) {
@@ -536,22 +531,6 @@ function initializeSingerNamePrompt() {
 initializeSingerNamePrompt();
 
 // Additional mobile-specific functionality
-function skipToSong(songId) {
-    fetch(window.KaraokeURLs.appUrl(`/api/queue/skip-to/${songId}`), {
-        method: 'POST'
-    }).then(response => {
-        if (response.ok) {
-            // WebSocket will handle the update, no need to reload
-            console.log('Skipped to song:', songId);
-        } else {
-            alert(window.KaraokeI18n?.t('queue.skip_to_failed') || 'Failed to skip to song');
-        }
-    }).catch(error => {
-        console.error('Error:', error);
-        alert(window.KaraokeI18n?.t('queue.skip_to_failed') || 'Failed to skip to song');
-    });
-}
-
 function removeSong(songId) {
     fetch(window.KaraokeURLs.appUrl(`/api/queue/${songId}`), {
         method: 'DELETE'
