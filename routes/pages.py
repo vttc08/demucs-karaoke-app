@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from sqlalchemy.orm import Session
 from database import get_db
+from models import QueueStatus
 from routes.auth import get_admin_user
 from services.queue_service import QueueService
 from services.media_library_service import MediaLibraryService
@@ -193,6 +194,8 @@ async def logout(request: Request, db: Session = Depends(get_db)):
 async def queue_page(request: Request, db: Session = Depends(get_db)):
     """Mobile queue page."""
     queue_items = queue_service.get_queue(db)
+    movable_items = [item for item in queue_items if item.status != QueueStatus.PLAYING]
+    movable_index_by_id = {item.id: index for index, item in enumerate(movable_items)}
     singer_name = (request.cookies.get("karaoke_singer") or "").strip()
     is_admin = get_admin_user(request, db) is not None
     return templates.TemplateResponse(
@@ -200,6 +203,8 @@ async def queue_page(request: Request, db: Session = Depends(get_db)):
         {
             "request": request,
             "queue": queue_items,
+            "movable_count": len(movable_items),
+            "movable_index_by_id": movable_index_by_id,
             "singer_name": singer_name,
             "needs_singer_name": not singer_name,
             "is_admin": is_admin,

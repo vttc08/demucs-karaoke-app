@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from sqlalchemy.orm import Session
 from config import settings
 from database import SessionLocal, get_db
-from models import QueueItemCreate, QueueItemResponse, QueueStatus
+from models import QueueItemCreate, QueueItemMoveRequest, QueueItemResponse, QueueStatus
 from routes.auth import require_admin_user
 from services.lyrics_service import LyricsService
 from services.queue_service import QueueService
@@ -181,6 +181,23 @@ async def skip_to_item(item_id: int, db: Session = Depends(get_db)):
     await manager.broadcast_current_item_changed(item_id, previous_id)
 
     return queue_service._to_response(item)
+
+
+@router.post("/{item_id}/move", response_model=QueueItemResponse)
+async def move_item(
+    item_id: int,
+    payload: QueueItemMoveRequest,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Move an active queue item up or down within the queue order."""
+    try:
+        response = queue_service.move_queue_item(db, item_id, payload.direction)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await manager.broadcast_queue_item_updated(response.model_dump(mode="json"))
+    return response
 
 
 @router.delete("/{item_id}")

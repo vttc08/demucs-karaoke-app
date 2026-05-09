@@ -18,6 +18,14 @@ _LYRICS_SUFFIXES = {".lrc", ".srt", ".txt"}
 class QueueService:
     """Service for queue operations."""
     POSITION_STEP = 1000
+    ACTIVE_QUEUE_STATUSES = (
+        QueueStatus.PENDING,
+        QueueStatus.DOWNLOADING,
+        QueueStatus.PROCESSING,
+        QueueStatus.READY,
+        QueueStatus.PLAYING,
+        QueueStatus.FAILED,
+    )
 
     def add_to_queue(
         self,
@@ -135,24 +143,7 @@ class QueueService:
         Returns:
             List of queue items
         """
-        items = (
-            db.query(QueueItem)
-            .filter(
-                QueueItem.status.in_(
-                    [
-                        QueueStatus.PENDING,
-                        QueueStatus.DOWNLOADING,
-                        QueueStatus.PROCESSING,
-                        QueueStatus.READY,
-                        QueueStatus.PLAYING,
-                        QueueStatus.FAILED,
-                    ]
-                )
-            )
-            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
-            .limit(limit)
-            .all()
-        )
+        items = self._get_active_queue_items(db, limit=limit)
         return [self._to_response(item) for item in items]
 
     def get_current_item(self, db: Session) -> Optional[QueueItemResponse]:
@@ -255,6 +246,66 @@ class QueueService:
         db.refresh(next_ready)
 
         return self._to_response(next_ready)
+
+    def move_queue_item(
+        self, db: Session, item_id: int, direction: str
+    ) -> QueueItemResponse:
+        """Move an active queue item up or down within the non-playing order."""
+        if direction not in {"up", "down"}:
+            raise ValueError("direction must be 'up' or 'down'")
+
+        for _attempt in range(2):
+            items = self._get_active_queue_items(db)
+            item = next((candidate for candidate in items if candidate.id == item_id), None)
+            if item is None:
+                raise ValueError(f"Queue item not found: {item_id}")
+            if item.status == QueueStatus.PLAYING:
+                raise ValueError("Cannot reorder currently playing item")
+
+            movable_items = [
+                candidate for candidate in items if candidate.status != QueueStatus.PLAYING
+            ]
+            movable_index_by_id = {
+                candidate.id: index for index, candidate in enumerate(movable_items)
+            }
+            movable_index = movable_index_by_id.get(item.id)
+            if movable_index is None:
+                raise ValueError(f"Queue item not found: {item_id}")
+
+            active_index_by_id = {candidate.id: index for index, candidate in enumerate(items)}
+
+            try:
+                if direction == "up":
+                    if movable_index == 0:
+                        raise ValueError("Item is already at the top of the queue")
+                    previous_item = movable_items[movable_index - 1]
+                    previous_active_index = active_index_by_id[previous_item.id]
+                    before_item = items[previous_active_index - 1] if previous_active_index > 0 else None
+                    if before_item is None:
+                        item.position = self.add_to_front(db)
+                    else:
+                        item.position = self.insert_between(db, before_item.position, previous_item.position)
+                else:
+                    if movable_index == len(movable_items) - 1:
+                        raise ValueError("Item is already at the bottom of the queue")
+                    next_item = movable_items[movable_index + 1]
+                    next_active_index = active_index_by_id[next_item.id]
+                    after_item = items[next_active_index + 1] if next_active_index + 1 < len(items) else None
+                    if after_item is None:
+                        item.position = self.append_to_end(db)
+                    else:
+                        item.position = self.insert_between(db, next_item.position, after_item.position)
+            except ValueError as exc:
+                if "No insert gap available" in str(exc) and _attempt == 0:
+                    self.renumber_queue_if_needed(db, force=True)
+                    continue
+                raise
+
+            db.commit()
+            db.refresh(item)
+            return self._to_response(item)
+
+        raise ValueError("Unable to move queue item")
 
     def complete_current_item(self, db: Session) -> Optional[QueueItemResponse]:
         """
@@ -586,6 +637,16 @@ class QueueService:
         if max_position is None:
             return self.POSITION_STEP
         return int(max_position) + self.POSITION_STEP
+
+    def _get_active_queue_items(self, db: Session, limit: int | None = None) -> list[QueueItem]:
+        query = (
+            db.query(QueueItem)
+            .filter(QueueItem.status.in_(self.ACTIVE_QUEUE_STATUSES))
+            .order_by(QueueItem.position.asc(), QueueItem.id.asc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def add_to_front(self, db: Session) -> int:
         """Return a sparse position value at queue head."""

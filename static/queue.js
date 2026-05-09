@@ -997,7 +997,11 @@ function updateQueueDisplay(queue) {
         `;
         return;
     }
-    
+
+    const movableItems = queue.filter((item) => item.status !== 'playing');
+    const movableIndexById = new Map(movableItems.map((item, index) => [String(item.id), index]));
+    const movableCount = movableItems.length;
+
     queueList.innerHTML = queue.map(item => {
         const statusInfo = getStatusInfo(item.status);
         const actionHtml = item.status === 'playing' ? `
@@ -1005,6 +1009,28 @@ function updateQueueDisplay(queue) {
                         <span class="material-symbols-outlined">equalizer</span>
                     </button>
                     ` : isAdminUser ? `
+                    <div class="flex items-center gap-1">
+                        <button
+                            id="queue-move-up-${item.id}"
+                            class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                            onclick="moveSong('${item.id}', 'up')"
+                            ${movableIndexById.get(String(item.id)) === 0 ? 'disabled' : ''}
+                            title="${escapeHtml(t('queue.move_up'))}"
+                            aria-label="${escapeHtml(t('queue.move_up'))}"
+                        >
+                            <span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span>
+                        </button>
+                        <button
+                            id="queue-move-down-${item.id}"
+                            class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                            onclick="moveSong('${item.id}', 'down')"
+                            ${movableIndexById.get(String(item.id)) === movableCount - 1 ? 'disabled' : ''}
+                            title="${escapeHtml(t('queue.move_down'))}"
+                            aria-label="${escapeHtml(t('queue.move_down'))}"
+                        >
+                            <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
+                        </button>
+                    </div>
                     <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors"
                             onclick="removeSong('${item.id}')">
                         <span class="material-symbols-outlined">remove</span>
@@ -1092,6 +1118,39 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+async function moveSong(songId, direction) {
+    try {
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/queue/${songId}/move`), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ direction }),
+        });
+
+        if (response.ok) {
+            await refreshQueue(true);
+            return;
+        }
+
+        let detail = t('queue.move_failed');
+        try {
+            const payload = await response.json();
+            if (payload?.detail) {
+                detail = payload.detail;
+            }
+        } catch (_) {
+            // Keep fallback text.
+        }
+        alert(detail);
+    } catch (error) {
+        console.error('Error moving queue item:', error);
+        alert(t('queue.move_failed'));
+    }
+}
+
+window.moveSong = moveSong;
 
 // WebSocket connection for real-time queue updates
 class QueueWebSocket {
@@ -1565,21 +1624,7 @@ window.addEventListener('queue_item_added', (event) => {
 
 window.addEventListener('queue_item_updated', (event) => {
     console.log('[Event] Queue item updated:', event.detail);
-    const item = event.detail;
-    const element = document.querySelector(`[data-id="${item.id}"]`);
-    
-    if (element) {
-        // Update the status without full refresh
-        const oldStatus = element.dataset.status;
-        if (oldStatus !== item.status) {
-            console.log(`[Event] Status changed for item ${item.id}: ${oldStatus} → ${item.status}`);
-            // Smooth refresh - update just this item's display
-            refreshQueue(true);
-        }
-    } else {
-        // Item not in DOM yet, refresh to add it
-        refreshQueue(true);
-    }
+    refreshQueue(true);
 });
 
 window.addEventListener('queue_item_removed', (event) => {

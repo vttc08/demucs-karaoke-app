@@ -65,7 +65,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] admin login page for settings and splash
 - [x] login page for device identification only, stored in local storage (Login Screen)
 - [x] real time join and enqueue feature
-- [ ] admin has ability to remove, skip or reorder queue
+- [x] admin has ability to remove, skip or reorder queue
 - [x] fix multi track audio sync issues
 - [ ] support playback of MP3 (default to cover bg)
 - [x] show users in queue

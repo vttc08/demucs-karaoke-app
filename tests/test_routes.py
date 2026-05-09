@@ -461,6 +461,7 @@ def test_queue_page_loads(client):
     assert 'href="/media"' in response.text
     assert 'href="/upload"' in response.text
     assert 'id="clear-all-btn"' not in response.text
+    assert "queue-move-up-" not in response.text
     assert "skipToSong(" not in response.text
     assert 'aria-label="Settings"' not in response.text
     assert 'aria-label="Stage View"' not in response.text
@@ -550,6 +551,8 @@ def test_queue_page_shows_admin_queue_controls(client):
     assert response.status_code == 200
     assert 'id="clear-all-btn"' in response.text
     assert "removeSong(" in response.text
+    assert "queue-move-up-" in response.text
+    assert "queue-move-down-" in response.text
     assert "skipToSong(" not in response.text
     assert 'aria-label="Stage View"' in response.text
     assert 'aria-label="Settings"' in response.text
@@ -1541,6 +1544,57 @@ def test_complete_current_without_next_returns_none(client):
     assert response.json() is None
 
 
+def test_move_queue_item_requires_admin(client):
+    """Guest users should not be able to reorder queue items."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-move", "title": "Guest Move", "is_karaoke": False},
+    ).json()
+
+    response = client.post(
+        f"/api/queue/{created['id']}/move",
+        json={"direction": "up"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
+
+
+def test_move_queue_item_reorders_queue_for_admin(client):
+    """Admin reorder requests should update queue positions and ordering."""
+    authenticate_admin_client(client)
+    first = client.post(
+        "/api/queue/",
+        json={"youtube_id": "admin-move-1", "title": "Admin First", "is_karaoke": False},
+    ).json()
+    second = client.post(
+        "/api/queue/",
+        json={"youtube_id": "admin-move-2", "title": "Admin Second", "is_karaoke": False},
+    ).json()
+    third = client.post(
+        "/api/queue/",
+        json={"youtube_id": "admin-move-3", "title": "Admin Third", "is_karaoke": False},
+    ).json()
+
+    db = TestingSessionLocal()
+    try:
+        first_row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        first_row.status = QueueStatus.PLAYING
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(f"/api/queue/{third['id']}/move", json={"direction": "up"})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == third["id"]
+    assert payload["position"] > first["position"]
+    assert payload["position"] < second["position"]
+
+    response = client.get("/api/queue/")
+    assert [item["title"] for item in response.json()] == ["Admin First", "Admin Third", "Admin Second"]
+
+
 def test_media_file_served_from_media_mount(client):
     """Test files under configured media path are served by app mount."""
     media_file = Path(settings.media_path) / "test-media-file.txt"
@@ -1902,6 +1956,47 @@ def test_websocket_broadcasts_queue_item_removed_event(client):
             event = websocket.receive_json()
         assert event["type"] == "queue_item_removed"
         assert event["data"]["id"] == created["id"]
+
+
+def test_websocket_broadcasts_queue_item_updated_on_move(client):
+    """Reordering a queue item should broadcast queue_item_updated."""
+    authenticate_admin_client(client)
+    first = client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-move-1", "title": "WS Move 1", "is_karaoke": False},
+    ).json()
+    second = client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-move-2", "title": "WS Move 2", "is_karaoke": False},
+    ).json()
+    third = client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-move-3", "title": "WS Move 3", "is_karaoke": False},
+    ).json()
+
+    db = TestingSessionLocal()
+    try:
+        first_row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        first_row.status = QueueStatus.PLAYING
+        db.commit()
+    finally:
+        db.close()
+
+    with client.websocket_connect("/api/queue/ws") as websocket:
+        connected = websocket.receive_json()
+        assert connected["type"] == "connected"
+
+        response = client.post(f"/api/queue/{third['id']}/move", json={"direction": "up"})
+        assert response.status_code == 200
+
+        event = websocket.receive_json()
+        if event["type"] == "ping":
+            websocket.send_json({"type": "pong"})
+            event = websocket.receive_json()
+        assert event["type"] == "queue_item_updated"
+        assert event["data"]["id"] == third["id"]
+        assert event["data"]["position"] > first["position"]
+        assert event["data"]["position"] < second["position"]
 
 
 def test_websocket_broadcasts_current_item_changed_on_skip(client):

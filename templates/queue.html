@@ -144,7 +144,7 @@
                                 <span class="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant">{{ t('queue.in_queue') }}</span>
                             {% endif %}
                         </div>
-                        {% if item.is_karaoke %}
+                    {% if item.is_karaoke %}
                         <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
                             <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>
                             <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">{{ t('app.karaoke') }}</span>
@@ -157,6 +157,29 @@
                             <span class="material-symbols-outlined">equalizer</span>
                         </button>
                         {% elif is_admin %}
+                        {% set movable_index = movable_index_by_id.get(item.id, 0) %}
+                        <div class="flex items-center gap-1">
+                            <button
+                                id="queue-move-up-{{ item.id }}"
+                                class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                                onclick="moveSong('{{ item.id }}', 'up')"
+                                {% if movable_index == 0 %}disabled{% endif %}
+                                title="{{ t('queue.move_up') }}"
+                                aria-label="{{ t('queue.move_up') }}"
+                            >
+                                <span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span>
+                            </button>
+                            <button
+                                id="queue-move-down-{{ item.id }}"
+                                class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                                onclick="moveSong('{{ item.id }}', 'down')"
+                                {% if movable_index >= movable_count - 1 %}disabled{% endif %}
+                                title="{{ t('queue.move_down') }}"
+                                aria-label="{{ t('queue.move_down') }}"
+                            >
+                                <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
+                            </button>
+                        </div>
                         <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors" 
                                 onclick="removeSong('{{ item.id }}')">
                             <span class="material-symbols-outlined">remove</span>

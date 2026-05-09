@@ -203,6 +203,28 @@ Guest identity is read server-side from queue-page cookies when available:
 
 ---
 
+### Reorder Queue Item
+```
+POST /api/queue/{item_id}/move
+```
+
+Admin-only endpoint for moving a non-playing queue item within the active order.
+
+**Request Body:**
+```json
+{
+  "direction": "up"
+}
+```
+
+Allowed `direction` values:
+- `up`
+- `down`
+
+The endpoint updates the stored sparse `position`, reuses existing gaps when possible, and renumbers the queue only if spacing has collapsed. Successful moves broadcast `queue_item_updated` so queue and stage clients refresh their ordering.
+
+---
+
 ### Resolve Lyrics
 ```
 POST /api/lyrics/resolve

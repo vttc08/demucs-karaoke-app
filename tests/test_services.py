@@ -194,6 +194,102 @@ def test_queue_service_updates_youtube_metadata_from_payload(db_session):
     assert result.artist == "Resolved Artist"
 
 
+def test_queue_service_moves_item_up_with_sparse_positions(db_session):
+    """Moving an item up should keep sparse ordering stable."""
+    service = QueueService()
+    first = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="move-up-1", title="First", is_karaoke=False),
+    )
+    second = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="move-up-2", title="Second", is_karaoke=False),
+    )
+    third = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="move-up-3", title="Third", is_karaoke=False),
+    )
+    fourth = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="move-up-4", title="Fourth", is_karaoke=False),
+    )
+
+    first_row = db_session.query(QueueItem).filter(QueueItem.id == first.id).first()
+    first_row.status = QueueStatus.PLAYING
+    db_session.commit()
+
+    moved = service.move_queue_item(db_session, third.id, "up")
+    ordered_titles = [item.title for item in service.get_queue(db_session)]
+
+    assert moved.id == third.id
+    assert ordered_titles == ["First", "Third", "Second", "Fourth"]
+    assert moved.position < second.position
+    assert moved.position > first.position
+
+
+def test_queue_service_moves_item_down_to_queue_tail(db_session):
+    """Moving an item down should append it after the next movable item."""
+    service = QueueService()
+    first = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="move-down-1", title="First", is_karaoke=False),
+    )
+    second = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="move-down-2", title="Second", is_karaoke=False),
+    )
+    third = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="move-down-3", title="Third", is_karaoke=False),
+    )
+
+    first_row = db_session.query(QueueItem).filter(QueueItem.id == first.id).first()
+    first_row.status = QueueStatus.PLAYING
+    db_session.commit()
+
+    moved = service.move_queue_item(db_session, second.id, "down")
+    ordered_titles = [item.title for item in service.get_queue(db_session)]
+
+    assert moved.id == second.id
+    assert ordered_titles == ["First", "Third", "Second"]
+    assert moved.position > third.position
+
+
+def test_queue_service_renumbers_before_reordering_when_gap_is_exhausted(db_session):
+    """Dense positions should be renumbered before the move succeeds."""
+    service = QueueService()
+    first = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="dense-1", title="First", is_karaoke=False),
+    )
+    second = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="dense-2", title="Second", is_karaoke=False),
+    )
+    third = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="dense-3", title="Third", is_karaoke=False),
+    )
+    fourth = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="dense-4", title="Fourth", is_karaoke=False),
+    )
+
+    for index, item in enumerate((first, second, third, fourth), start=1):
+        row = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
+        row.position = 1000 + (index - 1)
+    first_row = db_session.query(QueueItem).filter(QueueItem.id == first.id).first()
+    first_row.status = QueueStatus.PLAYING
+    db_session.commit()
+
+    moved = service.move_queue_item(db_session, third.id, "up")
+    refreshed = service.get_queue(db_session)
+
+    assert moved.id == third.id
+    assert [item.title for item in refreshed] == ["First", "Third", "Second", "Fourth"]
+    assert [item.position for item in refreshed] == [1000, 1500, 2000, 4000]
+
+
 def test_media_library_sync_service_reconciles_rows_and_sidecars(db_session, tmp_path):
     """Library scan should mark missing rows, create new rows, and refresh sidecars."""
     original_media = settings.media_path

@@ -96,6 +96,7 @@ The stage page uses a websocket-first model:
   and includes it in `stage_state_update` broadcasts.
 - Queue REST routes broadcast immediate state changes:
   - `queue_item_added`
+  - `queue_item_updated` for admin reorders and status refreshes
   - `queue_item_removed`
   - `queue_cleared`
   - `current_item_changed`

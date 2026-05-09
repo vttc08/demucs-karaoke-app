@@ -119,7 +119,7 @@ and `/static/...`.
      - Confirm to add to queue
      - Queue items show who requested them
      - Use remote stage controls, including lyrics on/off, for the currently playing item
-    - Admin users can clear queued songs and remove individual queued items; guest users can add songs but cannot perform destructive queue actions
+    - Admin users can clear queued songs, remove individual queued items, and move non-playing queue items up or down; guest users can add songs but cannot perform destructive queue actions
     - Queue status updates in real time (downloading, processing, ready, playing, failed)
    
 2. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`

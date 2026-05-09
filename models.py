@@ -169,6 +169,12 @@ class QueueItemCreate(BaseModel):
         return self
 
 
+class QueueItemMoveRequest(BaseModel):
+    """Request to move a queue item within the active ordering."""
+
+    direction: Literal["up", "down"]
+
+
 class LyricsResolveRequest(BaseModel):
     """Request to resolve lyrics for queue configuration."""
 
