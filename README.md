@@ -113,7 +113,8 @@ and `/static/...`.
      - Use the library and upload shortcuts under search to browse local media or add your own files
      - Or paste a YouTube link / video id directly to add external search results
      - Local matches are preferred in results; duplicate YouTube matches are hidden
-     - Tap **Add** on a result to open the queue configuration interaction
+     - Tap **Add** on a YouTube result to open the queue configuration interaction
+     - Tap **Add** on a local library result to enqueue it immediately as a local file
     - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, a Google search link, an editable lyrics box, and lyrics file upload before adding to queue; resolved metadata is saved back into the media entry before queueing
      - Confirm to add to queue
      - Queue items show who requested them

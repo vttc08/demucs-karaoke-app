@@ -263,6 +263,14 @@ searchResults.addEventListener('click', async (event) => {
     if (!resultElement) return;
 
     const source = resultElement.dataset.resultSource || 'youtube';
+    if (source === 'local') {
+        await submitQueueItem(buildQueueSelection(resultElement, button), button, {
+            isKaraoke: false,
+            lyricsEnabled: false,
+        });
+        return;
+    }
+
     openQueueConfigModal(resultElement, button);
 });
 
