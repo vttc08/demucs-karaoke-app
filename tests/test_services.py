@@ -104,6 +104,38 @@ def test_queue_service_add_to_queue_stores_requester_metadata(db_session):
     assert result.requested_by_name == "Alex"
 
 
+def test_queue_service_get_queue_sets_can_remove_for_owner_and_admin(db_session):
+    """Queue responses should expose remove permissions for the current viewer."""
+    service = QueueService()
+    owner_result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="owned-queue-item",
+            title="Owned Song",
+            is_karaoke=False,
+        ),
+        requester_id="guest-123",
+    )
+    other_result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="other-queue-item",
+            title="Other Song",
+            is_karaoke=False,
+        ),
+        requester_id="guest-999",
+    )
+
+    items_for_owner = service.get_queue(db_session, requester_id="guest-123")
+    permission_by_id = {item.id: item.can_remove for item in items_for_owner}
+
+    assert permission_by_id[owner_result.id] is True
+    assert permission_by_id[other_result.id] is False
+
+    items_for_admin = service.get_queue(db_session, is_admin=True)
+    assert all(item.can_remove is True for item in items_for_admin)
+
+
 def test_auth_service_stores_salted_password_hash(db_session):
     """Admin passwords should be stored as salted hashes, not plaintext."""
     service = AuthService()

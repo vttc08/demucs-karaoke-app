@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from config import settings
 from database import SessionLocal, get_db
 from models import QueueItemCreate, QueueItemMoveRequest, QueueItemResponse, QueueStatus
-from routes.auth import require_admin_user
+from routes.auth import get_admin_user, require_admin_user
 from services.lyrics_service import LyricsService
 from services.queue_service import QueueService
 from services.websocket_manager import manager
@@ -30,6 +30,11 @@ def _normalize_presence_value(value: str | None, *, max_length: int = 80) -> str
     if not normalized:
         return None
     return normalized[:max_length]
+
+
+def _current_guest_id(request: Request) -> str | None:
+    """Return the normalized persistent guest id for the current request."""
+    return _normalize_presence_value(request.cookies.get("karaoke_guest_id"))
 
 
 def _process_item_background(item_id: int):
@@ -74,9 +79,14 @@ async def add_to_queue(
 
 
 @router.get("/", response_model=List[QueueItemResponse])
-def get_queue(db: Session = Depends(get_db)):
+def get_queue(request: Request, db: Session = Depends(get_db)):
     """Get all items in queue."""
-    return queue_service.get_queue(db)
+    is_admin = get_admin_user(request, db) is not None
+    return queue_service.get_queue(
+        db,
+        is_admin=is_admin,
+        requester_id=_current_guest_id(request),
+    )
 
 
 @router.get("/presence")
@@ -203,23 +213,31 @@ async def move_item(
 @router.delete("/{item_id}")
 async def remove_item(
     item_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin_user),
 ):
     """Remove an item from the queue."""
     item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Queue item not found")
-    
-    if item.status == "playing":
+
+    is_admin = get_admin_user(request, db) is not None
+    if not queue_service.can_manage_queue_item(
+        item,
+        is_admin=is_admin,
+        requester_id=_current_guest_id(request),
+    ):
+        raise HTTPException(status_code=403, detail="Not allowed to remove this queue item")
+
+    if item.status == QueueStatus.PLAYING:
         raise HTTPException(status_code=400, detail="Cannot remove currently playing item")
-    
+
     db.delete(item)
     db.commit()
-    
+
     # Broadcast removal
     await manager.broadcast_queue_item_removed(item_id)
-    
+
     return {"status": "removed", "item_id": item_id}
 
 

@@ -131,7 +131,12 @@ class QueueService:
         return self._to_response(db_item)
 
     def get_queue(
-        self, db: Session, limit: int = 50
+        self,
+        db: Session,
+        limit: int = 50,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
     ) -> List[QueueItemResponse]:
         """
         Get all pending and processing items in queue.
@@ -144,7 +149,14 @@ class QueueService:
             List of queue items
         """
         items = self._get_active_queue_items(db, limit=limit)
-        return [self._to_response(item) for item in items]
+        return [
+            self._to_viewer_response(
+                item,
+                is_admin=is_admin,
+                requester_id=requester_id,
+            )
+            for item in items
+        ]
 
     def get_current_item(self, db: Session) -> Optional[QueueItemResponse]:
         """
@@ -723,6 +735,53 @@ class QueueService:
             error=item.error,
             created_at=item.created_at,
         )
+
+    def _to_viewer_response(
+        self,
+        item: QueueItem,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+    ) -> QueueItemResponse:
+        """Map a queue row into a response enriched with viewer permissions."""
+        response = self._to_response(item)
+        response.can_remove = self.can_remove_queue_item(
+            item,
+            is_admin=is_admin,
+            requester_id=requester_id,
+        )
+        return response
+
+    def can_remove_queue_item(
+        self,
+        item: QueueItem,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+    ) -> bool:
+        """Return whether the current viewer may remove the queue item."""
+        if QueueStatus(item.status) == QueueStatus.PLAYING:
+            return False
+        return self.can_manage_queue_item(
+            item,
+            is_admin=is_admin,
+            requester_id=requester_id,
+        )
+
+    def can_manage_queue_item(
+        self,
+        item: QueueItem,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+    ) -> bool:
+        """Return whether the current viewer owns the queue item or is admin."""
+        if is_admin:
+            return True
+        normalized_requester_id = self._normalize_optional_metadata(requester_id)
+        if normalized_requester_id is None:
+            return False
+        return self._normalize_optional_metadata(item.user_id) == normalized_requester_id
 
     def _normalize_media_field(self, raw_path: str | None) -> str | None:
         """Normalize persisted path values into URLs the app can actually serve."""

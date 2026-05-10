@@ -496,6 +496,51 @@ def test_queue_page_renders_requester_label(client):
     assert "Requested by Alex" in response.text
 
 
+def test_queue_page_hides_left_controls_for_guests(client):
+    """Guest queue cards should not render the left-side action column."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-left", "title": "Guest Left", "is_karaoke": False},
+    ).json()
+
+    db = TestingSessionLocal()
+    try:
+        row = db.query(QueueItem).filter(QueueItem.id == created["id"]).first()
+        row.status = QueueStatus.PLAYING
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert "queue-move-up-" not in response.text
+    assert "queue-move-down-" not in response.text
+    assert "equalizer" not in response.text
+
+
+def test_queue_page_shows_guest_remove_only_for_owned_items(client):
+    """Guest queue page should render remove only for owned non-playing items."""
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    owned = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-own-remove", "title": "Guest Owned", "is_karaoke": False},
+    ).json()
+
+    client.cookies.set("karaoke_guest_id", "guest-other")
+    other = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-other-remove", "title": "Guest Other", "is_karaoke": False},
+    ).json()
+
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert f'onclick="removeSong(\'{owned["id"]}\')"' in response.text
+    assert f'onclick="removeSong(\'{other["id"]}\')"' not in response.text
+
+
 def test_queue_page_uses_dash_in_default_guest_name(client):
     """Default generated guest names should not contain spaces."""
     response = client.get("/queue")
@@ -550,7 +595,8 @@ def test_queue_page_shows_admin_queue_controls(client):
 
     assert response.status_code == 200
     assert 'id="clear-all-btn"' in response.text
-    assert "removeSong(" in response.text
+    assert 'onclick="removeSong(\'' in response.text
+    assert response.text.count('onclick="removeSong(\'') == 1
     assert "queue-move-up-" in response.text
     assert "queue-move-down-" in response.text
     assert "skipToSong(" not in response.text
@@ -1703,20 +1749,113 @@ def test_get_queue_item_lyrics_cues_returns_404_without_lyrics(client):
     assert "Lyrics not available" in response.json()["detail"]
 
 
-def test_queue_destructive_routes_require_admin(client):
-    """Guest users should not be able to remove or clear queue items."""
+def test_queue_clear_route_requires_admin(client):
+    """Guest users should not be able to clear queue items."""
     created = client.post(
         "/api/queue/",
         json={"youtube_id": "guest-del", "title": "Guest Delete", "is_karaoke": False},
     ).json()
 
-    remove_response = client.delete(f"/api/queue/{created['id']}")
     clear_response = client.post("/api/queue/clear")
 
-    assert remove_response.status_code == 403
-    assert remove_response.json()["detail"] == "Admin session required"
     assert clear_response.status_code == 403
     assert clear_response.json()["detail"] == "Admin session required"
+
+
+def test_get_queue_marks_can_remove_for_guest_owner(client):
+    """Queue list should expose guest removal permissions per item."""
+    client.cookies.set("karaoke_guest_id", "guest-123")
+    own_item = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-own-api", "title": "Guest Own API", "is_karaoke": False},
+    ).json()
+
+    client.cookies.set("karaoke_guest_id", "guest-999")
+    other_item = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-other-api", "title": "Guest Other API", "is_karaoke": False},
+    ).json()
+
+    client.cookies.set("karaoke_guest_id", "guest-123")
+    response = client.get("/api/queue/")
+
+    assert response.status_code == 200
+    items = {item["id"]: item for item in response.json()}
+    assert items[own_item["id"]]["can_remove"] is True
+    assert items[other_item["id"]]["can_remove"] is False
+
+
+def test_get_queue_marks_can_remove_for_admin(client):
+    """Admin queue list should allow removal of all non-playing items."""
+    first = client.post(
+        "/api/queue/",
+        json={"youtube_id": "admin-can-remove-1", "title": "Admin First", "is_karaoke": False},
+    ).json()
+    second = client.post(
+        "/api/queue/",
+        json={"youtube_id": "admin-can-remove-2", "title": "Admin Second", "is_karaoke": False},
+    ).json()
+
+    with TestingSessionLocal() as db:
+        playing = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        playing.status = QueueStatus.PLAYING
+        db.commit()
+
+    authenticate_admin_client(client)
+    response = client.get("/api/queue/")
+
+    assert response.status_code == 200
+    items = {item["id"]: item for item in response.json()}
+    assert items[first["id"]]["can_remove"] is False
+    assert items[second["id"]]["can_remove"] is True
+
+
+def test_guest_can_remove_owned_queue_item(client):
+    """Guest users should be able to remove their own non-playing queue items."""
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-remove-own", "title": "Guest Remove Own", "is_karaoke": False},
+    ).json()
+
+    response = client.delete(f"/api/queue/{created['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "removed", "item_id": created["id"]}
+
+
+def test_guest_cannot_remove_other_guest_queue_item(client):
+    """Guest users should not be able to remove another guest's queue items."""
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-remove-other", "title": "Guest Remove Other", "is_karaoke": False},
+    ).json()
+
+    client.cookies.set("karaoke_guest_id", "guest-other")
+    response = client.delete(f"/api/queue/{created['id']}")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not allowed to remove this queue item"
+
+
+def test_guest_cannot_remove_owned_playing_queue_item(client):
+    """Guest users should not be able to remove their own currently playing queue item."""
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-remove-playing", "title": "Guest Remove Playing", "is_karaoke": False},
+    ).json()
+
+    with TestingSessionLocal() as db:
+        item = db.query(QueueItem).filter(QueueItem.id == created["id"]).first()
+        item.status = QueueStatus.PLAYING
+        db.commit()
+
+    response = client.delete(f"/api/queue/{created['id']}")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Cannot remove currently playing item"
 
 
 def test_get_queue_presence_route_returns_users(client):

@@ -186,6 +186,7 @@ When `lyrics_text` is supplied for karaoke items, the app persists it as a reusa
   "youtube_id": "dQw4w9WgXcQ",
   "title": "Song Title",
   "artist": "Artist Name",
+  "can_remove": false,
   "is_karaoke": true,
   "status": "pending",
   "media_path": "/media/dQw4w9WgXcQ.mp4",
@@ -275,6 +276,7 @@ GET /api/queue/
     "title": "Song Title",
     "artist": "Artist Name",
     "requested_by_name": "Alex",
+    "can_remove": true,
     "is_karaoke": true,
     "status": "ready",
     "media_path": "/media/dQw4w9WgXcQ.mp4",
@@ -285,6 +287,22 @@ GET /api/queue/
   }
 ]
 ```
+
+`can_remove` is request-scoped. It is `true` for admins on any non-playing item, and for guests only
+when the item's stored owner matches the current `karaoke_guest_id` cookie.
+
+---
+
+### Remove Queue Item
+```
+DELETE /api/queue/{item_id}
+```
+
+Removes a non-playing queue item.
+
+- Admins may remove any non-playing item.
+- Guests may remove only their own non-playing items.
+- Currently playing items cannot be removed.
 
 ---
 

@@ -1004,12 +1004,12 @@ function updateQueueDisplay(queue) {
 
     queueList.innerHTML = queue.map(item => {
         const statusInfo = getStatusInfo(item.status);
-        const actionHtml = item.status === 'playing' ? `
+        const leftActionHtml = item.status === 'playing' ? `
                     <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="${t('queue.playing')}">
                         <span class="material-symbols-outlined">equalizer</span>
                     </button>
                     ` : isAdminUser ? `
-                    <div class="flex items-center gap-1">
+                    <div class="flex flex-col items-center gap-1">
                         <button
                             id="queue-move-up-${item.id}"
                             class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
@@ -1031,13 +1031,21 @@ function updateQueueDisplay(queue) {
                             <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
                         </button>
                     </div>
+                    ` : '<span class="w-10 h-10" aria-hidden="true"></span>';
+    const rightActionHtml = item.can_remove ? `
                     <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors"
                             onclick="removeSong('${item.id}')">
                         <span class="material-symbols-outlined">remove</span>
                     </button>
                     ` : '<span class="w-10 h-10" aria-hidden="true"></span>';
+        const leftColumnHtml = isAdminUser ? `
+                <div class="flex shrink-0 flex-col items-center gap-1">
+                    ${leftActionHtml}
+                </div>
+                ` : '';
         return `
             <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-status="${item.status}">
+                ${leftColumnHtml}
                 <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 ${item.status !== 'playing' ? 'grayscale-[50%]' : ''}">
                     <div class="w-full h-full bg-surface-container-highest flex items-center justify-center">
                         <span class="material-symbols-outlined text-2xl text-on-surface-variant">music_note</span>
@@ -1058,8 +1066,8 @@ function updateQueueDisplay(queue) {
                     </div>
                     ` : ''}
                 </div>
-                <div class="flex flex-col gap-2">
-                    ${actionHtml}
+                <div class="flex shrink-0 items-center">
+                    ${rightActionHtml}
                 </div>
             </div>
         `;
@@ -1629,33 +1637,7 @@ window.addEventListener('queue_item_updated', (event) => {
 
 window.addEventListener('queue_item_removed', (event) => {
     console.log('[Event] Queue item removed:', event.detail);
-    const itemId = event.detail.id;
-    const element = document.querySelector(`[data-id="${itemId}"]`);
-    
-    if (element) {
-        // Animate removal
-        element.style.transition = 'all 0.3s ease-out';
-        element.style.opacity = '0';
-        element.style.transform = 'translateX(100%)';
-        
-        setTimeout(() => {
-            element.remove();
-            
-            // Check if queue is now empty
-            const queueList = document.getElementById('queue-list');
-            if (queueList && queueList.children.length === 0) {
-                queueList.innerHTML = `
-                    <div class="text-center py-12">
-                        <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">
-                            <span class="material-symbols-outlined text-4xl text-on-surface-variant">queue_music</span>
-                        </div>
-                        <p class="text-on-surface-variant text-lg font-medium">${t('queue.empty')}</p>
-                        <p class="text-on-surface-variant/60 text-sm">${t('queue.add_started')}</p>
-                    </div>
-                `;
-            }
-        }, 300);
-    }
+    refreshQueue(true);
 });
 
 window.addEventListener('queue_cleared', (event) => {

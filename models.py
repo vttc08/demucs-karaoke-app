@@ -208,6 +208,7 @@ class QueueItemResponse(BaseModel):
     title: str
     artist: Optional[str] = None
     requested_by_name: Optional[str] = None
+    can_remove: bool = False
     is_karaoke: bool
     status: QueueStatus
     media_path: Optional[str] = None

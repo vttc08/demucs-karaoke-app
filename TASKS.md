@@ -69,7 +69,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] fix multi track audio sync issues
 - [ ] support playback of MP3 (default to cover bg)
 - [x] show users in queue
-- [ ] users can change only their own added songs
+- [x] users can change only their own added songs
 - [ ] queue as feature (user can queue as song as someone else only on admin interface)
 - [ ] show progress for ytdlp and demucs
 - [x] customize lyric tracks behavior

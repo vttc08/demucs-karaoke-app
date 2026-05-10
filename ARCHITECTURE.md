@@ -218,10 +218,14 @@ The stage page uses a websocket-first model:
 - Queue presence uses a separate browser guest id cookie plus a per-tab id so active queue viewers can
   be tracked in real time without treating multiple tabs as separate people. Queue ownership persists
   `user_id`, `session_id`, and a display-name snapshot on each queue row.
+- Guest queue removal authorization uses the persistent `karaoke_guest_id` cookie matched against
+  `queue_items.user_id`, so guests can remove their own non-playing items across reloads and tabs on
+  the same browser/device.
 - The current branch establishes admin credential/session storage. The settings page and settings
   management APIs require an active admin session. The stage page and stage navbar entry are also
-  admin-only. Queue clear/remove actions and media delete actions are also restricted to admins in
-  both the UI and API. Other media/queue authorization gates can still be refined in a later pass.
+  admin-only. Queue clear actions and media delete actions are restricted to admins in both the UI and
+  API, while queue item removal is available to admins for any non-playing item and to guests only for
+  their own non-playing items. Other media/queue authorization gates can still be refined in a later pass.
 
 ## Lyrics inference and provider flow
 

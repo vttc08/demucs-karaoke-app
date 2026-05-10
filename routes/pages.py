@@ -70,6 +70,14 @@ def current_locale(request: Request) -> str:
     return resolve_locale(request)
 
 
+def normalized_cookie_value(value: str | None, *, max_length: int = 80) -> str:
+    """Normalize lightweight cookie metadata for template decisions."""
+    if not isinstance(value, str):
+        return ""
+    normalized = " ".join(value.split()).strip()
+    return normalized[:max_length]
+
+
 def safe_next_url(next_url: str | None) -> str:
     """Constrain language redirects to app-local paths."""
     if not next_url:
@@ -193,11 +201,19 @@ async def logout(request: Request, db: Session = Depends(get_db)):
 @router.get("/queue", response_class=HTMLResponse)
 async def queue_page(request: Request, db: Session = Depends(get_db)):
     """Mobile queue page."""
-    queue_items = queue_service.get_queue(db)
+    is_admin = get_admin_user(request, db) is not None
+    guest_id = normalized_cookie_value(request.cookies.get("karaoke_guest_id"))
+    queue_items = queue_service.get_queue(
+        db,
+        is_admin=is_admin,
+        requester_id=guest_id or None,
+    )
     movable_items = [item for item in queue_items if item.status != QueueStatus.PLAYING]
     movable_index_by_id = {item.id: index for index, item in enumerate(movable_items)}
-    singer_name = (request.cookies.get("karaoke_singer") or "").strip()
-    is_admin = get_admin_user(request, db) is not None
+    singer_name = normalized_cookie_value(
+        request.cookies.get("karaoke_singer"),
+        max_length=40,
+    )
     return templates.TemplateResponse(
         "queue.html",
         {
