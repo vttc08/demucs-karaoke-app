@@ -18,6 +18,7 @@ from services.media_library_maintenance_service import (
 )
 from services.media_library_sync_service import MediaLibrarySyncService
 from services.media_naming import build_media_stem
+from services.media_thumbnail_service import MediaThumbnailService
 from services.queue_service import QueueService
 from services.websocket_manager import manager
 
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/media", tags=["media-library"])
 media_library_sync_service = MediaLibrarySyncService()
 media_library_maintenance_service = MediaLibraryMaintenanceService()
+media_thumbnail_service = MediaThumbnailService()
 queue_service = QueueService()
 _UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
 
@@ -75,6 +77,7 @@ async def upload_media(
         )
         db.add(media_item)
         db.flush()
+        media_thumbnail_service.ensure_thumbnail_for_media_file(target_path)
         if lyrics_text:
             if lyrics_format not in (None, "lrc", "txt"):
                 raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc' or 'txt'")
@@ -103,11 +106,13 @@ async def upload_media(
         db.rollback()
         if target_path.exists():
             target_path.unlink()
+        media_thumbnail_service.remove_thumbnail_for_media_file(target_path)
         raise
     except Exception as exc:
         db.rollback()
         if target_path.exists():
             target_path.unlink()
+        media_thumbnail_service.remove_thumbnail_for_media_file(target_path)
         logger.exception("Failed to upload media file: %s", filename)
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(exc)}")
 

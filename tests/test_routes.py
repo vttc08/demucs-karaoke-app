@@ -21,6 +21,7 @@ from services import lyrics_service as lyrics_service_module
 from services.auth_service import ADMIN_SESSION_COOKIE, AuthService
 from services.i18n_service import LOCALE_COOKIE
 from services.media_naming import build_media_stem
+from services.media_thumbnail_service import MediaThumbnailService
 from config import settings
 
 # Test database
@@ -393,6 +394,49 @@ def test_add_to_queue_with_media_item_id(client):
     data = response.json()
     assert data["media_id"] == media_id
     assert data["youtube_id"] == "local-abc"
+    assert data["thumbnail"] == "https://i.ytimg.com/vi/local-abc/hqdefault.jpg"
+
+
+def test_queue_page_renders_thumbnail_for_local_media(client, tmp_path, monkeypatch):
+    """Queue page should render cached thumbnails for local media items."""
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media_file = media_root / "queue-thumb.mp4"
+    media_file.write_bytes(b"media")
+    thumbnail_path = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+    thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
+    thumbnail_path.write_bytes(b"thumbnail")
+
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id=None,
+            title="Queue Thumbnail",
+            artist="Artist",
+            media_path="/media/queue-thumb.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1000,
+            requested_karaoke=False,
+            status=QueueStatus.PENDING,
+        )
+        db.add(queue_item)
+        db.commit()
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert MediaThumbnailService.thumbnail_url_for_media_file(media_file) in response.text
 
 
 def test_get_empty_queue(client):
@@ -627,6 +671,61 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-video-player"' in response.content
 
 
+def test_stage_page_renders_audio_mode_for_current_mp3(client, tmp_path):
+    """Stage page should bootstrap audio-mode playback for current MP3 items."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    authenticate_admin_client(client)
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "stage-song.mp3"
+        media_file.write_bytes(b"audio")
+        thumb_path = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+        thumb_path.parent.mkdir(parents=True, exist_ok=True)
+        thumb_path.write_bytes(b"thumb")
+
+        with TestingSessionLocal() as db:
+            media_item = MediaItem(
+                title="Stage Audio",
+                artist="Stage Artist",
+                media_path="/media/stage-song.mp3",
+                missing=False,
+            )
+            db.add(media_item)
+            db.flush()
+            db.add(
+                QueueItem(
+                    media_id=media_item.id,
+                    position=1000,
+                    requested_karaoke=False,
+                    status=QueueStatus.PLAYING,
+                )
+            )
+            db.commit()
+
+        with patch(
+            "routes.pages.stage_lobby_service.resolve_lobby_media_url",
+            return_value="/media/stage-lobby-fallback.mp4",
+        ):
+            response = client.get("/stage")
+
+        assert response.status_code == 200
+        assert b'id="stage-audio-player"' in response.content
+        assert b'id="stage-audio-hero"' in response.content
+        assert MediaThumbnailService.thumbnail_url_for_media_file(media_file).encode("utf-8") in response.content
+        assert re.search(
+            rb'<video[^>]*id="stage-video-player"[\s\S]*?<source src="" type="video/mp4">',
+            response.content,
+        )
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
 def test_playback_page_is_removed(client):
     """Legacy playback page should no longer be exposed."""
     response = client.get("/playback")
@@ -820,6 +919,32 @@ def test_upload_media_persists_lyrics_and_queue_karaoke_flag(client, tmp_path):
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
+
+
+def test_upload_media_generates_thumbnail_for_mp3(client, tmp_path):
+    """Uploaded MP3 files should trigger thumbnail generation immediately."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        with patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()):
+            with patch("routes.media_library.media_thumbnail_service.ensure_thumbnail_for_media_file") as mock_thumb:
+                response = client.post(
+                    "/api/media/upload",
+                    data={
+                        "title": "Audio Upload",
+                        "artist": "Album Artist",
+                        "add_to_queue": "false",
+                    },
+                    files={"file": ("audio-upload.mp3", b"audio-bytes", "audio/mpeg")},
+                )
+
+        assert response.status_code == 200
+        payload = response.json()
+        mock_thumb.assert_called_once_with(settings.media_path / payload["filename"])
+    finally:
+        settings.media_path = original_media
 
 
 @pytest.mark.parametrize(

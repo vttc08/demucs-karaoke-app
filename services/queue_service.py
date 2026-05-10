@@ -9,6 +9,7 @@ from sqlalchemy import func
 from models import MediaItem, QueueItem, QueueItemCreate, QueueItemResponse, QueueStatus
 from config import settings
 from services.media_naming import build_media_stem
+from services.media_thumbnail_service import MediaThumbnailService
 
 logger = logging.getLogger(__name__)
 _AUDIO_SUFFIXES = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm"}
@@ -729,6 +730,7 @@ class QueueService:
             requested_by_name=item.requester_name,
             is_karaoke=bool(item.requested_karaoke),
             status=QueueStatus(item.status),
+            thumbnail=self._thumbnail_for_media(media_path, media.youtube_id),
             media_path=media_path,
             lyrics_path=lyrics_path,
             vocals_path=vocals_path,
@@ -800,6 +802,21 @@ class QueueService:
         except ValueError:
             logger.warning("Unservable media field path=%s", value)
             return None
+
+    @staticmethod
+    def _thumbnail_for_media(media_path: str | None, youtube_id: str | None) -> str | None:
+        youtube_id = (youtube_id or "").strip()
+        if youtube_id:
+            return f"https://i.ytimg.com/vi/{youtube_id}/hqdefault.jpg"
+
+        media_file = QueueService._media_url_to_file(media_path)
+        if media_file is None:
+            return None
+
+        thumbnail_path = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+        if not thumbnail_path.exists():
+            return None
+        return MediaThumbnailService.thumbnail_url_for_media_file(media_file)
 
     def _repair_sidecar_fields(
         self, media_path: str | None, vocals_path: str | None, lyrics_path: str | None

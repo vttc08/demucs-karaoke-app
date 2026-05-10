@@ -211,6 +211,7 @@ class QueueItemResponse(BaseModel):
     can_remove: bool = False
     is_karaoke: bool
     status: QueueStatus
+    thumbnail: Optional[str] = None
     media_path: Optional[str] = None
     lyrics_path: Optional[str] = None
     vocals_path: Optional[str] = None

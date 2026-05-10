@@ -142,9 +142,13 @@
                     </div>
                     {% endif %}
                     <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 {% if item.status.value != 'playing' %}grayscale-[50%]{% endif %}">
+                        {% if item.thumbnail %}
+                        <img src="{{ item.thumbnail|public_url }}" alt="{{ item.title }} {{ t('media.cover') }}" class="h-full w-full object-cover" loading="lazy" decoding="async" />
+                        {% else %}
                         <div class="w-full h-full bg-surface-container-highest flex items-center justify-center">
                             <span class="material-symbols-outlined text-2xl text-on-surface-variant">music_note</span>
                         </div>
+                        {% endif %}
                     </div>
                     <div class="flex-1 min-w-0">
                         <h3 class="font-bold {% if item.status.value == 'playing' %}text-on-surface{% else %}text-on-surface/80{% endif %} truncate">{{ item.title }}</h3>

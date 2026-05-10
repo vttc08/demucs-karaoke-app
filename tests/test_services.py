@@ -80,6 +80,46 @@ def test_queue_service_add_to_queue(db_session):
     assert result.status == QueueStatus.PENDING
 
 
+def test_queue_service_add_to_queue_includes_thumbnail_for_local_media(db_session, tmp_path, monkeypatch):
+    """Queue responses should include cached thumbnails for local media items."""
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media_file = media_root / "local-track.mp4"
+    media_file.write_bytes(b"media")
+    thumbnail_path = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+    thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
+    thumbnail_path.write_bytes(b"thumbnail")
+
+    db_session.add(
+        MediaItem(
+            youtube_id=None,
+            title="Local Thumb",
+            artist="Artist",
+            media_path="/media/local-track.mp4",
+            missing=False,
+        )
+    )
+    db_session.commit()
+
+    service = QueueService()
+    result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            media_item_id=db_session.query(MediaItem).filter(MediaItem.title == "Local Thumb").first().id,
+            title="Local Thumb",
+            artist="Artist",
+            is_karaoke=False,
+        ),
+    )
+
+    assert result.thumbnail == MediaThumbnailService.thumbnail_url_for_media_file(media_file)
+
+
 def test_queue_service_add_to_queue_stores_requester_metadata(db_session):
     """Queue items should preserve requester identity and display name."""
     service = QueueService()
@@ -443,6 +483,42 @@ def test_media_library_sync_service_generates_thumbnails_for_videos(db_session, 
         settings.cache_path = original_cache
 
 
+def test_media_library_sync_service_generates_thumbnails_for_audio_files(db_session, tmp_path, monkeypatch):
+    """Library scans should request thumbnail generation for local audio files too."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "scan-me.mp3"
+        media_file.write_text("audio", encoding="utf-8")
+
+        service = MediaLibrarySyncService()
+        calls: list[Path] = []
+
+        def fake_generate(path: Path):
+            calls.append(path)
+            thumb_path = MediaThumbnailService.thumbnail_path_for_media_file(path)
+            thumb_path.parent.mkdir(parents=True, exist_ok=True)
+            thumb_path.write_bytes(b"thumb")
+            return thumb_path
+
+        monkeypatch.setattr(service.thumbnail_service, "ensure_thumbnail_for_media_file", fake_generate)
+
+        summary = service.scan_library(db_session)
+
+        assert summary["scanned_files"] == 1
+        assert summary["created"] == 1
+        assert summary["thumbnails_updated"] == 1
+        assert calls == [media_file]
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
 def test_media_library_service_uses_cached_local_thumbnail(db_session, tmp_path):
     """Media page rows should use cached thumbnails for local media files."""
     original_media = settings.media_path
@@ -475,6 +551,37 @@ def test_media_library_service_uses_cached_local_thumbnail(db_session, tmp_path)
         assert items[0]["thumbnail"] == MediaThumbnailService.thumbnail_url_for_media_file(media_file)
     finally:
         settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_thumbnail_service_uses_embedded_art_extraction_for_audio(tmp_path, monkeypatch):
+    """Audio thumbnails should use embedded-art extraction instead of video frame capture."""
+    original_cache = settings.cache_path
+    try:
+        settings.cache_path = tmp_path / "cache"
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+        media_file = tmp_path / "album-track.mp3"
+        media_file.write_bytes(b"audio")
+        service = MediaThumbnailService()
+        called: list[str] = []
+
+        def fake_extract_embedded(source_path: Path, output_path: Path):
+            called.append(f"embedded:{source_path.name}")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"thumb")
+            return output_path
+
+        def fail_extract_video(source_path: Path, output_path: Path):
+            raise AssertionError("video extraction should not run for audio files")
+
+        monkeypatch.setattr(service.ffmpeg, "extract_embedded_thumbnail", fake_extract_embedded)
+        monkeypatch.setattr(service.ffmpeg, "extract_video_thumbnail", fail_extract_video)
+
+        result = service.ensure_thumbnail_for_media_file(media_file)
+
+        assert result == MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+        assert called == ["embedded:album-track.mp3"]
+    finally:
         settings.cache_path = original_cache
 
 

@@ -127,6 +127,7 @@ and `/static/...`.
      - Requires an admin session created by the server-managed admin login flow
      - Presentation-first stage output with fullscreen-optimized player
      - Always-on playback shell: queue items switch in-place without full page reload, so fullscreen is preserved during track transitions
+     - Audio-only items such as MP3s use embedded album art as the stage background when available, with a branded fallback background otherwise
      - When the queue is empty, stage loops lobby media; when a song becomes playable, stage switches to it automatically and returns to lobby when queue drains
      - Minimal controls overlay (play/pause, skip, hard resync, fullscreen)
      - Toggle the lyrics overlay on or off while playback is running
@@ -150,6 +151,7 @@ and `/static/...`.
 4. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
          - Browse existing database-backed media entries in responsive card/table layouts
          - View title, artist, and capability badges (multi-track, lyrics)
+         - Local audio files reuse embedded album art as the thumbnail when cached cover art is available
          - Use **Add to Queue** to enqueue a local media row through the existing queue API
          - Use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
          - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
@@ -161,6 +163,7 @@ and `/static/...`.
         - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use
         - If **Add to queue** and **AI Karaoke** are enabled, the uploaded item is queued with karaoke processing requested
         - Keep the default checked **Add to queue** toggle enabled to enqueue the new media item after upload
+        - Uploaded audio files generate cached cover thumbnails immediately when embedded album art is present
         - Successful uploads redirect to the media management page
 
 6. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`

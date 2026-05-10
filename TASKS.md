@@ -67,7 +67,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] real time join and enqueue feature
 - [x] admin has ability to remove, skip or reorder queue
 - [x] fix multi track audio sync issues
-- [ ] support playback of MP3 (default to cover bg)
+- [x] support playback of MP3 (default to cover bg)
 - [x] show users in queue
 - [x] users can change only their own added songs
 - [ ] queue as feature (user can queue as song as someone else only on admin interface)
@@ -75,6 +75,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] customize lyric tracks behavior
 - [x] lyrics-assisted add-to-queue flow with manual lyrics override
 - [ ] lyrics display page/modal for current song (synced and unsynced) (lyrics viewer screen)
+- [ ] implement lyrics and karaoke demucs behavior for upload and media management 
 - [ ] i frame only video previewer and editor (vibestudio editor)
 - [ ] add vocals to existing karaoke video (audio synchronization)
 - [ ] oidc authelia support

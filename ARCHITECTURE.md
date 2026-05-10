@@ -159,6 +159,15 @@ The stage page uses a websocket-first model:
   - `vocals` is persisted separately to `vocals_path` under `media_path`
 - Vocal mix state is runtime-only and resets when the current queue item changes.
 
+## Local thumbnails and audio cover art
+
+- Local media thumbnails are cached under `cache/media-thumbnails/` and reused by queue, media-library, and stage views.
+- Video thumbnails come from a captured frame.
+- Audio files (`.mp3`, `.wav`, `.m4a`, `.flac`, `.aac`, `.ogg`, `.opus`) attempt to extract embedded cover art via ffmpeg.
+- Uploads generate thumbnails immediately after save, while library scans refresh thumbnails for existing files under the media root.
+- Stage keeps the existing `<video>` path for video items and lobby playback, but switches to an `<audio>` primary player for audio-only queue items.
+- In audio-only stage mode, the queue item's `thumbnail` URL drives the fullscreen background/artwork treatment; if no cover is available, stage falls back to a branded placeholder background instead of a plain black screen.
+
 ## Stage lyrics overlay flow
 
 - Stage uses a custom HTML/CSS/JS overlay (not native WebVTT rendering) on top of the

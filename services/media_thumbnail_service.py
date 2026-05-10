@@ -14,6 +14,7 @@ from adapters.ffmpeg import FFmpegAdapter
 logger = logging.getLogger(__name__)
 
 _VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}
+_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus"}
 
 
 class MediaThumbnailService:
@@ -37,7 +38,8 @@ class MediaThumbnailService:
 
     def ensure_thumbnail_for_media_file(self, media_file: Path) -> Path | None:
         """Generate or refresh a cached thumbnail for a local media file."""
-        if not self._is_thumbnailable(media_file):
+        media_kind = self._media_kind_for(media_file)
+        if media_kind is None:
             return None
 
         thumbnail_path = self.thumbnail_path_for_media_file(media_file)
@@ -50,7 +52,10 @@ class MediaThumbnailService:
 
         thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            self.ffmpeg.extract_thumbnail(media_file, thumbnail_path)
+            if media_kind == "video":
+                self.ffmpeg.extract_video_thumbnail(media_file, thumbnail_path)
+            else:
+                self.ffmpeg.extract_embedded_thumbnail(media_file, thumbnail_path)
         except (FileNotFoundError, shutil.Error, OSError, subprocess.CalledProcessError):
             logger.warning("Thumbnail generation failed media_file=%s thumbnail=%s", media_file, thumbnail_path)
             if thumbnail_path.exists():
@@ -85,5 +90,10 @@ class MediaThumbnailService:
         return True
 
     @staticmethod
-    def _is_thumbnailable(media_file: Path) -> bool:
-        return media_file.suffix.lower() in _VIDEO_EXTENSIONS
+    def _media_kind_for(media_file: Path) -> str | None:
+        suffix = media_file.suffix.lower()
+        if suffix in _VIDEO_EXTENSIONS:
+            return "video"
+        if suffix in _AUDIO_EXTENSIONS:
+            return "audio"
+        return None

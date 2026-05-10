@@ -1004,6 +1004,7 @@ function updateQueueDisplay(queue) {
 
     queueList.innerHTML = queue.map(item => {
         const statusInfo = getStatusInfo(item.status);
+        const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/placeholder.png'));
         const leftActionHtml = item.status === 'playing' ? `
                     <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="${t('queue.playing')}">
                         <span class="material-symbols-outlined">equalizer</span>
@@ -1047,9 +1048,7 @@ function updateQueueDisplay(queue) {
             <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-status="${item.status}">
                 ${leftColumnHtml}
                 <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 ${item.status !== 'playing' ? 'grayscale-[50%]' : ''}">
-                    <div class="w-full h-full bg-surface-container-highest flex items-center justify-center">
-                        <span class="material-symbols-outlined text-2xl text-on-surface-variant">music_note</span>
-                    </div>
+                    <img src="${thumbnail}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'">
                 </div>
                 <div class="flex-1 min-w-0">
                     <h3 class="font-bold ${item.status === 'playing' ? 'text-on-surface' : 'text-on-surface/80'} truncate">${escapeHtml(item.title)}</h3>
