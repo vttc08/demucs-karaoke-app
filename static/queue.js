@@ -46,6 +46,7 @@ const queueConfigCloseBtn = document.getElementById('queue-config-close-btn');
 const queueConfigCancelBtn = document.getElementById('queue-config-cancel-btn');
 const queueConfigConfirmBtn = document.getElementById('queue-config-confirm-btn');
 const queueConfigQueueAsPanel = document.getElementById('queue-config-queue-as-panel');
+const queueConfigQueueAsCheckbox = document.getElementById('queue-config-queue-as-checkbox');
 const queueConfigQueueAsInput = document.getElementById('queue-config-queue-as-input');
 const queueConfigQueueAsSuggestions = document.getElementById('queue-config-queue-as-suggestions');
 const queueAsSettingsPanel = document.getElementById('queue-as-settings-panel');
@@ -764,6 +765,7 @@ function syncQueueConfirmState() {
         && queueAsEnabled
         && modalSelection?.source !== 'local'
         && Boolean(queueConfigQueueAsPanel)
+        && Boolean(queueConfigQueueAsCheckbox?.checked)
         && !sanitizeQueueAsName(queueConfigQueueAsInput?.value || '');
     const disabled = waiting || (lyricsRequired && !ready) || queueAsRequired;
 
@@ -799,6 +801,9 @@ function syncQueueAsInQueueConfig() {
         return;
     }
     renderQueueAsSuggestions(queueConfigQueueAsSuggestions);
+    if (queueConfigQueueAsCheckbox) {
+        queueConfigQueueAsCheckbox.checked = true;
+    }
     if (queueConfigQueueAsInput) {
         const current = sanitizeQueueAsName(queueConfigQueueAsInput.value);
         if (!current) {
@@ -959,7 +964,7 @@ function displaySearchResults(results) {
 }
 
 async function addToQueueFromModal(selection, buttonElement) {
-    const queueAsName = isAdminUser && queueAsEnabled && selection?.source !== 'local'
+    const queueAsName = isAdminUser && queueAsEnabled && selection?.source !== 'local' && queueConfigQueueAsCheckbox?.checked
         ? sanitizeQueueAsName(queueConfigQueueAsInput?.value || '')
         : null;
     if (queueAsName) {
@@ -1167,23 +1172,32 @@ if (queueConfigLyricsToggle) {
     });
 }
 
-if (queueConfigQueueAsSuggestions) {
-    queueConfigQueueAsSuggestions.addEventListener('click', (event) => {
-        const button = event.target.closest('.queue-as-suggestion-btn');
-        if (!button || !queueConfigQueueAsInput) {
-            return;
-        }
-        queueConfigQueueAsInput.value = sanitizeQueueAsName(button.dataset.queueAsName);
-        queueConfigQueueAsInput.focus();
-        syncQueueConfirmState();
-    });
-}
+    if (queueConfigQueueAsSuggestions) {
+        queueConfigQueueAsSuggestions.addEventListener('click', (event) => {
+            const button = event.target.closest('.queue-as-suggestion-btn');
+            if (!button || !queueConfigQueueAsInput) {
+                return;
+            }
+            queueConfigQueueAsInput.value = sanitizeQueueAsName(button.dataset.queueAsName);
+            queueConfigQueueAsInput.focus();
+            if (queueConfigQueueAsCheckbox) {
+                queueConfigQueueAsCheckbox.checked = true;
+            }
+            syncQueueConfirmState();
+        });
+    }
 
-if (queueConfigQueueAsInput) {
-    queueConfigQueueAsInput.addEventListener('input', () => {
-        syncQueueConfirmState();
-    });
-}
+    if (queueConfigQueueAsInput) {
+        queueConfigQueueAsInput.addEventListener('input', () => {
+            syncQueueConfirmState();
+        });
+    }
+
+    if (queueConfigQueueAsCheckbox) {
+        queueConfigQueueAsCheckbox.addEventListener('change', () => {
+            syncQueueConfirmState();
+        });
+    }
 
 if (queueConfigConfirmBtn) {
     queueConfigConfirmBtn.addEventListener('click', async () => {

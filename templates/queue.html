@@ -7,7 +7,7 @@
 
 {% block content %}
 <main
-    class="pt-28 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-8 sm:px-6 lg:px-8"
+    class="pt-28 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-4 sm:gap-5 sm:px-6 lg:px-8"
     data-singer-name="{{ singer_name }}"
     data-needs-singer-name="{{ 'true' if needs_singer_name else 'false' }}"
     data-is-admin="{{ 'true' if is_admin else 'false' }}"
@@ -31,20 +31,16 @@
     </section>
 
     {% if is_admin %}
-    <section id="queue-as-settings-panel" class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+    <section id="queue-as-settings-panel" class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-1.5">
         <label class="flex items-center justify-between gap-3">
-            <div class="min-w-0">
-                <span class="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_setting_label') }}</span>
-                <span class="block text-xs text-on-surface-variant">{{ t('queue.queue_as_setting_detail') }}</span>
-            </div>
-            <input id="queue-as-enabled-toggle" type="checkbox" class="h-5 w-5 accent-primary" />
+            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_setting_label') }}</span>
+            <input id="queue-as-enabled-toggle" type="checkbox" class="h-4 w-4 accent-primary" />
         </label>
-        <p id="queue-as-current-label" class="mt-2 text-xs font-semibold text-on-surface-variant">{{ t('queue.queue_as_current_none') }}</p>
     </section>
     {% endif %}
 
     <!-- Search Section -->
-    <section class="flex flex-col gap-4">
+    <section class="flex flex-col gap-2">
         <div class="relative group">
             <input 
                 id="search-input"
@@ -349,23 +345,18 @@
                 </div>
 
                 {% if is_admin %}
-                <div id="queue-config-queue-as-panel" class="hidden space-y-3 rounded-xl bg-surface-container p-3 sm:p-4">
-                    <div class="min-w-0">
-                        <div class="flex items-center gap-2">
-                            <span class="material-symbols-outlined text-primary text-base">badge</span>
-                            <span class="text-[13px] font-bold leading-tight text-on-surface sm:text-sm">{{ t('queue.queue_as_modal_title') }}</span>
-                        </div>
-                        <p class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">{{ t('queue.queue_as_setting_detail') }}</p>
+                <div id="queue-config-queue-as-panel" class="hidden space-y-2 rounded-xl bg-surface-container px-3 py-2 sm:px-4 sm:py-2.5">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="text-[13px] font-bold leading-tight text-on-surface sm:text-sm">{{ t('queue.queue_as_modal_title') }}</span>
+                        <input id="queue-config-queue-as-checkbox" type="checkbox" class="h-4 w-4 accent-primary" />
                     </div>
                     <div>
-                        <p class="mb-2 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_recent') }}</p>
                         <div id="queue-config-queue-as-suggestions" class="flex flex-wrap gap-2"></div>
                     </div>
                     <label class="flex flex-col gap-2">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_manual_label') }}</span>
                         <input
                             id="queue-config-queue-as-input"
-                            class="h-11 rounded-xl border border-outline-variant/30 bg-surface-container-highest px-3 text-sm text-on-surface outline-none transition focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+                            class="h-10 rounded-xl border border-outline-variant/30 bg-surface-container-highest px-3 text-sm text-on-surface outline-none transition focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
                             maxlength="40"
                             placeholder="{{ t('common.guest') }}"
                             type="text"
@@ -480,19 +471,6 @@
         </div>
     </div>
 
-    <!-- Navigation hint -->
-    <div class="text-center mt-8">
-        <div class="flex justify-center gap-4">
-            <a href="{{ app_url('/queue') }}" class="inline-flex items-center gap-2 text-primary hover:text-primary/80 transition-colors px-4 py-2 rounded-full bg-primary/10">
-                <span class="material-symbols-outlined">queue_music</span>
-                <span class="font-medium">{{ t('app.karaoke') }}</span>
-            </a>
-            <a href="{{ app_url('/stage') }}" class="inline-flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors px-4 py-2 rounded-full">
-                <span class="material-symbols-outlined">live_tv</span>
-                <span class="font-medium">{{ t('queue.stage') }}</span>
-            </a>
-        </div>
-    </div>
 </main>
 
 <div id="singer-name-modal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-background/75 p-0 backdrop-blur-sm sm:items-center sm:p-6">
