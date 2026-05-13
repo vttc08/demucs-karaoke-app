@@ -45,6 +45,16 @@ const queueConfigModalBackdrop = document.getElementById('queue-config-modal-bac
 const queueConfigCloseBtn = document.getElementById('queue-config-close-btn');
 const queueConfigCancelBtn = document.getElementById('queue-config-cancel-btn');
 const queueConfigConfirmBtn = document.getElementById('queue-config-confirm-btn');
+const queueAsSettingsPanel = document.getElementById('queue-as-settings-panel');
+const queueAsEnabledToggle = document.getElementById('queue-as-enabled-toggle');
+const queueAsCurrentLabel = document.getElementById('queue-as-current-label');
+const queueAsModal = document.getElementById('queue-as-modal');
+const queueAsModalBackdrop = document.getElementById('queue-as-modal-backdrop');
+const queueAsCloseBtn = document.getElementById('queue-as-close-btn');
+const queueAsCancelBtn = document.getElementById('queue-as-cancel-btn');
+const queueAsConfirmBtn = document.getElementById('queue-as-confirm-btn');
+const queueAsInput = document.getElementById('queue-as-input');
+const queueAsSuggestions = document.getElementById('queue-as-suggestions');
 const queueConfigSongThumb = document.getElementById('queue-config-song-thumb');
 const queueConfigSongTitle = document.getElementById('queue-config-song-title');
 const queueConfigSongChannel = document.getElementById('queue-config-song-channel');
@@ -55,6 +65,8 @@ const queueConfigLyricsToggle = document.getElementById('queue-config-lyrics-tog
 const queueConfigLyricsDetail = document.getElementById('queue-config-lyrics-detail');
 const queueToast = document.getElementById('queue-toast');
 const queueToastText = document.getElementById('queue-toast-text');
+const QUEUE_AS_ENABLED_STORAGE_KEY = 'karaoke.queueAs.enabled';
+const QUEUE_AS_LAST_NAME_STORAGE_KEY = 'karaoke.queueAs.lastName';
 const QUEUE_CONFIRM_DEFAULT_HTML = `<span class="material-symbols-outlined text-base" style="font-variation-settings: 'FILL' 1">add_circle</span>${t('common.add_to_queue')}`;
 const QUEUE_CONFIRM_LOADING_HTML = `<span class="material-symbols-outlined animate-spin text-base">sync</span>${t('lyrics.searching_providers')}`;
 const KARAOKE_TITLE_HINT_RE = /\b(karaoke|ktv|sing[-\s]?along|off[-\s]?vocal|no[-\s]?vocal|instrumental|noraebang)\b/i;
@@ -70,6 +82,8 @@ let modalSelection = null;
 let modalKaraokeEnabled = false;
 let queueToastTimer = null;
 let queuePresenceUsers = [];
+let queueAsEnabled = false;
+let queueAsModalResolver = null;
 
 function getCookieValue(name) {
     const match = document.cookie
@@ -80,6 +94,10 @@ function getCookieValue(name) {
 
 function sanitizePresenceValue(value, maxLength = 80) {
     return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
+function sanitizeQueueAsName(value) {
+    return sanitizePresenceValue(value, 40);
 }
 
 function setCookieValue(name, value, maxAge = 31536000) {
@@ -116,6 +134,191 @@ function getCurrentSingerName() {
     return cookieName || datasetName || labelName || t('common.guest');
 }
 
+function setLocalStorageValue(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch (_) {
+        // Keep queue interactions functional when storage is unavailable.
+    }
+}
+
+function getLocalStorageValue(key, fallback = null) {
+    try {
+        const value = localStorage.getItem(key);
+        return value === null ? fallback : value;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+function getQueueAsLastName() {
+    return sanitizeQueueAsName(getLocalStorageValue(QUEUE_AS_LAST_NAME_STORAGE_KEY, '') || '');
+}
+
+function setQueueAsLastName(name) {
+    const normalized = sanitizeQueueAsName(name);
+    if (normalized) {
+        setLocalStorageValue(QUEUE_AS_LAST_NAME_STORAGE_KEY, normalized);
+    }
+    return normalized;
+}
+
+function updateQueueAsCurrentLabel(nameOverride = null) {
+    if (!queueAsCurrentLabel) {
+        return;
+    }
+    const name = sanitizeQueueAsName(nameOverride ?? getQueueAsLastName());
+    if (name) {
+        queueAsCurrentLabel.textContent = t('queue.queue_as_current', { name });
+    } else {
+        queueAsCurrentLabel.textContent = t('queue.queue_as_current_none');
+    }
+}
+
+function updateQueueAsToggleUi() {
+    if (!queueAsEnabledToggle) {
+        return;
+    }
+    queueAsEnabledToggle.checked = queueAsEnabled;
+}
+
+function readQueueAsEnabledSetting() {
+    const raw = getLocalStorageValue(QUEUE_AS_ENABLED_STORAGE_KEY, 'false');
+    return raw === 'true';
+}
+
+function writeQueueAsEnabledSetting(enabled) {
+    setLocalStorageValue(QUEUE_AS_ENABLED_STORAGE_KEY, enabled ? 'true' : 'false');
+}
+
+function getQueueAsSuggestions() {
+    const unique = new Map();
+    queuePresenceUsers.forEach((user) => {
+        const normalized = sanitizeQueueAsName(user?.display_name);
+        if (!normalized) {
+            return;
+        }
+        const key = normalized.toLowerCase();
+        if (!unique.has(key)) {
+            unique.set(key, normalized);
+        }
+    });
+    return Array.from(unique.values());
+}
+
+function renderQueueAsSuggestions() {
+    if (!queueAsSuggestions) {
+        return;
+    }
+    const suggestions = getQueueAsSuggestions();
+    if (!suggestions.length) {
+        queueAsSuggestions.innerHTML = `<p class="text-xs text-on-surface-variant">${escapeHtml(t('queue.queue_as_no_recent'))}</p>`;
+        return;
+    }
+    queueAsSuggestions.innerHTML = suggestions.map((name) => `
+        <button
+            type="button"
+            class="queue-as-suggestion-btn inline-flex items-center rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-semibold text-on-surface transition-colors hover:text-primary"
+            data-queue-as-name="${escapeHtml(name)}"
+        >
+            ${escapeHtml(name)}
+        </button>
+    `).join('');
+}
+
+function closeQueueAsModal() {
+    if (!queueAsModal) {
+        return;
+    }
+    queueAsModal.classList.add('hidden');
+    queueAsModal.classList.remove('flex');
+    const queueConfigOpen = queueConfigModal && !queueConfigModal.classList.contains('hidden');
+    if (!queueConfigOpen) {
+        document.body.classList.remove('overflow-hidden');
+    }
+}
+
+function resolveQueueAsModal(value) {
+    const resolver = queueAsModalResolver;
+    queueAsModalResolver = null;
+    closeQueueAsModal();
+    if (resolver) {
+        resolver(value);
+    }
+}
+
+function openQueueAsModal(defaultName = '') {
+    if (!queueAsModal) {
+        return Promise.resolve(sanitizeQueueAsName(defaultName) || null);
+    }
+    renderQueueAsSuggestions();
+    if (queueAsInput) {
+        queueAsInput.value = sanitizeQueueAsName(defaultName);
+        window.setTimeout(() => queueAsInput.focus(), 60);
+    }
+    queueAsModal.classList.remove('hidden');
+    queueAsModal.classList.add('flex');
+    document.body.classList.add('overflow-hidden');
+
+    return new Promise((resolve) => {
+        queueAsModalResolver = resolve;
+    });
+}
+
+function initializeQueueAsSettings() {
+    if (!isAdminUser || !queueAsSettingsPanel) {
+        return;
+    }
+    queueAsEnabled = readQueueAsEnabledSetting();
+    updateQueueAsToggleUi();
+    updateQueueAsCurrentLabel();
+
+    queueAsEnabledToggle?.addEventListener('change', () => {
+        queueAsEnabled = Boolean(queueAsEnabledToggle.checked);
+        writeQueueAsEnabledSetting(queueAsEnabled);
+        updateQueueAsToggleUi();
+    });
+
+    queueAsSuggestions?.addEventListener('click', (event) => {
+        const button = event.target.closest('.queue-as-suggestion-btn');
+        if (!button || !queueAsInput) {
+            return;
+        }
+        queueAsInput.value = sanitizeQueueAsName(button.dataset.queueAsName);
+        queueAsInput.focus();
+    });
+
+    queueAsConfirmBtn?.addEventListener('click', () => {
+        const selectedName = sanitizeQueueAsName(queueAsInput?.value || '');
+        if (!selectedName) {
+            if (queueAsInput) {
+                queueAsInput.focus();
+            }
+            return;
+        }
+        setQueueAsLastName(selectedName);
+        updateQueueAsCurrentLabel(selectedName);
+        resolveQueueAsModal(selectedName);
+    });
+
+    const cancelQueueAs = () => resolveQueueAsModal(null);
+    queueAsCloseBtn?.addEventListener('click', cancelQueueAs);
+    queueAsCancelBtn?.addEventListener('click', cancelQueueAs);
+    queueAsModalBackdrop?.addEventListener('click', cancelQueueAs);
+}
+
+async function submitQueueItemWithQueueAs(selection, buttonElement, options = {}) {
+    if (!isAdminUser || !queueAsEnabled) {
+        return submitQueueItem(selection, buttonElement, options);
+    }
+    const defaultName = getQueueAsLastName() || getCurrentSingerName();
+    const queueAsName = await openQueueAsModal(defaultName);
+    if (!queueAsName) {
+        return;
+    }
+    return submitQueueItem(selection, buttonElement, { ...options, queueAsName });
+}
+
 function renderPresenceList() {
     if (!queuePresenceList || !queuePresenceCount) {
         return;
@@ -135,6 +338,9 @@ function renderPresenceList() {
             ${user.connection_count > 1 ? `<span class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">x${user.connection_count}</span>` : ''}
         </span>
     `).join('');
+    if (queueAsModal && !queueAsModal.classList.contains('hidden')) {
+        renderQueueAsSuggestions();
+    }
 }
 
 function upsertPresenceUser(user) {
@@ -264,7 +470,7 @@ searchResults.addEventListener('click', async (event) => {
 
     const source = resultElement.dataset.resultSource || 'youtube';
     if (source === 'local') {
-        await submitQueueItem(buildQueueSelection(resultElement, button), button, {
+        await submitQueueItemWithQueueAs(buildQueueSelection(resultElement, button), button, {
             isKaraoke: false,
             lyricsEnabled: false,
         });
@@ -569,7 +775,7 @@ function syncQueueConfirmState() {
 
 async function openQueueConfigModal(resultElement, triggerButton) {
     if (!queueConfigModal || !queueConfigConfirmBtn) {
-        await submitQueueItem(buildQueueSelection(resultElement, triggerButton), triggerButton, {
+        await submitQueueItemWithQueueAs(buildQueueSelection(resultElement, triggerButton), triggerButton, {
             isKaraoke: false,
             lyricsEnabled: false,
         });
@@ -597,7 +803,7 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     queueConfigConfirmBtn.disabled = false;
     queueConfigConfirmBtn.setAttribute('aria-disabled', 'false');
     queueConfigConfirmBtn.setAttribute('aria-busy', 'false');
-    queueConfigConfirmBtn.title = 'Add the song to the queue';
+    queueConfigConfirmBtn.title = t('queue.add_song_to_queue');
     queueConfigConfirmBtn.classList.remove('bg-secondary', 'text-white', 'bg-error', 'bg-surface-container-highest', 'text-on-surface-variant');
     queueConfigConfirmBtn.classList.add('bg-primary', 'text-on-primary');
     queueConfigConfirmBtn.innerHTML = QUEUE_CONFIRM_DEFAULT_HTML;
@@ -716,7 +922,7 @@ function displaySearchResults(results) {
 }
 
 async function addToQueueFromModal(selection, buttonElement) {
-    return submitQueueItem(selection, buttonElement, {
+    return submitQueueItemWithQueueAs(selection, buttonElement, {
         isKaraoke: modalKaraokeEnabled,
         lyricsEnabled: Boolean(lyricsManager?.state.lyricsEnabled),
     });
@@ -781,6 +987,7 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
     const mediaItemId = selection?.mediaItemId || null;
     const isKaraoke = Boolean(options.isKaraoke);
     const lyricsEnabled = Boolean(options.lyricsEnabled && isKaraoke && lyricsManager);
+    const queueAsName = sanitizeQueueAsName(options.queueAsName);
     
     // Get title/artist from manager if available, otherwise fall back to selection
     const title = lyricsEnabled && lyricsManager.state.title 
@@ -821,6 +1028,9 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
             payload.youtube_id = videoId;
         } else {
             throw new Error('Missing media source identifier');
+        }
+        if (queueAsName) {
+            payload.queue_as_name = queueAsName;
         }
 
         const response = await fetch(`${API_BASE}/api/queue/`, {
@@ -933,6 +1143,9 @@ if (queueConfigModalBackdrop) {
 window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && queueConfigModal && !queueConfigModal.classList.contains('hidden')) {
         closeQueueConfigModal();
+    }
+    if (event.key === 'Escape' && queueAsModal && !queueAsModal.classList.contains('hidden')) {
+        resolveQueueAsModal(null);
     }
 });
 
@@ -1486,6 +1699,7 @@ function syncStageLyricsAvailability(queue) {
 
 // Initialize WebSocket connection
 let queueWebSocket = null;
+initializeQueueAsSettings();
 if (window.location.pathname === appUrl('/queue') || window.location.pathname === appUrl('/')) {
     queueWebSocket = new QueueWebSocket();
     window.queueWebSocket = queueWebSocket;

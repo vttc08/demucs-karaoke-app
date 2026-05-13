@@ -156,6 +156,7 @@ class QueueItemCreate(BaseModel):
     is_karaoke: bool = False
     lyrics_text: Optional[str] = None
     lyrics_format: Optional[Literal["lrc", "txt"]] = None
+    queue_as_name: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_source(self):
@@ -164,6 +165,9 @@ class QueueItemCreate(BaseModel):
             self.youtube_id = self.youtube_id.strip() or None
         if isinstance(self.lyrics_text, str):
             self.lyrics_text = self.lyrics_text.strip() or None
+        if isinstance(self.queue_as_name, str):
+            normalized_queue_as = " ".join(self.queue_as_name.split()).strip()
+            self.queue_as_name = normalized_queue_as[:40] or None
         if self.youtube_id is None and self.media_item_id is None:
             raise ValueError("Either youtube_id or media_item_id is required")
         return self

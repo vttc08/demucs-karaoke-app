@@ -235,6 +235,9 @@ The stage page uses a websocket-first model:
   admin-only. Queue clear actions and media delete actions are restricted to admins in both the UI and
   API, while queue item removal is available to admins for any non-playing item and to guests only for
   their own non-playing items. Other media/queue authorization gates can still be refined in a later pass.
+- Queue add supports an optional admin-only `queue_as_name` field so shared admin tablets can submit
+  songs on behalf of someone else without changing device ownership cookies. The frontend "queue as"
+  toggle is stored locally per device (not persisted in backend runtime settings).
 
 ## Lyrics inference and provider flow
 

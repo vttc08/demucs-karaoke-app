@@ -163,7 +163,7 @@ POST /api/queue/
   "media_item_id": null,
   "title": "Song Title",
   "artist": "Artist Name",
-  "requested_by_name": "Alex",
+  "queue_as_name": "Alex",
   "is_karaoke": true,
   "lyrics_text": "[00:01.00]Line 1",
   "lyrics_format": "lrc"
@@ -173,6 +173,7 @@ POST /api/queue/
 Queue payload can identify the target with either:
 - `youtube_id` (existing behavior), or
 - `media_item_id` (for direct enqueue of local library search matches).
+- `queue_as_name` is optional and admin-only. When provided by an authenticated admin session, it overrides the displayed requester label for that queued item.
 
 If the `youtube_id` already exists in `media_items` with a usable local media file, the queue item is created against that existing media row and processing reuses the stored file instead of re-downloading the video again.
 When `lyrics_text` is supplied for karaoke items, the app persists it as a reusable lyrics sidecar under the cache directory so karaoke processing can skip a second lookup. `lyrics_format` is optional; if omitted, the app infers `.lrc` when timestamped lines are present and `.txt` otherwise.

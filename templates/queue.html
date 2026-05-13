@@ -30,6 +30,19 @@
         </button>
     </section>
 
+    {% if is_admin %}
+    <section id="queue-as-settings-panel" class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+        <label class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <span class="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_setting_label') }}</span>
+                <span class="block text-xs text-on-surface-variant">{{ t('queue.queue_as_setting_detail') }}</span>
+            </div>
+            <input id="queue-as-enabled-toggle" type="checkbox" class="h-5 w-5 accent-primary" />
+        </label>
+        <p id="queue-as-current-label" class="mt-2 text-xs font-semibold text-on-surface-variant">{{ t('queue.queue_as_current_none') }}</p>
+    </section>
+    {% endif %}
+
     <!-- Search Section -->
     <section class="flex flex-col gap-4">
         <div class="relative group">
@@ -393,6 +406,49 @@
                 <button id="queue-config-confirm-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black uppercase tracking-tight text-on-primary transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:bg-surface-container-highest disabled:text-on-surface-variant disabled:shadow-none disabled:opacity-100 disabled:hover:brightness-100">
                     <span class="material-symbols-outlined text-base" style="font-variation-settings: 'FILL' 1">add_circle</span>
                     {{ t('common.add_to_queue') }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="queue-as-modal" class="fixed inset-0 z-[85] hidden items-end justify-center bg-background/80 p-0 backdrop-blur-sm sm:items-center sm:p-6">
+        <div id="queue-as-modal-backdrop" class="absolute inset-0"></div>
+        <div class="relative flex w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-outline-variant/20 bg-surface-container-high shadow-[0_-10px_60px_rgba(143,67,251,0.2)] sm:rounded-2xl">
+            <div class="flex items-center justify-between border-b border-outline-variant/20 px-5 py-4">
+                <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('queue.queue_as_modal_title') }}</h3>
+                <button
+                    id="queue-as-close-btn"
+                    type="button"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-on-surface"
+                    aria-label="{{ t('queue.close_config') }}"
+                >
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+            <div class="space-y-4 px-5 py-4">
+                <p class="text-sm text-on-surface-variant">{{ t('queue.queue_as_modal_detail') }}</p>
+                <div>
+                    <p class="mb-2 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_recent') }}</p>
+                    <div id="queue-as-suggestions" class="flex flex-wrap gap-2"></div>
+                </div>
+                <label class="flex flex-col gap-2">
+                    <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_manual_label') }}</span>
+                    <input
+                        id="queue-as-input"
+                        class="h-11 rounded-xl border border-outline-variant/30 bg-surface-container-highest px-3 text-sm text-on-surface outline-none transition focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+                        maxlength="40"
+                        placeholder="{{ t('common.guest') }}"
+                        type="text"
+                    />
+                </label>
+            </div>
+            <div class="flex flex-col gap-2 border-t border-outline-variant/20 px-5 py-4 sm:flex-row sm:justify-end">
+                <button id="queue-as-cancel-btn" type="button" class="rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface-variant transition-colors hover:text-on-surface">
+                    {{ t('common.cancel') }}
+                </button>
+                <button id="queue-as-confirm-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-black uppercase tracking-tight text-on-primary transition-all hover:brightness-110 active:scale-95">
+                    <span class="material-symbols-outlined text-base">check</span>
+                    {{ t('queue.queue_as_confirm') }}
                 </button>
             </div>
         </div>

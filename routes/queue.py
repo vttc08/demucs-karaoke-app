@@ -57,6 +57,18 @@ async def add_to_queue(
     db: Session = Depends(get_db),
 ):
     """Add item to queue."""
+    is_admin = get_admin_user(request, db) is not None
+    requester_name = _normalize_presence_value(
+        request.cookies.get("karaoke_singer"), max_length=40
+    )
+    if item.queue_as_name is not None:
+        if not is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="queue_as_name requires an admin session",
+            )
+        requester_name = _normalize_presence_value(item.queue_as_name, max_length=40)
+
     try:
         response = queue_service.add_to_queue(
             db,
@@ -67,9 +79,7 @@ async def add_to_queue(
             requester_session_id=_normalize_presence_value(
                 request.cookies.get("karaoke_queue_tab_id")
             ),
-            requester_name=_normalize_presence_value(
-                request.cookies.get("karaoke_singer"), max_length=40
-            ),
+            requester_name=requester_name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
