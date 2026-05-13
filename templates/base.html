@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ t('app.karaoke') }}{% endblock %}</title>
+    <link rel="icon" type="image/x-icon" href="{{ app_url('/static/favicon.ico') }}">
+    <link rel="apple-touch-icon" href="{{ app_url('/static/karaoke-icon.png') }}">
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -81,8 +83,13 @@
     <header class="fixed top-0 left-0 right-0 z-50 glass-card border-b border-outline-variant/20">
         <div class="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
             <div class="flex min-w-0 items-center gap-3">
-                <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                    <span class="material-symbols-outlined text-primary text-lg">{% block header_icon %}music_note{% endblock %}</span>
+                <div class="w-8 h-8 overflow-hidden rounded-full bg-primary/20">
+                    <img
+                        src="{{ app_url('/static/karaoke-icon.png') }}"
+                        alt=""
+                        class="h-full w-full object-cover"
+                        aria-hidden="true"
+                    >
                 </div>
                 <div class="min-w-0">
                     <h1 class="truncate font-headline font-bold text-lg text-on-surface">{% block header_title %}{{ t('app.karaoke') }}{% endblock %}</h1>

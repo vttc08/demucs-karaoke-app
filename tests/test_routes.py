@@ -275,6 +275,51 @@ def test_add_to_queue_uses_guest_cookies_for_requester(client):
         assert row.requester_name == "Alex"
 
 
+def test_add_to_queue_rejects_queue_as_name_for_non_admin(client):
+    """Non-admin queue adds cannot override requester label via queue_as_name."""
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "queue-as-guest-denied",
+            "title": "Queue As Denied",
+            "is_karaoke": False,
+            "queue_as_name": "Taylor",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "queue_as_name requires an admin session"
+
+
+def test_add_to_queue_admin_can_override_requester_name(client):
+    """Admin queue adds may set queue_as_name without changing ownership metadata."""
+    authenticate_admin_client(client)
+    client.cookies.set("karaoke_guest_id", "guest-admin-device")
+    client.cookies.set("karaoke_queue_tab_id", "tab-admin-device")
+    client.cookies.set("karaoke_singer", "Admin Device")
+
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "queue-as-admin-ok",
+            "title": "Queue As Admin",
+            "is_karaoke": False,
+            "queue_as_name": "Taylor",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["requested_by_name"] == "Taylor"
+
+    with TestingSessionLocal() as db:
+        row = db.query(QueueItem).filter(QueueItem.id == data["id"]).first()
+        assert row is not None
+        assert row.user_id == "guest-admin-device"
+        assert row.session_id == "tab-admin-device"
+        assert row.requester_name == "Taylor"
+
+
 def test_add_to_queue_non_karaoke(client):
     """Non-karaoke queue items should be accepted without burn settings."""
     response = client.post(
@@ -504,6 +549,8 @@ def test_queue_page_loads(client):
     assert 'id="queue-library-shortcuts"' in response.text
     assert 'href="/media"' in response.text
     assert 'href="/upload"' in response.text
+    assert 'id="queue-as-settings-panel"' not in response.text
+    assert 'id="queue-config-queue-as-panel"' not in response.text
     assert 'id="clear-all-btn"' not in response.text
     assert "queue-move-up-" not in response.text
     assert "skipToSong(" not in response.text
@@ -512,6 +559,19 @@ def test_queue_page_loads(client):
     assert 'aria-label="Media Library"' not in response.text
     assert 'aria-label="Upload Media"' not in response.text
     assert "shield_person" not in response.text
+
+
+def test_queue_page_admin_shows_queue_as_controls(client):
+    """Admin queue page should expose queue-as device controls and modal."""
+    authenticate_admin_client(client)
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert 'id="queue-as-settings-panel"' in response.text
+    assert 'id="queue-as-enabled-toggle"' in response.text
+    assert 'id="queue-as-modal"' in response.text
+    assert 'id="queue-config-queue-as-panel"' in response.text
 
 
 def test_queue_page_renders_simplified_chinese_locale(client):
