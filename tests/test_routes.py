@@ -550,6 +550,7 @@ def test_queue_page_loads(client):
     assert 'href="/media"' in response.text
     assert 'href="/upload"' in response.text
     assert 'id="queue-as-settings-panel"' not in response.text
+    assert 'id="queue-config-queue-as-panel"' not in response.text
     assert 'id="clear-all-btn"' not in response.text
     assert "queue-move-up-" not in response.text
     assert "skipToSong(" not in response.text
@@ -570,6 +571,7 @@ def test_queue_page_admin_shows_queue_as_controls(client):
     assert 'id="queue-as-settings-panel"' in response.text
     assert 'id="queue-as-enabled-toggle"' in response.text
     assert 'id="queue-as-modal"' in response.text
+    assert 'id="queue-config-queue-as-panel"' in response.text
 
 
 def test_queue_page_renders_simplified_chinese_locale(client):

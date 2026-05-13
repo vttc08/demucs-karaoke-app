@@ -199,6 +199,7 @@
   "queue.queue_as_modal_title": "代谁点歌",
   "queue.queue_as_no_recent": "暂无最近在线访客。",
   "queue.queue_as_recent": "最近在线访客",
+  "queue.queue_as_required": "加入歌曲前请先选择代点名称",
   "queue.queue_as_setting_detail": "每次加入队列前提示代点名称（仅此设备）。",
   "queue.queue_as_setting_label": "代点提示",
   "queue.remote": "遥控",

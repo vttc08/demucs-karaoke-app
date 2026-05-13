@@ -45,6 +45,9 @@ const queueConfigModalBackdrop = document.getElementById('queue-config-modal-bac
 const queueConfigCloseBtn = document.getElementById('queue-config-close-btn');
 const queueConfigCancelBtn = document.getElementById('queue-config-cancel-btn');
 const queueConfigConfirmBtn = document.getElementById('queue-config-confirm-btn');
+const queueConfigQueueAsPanel = document.getElementById('queue-config-queue-as-panel');
+const queueConfigQueueAsInput = document.getElementById('queue-config-queue-as-input');
+const queueConfigQueueAsSuggestions = document.getElementById('queue-config-queue-as-suggestions');
 const queueAsSettingsPanel = document.getElementById('queue-as-settings-panel');
 const queueAsEnabledToggle = document.getElementById('queue-as-enabled-toggle');
 const queueAsCurrentLabel = document.getElementById('queue-as-current-label');
@@ -206,16 +209,16 @@ function getQueueAsSuggestions() {
     return Array.from(unique.values());
 }
 
-function renderQueueAsSuggestions() {
-    if (!queueAsSuggestions) {
+function renderQueueAsSuggestions(targetElement = queueAsSuggestions) {
+    if (!targetElement) {
         return;
     }
     const suggestions = getQueueAsSuggestions();
     if (!suggestions.length) {
-        queueAsSuggestions.innerHTML = `<p class="text-xs text-on-surface-variant">${escapeHtml(t('queue.queue_as_no_recent'))}</p>`;
+        targetElement.innerHTML = `<p class="text-xs text-on-surface-variant">${escapeHtml(t('queue.queue_as_no_recent'))}</p>`;
         return;
     }
-    queueAsSuggestions.innerHTML = suggestions.map((name) => `
+    targetElement.innerHTML = suggestions.map((name) => `
         <button
             type="button"
             class="queue-as-suggestion-btn inline-flex items-center rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-semibold text-on-surface transition-colors hover:text-primary"
@@ -340,6 +343,9 @@ function renderPresenceList() {
     `).join('');
     if (queueAsModal && !queueAsModal.classList.contains('hidden')) {
         renderQueueAsSuggestions();
+    }
+    if (queueConfigModal && !queueConfigModal.classList.contains('hidden')) {
+        renderQueueAsSuggestions(queueConfigQueueAsSuggestions);
     }
 }
 
@@ -754,7 +760,12 @@ function syncQueueConfirmState() {
         || ['resolved', 'not_found', 'error', 'manual'].includes(lyricsState)
         || Boolean(lyricsManager?.getSubmissionText());
     const waiting = lyricsRequired && lyricsState === 'loading';
-    const disabled = waiting || (lyricsRequired && !ready);
+    const queueAsRequired = isAdminUser
+        && queueAsEnabled
+        && modalSelection?.source !== 'local'
+        && Boolean(queueConfigQueueAsPanel)
+        && !sanitizeQueueAsName(queueConfigQueueAsInput?.value || '');
+    const disabled = waiting || (lyricsRequired && !ready) || queueAsRequired;
 
     queueConfigConfirmBtn.disabled = disabled;
     queueConfigConfirmBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
@@ -763,7 +774,9 @@ function syncQueueConfirmState() {
         ? t('queue.lyrics_resolving')
         : lyricsRequired && !ready
             ? t('queue.resolve_before_continue')
-            : t('queue.add_song_to_queue');
+            : queueAsRequired
+                ? t('queue.queue_as_required')
+                : t('queue.add_song_to_queue');
 
     queueConfigConfirmBtn.classList.toggle('bg-primary', !disabled);
     queueConfigConfirmBtn.classList.toggle('text-on-primary', !disabled);
@@ -771,6 +784,27 @@ function syncQueueConfirmState() {
     queueConfigConfirmBtn.classList.toggle('text-on-surface-variant', disabled);
 
     queueConfigConfirmBtn.innerHTML = waiting ? QUEUE_CONFIRM_LOADING_HTML : QUEUE_CONFIRM_DEFAULT_HTML;
+}
+
+function syncQueueAsInQueueConfig() {
+    const inlineQueueAsEnabled = isAdminUser
+        && queueAsEnabled
+        && modalSelection?.source !== 'local'
+        && Boolean(queueConfigQueueAsPanel);
+    if (!queueConfigQueueAsPanel) {
+        return;
+    }
+    queueConfigQueueAsPanel.classList.toggle('hidden', !inlineQueueAsEnabled);
+    if (!inlineQueueAsEnabled) {
+        return;
+    }
+    renderQueueAsSuggestions(queueConfigQueueAsSuggestions);
+    if (queueConfigQueueAsInput) {
+        const current = sanitizeQueueAsName(queueConfigQueueAsInput.value);
+        if (!current) {
+            queueConfigQueueAsInput.value = getQueueAsLastName() || getCurrentSingerName();
+        }
+    }
 }
 
 async function openQueueConfigModal(resultElement, triggerButton) {
@@ -811,6 +845,9 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     queueConfigModal.classList.add('flex');
     document.body.classList.add('overflow-hidden');
 
+    if (queueConfigQueueAsInput) {
+        queueConfigQueueAsInput.value = getQueueAsLastName() || getCurrentSingerName();
+    }
     syncQueueConfigModalUi();
 
     if (lyricsManager.state.lyricsEnabled && modalKaraokeEnabled && lyricsManager.shouldAutoResolve()) {
@@ -922,9 +959,17 @@ function displaySearchResults(results) {
 }
 
 async function addToQueueFromModal(selection, buttonElement) {
-    return submitQueueItemWithQueueAs(selection, buttonElement, {
+    const queueAsName = isAdminUser && queueAsEnabled && selection?.source !== 'local'
+        ? sanitizeQueueAsName(queueConfigQueueAsInput?.value || '')
+        : null;
+    if (queueAsName) {
+        setQueueAsLastName(queueAsName);
+        updateQueueAsCurrentLabel(queueAsName);
+    }
+    return submitQueueItem(selection, buttonElement, {
         isKaraoke: modalKaraokeEnabled,
         lyricsEnabled: Boolean(lyricsManager?.state.lyricsEnabled),
+        queueAsName,
     });
 }
 
@@ -977,6 +1022,7 @@ function syncQueueConfigModalUi() {
             queueConfigLyricsDetail.textContent = t('queue.lyrics_detail');
         }
     }
+    syncQueueAsInQueueConfig();
 
     syncQueueConfirmState();
 }
@@ -1118,6 +1164,24 @@ if (queueConfigLyricsToggle) {
         }
 
         syncQueueConfigModalUi();
+    });
+}
+
+if (queueConfigQueueAsSuggestions) {
+    queueConfigQueueAsSuggestions.addEventListener('click', (event) => {
+        const button = event.target.closest('.queue-as-suggestion-btn');
+        if (!button || !queueConfigQueueAsInput) {
+            return;
+        }
+        queueConfigQueueAsInput.value = sanitizeQueueAsName(button.dataset.queueAsName);
+        queueConfigQueueAsInput.focus();
+        syncQueueConfirmState();
+    });
+}
+
+if (queueConfigQueueAsInput) {
+    queueConfigQueueAsInput.addEventListener('input', () => {
+        syncQueueConfirmState();
     });
 }
 

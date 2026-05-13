@@ -199,6 +199,7 @@
   "queue.queue_as_modal_title": "Queue As",
   "queue.queue_as_no_recent": "No recent guests online yet.",
   "queue.queue_as_recent": "Recent guests",
+  "queue.queue_as_required": "Choose a queue-as name before adding this song",
   "queue.queue_as_setting_detail": "Prompt for a requester name on each add (this device only).",
   "queue.queue_as_setting_label": "Queue As Prompt",
   "queue.remote": "Remote",
