@@ -451,6 +451,7 @@ let hardSyncInProgress = false;
 let initialMultitrackResyncCompleted = !vocalsAvailable;
 let currentPrimaryKind = null;
 let currentPrimarySrc = null;
+let lastPlaybackStateBroadcastAt = 0;
 const SOFT_DRIFT_THRESHOLD_SECONDS = 0.12;
 const MEDIA_SEEK_TIMEOUT_MS = 1200;
 const MEDIA_READY_TIMEOUT_MS = 1200;
@@ -936,6 +937,27 @@ function syncVocalsToVideo(forceSeek = false) {
     }
     vocalsAudio.play().catch((error) => {
         console.warn("Vocals playback start blocked:", error);
+    });
+}
+
+function sendPlaybackTimeUpdate(force = false) {
+    const primary = getPrimaryPlayer();
+    if (!primary) {
+        return;
+    }
+    const now = performance.now();
+    if (!force && now - lastPlaybackStateBroadcastAt < 250) {
+        return;
+    }
+    lastPlaybackStateBroadcastAt = now;
+    sendStageCommandRaw({
+        type: "stage_time_update",
+        data: {
+            current_time: primary.currentTime || 0,
+            is_paused: primary.paused,
+            source: "stage",
+        },
+        timestamp: Date.now(),
     });
 }
 
@@ -1516,6 +1538,7 @@ function bindPrimaryMediaEvents(mediaElement) {
         if (mediaElement !== getPrimaryPlayer()) {
             return;
         }
+        sendPlaybackTimeUpdate(true);
         if (await runInitialMultitrackResync()) {
             return;
         }
@@ -1531,6 +1554,7 @@ function bindPrimaryMediaEvents(mediaElement) {
         if (mediaElement !== getPrimaryPlayer()) {
             return;
         }
+        sendPlaybackTimeUpdate(true);
         stopSyncTimer();
         stopLyricsTicker();
         if (vocalsAudio && !vocalsAudio.paused) {
@@ -1541,12 +1565,14 @@ function bindPrimaryMediaEvents(mediaElement) {
         if (mediaElement !== getPrimaryPlayer()) {
             return;
         }
+        sendPlaybackTimeUpdate(false);
         updateLyricsForTime(mediaElement.currentTime || 0);
     });
     mediaElement.addEventListener("seeking", () => {
         if (mediaElement !== getPrimaryPlayer()) {
             return;
         }
+        sendPlaybackTimeUpdate(true);
         if (vocalsAvailable && vocalsAudio) {
             vocalsAudio.currentTime = mediaElement.currentTime || 0;
             if (mediaElement.paused && !vocalsAudio.paused) {

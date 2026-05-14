@@ -22,6 +22,7 @@ class ConnectionManager:
             "vocals_enabled": True,
             "vocals_volume": 1.0,
             "lyrics_enabled": True,
+            "current_time": 0.0,
         }
         self._sync_version = 0
 
@@ -336,6 +337,7 @@ class ConnectionManager:
                     "vocals_enabled": state["vocals_enabled"],
                     "vocals_volume": state["vocals_volume"],
                     "lyrics_enabled": state["lyrics_enabled"],
+                    "current_time": state["current_time"],
                     "source": source,
                 },
                 "timestamp": self._timestamp(),
@@ -356,6 +358,18 @@ class ConnectionManager:
     async def set_stage_paused(self, is_paused: bool, source: str = "unknown"):
         """Set paused flag and broadcast full stage state."""
         self._stage_state["is_paused"] = bool(is_paused)
+        await self.broadcast_stage_state_update(source=source)
+
+    async def set_stage_current_time(
+        self,
+        current_time: float,
+        source: str = "unknown",
+        is_paused: bool | None = None,
+    ):
+        """Set the current playback timestamp and broadcast full stage state."""
+        self._stage_state["current_time"] = max(0.0, float(current_time))
+        if isinstance(is_paused, bool):
+            self._stage_state["is_paused"] = is_paused
         await self.broadcast_stage_state_update(source=source)
 
     async def set_stage_vocals_enabled(
@@ -386,6 +400,7 @@ class ConnectionManager:
         self._stage_state["vocals_enabled"] = True
         self._stage_state["vocals_volume"] = 1.0
         self._stage_state["lyrics_enabled"] = True
+        self._stage_state["current_time"] = 0.0
         await self.broadcast_stage_state_update(source=source)
 
     def get_connection_count(self) -> int:

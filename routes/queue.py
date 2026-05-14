@@ -119,7 +119,7 @@ def get_next(db: Session = Depends(get_db)):
 
 @router.get("/{item_id}/lyrics-cues")
 def get_lyrics_cues(item_id: int, db: Session = Depends(get_db)):
-    """Get normalized timed lyric cues for a queue item."""
+    """Get normalized lyrics payload for a queue item."""
     item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Queue item not found")
@@ -130,7 +130,7 @@ def get_lyrics_cues(item_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Lyrics not available for queue item")
 
     try:
-        source_format, cues = lyrics_service.load_cues_from_media_url(lyrics_path)
+        lyrics_payload = lyrics_service.load_lyrics_payload_from_media_url(lyrics_path)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
@@ -142,8 +142,10 @@ def get_lyrics_cues(item_id: int, db: Session = Depends(get_db)):
         "item_id": item.id,
         "media_id": item.media_id,
         "lyrics_path": lyrics_path,
-        "source_format": source_format,
-        "cues": cues,
+        "source_format": lyrics_payload["source_format"],
+        "is_synced": lyrics_payload["is_synced"],
+        "cues": lyrics_payload["cues"],
+        "lines": lyrics_payload["lines"],
     }
 
 
@@ -445,8 +447,11 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         source=source,
                         extra_data=extra_data,
                     )
-                    if isinstance(is_paused, bool):
-                        await manager.set_stage_paused(is_paused=is_paused, source=source)
+                    await manager.set_stage_current_time(
+                        current_time=seek_time,
+                        source=source,
+                        is_paused=is_paused if isinstance(is_paused, bool) else None,
+                    )
                 elif command == "resync":
                     extra_data = {"sync_version": manager.next_stage_sync_version()}
                     raw_seek_time = payload.get("seek_time")
@@ -471,6 +476,12 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         source=source,
                         extra_data=extra_data,
                     )
+                    if "seek_time" in extra_data:
+                        await manager.set_stage_current_time(
+                            current_time=extra_data["seek_time"],
+                            source=source,
+                            is_paused=is_paused if isinstance(is_paused, bool) else None,
+                        )
                 elif command == "set_vocals_enabled":
                     vocals_enabled = payload.get("vocals_enabled")
                     if not isinstance(vocals_enabled, bool):
@@ -524,6 +535,55 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                 else:
                     await manager.broadcast_stage_control_command(command=command, source=source)
                     await manager.set_stage_paused(is_paused=(command == "pause"), source=source)
+                continue
+
+            if data.get("type") == "stage_time_update":
+                payload = data.get("data")
+                if not isinstance(payload, dict):
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "data": {"detail": "Invalid stage_time_update payload"},
+                            "timestamp": asyncio.get_event_loop().time(),
+                        },
+                        websocket,
+                    )
+                    continue
+
+                raw_current_time = payload.get("current_time")
+                if not isinstance(raw_current_time, (int, float)):
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "data": {"detail": "stage_time_update requires numeric current_time"},
+                            "timestamp": asyncio.get_event_loop().time(),
+                        },
+                        websocket,
+                    )
+                    continue
+                current_time = float(raw_current_time)
+                if current_time < 0.0 or not math.isfinite(current_time):
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "data": {"detail": "current_time must be a non-negative finite number"},
+                            "timestamp": asyncio.get_event_loop().time(),
+                        },
+                        websocket,
+                    )
+                    continue
+                is_paused = payload.get("is_paused")
+                if isinstance(is_paused, bool):
+                    await manager.set_stage_current_time(
+                        current_time=current_time,
+                        source=payload.get("source", "stage"),
+                        is_paused=is_paused,
+                    )
+                else:
+                    await manager.set_stage_current_time(
+                        current_time=current_time,
+                        source=payload.get("source", "stage"),
+                    )
                 continue
             
             # Handle other message types as needed

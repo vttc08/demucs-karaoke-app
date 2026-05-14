@@ -2,13 +2,20 @@
 import logging
 from fastapi import APIRouter, HTTPException
 
-from models import LyricsResolveRequest, LyricsResolveResponse
+from models import (
+    ChineseLyricsTransformRequest,
+    ChineseLyricsTransformResponse,
+    LyricsResolveRequest,
+    LyricsResolveResponse,
+)
+from services.chinese_lyrics_service import ChineseLyricsService
 from services.lyrics_service import LyricsService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/lyrics", tags=["lyrics"])
 lyrics_service = LyricsService()
+chinese_lyrics_service = ChineseLyricsService()
 
 
 @router.post("/resolve", response_model=LyricsResolveResponse)
@@ -52,3 +59,18 @@ async def resolve_lyrics(request: LyricsResolveRequest):
         lyrics=payload.lyrics,
         is_synced=payload.is_synced,
     )
+
+
+@router.post("/chinese-transform", response_model=ChineseLyricsTransformResponse)
+async def transform_chinese_lyrics(request: ChineseLyricsTransformRequest):
+    """Simplify Chinese lyrics and optionally render pinyin rows for display."""
+    try:
+        items = chinese_lyrics_service.transform_lines(
+            request.texts,
+            include_pinyin=request.include_pinyin,
+        )
+    except Exception as exc:
+        logger.exception("Chinese lyrics transform failed include_pinyin=%s", request.include_pinyin)
+        raise HTTPException(status_code=500, detail="Chinese lyrics transform failed") from exc
+
+    return ChineseLyricsTransformResponse(items=items)

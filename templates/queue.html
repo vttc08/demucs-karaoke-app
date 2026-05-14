@@ -76,6 +76,13 @@
                 <span class="min-w-0 truncate text-sm font-bold leading-none text-on-surface">{{ t('common.upload_media') }}</span>
             </a>
         </div>
+        <a
+            href="{{ app_url('/queue/lyrics') }}"
+            class="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-sm font-bold text-on-surface transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+        >
+            <span class="material-symbols-outlined text-[18px] leading-none text-primary">lyrics</span>
+            <span>{{ t('queue.open_lyrics_viewer') }}</span>
+        </a>
         <!-- Search Results -->
         <div id="search-results" class="flex flex-col gap-3"></div>
     </section>

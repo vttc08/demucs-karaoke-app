@@ -1004,8 +1004,13 @@ class LyricsService:
         cues.sort(key=lambda cue: float(cue["time"]))
         return cues
 
-    def load_cues_from_media_url(self, lyrics_url: str) -> tuple[str, list[dict[str, float | str]]]:
-        """Load and parse lyrics cues from a /media or /cache URL."""
+    @staticmethod
+    def parse_text_to_lines(payload: str) -> list[str]:
+        """Parse plain text lyrics into non-empty display lines."""
+        return [line.strip() for line in payload.splitlines() if line.strip()]
+
+    def load_lyrics_payload_from_media_url(self, lyrics_url: str) -> dict[str, object]:
+        """Load normalized lyrics payload from a /media or /cache URL."""
         lyrics_file = self._media_url_to_file(lyrics_url)
         if lyrics_file is None:
             raise ValueError("Lyrics path must be a /media or /cache URL")
@@ -1016,11 +1021,40 @@ class LyricsService:
         raw_content = lyrics_file.read_text(encoding="utf-8")
 
         if suffix == ".json":
-            return "json", self.parse_json_to_cues(raw_content)
+            cues = self.parse_json_to_cues(raw_content)
+            return {
+                "source_format": "json",
+                "is_synced": True,
+                "cues": cues,
+                "lines": [str(cue["text"]) for cue in cues],
+            }
         if suffix == ".lrc":
-            return "lrc", self.parse_lrc_to_cues(raw_content)
+            cues = self.parse_lrc_to_cues(raw_content)
+            return {
+                "source_format": "lrc",
+                "is_synced": True,
+                "cues": cues,
+                "lines": [str(cue["text"]) for cue in cues],
+            }
+        if suffix == ".txt":
+            lines = self.parse_text_to_lines(raw_content)
+            return {
+                "source_format": "txt",
+                "is_synced": False,
+                "cues": [],
+                "lines": lines,
+            }
 
         raise ValueError(f"Unsupported lyrics format: {suffix}")
+
+    def load_cues_from_media_url(self, lyrics_url: str) -> tuple[str, list[dict[str, float | str]]]:
+        """Load and parse lyrics cues from a /media or /cache URL."""
+        payload = self.load_lyrics_payload_from_media_url(lyrics_url)
+        if not payload.get("is_synced"):
+            raise ValueError(
+                f"Unsupported lyrics format for timed cues: {payload.get('source_format')}"
+            )
+        return str(payload["source_format"]), list(payload["cues"])
 
     @staticmethod
     def _media_url_to_file(media_url: str | None) -> Path | None:
