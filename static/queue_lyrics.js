@@ -7,7 +7,11 @@ const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key) => key);
 
 const main = document.querySelector("main[data-initial-item-id]");
 const liveStatus = document.getElementById("lyrics-live-status");
+const editorToggleBtn = document.getElementById("queue-lyrics-editor-toggle");
 const followLiveBtn = document.getElementById("lyrics-follow-live-btn");
+const editorShell = document.getElementById("queue-lyrics-editor-shell");
+const editorCloseBtn = document.getElementById("queue-lyrics-editor-close");
+const inferBtn = document.getElementById("queue-lyrics-infer-btn");
 const currentTitle = document.getElementById("lyrics-current-title");
 const currentArtist = document.getElementById("lyrics-current-artist");
 const modeBadge = document.getElementById("lyrics-mode-badge");
@@ -17,6 +21,26 @@ const emptyState = document.getElementById("lyrics-empty-state");
 const emptyTitle = document.getElementById("lyrics-empty-title");
 const emptyDetail = document.getElementById("lyrics-empty-detail");
 const googleLink = document.getElementById("lyrics-google-link");
+
+const EDITOR_OPEN_STORAGE_KEY = "karaoke.queueLyrics.editorOpen";
+const DRAFT_STORAGE_PREFIX = "karaoke.queueLyrics.draft:";
+const LRC_TIMESTAMP_RE = /\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]/g;
+const LRC_OFFSET_RE = /^\[offset:([+-]?\d+)\]\s*$/i;
+
+const lyricsManager = new LyricsManager({ apiBase: API_BASE });
+const lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
+    titleInput: "#lyrics-title",
+    artistInput: "#lyrics-artist",
+    textarea: "#lyrics-textarea",
+    stateLabel: "#lyrics-state",
+    providerLabel: "#lyrics-provider",
+    helpText: "#lyrics-help",
+    searchBtn: "#lyrics-search-btn",
+    uploadBtn: "#lyrics-upload-btn",
+    fileInput: "#lyrics-file",
+    googleLink: "#lyrics-google-link",
+    panel: "#lyrics-panel",
+});
 
 let ws = null;
 let currentItem = null;
@@ -28,11 +52,78 @@ let activeCueIndex = null;
 let followLive = true;
 let suppressScrollEvent = false;
 let suppressScrollResetTimer = null;
-
 let paused = false;
 let basePlaybackSeconds = 0;
 let playbackAnchorMs = performance.now();
 let tickerId = null;
+let editorVisible = readEditorVisibility();
+let initialLoadCompleted = false;
+let isHydratingLyrics = false;
+
+lyricsManager.setEnabled(true);
+lyricsUIAdapter.initialize();
+lyricsManager.on(() => {
+    if (isHydratingLyrics) {
+        return;
+    }
+    persistDraftForCurrentItem();
+    syncViewerFromLyricsState();
+});
+updateEditorVisibilityUi();
+syncEditorToggleLabel();
+
+function safeSessionStorageGet(key) {
+    try {
+        return window.sessionStorage.getItem(key);
+    } catch (_) {
+        return null;
+    }
+}
+
+function safeSessionStorageSet(key, value) {
+    try {
+        window.sessionStorage.setItem(key, value);
+    } catch (_) {
+        // Session persistence is best-effort only.
+    }
+}
+
+function safeSessionStorageRemove(key) {
+    try {
+        window.sessionStorage.removeItem(key);
+    } catch (_) {
+        // Session persistence is best-effort only.
+    }
+}
+
+function readEditorVisibility() {
+    return safeSessionStorageGet(EDITOR_OPEN_STORAGE_KEY) === "true";
+}
+
+function persistEditorVisibility(visible) {
+    safeSessionStorageSet(EDITOR_OPEN_STORAGE_KEY, visible ? "true" : "false");
+}
+
+function syncEditorToggleLabel() {
+    if (!editorToggleBtn) {
+        return;
+    }
+    editorToggleBtn.textContent = editorVisible ? t("queue_lyrics.hide_editor") : t("queue_lyrics.edit_lyrics");
+}
+
+function updateEditorVisibilityUi() {
+    if (!editorShell) {
+        return;
+    }
+    editorShell.classList.toggle("hidden", !editorVisible);
+    syncEditorToggleLabel();
+}
+
+function setEditorVisible(visible) {
+    editorVisible = Boolean(visible);
+    persistEditorVisibility(editorVisible);
+    updateEditorVisibilityUi();
+}
 
 function escapeHtml(value) {
     const div = document.createElement("div");
@@ -96,7 +187,7 @@ function setPlaybackClock(seconds, nextPaused = null) {
     } else if (!paused) {
         startTicker();
     }
-    updateActiveCue();
+    updateActiveCue(true);
 }
 
 function setPaused(nextPaused) {
@@ -119,24 +210,20 @@ function setSeekTime(seconds) {
     setPlaybackClock(seconds);
 }
 
-function resetPlaybackClock() {
-    basePlaybackSeconds = 0;
-    playbackAnchorMs = performance.now();
-}
-
-function findActiveCueIndex(currentSeconds) {
+function findActiveLyricCueIndex(currentTime) {
     if (!cues.length) {
         return null;
     }
-    if (currentSeconds < cues[0].time) {
+    if (currentTime < cues[0].time) {
         return -1;
     }
+
     let left = 0;
     let right = cues.length - 1;
     let best = 0;
     while (left <= right) {
         const mid = Math.floor((left + right) / 2);
-        if (cues[mid].time <= currentSeconds) {
+        if (cues[mid].time <= currentTime) {
             best = mid;
             left = mid + 1;
         } else {
@@ -173,7 +260,7 @@ function updateActiveCue(forceScroll = false) {
     if (!isSynced || !cues.length || !lyricsLines) {
         return;
     }
-    const nextIndex = findActiveCueIndex(getPlaybackSeconds());
+    const nextIndex = findActiveLyricCueIndex(getPlaybackSeconds());
     if (nextIndex === activeCueIndex && !forceScroll) {
         return;
     }
@@ -266,7 +353,7 @@ function renderSyncedLyrics() {
     setModeBadge(t("queue_lyrics.timed_mode"));
     setEmptyStateVisible(false);
     activeCueIndex = null;
-    updateActiveCue();
+    updateActiveCue(true);
     if (!paused) {
         startTicker();
     }
@@ -293,6 +380,219 @@ function normalizeCue(rawCue) {
     return { time: Math.max(0, time), text };
 }
 
+function parseLrcLyrics(text) {
+    let offsetMs = 0;
+    const parsed = [];
+    for (const rawLine of String(text || "").split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line) {
+            continue;
+        }
+
+        const offsetMatch = LRC_OFFSET_RE.exec(line);
+        if (offsetMatch) {
+            offsetMs = Number(offsetMatch[1]) || 0;
+            continue;
+        }
+
+        const timestamps = [...line.matchAll(LRC_TIMESTAMP_RE)];
+        if (!timestamps.length) {
+            continue;
+        }
+
+        const cueText = line.replace(LRC_TIMESTAMP_RE, "").trim();
+        if (!cueText) {
+            continue;
+        }
+
+        timestamps.forEach((match) => {
+            const minutes = Number(match[1]);
+            const seconds = Number(match[2]);
+            if (!Number.isFinite(minutes) || !Number.isFinite(seconds) || seconds >= 60) {
+                return;
+            }
+            const fractionRaw = match[3] || "";
+            const fraction = fractionRaw ? Number(fractionRaw) / (10 ** fractionRaw.length) : 0;
+            const totalSeconds = minutes * 60 + seconds + fraction + (offsetMs / 1000);
+            if (Number.isFinite(totalSeconds) && totalSeconds >= 0) {
+                parsed.push({ time: totalSeconds, text: cueText });
+            }
+        });
+    }
+
+    parsed.sort((a, b) => a.time - b.time);
+    return parsed;
+}
+
+function parsePlainLyrics(text) {
+    return String(text || "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+}
+
+function formatLrcTimestamp(seconds) {
+    const totalHundredths = Math.max(0, Math.round(Number(seconds || 0) * 100));
+    const minutes = Math.floor(totalHundredths / 6000);
+    const remainingHundredths = totalHundredths % 6000;
+    const wholeSeconds = Math.floor(remainingHundredths / 100);
+    const hundredths = remainingHundredths % 100;
+    return `${String(minutes).padStart(2, "0")}:${String(wholeSeconds).padStart(2, "0")}.${String(hundredths).padStart(2, "0")}`;
+}
+
+function cuesToLrc(cueRows) {
+    return cueRows
+        .map((cue) => `[${formatLrcTimestamp(cue.time)}]${cue.text}`)
+        .join("\n");
+}
+
+function payloadToEditorText(payload) {
+    if (!payload) {
+        return "";
+    }
+    if (payload.source_format === "txt") {
+        return Array.isArray(payload.lines) ? payload.lines.join("\n") : "";
+    }
+    if (Array.isArray(payload.cues) && payload.cues.length > 0) {
+        const normalized = payload.cues.map(normalizeCue).filter((cue) => cue !== null);
+        return cuesToLrc(normalized);
+    }
+    if (Array.isArray(payload.lines)) {
+        return payload.lines.join("\n");
+    }
+    return "";
+}
+
+function deriveLyricsSourceFromState(state) {
+    const text = String(state?.text || "").trim();
+    if (!text) {
+        return null;
+    }
+
+    const format = state?.format || "txt";
+    const inferredSynced = format === "lrc" || LyricsManager.inferFormat(text) === "lrc";
+    if (inferredSynced) {
+        const parsedCues = parseLrcLyrics(text);
+        if (parsedCues.length > 0) {
+            return {
+                isSynced: true,
+                cues: parsedCues,
+                lines: parsedCues.map((cue) => cue.text),
+            };
+        }
+    }
+
+    const parsedLines = parsePlainLyrics(text);
+    if (!parsedLines.length) {
+        return null;
+    }
+    return {
+        isSynced: false,
+        cues: [],
+        lines: parsedLines,
+    };
+}
+
+function persistDraftForCurrentItem() {
+    if (!currentItemId) {
+        return;
+    }
+    const state = lyricsManager.getState();
+    const snapshot = {
+        title: String(state.title || "").trim(),
+        artist: String(state.artist || "").trim(),
+        provider: String(state.provider || "").trim(),
+        text: String(state.text || "").trim(),
+        format: state.format || "txt",
+        isSynced: Boolean(state.isSynced),
+    };
+    const hasContent = Boolean(snapshot.text || snapshot.title || snapshot.artist || snapshot.provider);
+    const storageKey = `${DRAFT_STORAGE_PREFIX}${currentItemId}`;
+    if (!hasContent) {
+        safeSessionStorageRemove(storageKey);
+        return;
+    }
+    safeSessionStorageSet(storageKey, JSON.stringify(snapshot));
+}
+
+function loadDraftForItem(itemId) {
+    if (!itemId) {
+        return null;
+    }
+    const storageKey = `${DRAFT_STORAGE_PREFIX}${itemId}`;
+    const raw = safeSessionStorageGet(storageKey);
+    if (!raw) {
+        return null;
+    }
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function seedLyricsManagerForCurrentItem(payload) {
+    const title = currentItem?.title || "";
+    const artist = currentItem?.artist || "";
+    const draft = loadDraftForItem(currentItemId);
+
+    isHydratingLyrics = true;
+    try {
+        if (draft) {
+            lyricsManager.setMetadata(draft.title || title, draft.artist || artist, title);
+            lyricsManager.setLyricsDraft(draft.text || "", draft.provider || "", {
+                format: draft.format || "txt",
+                isSynced: typeof draft.isSynced === "boolean" ? draft.isSynced : false,
+                lyricsState: draft.text ? "manual" : "idle",
+            });
+            return;
+        }
+
+        lyricsManager.setMetadata(title, artist, title);
+        const seedText = payloadToEditorText(payload);
+        if (seedText) {
+            lyricsManager.setLyricsDraft(seedText, `saved:${payload?.source_format || "txt"}`, {
+                format: payload?.source_format === "txt" ? "txt" : "lrc",
+                isSynced: Boolean(payload?.is_synced),
+                lyricsState: "manual",
+            });
+            return;
+        }
+
+        lyricsManager.setLyricsDraft("", "", {
+            format: "txt",
+            isSynced: false,
+            lyricsState: "idle",
+        });
+    } finally {
+        isHydratingLyrics = false;
+    }
+
+    persistDraftForCurrentItem();
+    syncViewerFromLyricsState();
+}
+
+function syncViewerFromLyricsState() {
+    const source = deriveLyricsSourceFromState(lyricsManager.getState());
+    if (!source) {
+        cues = [];
+        lines = [];
+        isSynced = false;
+        renderNoLyricsState(currentItem);
+        return;
+    }
+
+    cues = source.cues;
+    lines = source.lines;
+    isSynced = source.isSynced;
+    if (isSynced) {
+        renderSyncedLyrics();
+        return;
+    }
+    renderUnsyncedLyrics();
+}
+
 async function fetchLyricsPayload(itemId) {
     const response = await fetch(`${API_BASE}/api/queue/${itemId}/lyrics-cues`);
     if (!response.ok) {
@@ -312,36 +612,24 @@ async function refreshCurrentItem() {
     setNowPlaying(currentItem);
 
     if (!currentItemId) {
+        isHydratingLyrics = true;
+        try {
+            lyricsManager.setMetadata("", "", "");
+            lyricsManager.setLyricsDraft("", "", {
+                format: "txt",
+                isSynced: false,
+                lyricsState: "idle",
+            });
+        } finally {
+            isHydratingLyrics = false;
+        }
         renderNoLyricsState(null);
         return;
     }
 
     const payload = await fetchLyricsPayload(currentItemId);
-    if (!payload) {
-        renderNoLyricsState(currentItem);
-        return;
-    }
-
-    isSynced = Boolean(payload.is_synced);
-    cues = Array.isArray(payload.cues)
-        ? payload.cues.map(normalizeCue).filter((cue) => cue !== null).sort((a, b) => a.time - b.time)
-        : [];
-    lines = Array.isArray(payload.lines)
-        ? payload.lines.map((line) => String(line || "").trim()).filter(Boolean)
-        : [];
-
-    followLive = true;
-    updateFollowLiveButton();
-
-    if (isSynced && cues.length > 0) {
-        renderSyncedLyrics();
-        return;
-    }
-    if (lines.length > 0) {
-        renderUnsyncedLyrics();
-        return;
-    }
-    renderNoLyricsState(currentItem);
+    seedLyricsManagerForCurrentItem(payload);
+    initialLoadCompleted = true;
 }
 
 function handleSocketMessage(message) {
@@ -434,6 +722,42 @@ function connectSocket() {
     };
 }
 
+function getInferenceSeed() {
+    const mediaPath = currentItem?.media_path || "";
+    const pathSource = mediaPath ? mediaPath.split("?")[0].split("/").pop() || "" : "";
+    const pathStem = pathSource.replace(/\.[^.]+$/, "").trim();
+    if (pathStem) {
+        return pathStem;
+    }
+    const title = lyricsManager.getState().title || currentItem?.title || "";
+    return String(title || "").trim();
+}
+
+async function inferMetadataFromFilename() {
+    const seed = getInferenceSeed();
+    if (!seed) {
+        return;
+    }
+
+    if (inferBtn) {
+        inferBtn.disabled = true;
+    }
+    try {
+        const response = await fetch(`${API_BASE}/api/search/infer?title=${encodeURIComponent(seed)}`);
+        if (!response.ok) {
+            throw new Error(`Metadata inference failed: ${response.status}`);
+        }
+        const data = await response.json();
+        lyricsManager.setMetadata(data.title || seed, data.artist || "", seed);
+    } catch (error) {
+        console.warn("Lyrics metadata inference failed:", error);
+    } finally {
+        if (inferBtn) {
+            inferBtn.disabled = false;
+        }
+    }
+}
+
 if (scrollContainer) {
     scrollContainer.addEventListener("scroll", () => {
         if (!isSynced || suppressScrollEvent || !followLive) {
@@ -448,11 +772,33 @@ followLiveBtn?.addEventListener("click", () => {
     followLive = true;
     updateFollowLiveButton();
     updateActiveCue(true);
-    scrollToActiveCue();
 });
 
-refreshCurrentItem().catch((error) => {
-    console.warn("Initial lyrics viewer load failed:", error);
-    renderNoLyricsState(currentItem);
+editorToggleBtn?.addEventListener("click", () => {
+    setEditorVisible(!editorVisible);
+    if (editorVisible) {
+        window.setTimeout(() => {
+            document.getElementById("lyrics-title")?.focus();
+        }, 0);
+    }
 });
+
+editorCloseBtn?.addEventListener("click", () => {
+    setEditorVisible(false);
+});
+
+inferBtn?.addEventListener("click", () => {
+    inferMetadataFromFilename().catch((error) => {
+        console.warn("Failed to infer lyrics metadata from filename:", error);
+    });
+});
+
+refreshCurrentItem()
+    .catch((error) => {
+        console.warn("Initial lyrics viewer load failed:", error);
+        renderNoLyricsState(currentItem);
+    })
+    .finally(() => {
+        initialLoadCompleted = true;
+    });
 connectSocket();

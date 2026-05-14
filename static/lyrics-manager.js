@@ -122,13 +122,21 @@ class LyricsManager {
    * Set manual lyrics text (from editor or upload)
    */
   setManualLyrics(text, providerInfo = '') {
+    this.setLyricsDraft(text, providerInfo, { lyricsState: 'manual' });
+  }
+
+  /**
+   * Set lyrics content without forcing a backend-save workflow.
+   */
+  setLyricsDraft(text, providerInfo = '', options = {}) {
     this.cancelInFlight();
     const trimmedText = (text || '').trim();
+    const format = options.format || LyricsManager.inferFormat(trimmedText);
     this.state.text = trimmedText;
-    this.state.format = LyricsManager.inferFormat(trimmedText);
+    this.state.format = format;
     this.state.provider = providerInfo;
-    this.state.isSynced = this.state.format === 'lrc';
-    this.state.lyricsState = 'manual';
+    this.state.isSynced = typeof options.isSynced === 'boolean' ? options.isSynced : format === 'lrc';
+    this.state.lyricsState = options.lyricsState || (trimmedText ? 'manual' : 'idle');
     this.notifyListeners();
   }
 
