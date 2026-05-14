@@ -181,6 +181,37 @@ function setPinyinDisplayEnabled(enabled) {
     scheduleDisplayRefresh();
 }
 
+function applyLyricsDraft(manager, text, providerInfo, options = {}) {
+    if (!manager) {
+        return;
+    }
+    if (typeof manager.setLyricsDraft === "function") {
+        manager.setLyricsDraft(text, providerInfo, options);
+        return;
+    }
+    if (typeof manager.setManualLyrics === "function") {
+        manager.setManualLyrics(text, providerInfo);
+        return;
+    }
+
+    // Compatibility fallback for older manager bundles.
+    const trimmedText = String(text || "").trim();
+    const inferredFormat = options.format || LyricsManager.inferFormat(trimmedText);
+    if (typeof manager.cancelInFlight === "function") {
+        manager.cancelInFlight();
+    }
+    if (manager.state && typeof manager.state === "object") {
+        manager.state.text = trimmedText;
+        manager.state.format = inferredFormat;
+        manager.state.provider = providerInfo || "";
+        manager.state.isSynced = typeof options.isSynced === "boolean" ? options.isSynced : inferredFormat === "lrc";
+        manager.state.lyricsState = options.lyricsState || (trimmedText ? "manual" : "idle");
+    }
+    if (typeof manager.notifyListeners === "function") {
+        manager.notifyListeners();
+    }
+}
+
 function escapeHtml(value) {
     const div = document.createElement("div");
     div.textContent = String(value || "");
@@ -717,7 +748,7 @@ function seedLyricsManagerForCurrentItem(payload) {
     try {
         if (draft) {
             lyricsManager.setMetadata(draft.title || title, draft.artist || artist, title);
-            lyricsManager.setLyricsDraft(draft.text || "", draft.provider || "", {
+            applyLyricsDraft(lyricsManager, draft.text || "", draft.provider || "", {
                 format: draft.format || "txt",
                 isSynced: typeof draft.isSynced === "boolean" ? draft.isSynced : false,
                 lyricsState: draft.text ? "manual" : "idle",
@@ -728,7 +759,7 @@ function seedLyricsManagerForCurrentItem(payload) {
         lyricsManager.setMetadata(title, artist, title);
         const seedText = payloadToEditorText(payload);
         if (seedText) {
-            lyricsManager.setLyricsDraft(seedText, `saved:${payload?.source_format || "txt"}`, {
+            applyLyricsDraft(lyricsManager, seedText, `saved:${payload?.source_format || "txt"}`, {
                 format: payload?.source_format === "txt" ? "txt" : "lrc",
                 isSynced: Boolean(payload?.is_synced),
                 lyricsState: "manual",
@@ -736,7 +767,7 @@ function seedLyricsManagerForCurrentItem(payload) {
             return;
         }
 
-        lyricsManager.setLyricsDraft("", "", {
+        applyLyricsDraft(lyricsManager, "", "", {
             format: "txt",
             isSynced: false,
             lyricsState: "idle",
@@ -831,7 +862,7 @@ async function refreshCurrentItem() {
         isHydratingLyrics = true;
         try {
             lyricsManager.setMetadata("", "", "");
-            lyricsManager.setLyricsDraft("", "", {
+            applyLyricsDraft(lyricsManager, "", "", {
                 format: "txt",
                 isSynced: false,
                 lyricsState: "idle",
