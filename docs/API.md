@@ -565,6 +565,48 @@ Behavior:
 
 ---
 
+### Transform Chinese Lyrics for Display
+```
+POST /api/lyrics/chinese-transform
+```
+
+Display-only helper for the queue lyrics viewer.
+
+**Request body:**
+```json
+{
+  "texts": ["繁體中文", "Hello 世界"],
+  "include_pinyin": true
+}
+```
+
+Behavior:
+- Converts Traditional Chinese characters to Simplified Chinese.
+- Leaves non-Chinese text unchanged.
+- When `include_pinyin` is `true`, returns a pinyin rendering under each Chinese line.
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "original": "繁體中文",
+      "simplified": "繁体中文",
+      "pinyin": "fan ti zhong wen",
+      "has_chinese": true
+    },
+    {
+      "original": "Hello 世界",
+      "simplified": "Hello 世界",
+      "pinyin": "Hello shi jie",
+      "has_chinese": true
+    }
+  ]
+}
+```
+
+---
+
 ### Process Queue Item
 ```
 POST /api/queue/{item_id}/process

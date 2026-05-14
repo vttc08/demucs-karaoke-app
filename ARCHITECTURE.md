@@ -197,6 +197,9 @@ The stage page uses a websocket-first model:
 - Synced mode auto-follows playback time and highlights active lines; manual scroll pauses
   follow mode until the user re-enables it from the viewer UI.
 - Unsynced mode renders large freely scrollable text.
+- The viewer can optionally request display-only Chinese normalization from
+  `POST /api/lyrics/chinese-transform` so simplified Chinese and pinyin can be shown together
+  without changing the stored lyrics payload.
 - When no lyrics sidecar exists, viewer falls back to a lightweight empty state using
   current title/artist + external lyrics search link.
 

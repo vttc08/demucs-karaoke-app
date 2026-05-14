@@ -8,6 +8,8 @@ const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key) => key);
 const main = document.querySelector("main[data-initial-item-id]");
 const liveStatus = document.getElementById("lyrics-live-status");
 const editorToggleBtn = document.getElementById("queue-lyrics-editor-toggle");
+const chineseToggle = document.getElementById("queue-lyrics-chinese-toggle");
+const pinyinToggle = document.getElementById("queue-lyrics-pinyin-toggle");
 const followLiveBtn = document.getElementById("lyrics-follow-live-btn");
 const editorShell = document.getElementById("queue-lyrics-editor-shell");
 const editorCloseBtn = document.getElementById("queue-lyrics-editor-close");
@@ -23,6 +25,8 @@ const emptyDetail = document.getElementById("lyrics-empty-detail");
 const googleLink = document.getElementById("lyrics-google-link");
 
 const EDITOR_OPEN_STORAGE_KEY = "karaoke.queueLyrics.editorOpen";
+const CHINESE_DISPLAY_STORAGE_KEY = "karaoke.queueLyrics.chineseDisplay";
+const PINYIN_DISPLAY_STORAGE_KEY = "karaoke.queueLyrics.pinyinDisplay";
 const DRAFT_STORAGE_PREFIX = "karaoke.queueLyrics.draft:";
 const LRC_TIMESTAMP_RE = /\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]/g;
 const LRC_OFFSET_RE = /^\[offset:([+-]?\d+)\]\s*$/i;
@@ -50,12 +54,20 @@ let cues = [];
 let lines = [];
 let activeCueIndex = null;
 let followLive = true;
+let chineseDisplayEnabled = readBooleanSessionStorage(CHINESE_DISPLAY_STORAGE_KEY);
+let pinyinDisplayEnabled = readBooleanSessionStorage(PINYIN_DISPLAY_STORAGE_KEY);
+if (!chineseDisplayEnabled) {
+    pinyinDisplayEnabled = false;
+}
 let suppressScrollEvent = false;
 let suppressScrollResetTimer = null;
 let paused = false;
 let basePlaybackSeconds = 0;
 let playbackAnchorMs = performance.now();
 let tickerId = null;
+let transformRequestId = 0;
+let transformDebounceId = null;
+let renderedDisplaySource = null;
 let editorVisible = readEditorVisibility();
 let initialLoadCompleted = false;
 let isHydratingLyrics = false;
@@ -67,10 +79,15 @@ lyricsManager.on(() => {
         return;
     }
     persistDraftForCurrentItem();
+    if (chineseDisplayEnabled) {
+        scheduleDisplayRefresh();
+        return;
+    }
     syncViewerFromLyricsState();
 });
 updateEditorVisibilityUi();
 syncEditorToggleLabel();
+syncChineseDisplayControls();
 
 function safeSessionStorageGet(key) {
     try {
@@ -94,6 +111,10 @@ function safeSessionStorageRemove(key) {
     } catch (_) {
         // Session persistence is best-effort only.
     }
+}
+
+function readBooleanSessionStorage(key) {
+    return safeSessionStorageGet(key) === "true";
 }
 
 function readEditorVisibility() {
@@ -123,6 +144,41 @@ function setEditorVisible(visible) {
     editorVisible = Boolean(visible);
     persistEditorVisibility(editorVisible);
     updateEditorVisibilityUi();
+}
+
+function persistChineseDisplayVisibility() {
+    safeSessionStorageSet(CHINESE_DISPLAY_STORAGE_KEY, chineseDisplayEnabled ? "true" : "false");
+    safeSessionStorageSet(PINYIN_DISPLAY_STORAGE_KEY, pinyinDisplayEnabled ? "true" : "false");
+}
+
+function syncChineseDisplayControls() {
+    if (chineseToggle) {
+        chineseToggle.checked = chineseDisplayEnabled;
+    }
+    if (pinyinToggle) {
+        pinyinToggle.checked = pinyinDisplayEnabled;
+        pinyinToggle.disabled = !chineseDisplayEnabled;
+        pinyinToggle.closest("label")?.classList.toggle("opacity-60", !chineseDisplayEnabled);
+    }
+}
+
+function setChineseDisplayEnabled(enabled) {
+    chineseDisplayEnabled = Boolean(enabled);
+    if (!chineseDisplayEnabled) {
+        pinyinDisplayEnabled = false;
+    }
+    transformRequestId += 1;
+    persistChineseDisplayVisibility();
+    syncChineseDisplayControls();
+    scheduleDisplayRefresh();
+}
+
+function setPinyinDisplayEnabled(enabled) {
+    pinyinDisplayEnabled = Boolean(enabled) && chineseDisplayEnabled;
+    transformRequestId += 1;
+    persistChineseDisplayVisibility();
+    syncChineseDisplayControls();
+    scheduleDisplayRefresh();
 }
 
 function escapeHtml(value) {
@@ -315,11 +371,58 @@ function buildGoogleLyricsUrl(item) {
     return `https://www.google.com/search?q=${encodeURIComponent(parts.join(" "))}`;
 }
 
+function buildDisplayModeLabel(isSyncedMode) {
+    const parts = [isSyncedMode ? t("queue_lyrics.timed_mode") : t("queue_lyrics.plain_mode")];
+    if (chineseDisplayEnabled) {
+        parts.push(t("queue_lyrics.simplify_chinese"));
+        if (pinyinDisplayEnabled) {
+            parts.push(t("queue_lyrics.show_pinyin"));
+        }
+    }
+    return parts.join(" • ");
+}
+
+function normalizeDisplayItem(item) {
+    if (item && typeof item === "object") {
+        return {
+            text: typeof item.text === "string" ? item.text : "",
+            pinyin: typeof item.pinyin === "string" ? item.pinyin : "",
+        };
+    }
+    return {
+        text: typeof item === "string" ? item : "",
+        pinyin: "",
+    };
+}
+
+function renderDisplayBlocks(items, { synced = false } = {}) {
+    if (!lyricsLines) return;
+    lyricsLines.innerHTML = items
+        .map((item, index) => {
+            const normalized = normalizeDisplayItem(item);
+            const secondary = normalized.pinyin ? `
+                <p class="mt-1 text-sm leading-relaxed text-on-surface-variant sm:text-base">${escapeHtml(normalized.pinyin)}</p>
+            ` : "";
+            const cursorClass = synced ? "cursor-default" : "";
+            return `
+                <div
+                    data-cue-index="${index}"
+                    class="rounded-xl border border-transparent px-3 py-2 text-on-surface transition-colors ${cursorClass}"
+                >
+                    <p class="text-xl leading-relaxed text-inherit sm:text-2xl">${escapeHtml(normalized.text)}</p>
+                    ${secondary}
+                </div>
+            `;
+        })
+        .join("");
+}
+
 function renderNoLyricsState(item) {
     stopTicker();
     isSynced = false;
     cues = [];
     lines = [];
+    renderedDisplaySource = null;
     activeCueIndex = null;
     setModeBadge("");
     setEmptyStateVisible(true);
@@ -340,17 +443,11 @@ function renderNoLyricsState(item) {
     updateFollowLiveButton();
 }
 
-function renderSyncedLyrics() {
+function renderSyncedLyrics(displayCues = cues) {
     if (!lyricsLines) return;
-    lyricsLines.innerHTML = cues
-        .map((cue, index) => `
-            <p
-                data-cue-index="${index}"
-                class="rounded-xl border border-transparent px-3 py-2 text-xl leading-relaxed text-on-surface transition-colors sm:text-2xl"
-            >${escapeHtml(cue.text)}</p>
-        `)
-        .join("");
-    setModeBadge(t("queue_lyrics.timed_mode"));
+    stopTicker();
+    renderDisplayBlocks(displayCues, { synced: true });
+    setModeBadge(buildDisplayModeLabel(true));
     setEmptyStateVisible(false);
     activeCueIndex = null;
     updateActiveCue(true);
@@ -359,15 +456,11 @@ function renderSyncedLyrics() {
     }
 }
 
-function renderUnsyncedLyrics() {
+function renderUnsyncedLyrics(displayLines = lines) {
     if (!lyricsLines) return;
     stopTicker();
-    lyricsLines.innerHTML = lines
-        .map((line) => `
-            <p class="rounded-xl px-3 py-2 text-xl leading-relaxed text-on-surface sm:text-2xl">${escapeHtml(line)}</p>
-        `)
-        .join("");
-    setModeBadge(t("queue_lyrics.plain_mode"));
+    renderDisplayBlocks(displayLines, { synced: false });
+    setModeBadge(buildDisplayModeLabel(false));
     setEmptyStateVisible(false);
     updateFollowLiveButton();
 }
@@ -493,6 +586,89 @@ function deriveLyricsSourceFromState(state) {
     };
 }
 
+function buildDisplayTexts(source) {
+    if (!source) {
+        return [];
+    }
+    if (source.isSynced) {
+        return source.cues.map((cue) => cue.text);
+    }
+    return source.lines.slice();
+}
+
+function makeDisplaySource(source, transformedItems) {
+    if (!source || !Array.isArray(transformedItems)) {
+        return null;
+    }
+    if (source.isSynced) {
+        return {
+            isSynced: true,
+            cues: source.cues.map((cue, index) => ({
+                time: cue.time,
+                text: transformedItems[index]?.simplified || cue.text,
+                pinyin: transformedItems[index]?.pinyin || "",
+            })),
+            lines: transformedItems.map((item) => ({
+                text: item?.simplified || "",
+                pinyin: item?.pinyin || "",
+            })),
+        };
+    }
+    return {
+        isSynced: false,
+        cues: [],
+        lines: transformedItems.map((item) => ({
+            text: item?.simplified || "",
+            pinyin: item?.pinyin || "",
+        })),
+    };
+}
+
+async function fetchChineseDisplayItems(source) {
+    if (!source) {
+        return null;
+    }
+    const texts = buildDisplayTexts(source);
+    if (!texts.length) {
+        return null;
+    }
+
+    const requestId = ++transformRequestId;
+    const response = await fetch(`${API_BASE}/api/lyrics/chinese-transform`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            texts,
+            include_pinyin: pinyinDisplayEnabled,
+        }),
+    });
+    if (!response.ok) {
+        throw new Error(`Chinese transform failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    if (requestId !== transformRequestId) {
+        return null;
+    }
+    return Array.isArray(payload?.items) ? payload.items : null;
+}
+
+function clearTransformDebounce() {
+    if (transformDebounceId !== null) {
+        window.clearTimeout(transformDebounceId);
+        transformDebounceId = null;
+    }
+}
+
+function scheduleDisplayRefresh() {
+    clearTransformDebounce();
+    transformDebounceId = window.setTimeout(() => {
+        transformDebounceId = null;
+        syncViewerFromLyricsState();
+    }, 120);
+}
+
 function persistDraftForCurrentItem() {
     if (!currentItemId) {
         return;
@@ -573,24 +749,64 @@ function seedLyricsManagerForCurrentItem(payload) {
     syncViewerFromLyricsState();
 }
 
-function syncViewerFromLyricsState() {
+async function syncViewerFromLyricsState() {
     const source = deriveLyricsSourceFromState(lyricsManager.getState());
     if (!source) {
         cues = [];
         lines = [];
+        renderedDisplaySource = null;
         isSynced = false;
         renderNoLyricsState(currentItem);
         return;
     }
 
-    cues = source.cues;
-    lines = source.lines;
     isSynced = source.isSynced;
-    if (isSynced) {
-        renderSyncedLyrics();
+
+    if (!chineseDisplayEnabled) {
+        cues = source.cues;
+        lines = source.lines;
+        renderedDisplaySource = null;
+        if (isSynced) {
+            renderSyncedLyrics();
+            return;
+        }
+        renderUnsyncedLyrics();
         return;
     }
-    renderUnsyncedLyrics();
+
+    try {
+        const items = await fetchChineseDisplayItems(source);
+        if (!items) {
+            cues = source.cues;
+            lines = source.lines;
+            renderedDisplaySource = null;
+            if (isSynced) {
+                renderSyncedLyrics();
+                return;
+            }
+            renderUnsyncedLyrics();
+            return;
+        }
+
+        renderedDisplaySource = makeDisplaySource(source, items);
+        cues = renderedDisplaySource?.cues || source.cues;
+        lines = renderedDisplaySource?.lines || source.lines;
+        if (isSynced) {
+            renderSyncedLyrics(cues);
+            return;
+        }
+        renderUnsyncedLyrics(lines);
+    } catch (error) {
+        console.warn("Chinese lyrics display transform failed:", error);
+        cues = source.cues;
+        lines = source.lines;
+        renderedDisplaySource = null;
+        if (isSynced) {
+            renderSyncedLyrics();
+            return;
+        }
+        renderUnsyncedLyrics();
+    }
 }
 
 async function fetchLyricsPayload(itemId) {
@@ -791,6 +1007,14 @@ inferBtn?.addEventListener("click", () => {
     inferMetadataFromFilename().catch((error) => {
         console.warn("Failed to infer lyrics metadata from filename:", error);
     });
+});
+
+chineseToggle?.addEventListener("change", (event) => {
+    setChineseDisplayEnabled(event.target.checked);
+});
+
+pinyinToggle?.addEventListener("change", (event) => {
+    setPinyinDisplayEnabled(event.target.checked);
 });
 
 refreshCurrentItem()

@@ -28,6 +28,22 @@
                 >
                     {{ t('queue_lyrics.edit_lyrics') }}
                 </button>
+                <label class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-bold text-on-surface transition-all hover:brightness-110">
+                    <input
+                        id="queue-lyrics-chinese-toggle"
+                        type="checkbox"
+                        class="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary"
+                    >
+                    <span>{{ t('queue_lyrics.simplify_chinese') }}</span>
+                </label>
+                <label class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-bold text-on-surface transition-all hover:brightness-110">
+                    <input
+                        id="queue-lyrics-pinyin-toggle"
+                        type="checkbox"
+                        class="h-4 w-4 rounded border-outline-variant text-primary focus:ring-primary"
+                    >
+                    <span>{{ t('queue_lyrics.show_pinyin') }}</span>
+                </label>
                 <button
                     id="lyrics-follow-live-btn"
                     class="hidden rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-on-primary transition-all hover:brightness-110 active:scale-95"

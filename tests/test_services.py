@@ -10,6 +10,7 @@ from pathlib import Path
 from services.queue_service import QueueService
 from services.youtube_service import YouTubeService
 from services.karaoke_service import KaraokeService
+from services.chinese_lyrics_service import ChineseLyricsService
 from services.lyrics_service import LyricsService
 from services.demucs_client import DemucsClient
 from services.media_naming import build_media_stem
@@ -3115,6 +3116,28 @@ def test_lyrics_service_parse_json_to_cues_normalizes_shape():
         {"time": 3.4, "text": "Middle line"},
         {"time": 5.2, "text": "Later line"},
     ]
+
+
+def test_chinese_lyrics_service_simplifies_and_adds_pinyin():
+    """Chinese lyrics transformer should simplify Traditional Chinese and preserve mixed text."""
+    service = ChineseLyricsService()
+
+    items = service.transform_lines(
+        [
+            "繁體中文",
+            "Hello 世界",
+            "No Chinese here",
+        ],
+        include_pinyin=True,
+    )
+
+    assert items[0]["simplified"] == "繁体中文"
+    assert items[0]["has_chinese"] is True
+    assert items[0]["pinyin"] == "fan ti zhong wen"
+    assert items[1]["simplified"] == "Hello 世界"
+    assert items[1]["pinyin"] == "Hello shi jie"
+    assert items[2]["simplified"] == "No Chinese here"
+    assert items[2]["pinyin"] is None
 
 
 @pytest.mark.asyncio

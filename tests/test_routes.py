@@ -569,6 +569,8 @@ def test_queue_lyrics_page_loads(client):
     assert response.status_code == 200
     assert "Lyrics Viewer" in response.text
     assert 'id="lyrics-scroll-container"' in response.text
+    assert 'id="queue-lyrics-chinese-toggle"' in response.text
+    assert 'id="queue-lyrics-pinyin-toggle"' in response.text
     assert "/static/queue_lyrics.js" in response.text
     assert 'href="/queue"' in response.text
 
@@ -1969,6 +1971,38 @@ def test_get_queue_item_lyrics_cues_from_txt(client):
     finally:
         if lyrics_file.exists():
             lyrics_file.unlink()
+
+
+def test_transform_chinese_lyrics_endpoint_simplifies_and_pinyinizes(client):
+    """Chinese lyrics transform endpoint should simplify Chinese and add optional pinyin."""
+    response = client.post(
+        "/api/lyrics/chinese-transform",
+        json={
+            "texts": ["繁體中文", "Hello 世界", "Plain English"],
+            "include_pinyin": True,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"][0] == {
+        "original": "繁體中文",
+        "simplified": "繁体中文",
+        "pinyin": "fan ti zhong wen",
+        "has_chinese": True,
+    }
+    assert payload["items"][1] == {
+        "original": "Hello 世界",
+        "simplified": "Hello 世界",
+        "pinyin": "Hello shi jie",
+        "has_chinese": True,
+    }
+    assert payload["items"][2] == {
+        "original": "Plain English",
+        "simplified": "Plain English",
+        "pinyin": None,
+        "has_chinese": False,
+    }
 
 
 def test_get_queue_item_lyrics_cues_returns_404_without_lyrics(client):

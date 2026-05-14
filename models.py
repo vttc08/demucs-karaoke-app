@@ -200,6 +200,28 @@ class LyricsResolveResponse(BaseModel):
     detail: Optional[str] = None
 
 
+class ChineseLyricsTransformRequest(BaseModel):
+    """Request to simplify Chinese lyrics and optionally add pinyin."""
+
+    texts: list[str]
+    include_pinyin: bool = False
+
+
+class ChineseLyricsTransformItem(BaseModel):
+    """Transformed lyrics line for display-only rendering."""
+
+    original: str
+    simplified: str
+    pinyin: Optional[str] = None
+    has_chinese: bool = False
+
+
+class ChineseLyricsTransformResponse(BaseModel):
+    """Display-oriented Chinese lyrics transformation result."""
+
+    items: list[ChineseLyricsTransformItem]
+
+
 class QueueItemResponse(BaseModel):
     """Queue item response."""
 

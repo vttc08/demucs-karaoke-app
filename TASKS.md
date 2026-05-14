@@ -74,7 +74,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [ ] show progress for ytdlp and demucs
 - [x] customize lyric tracks behavior
 - [x] lyrics-assisted add-to-queue flow with manual lyrics override
-- [ ] lyrics display page/modal for current song (synced and unsynced) (lyrics viewer screen)
+- [x] lyrics display page/modal for current song (synced and unsynced) (lyrics viewer screen)
 - [ ] implement lyrics and karaoke demucs behavior for upload and media management 
 - [ ] i frame only video previewer and editor (vibestudio editor)
 - [ ] add vocals to existing karaoke video (audio synchronization)

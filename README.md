@@ -130,6 +130,7 @@ and `/static/...`.
       - Synced `.lrc` / `.json` lyrics highlight and auto-follow playback time
       - Manual scrolling pauses auto-follow until **Follow live** is tapped
       - Unsynced `.txt` lyrics render as large, freely scrollable text
+      - Optional simplified-Chinese and pinyin display toggles re-render Chinese lyrics only, leaving non-Chinese text unchanged
       - If no lyrics sidecar is present, the page shows title/artist plus a Google lyrics link
 
 3. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
