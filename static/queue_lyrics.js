@@ -68,6 +68,7 @@ let tickerId = null;
 let transformRequestId = 0;
 let transformDebounceId = null;
 let renderedDisplaySource = null;
+let currentDisplaySource = null;
 let editorVisible = readEditorVisibility();
 let initialLoadCompleted = false;
 let isHydratingLyrics = false;
@@ -79,11 +80,6 @@ lyricsManager.on(() => {
         return;
     }
     persistDraftForCurrentItem();
-    if (chineseDisplayEnabled) {
-        scheduleDisplayRefresh();
-        return;
-    }
-    syncViewerFromLyricsState();
 });
 updateEditorVisibilityUi();
 syncEditorToggleLabel();
@@ -194,7 +190,7 @@ function applyLyricsDraft(manager, text, providerInfo, options = {}) {
         return;
     }
 
-    // Compatibility fallback for older manager bundles.
+// Compatibility fallback for older manager bundles.
     const trimmedText = String(text || "").trim();
     const inferredFormat = options.format || LyricsManager.inferFormat(trimmedText);
     if (typeof manager.cancelInFlight === "function") {
@@ -587,34 +583,40 @@ function payloadToEditorText(payload) {
     return "";
 }
 
-function deriveLyricsSourceFromState(state) {
-    const text = String(state?.text || "").trim();
-    if (!text) {
+function buildDisplaySourceFromPayload(payload) {
+    if (!payload) {
         return null;
     }
 
-    const format = state?.format || "txt";
-    const inferredSynced = format === "lrc" || LyricsManager.inferFormat(text) === "lrc";
-    if (inferredSynced) {
-        const parsedCues = parseLrcLyrics(text);
-        if (parsedCues.length > 0) {
-            return {
-                isSynced: true,
-                cues: parsedCues,
-                lines: parsedCues.map((cue) => cue.text),
-            };
-        }
-    }
+    const normalizedCues = Array.isArray(payload.cues)
+        ? payload.cues.map(normalizeCue).filter((cue) => cue !== null).sort((a, b) => a.time - b.time)
+        : [];
+    const normalizedLines = Array.isArray(payload.lines)
+        ? payload.lines.map((line) => String(line || "").trim()).filter(Boolean)
+        : [];
 
-    const parsedLines = parsePlainLyrics(text);
-    if (!parsedLines.length) {
-        return null;
+    if (payload.is_synced && normalizedCues.length > 0) {
+        return {
+            isSynced: true,
+            cues: normalizedCues,
+            lines: normalizedCues.map((cue) => cue.text),
+        };
     }
-    return {
-        isSynced: false,
-        cues: [],
-        lines: parsedLines,
-    };
+    if (normalizedLines.length > 0) {
+        return {
+            isSynced: false,
+            cues: [],
+            lines: normalizedLines,
+        };
+    }
+    if (normalizedCues.length > 0) {
+        return {
+            isSynced: true,
+            cues: normalizedCues,
+            lines: normalizedCues.map((cue) => cue.text),
+        };
+    }
+    return null;
 }
 
 function buildDisplayTexts(source) {
@@ -696,7 +698,7 @@ function scheduleDisplayRefresh() {
     clearTransformDebounce();
     transformDebounceId = window.setTimeout(() => {
         transformDebounceId = null;
-        syncViewerFromLyricsState();
+        renderCurrentLyricsSource();
     }, 120);
 }
 
@@ -777,11 +779,10 @@ function seedLyricsManagerForCurrentItem(payload) {
     }
 
     persistDraftForCurrentItem();
-    syncViewerFromLyricsState();
 }
 
-async function syncViewerFromLyricsState() {
-    const source = deriveLyricsSourceFromState(lyricsManager.getState());
+async function renderCurrentLyricsSource() {
+    const source = currentDisplaySource;
     if (!source) {
         cues = [];
         lines = [];
@@ -870,12 +871,15 @@ async function refreshCurrentItem() {
         } finally {
             isHydratingLyrics = false;
         }
+        currentDisplaySource = null;
         renderNoLyricsState(null);
         return;
     }
 
     const payload = await fetchLyricsPayload(currentItemId);
+    currentDisplaySource = buildDisplaySourceFromPayload(payload);
     seedLyricsManagerForCurrentItem(payload);
+    await renderCurrentLyricsSource();
     initialLoadCompleted = true;
 }
 
