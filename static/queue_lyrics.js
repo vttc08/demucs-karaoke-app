@@ -27,6 +27,7 @@ let lines = [];
 let activeCueIndex = null;
 let followLive = true;
 let suppressScrollEvent = false;
+let suppressScrollResetTimer = null;
 
 let paused = false;
 let basePlaybackSeconds = 0;
@@ -158,18 +159,22 @@ function scrollToActiveCue() {
     const target = scrollContainer.querySelector(`[data-cue-index="${activeCueIndex}"]`);
     if (!target) return;
     suppressScrollEvent = true;
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
-    window.setTimeout(() => {
+    if (suppressScrollResetTimer !== null) {
+        window.clearTimeout(suppressScrollResetTimer);
+    }
+    target.scrollIntoView({ behavior: "auto", block: "center" });
+    suppressScrollResetTimer = window.setTimeout(() => {
         suppressScrollEvent = false;
-    }, 250);
+        suppressScrollResetTimer = null;
+    }, 150);
 }
 
-function updateActiveCue() {
+function updateActiveCue(forceScroll = false) {
     if (!isSynced || !cues.length || !lyricsLines) {
         return;
     }
     const nextIndex = findActiveCueIndex(getPlaybackSeconds());
-    if (nextIndex === activeCueIndex) {
+    if (nextIndex === activeCueIndex && !forceScroll) {
         return;
     }
 
@@ -442,7 +447,8 @@ if (scrollContainer) {
 followLiveBtn?.addEventListener("click", () => {
     followLive = true;
     updateFollowLiveButton();
-    updateActiveCue();
+    updateActiveCue(true);
+    scrollToActiveCue();
 });
 
 refreshCurrentItem().catch((error) => {
