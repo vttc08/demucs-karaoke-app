@@ -7,6 +7,7 @@ Lightweight AI-powered karaoke application for home use.
 - **Mobile Queue Page**: Search YouTube, add songs to queue
 - **Stage Page**: Auto-play queue with karaoke mode
 - **Karaoke Mode**: Vocal removal + optional sidecar lyrics overlay
+- **Queue Lyrics Viewer**: Phone-friendly lyrics page for the currently playing song (synced + unsynced)
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
 - **Live Queue Presence**: Queue page shows active guests and join toasts in real time
@@ -118,12 +119,20 @@ and `/static/...`.
     - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, a Google search link, an editable lyrics box, and lyrics file upload before adding to queue; resolved metadata is saved back into the media entry before queueing
      - Confirm to add to queue
      - Queue items show who requested them
+      - Open **Lyrics Viewer** from the queue page to read current-song lyrics on phone/secondary display
      - Use remote stage controls, including lyrics on/off, for the currently playing item
     - Admin users can clear queued songs, remove individual queued items, and move non-playing queue items up or down
     - Guest users can remove only their own non-playing queue items from the queue page
     - Queue status updates in real time (downloading, processing, ready, playing, failed)
    
-2. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
+2. **Queue Lyrics Viewer** (Mobile/Desktop): Open `http://<server-ip>:8000/queue/lyrics`
+      - Dedicated lyrics companion view for the currently playing queue item
+      - Synced `.lrc` / `.json` lyrics highlight and auto-follow playback time
+      - Manual scrolling pauses auto-follow until **Follow live** is tapped
+      - Unsynced `.txt` lyrics render as large, freely scrollable text
+      - If no lyrics sidecar is present, the page shows title/artist plus a Google lyrics link
+
+3. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
      - Requires an admin session created by the server-managed admin login flow
      - Presentation-first stage output with fullscreen-optimized player
      - Always-on playback shell: queue items switch in-place without full page reload, so fullscreen is preserved during track transitions
@@ -135,7 +144,7 @@ and `/static/...`.
      - Auto-advances when song ends
    - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling
 
-3. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
+4. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
        - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
        - View current runtime settings
        - Log out of the active admin session from the settings page
@@ -148,7 +157,7 @@ and `/static/...`.
        - Persist changes to the database so settings survive app reloads and restarts
        - View real-time Demucs engine health (online/offline with detail)
 
-4. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
+5. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
          - Browse existing database-backed media entries in responsive card/table layouts
          - View title, artist, and capability badges (multi-track, lyrics)
          - Local audio files reuse embedded album art as the thumbnail when cached cover art is available
@@ -158,7 +167,7 @@ and `/static/...`.
          - Trigger **Scan Library** to reconcile DB with filesystem on demand
          - App also performs one media-library scan on startup/restart
 
-5. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
+6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
         - Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files into the media library with title and artist metadata
         - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use
         - If **Add to queue** and **AI Karaoke** are enabled, the uploaded item is queued with karaoke processing requested
@@ -166,11 +175,11 @@ and `/static/...`.
         - Uploaded audio files generate cached cover thumbnails immediately when embedded album art is present
         - Successful uploads redirect to the media management page
 
-6. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`
+7. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`
         - Static reverse-proxy gate page for users who are outside the approved home network
         - Explains the Wi-Fi / WAN IP check and common masking tools like iCloud Private Relay, Clash, and V2Ray
 
-7. **Login Page**: Open `http://<server-ip>:8000/login`
+8. **Login Page**: Open `http://<server-ip>:8000/login`
         - Guest identification happens inline on the queue page.
         - Admins sign in with a server-created account stored in the local database.
         - Admin credentials cannot be created from the web UI.

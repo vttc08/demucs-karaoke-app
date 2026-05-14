@@ -228,6 +228,19 @@ async def queue_page(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/queue/lyrics", response_class=HTMLResponse)
+async def queue_lyrics_page(request: Request, db: Session = Depends(get_db)):
+    """Queue-side lyrics viewer page for the currently playing item."""
+    current_item = queue_service.get_current_item(db)
+    return templates.TemplateResponse(
+        "queue_lyrics.html",
+        {
+            "request": request,
+            "current": current_item,
+        },
+    )
+
+
 @router.get("/stage", response_class=HTMLResponse)
 async def stage_page(request: Request, db: Session = Depends(get_db)):
     """Presentation-first stage player page."""

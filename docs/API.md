@@ -60,7 +60,22 @@ Allowed `command` values:
   - `user_left`
 - Stage control:
   - `stage_control_command` with `{command, source}`, optional seek payload (`seek_time`, `is_paused`), and `sync_version` for resync commands
-  - `stage_state_update` with `{is_paused, vocals_enabled, vocals_volume, lyrics_enabled, source}`
+  - `stage_state_update` with `{current_time, is_paused, vocals_enabled, vocals_volume, lyrics_enabled, source}`
+
+**Client → server playback clock update:**
+```json
+{
+  "type": "stage_time_update",
+  "data": {
+    "current_time": 18.25,
+    "is_paused": false,
+    "source": "stage"
+  },
+  "timestamp": 1712345678901
+}
+```
+
+The stage page sends this message from the active media element so lyrics viewers can follow the authoritative playback clock instead of a local timer.
 
 **Queue presence client message:**
 ```json
@@ -498,16 +513,19 @@ Same as queue item, or `null` if no items ready.
 
 ---
 
-### Get Queue Item Lyrics Cues
+### Get Queue Item Lyrics Payload
 ```
 GET /api/queue/{item_id}/lyrics-cues
 ```
 
-Returns normalized, time-sorted lyric cues for stage overlay rendering.
+Returns normalized lyrics payload for stage overlay and queue lyrics viewer rendering.
 
 Behavior:
 - Reads queue item media sidecar `lyrics_path` (after server-side normalization/repair).
-- Supports `.lrc` files (parsed to cues) and `.json` files (validated/normalized cue payloads).
+- Supports:
+  - `.lrc` files (parsed to cues)
+  - `.json` files (validated/normalized cue payloads)
+  - `.txt` files (plain unsynced lines)
 - Uses configured media/cache roots for `/media/...` and `/cache/...` paths.
 
 **Success response:**
@@ -517,10 +535,25 @@ Behavior:
   "media_id": 45,
   "lyrics_path": "/media/song123.lrc",
   "source_format": "lrc",
+  "is_synced": true,
   "cues": [
     {"time": 1.2, "text": "First line"},
     {"time": 4.8, "text": "Second line"}
-  ]
+  ],
+  "lines": ["First line", "Second line"]
+}
+```
+
+`.txt` example:
+```json
+{
+  "item_id": 12,
+  "media_id": 45,
+  "lyrics_path": "/media/song123.txt",
+  "source_format": "txt",
+  "is_synced": false,
+  "cues": [],
+  "lines": ["Line one", "Line two"]
 }
 ```
 
@@ -745,6 +778,16 @@ GET /queue
 ```
 
 Mobile-friendly page for searching and queueing songs.
+
+### Queue Lyrics Viewer (Mobile/Desktop)
+```
+GET /queue/lyrics
+```
+
+Dedicated current-song lyrics viewer page:
+- synced lyrics mode with active-line highlight + follow-live behavior
+- unsynced lyrics mode with standard free scrolling
+- empty-state fallback when no lyrics sidecar is available
 
 ### Stage View Page (Presentation Output)
 ```

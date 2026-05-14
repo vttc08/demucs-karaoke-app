@@ -76,6 +76,8 @@ The stage page uses a websocket-first model:
 - `routes/queue.py` also accepts `resync` stage commands so remote controls can force hard local
   video/vocals recovery on stage clients. Resync broadcasts include a monotonic `sync_version`, and
   stage-originated resync may include `seek_time`/`is_paused` for a concrete recovery timeline.
+- `routes/queue.py` also accepts `stage_time_update` messages from the stage page and stores the
+  authoritative playback clock in shared websocket state.
 - `routes/queue.py` also accepts stage mix commands (`set_vocals_enabled`, `set_vocals_volume`)
   for runtime-only vocal assist control.
 - `routes/queue.py` also accepts `set_lyrics_enabled` for runtime-only lyrics overlay visibility.
@@ -84,12 +86,13 @@ The stage page uses a websocket-first model:
   - `stage_state_update`
 - For `seek`, the server validates `seek_time` and broadcasts:
   - `stage_control_command` with `seek_time` (+ optional `is_paused`)
-  - `stage_state_update` when paused state is included
+  - `stage_state_update` when paused state is included, now carrying `current_time`
 - For `skip`, server-side queue skip logic runs and then broadcasts:
   - `stage_control_command`
   - `current_item_changed`
 - `services/websocket_manager.py` stores in-memory stage state:
   - `is_paused`
+  - `current_time`
   - `vocals_enabled`
   - `vocals_volume` (`0.0` to `1.0`)
   - `lyrics_enabled`
@@ -176,10 +179,26 @@ The stage page uses a websocket-first model:
 - Backend cue source is media sidecar `lyrics_path` and supports:
   - `.lrc` sidecars parsed into timestamped cues
   - `.json` sidecars validated and normalized into cue objects
+  - `.txt` sidecars parsed into unsynced text lines for queue-side viewing
 - Overlay highlight logic is driven by the video timeline:
   - current line highlighted in red
   - nearby lines shown in white
 - This custom pipeline keeps room for future per-user appearance/animation customization.
+
+## Queue lyrics viewer flow
+
+- Queue page links to dedicated lyrics viewer page: `GET /queue/lyrics`.
+- Viewer resolves current playing item through `GET /api/queue/current`, then fetches
+  `GET /api/queue/{item_id}/lyrics-cues`.
+- Lyrics payload now includes:
+  - `is_synced` (`true` for `.lrc`/`.json`, `false` for `.txt`)
+  - `cues` (timed lines; empty for unsynced lyrics)
+  - `lines` (display lines for synced or unsynced rendering)
+- Synced mode auto-follows playback time and highlights active lines; manual scroll pauses
+  follow mode until the user re-enables it from the viewer UI.
+- Unsynced mode renders large freely scrollable text.
+- When no lyrics sidecar exists, viewer falls back to a lightweight empty state using
+  current title/artist + external lyrics search link.
 
 ## Add-to-queue lyrics flow
 

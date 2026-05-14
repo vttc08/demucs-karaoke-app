@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('queue_lyrics.title') }}{% endblock %}
+{% block header_icon %}lyrics{% endblock %}
+{% block header_title %}{{ t('queue_lyrics.title') }}{% endblock %}
+{% block header_subtitle %}{{ t('queue_lyrics.subtitle') }}{% endblock %}
+
+{% block content %}
+<main
+    class="pt-28 pb-20 px-4 max-w-5xl mx-auto flex flex-col gap-4 sm:gap-5 sm:px-6 lg:px-8"
+    data-initial-item-id="{{ current.id if current else '' }}"
+>
+    <section class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <a
+                href="{{ app_url('/queue') }}"
+                class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-3 py-2 text-sm font-bold text-on-surface transition-colors hover:text-primary active:scale-95"
+            >
+                <span class="material-symbols-outlined text-base">arrow_back</span>
+                {{ t('queue_lyrics.back_to_queue') }}
+            </a>
+            <div class="inline-flex items-center gap-2">
+                <span id="lyrics-live-status" class="rounded-full bg-surface-container-highest px-3 py-1 text-xs font-bold text-on-surface-variant">{{ t('queue_lyrics.connecting') }}</span>
+                <button
+                    id="lyrics-follow-live-btn"
+                    class="hidden rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-on-primary transition-all hover:brightness-110 active:scale-95"
+                    type="button"
+                >
+                    {{ t('queue_lyrics.follow_live') }}
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue_lyrics.now_playing') }}</span>
+                <h2 id="lyrics-current-title" class="truncate font-headline text-2xl font-black tracking-tight text-on-surface">{{ current.title if current else t('queue_lyrics.queue_empty') }}</h2>
+                <p id="lyrics-current-artist" class="truncate text-sm text-on-surface-variant">{{ current.artist if current and current.artist else t('queue_lyrics.queue_empty_detail') }}</p>
+            </div>
+            <span id="lyrics-mode-badge" class="rounded-full bg-surface-container-highest px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-on-surface-variant"></span>
+        </div>
+    </section>
+
+    <section class="rounded-xl border border-outline-variant/20 bg-surface-container-low">
+        <div id="lyrics-scroll-container" class="max-h-[65vh] min-h-[50vh] overflow-y-auto px-4 py-5 sm:px-6">
+            <div id="lyrics-lines" class="mx-auto flex max-w-4xl flex-col gap-3"></div>
+            <div id="lyrics-empty-state" class="hidden mx-auto max-w-2xl rounded-xl border border-outline-variant/20 bg-surface-container-high/40 p-5 text-center">
+                <h3 id="lyrics-empty-title" class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('queue_lyrics.no_lyrics_title') }}</h3>
+                <p id="lyrics-empty-detail" class="mt-2 text-sm text-on-surface-variant">{{ t('queue_lyrics.no_lyrics_detail') }}</p>
+                <a
+                    id="lyrics-google-link"
+                    href="https://www.google.com/search?q=lyrics"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-4 inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold text-on-surface transition-all hover:brightness-110 active:scale-95"
+                >
+                    <span class="material-symbols-outlined text-base">open_in_new</span>
+                    {{ t('lyrics.google') }}
+                </a>
+            </div>
+        </div>
+    </section>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ app_url('/static/queue_lyrics.js') }}"></script>
+{% endblock %}

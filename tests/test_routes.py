@@ -549,6 +549,7 @@ def test_queue_page_loads(client):
     assert 'id="queue-library-shortcuts"' in response.text
     assert 'href="/media"' in response.text
     assert 'href="/upload"' in response.text
+    assert 'href="/queue/lyrics"' in response.text
     assert 'id="queue-as-settings-panel"' not in response.text
     assert 'id="queue-config-queue-as-panel"' not in response.text
     assert 'id="clear-all-btn"' not in response.text
@@ -559,6 +560,17 @@ def test_queue_page_loads(client):
     assert 'aria-label="Media Library"' not in response.text
     assert 'aria-label="Upload Media"' not in response.text
     assert "shield_person" not in response.text
+
+
+def test_queue_lyrics_page_loads(client):
+    """Queue lyrics page should render the lyrics viewer shell."""
+    response = client.get("/queue/lyrics")
+
+    assert response.status_code == 200
+    assert "Lyrics Viewer" in response.text
+    assert 'id="lyrics-scroll-container"' in response.text
+    assert "/static/queue_lyrics.js" in response.text
+    assert 'href="/queue"' in response.text
 
 
 def test_queue_page_admin_shows_queue_as_controls(client):
@@ -1878,8 +1890,10 @@ def test_get_queue_item_lyrics_cues_from_lrc(client):
         payload = response.json()
         assert payload["item_id"] == created["id"]
         assert payload["source_format"] == "lrc"
+        assert payload["is_synced"] is True
         assert payload["cues"][0] == {"time": 0.0, "text": "Line one"}
         assert payload["cues"][1] == {"time": 3.0, "text": "Line two"}
+        assert payload["lines"] == ["Line one", "Line two"]
     finally:
         if lyrics_file.exists():
             lyrics_file.unlink()
@@ -1913,10 +1927,45 @@ def test_get_queue_item_lyrics_cues_from_json(client):
         assert response.status_code == 200
         payload = response.json()
         assert payload["source_format"] == "json"
+        assert payload["is_synced"] is True
         assert payload["cues"] == [
             {"time": 1.5, "text": "First"},
             {"time": 4.0, "text": "Fourth"},
         ]
+        assert payload["lines"] == ["First", "Fourth"]
+    finally:
+        if lyrics_file.exists():
+            lyrics_file.unlink()
+
+
+def test_get_queue_item_lyrics_cues_from_txt(client):
+    """Lyrics cues endpoint should expose plain text lyrics as unsynced lines."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "lyric-txt-1", "title": "Lyric TXT", "is_karaoke": False},
+    ).json()
+
+    lyrics_file = Path(settings.media_path) / "route-lyrics.txt"
+    lyrics_file.write_text("Line one\n\nLine two\n", encoding="utf-8")
+
+    db = TestingSessionLocal()
+    try:
+        row = db.query(QueueItem).filter(QueueItem.id == created["id"]).first()
+        assert row is not None
+        assert row.media is not None
+        row.media.lyrics_path = "/media/route-lyrics.txt"
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        response = client.get(f"/api/queue/{created['id']}/lyrics-cues")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["source_format"] == "txt"
+        assert payload["is_synced"] is False
+        assert payload["cues"] == []
+        assert payload["lines"] == ["Line one", "Line two"]
     finally:
         if lyrics_file.exists():
             lyrics_file.unlink()
@@ -2484,6 +2533,31 @@ def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
                 state_event = receiver.receive_json()
             assert state_event["type"] == "stage_state_update"
             assert state_event["data"]["is_paused"] is False
+            assert state_event["data"]["current_time"] == 42.5
+
+
+def test_websocket_stage_time_update_broadcasts_state(client):
+    """Stage time updates should refresh the shared playback clock."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+
+            sender.send_json(
+                {
+                    "type": "stage_time_update",
+                    "data": {"current_time": 18.25, "is_paused": True, "source": "stage"},
+                    "timestamp": 123,
+                }
+            )
+
+            state_event = receiver.receive_json()
+            if state_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                state_event = receiver.receive_json()
+            assert state_event["type"] == "stage_state_update"
+            assert state_event["data"]["current_time"] == 18.25
+            assert state_event["data"]["is_paused"] is True
 
 
 def test_websocket_stage_command_seek_rejects_invalid_time(client):

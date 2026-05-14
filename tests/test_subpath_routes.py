@@ -74,6 +74,11 @@ def test_app_serves_pages_assets_api_and_websocket_under_configured_subpath(tmp_
         assert 'id="queue-library-shortcuts"' in queue_html
         assert 'href="/karaoke/media"' in queue_html
         assert 'href="/karaoke/upload"' in queue_html
+        assert 'href="/karaoke/queue/lyrics"' in queue_html
+
+        lyrics_page = client.get("/karaoke/queue/lyrics")
+        assert lyrics_page.status_code == 200
+        assert "/karaoke/static/queue_lyrics.js" in lyrics_page.text
 
         language_response = client.post(
             "/karaoke/language",
