@@ -19,16 +19,16 @@
                 <span class="material-symbols-outlined text-base">arrow_back</span>
                 {{ t('queue_lyrics.back_to_queue') }}
             </a>
-            <div class="inline-flex items-center gap-2">
+            <div class="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
                 <span id="lyrics-live-status" class="rounded-full bg-surface-container-highest px-3 py-1 text-xs font-bold text-on-surface-variant">{{ t('queue_lyrics.connecting') }}</span>
                 <button
                     id="queue-lyrics-editor-toggle"
-                    class="rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-bold text-on-surface transition-all hover:brightness-110 active:scale-95"
+                    class="min-w-0 rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-bold text-on-surface transition-all hover:brightness-110 active:scale-95"
                     type="button"
                 >
                     {{ t('queue_lyrics.edit_lyrics') }}
                 </button>
-                <label class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-bold text-on-surface transition-all hover:brightness-110">
+                <label class="inline-flex min-w-0 items-center gap-2 rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-bold text-on-surface transition-all hover:brightness-110">
                     <input
                         id="queue-lyrics-chinese-toggle"
                         type="checkbox"
@@ -36,7 +36,7 @@
                     >
                     <span>{{ t('queue_lyrics.simplify_chinese') }}</span>
                 </label>
-                <label class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-bold text-on-surface transition-all hover:brightness-110">
+                <label class="inline-flex min-w-0 items-center gap-2 rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-bold text-on-surface transition-all hover:brightness-110">
                     <input
                         id="queue-lyrics-pinyin-toggle"
                         type="checkbox"
@@ -46,7 +46,7 @@
                 </label>
                 <button
                     id="lyrics-follow-live-btn"
-                    class="hidden rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-on-primary transition-all hover:brightness-110 active:scale-95"
+                    class="hidden w-full rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-on-primary transition-all hover:brightness-110 active:scale-95 sm:w-auto"
                     type="button"
                 >
                     {{ t('queue_lyrics.follow_live') }}
