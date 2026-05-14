@@ -80,6 +80,7 @@ lyricsManager.on(() => {
         return;
     }
     persistDraftForCurrentItem();
+    scheduleDisplayRefresh();
 });
 updateEditorVisibilityUi();
 syncEditorToggleLabel();
@@ -724,6 +725,35 @@ function persistDraftForCurrentItem() {
     safeSessionStorageSet(storageKey, JSON.stringify(snapshot));
 }
 
+function buildSourceFromText(text, format = "txt") {
+    const trimmedText = String(text || "").trim();
+    if (!trimmedText) {
+        return null;
+    }
+
+    const inferredSynced = format === "lrc" || LyricsManager.inferFormat(trimmedText) === "lrc";
+    if (inferredSynced) {
+        const parsedCues = parseLrcLyrics(trimmedText);
+        if (parsedCues.length > 0) {
+            return {
+                isSynced: true,
+                cues: parsedCues,
+                lines: parsedCues.map((cue) => cue.text),
+            };
+        }
+    }
+
+    const parsedLines = parsePlainLyrics(trimmedText);
+    if (!parsedLines.length) {
+        return null;
+    }
+    return {
+        isSynced: false,
+        cues: [],
+        lines: parsedLines,
+    };
+}
+
 function loadDraftForItem(itemId) {
     if (!itemId) {
         return null;
@@ -739,6 +769,12 @@ function loadDraftForItem(itemId) {
     } catch (_) {
         return null;
     }
+}
+
+function getActiveViewerSource() {
+    const state = lyricsManager.getState();
+    const editorSource = buildSourceFromText(state.text, state.format);
+    return editorSource || currentDisplaySource;
 }
 
 function seedLyricsManagerForCurrentItem(payload) {
@@ -782,7 +818,7 @@ function seedLyricsManagerForCurrentItem(payload) {
 }
 
 async function renderCurrentLyricsSource() {
-    const source = currentDisplaySource;
+    const source = getActiveViewerSource();
     if (!source) {
         cues = [];
         lines = [];
