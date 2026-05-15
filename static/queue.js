@@ -36,10 +36,10 @@ const stageRemoteResyncBtn = document.getElementById('stage-remote-resync-btn');
 const stageRemoteLyricsToggleBtn = document.getElementById('stage-remote-lyrics-toggle-btn');
 const stageRemoteLyricsToggleIcon = document.getElementById('stage-remote-lyrics-toggle-icon');
 const stageRemoteLyricsToggleLabel = document.getElementById('stage-remote-lyrics-toggle-label');
-const stageRemoteVocalsToggleBtn = document.getElementById('stage-remote-vocals-toggle-btn');
-const stageRemoteVocalsToggleIcon = document.getElementById('stage-remote-vocals-toggle-icon');
-const stageRemoteVocalsToggleLabel = document.getElementById('stage-remote-vocals-toggle-label');
-const stageRemoteVocalsVolumeSlider = document.getElementById('stage-remote-vocals-volume-slider');
+const stageRemoteVocalsBubble = document.getElementById('stage-remote-vocals-bubble');
+const stageRemoteVocalsBubbleIcon = document.getElementById('stage-remote-vocals-bubble-icon');
+const stageRemoteVocalsBubbleLabel = document.getElementById('stage-remote-vocals-bubble-label');
+const stageRemoteVocalsFill = document.getElementById('stage-remote-vocals-fill');
 const queueConfigModal = document.getElementById('queue-config-modal');
 const queueConfigModalBackdrop = document.getElementById('queue-config-modal-backdrop');
 const queueConfigCloseBtn = document.getElementById('queue-config-close-btn');
@@ -80,7 +80,10 @@ let stageRemoteLyricsEnabled = true;
 let stageRemoteLyricsAvailable = false;
 let stageRemoteVocalsEnabled = true;
 let stageRemoteVocalsVolume = 1.0;
+let stageRemoteVocalsLastVolume = 1.0;
 let stageRemoteVocalsAvailable = false;
+let stageRemoteVocalsPointerState = null;
+let stageRemoteVocalsSuppressClick = false;
 let demucsHealth = { healthy: true, detail: t('settings.engine_unknown') };
 let modalSelection = null;
 let modalKaraokeEnabled = false;
@@ -446,7 +449,7 @@ function getModalDefaults() {
  */
 function initializeLyricsManager() {
     if (lyricsManager) return;
-    
+
     lyricsManager = new LyricsManager({ apiBase: API_BASE });
     lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
         titleInput: '#queue-config-lyrics-title',
@@ -461,7 +464,7 @@ function initializeLyricsManager() {
         googleLink: '#queue-config-lyrics-google-link',
         panel: '#queue-config-lyrics-panel',
     });
-    
+
     lyricsUIAdapter.initialize();
     lyricsManager.on(() => {
         syncQueueConfigModalUi();
@@ -1009,7 +1012,7 @@ function syncQueueConfigModalUi() {
     if (!lyricsEnabled && lyricsManager?.state.lyricsEnabled) {
         lyricsManager.setEnabled(false);
     }
-    
+
     if (queueConfigLyricsToggle) {
         queueConfigLyricsToggle.disabled = !lyricsEnabled;
         queueConfigLyricsToggle.classList.toggle('opacity-50', !lyricsEnabled);
@@ -1726,18 +1729,33 @@ function updateStageRemotePlayPauseUi() {
 }
 
 function updateStageRemoteVocalsUi() {
-    if (stageRemoteVocalsToggleBtn) {
-        stageRemoteVocalsToggleBtn.disabled = !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
+    const isDisabled = !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
+    const volume = stageRemoteVocalsVolume * 100;
+
+    if (stageRemoteVocalsBubble) {
+        stageRemoteVocalsBubble.setAttribute('aria-pressed', stageRemoteVocalsEnabled ? 'true' : 'false');
+        stageRemoteVocalsBubble.setAttribute('aria-disabled', isDisabled ? 'true' : 'false');
+        stageRemoteVocalsBubble.setAttribute('aria-valuenow', String(Math.round(volume)));
+        stageRemoteVocalsBubble.setAttribute('aria-valuetext', `${Math.round(volume)}%`);
+        stageRemoteVocalsBubble.classList.toggle('opacity-60', isDisabled);
+        stageRemoteVocalsBubble.classList.toggle('cursor-not-allowed', isDisabled);
+        stageRemoteVocalsBubble.classList.toggle('cursor-pointer', !isDisabled);
     }
-    if (stageRemoteVocalsVolumeSlider) {
-        stageRemoteVocalsVolumeSlider.disabled = !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
-        stageRemoteVocalsVolumeSlider.value = String(Math.round(stageRemoteVocalsVolume * 100));
+
+    if (stageRemoteVocalsFill) {
+        stageRemoteVocalsFill.style.width = `${Math.max(0, Math.min(100, volume))}%`;
+        stageRemoteVocalsFill.style.opacity = stageRemoteVocalsEnabled ? '1' : '0.35';
     }
-    if (stageRemoteVocalsToggleIcon) {
-        stageRemoteVocalsToggleIcon.textContent = stageRemoteVocalsEnabled ? 'mic' : 'mic_off';
+
+    if (stageRemoteVocalsBubbleLabel) {
+        stageRemoteVocalsBubbleLabel.textContent = `${Math.round(volume)}%`;
     }
-    if (stageRemoteVocalsToggleLabel) {
-        stageRemoteVocalsToggleLabel.textContent = stageRemoteVocalsEnabled ? t('stage.vocals_on') : t('stage.vocals_off');
+
+    if (stageRemoteVocalsBubbleIcon) {
+        stageRemoteVocalsBubbleIcon.textContent = stageRemoteVocalsEnabled ? 'mic' : 'mic_off';
+        stageRemoteVocalsBubbleIcon.className = `material-symbols-outlined text-2xl ${
+            stageRemoteVocalsEnabled ? 'text-secondary' : 'text-on-surface/50'
+        }`;
     }
 }
 
@@ -1758,10 +1776,6 @@ function syncStageVocalsAvailability(queue) {
     stageRemoteVocalsAvailable = Boolean(playingItem && playingItem.vocals_path);
     if (!stageRemoteVocalsAvailable) {
         stageRemoteVocalsEnabled = false;
-        stageRemoteVocalsVolume = 0;
-    } else if (stageRemoteVocalsVolume <= 0) {
-        stageRemoteVocalsEnabled = true;
-        stageRemoteVocalsVolume = 1.0;
     }
     updateStageRemoteVocalsUi();
 }
@@ -1864,40 +1878,93 @@ if (stageRemoteLyricsToggleBtn) {
     });
 }
 
-if (stageRemoteVocalsToggleBtn) {
-    stageRemoteVocalsToggleBtn.addEventListener('click', () => {
-        if (!queueWebSocket) return;
-        if (!stageRemoteVocalsAvailable) {
-            alert(t('queue.no_vocals_track'));
-            return;
-        }
-        const nextEnabled = !stageRemoteVocalsEnabled;
-        const sent = queueWebSocket.send({
+function sendStageVocalsVolume(nextVolume) {
+    if (!queueWebSocket || !stageRemoteVocalsAvailable) {
+        return false;
+    }
+
+    const clampedVolume = Math.max(0, Math.min(1, nextVolume));
+    const commands = [];
+
+    if (clampedVolume > 0 && !stageRemoteVocalsEnabled) {
+        commands.push({
+            command: 'set_vocals_enabled',
+            payload: { vocals_enabled: true },
+        });
+    }
+
+    commands.push({
+        command: 'set_vocals_volume',
+        payload: { vocals_volume: clampedVolume },
+    });
+
+    if (clampedVolume === 0 && stageRemoteVocalsEnabled) {
+        commands.push({
+            command: 'set_vocals_enabled',
+            payload: { vocals_enabled: false },
+        });
+    }
+
+    let sent = false;
+    commands.forEach(({ command, payload }) => {
+        sent = queueWebSocket.send({
             type: 'stage_command',
             data: {
-                command: 'set_vocals_enabled',
+                command,
                 source: 'queue',
-                vocals_enabled: nextEnabled,
+                ...payload,
             },
             timestamp: Date.now(),
-        });
-        if (!sent) {
-            alert(t('queue.stage_offline'));
-            return;
-        }
-        stageRemoteVocalsEnabled = nextEnabled;
-        updateStageRemoteVocalsUi();
+        }) || sent;
     });
+
+    if (sent) {
+        stageRemoteVocalsVolume = clampedVolume;
+        if (clampedVolume > 0) {
+            stageRemoteVocalsLastVolume = clampedVolume;
+            stageRemoteVocalsEnabled = true;
+        } else {
+            stageRemoteVocalsEnabled = false;
+        }
+        updateStageRemoteVocalsUi();
+    }
+
+    return sent;
 }
 
-if (stageRemoteVocalsVolumeSlider) {
-    stageRemoteVocalsVolumeSlider.addEventListener('input', () => {
-        if (!queueWebSocket) return;
-        if (!stageRemoteVocalsAvailable) {
-            return;
+function toggleStageVocalsEnabled() {
+    if (!queueWebSocket) return false;
+    if (!stageRemoteVocalsAvailable) {
+        alert(t('queue.no_vocals_track'));
+        return false;
+    }
+
+    const nextEnabled = !stageRemoteVocalsEnabled;
+    const fallbackVolume = stageRemoteVocalsLastVolume > 0 ? stageRemoteVocalsLastVolume : 1.0;
+    const nextVolume = nextEnabled && stageRemoteVocalsVolume <= 0 ? fallbackVolume : stageRemoteVocalsVolume;
+
+    const sent = queueWebSocket.send({
+        type: 'stage_command',
+        data: {
+            command: 'set_vocals_enabled',
+            source: 'queue',
+            vocals_enabled: nextEnabled,
+        },
+        timestamp: Date.now(),
+    });
+
+    if (!sent) {
+        alert(t('queue.stage_offline'));
+        return false;
+    }
+
+    stageRemoteVocalsEnabled = nextEnabled;
+    if (nextEnabled && nextVolume !== stageRemoteVocalsVolume) {
+        stageRemoteVocalsVolume = nextVolume;
+        if (nextVolume > 0) {
+            stageRemoteVocalsLastVolume = nextVolume;
         }
-        const nextVolume = Number(stageRemoteVocalsVolumeSlider.value) / 100;
-        const sent = queueWebSocket.send({
+        queueWebSocket.send({
             type: 'stage_command',
             data: {
                 command: 'set_vocals_volume',
@@ -1906,11 +1973,91 @@ if (stageRemoteVocalsVolumeSlider) {
             },
             timestamp: Date.now(),
         });
-        if (!sent) {
+    }
+    updateStageRemoteVocalsUi();
+    return true;
+}
+
+if (stageRemoteVocalsBubble) {
+    const getVocalsVolumeFromPointerX = (clientX) => {
+        const rect = stageRemoteVocalsBubble.getBoundingClientRect();
+        if (!rect.width) {
+            return stageRemoteVocalsVolume;
+        }
+        return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    };
+
+    stageRemoteVocalsBubble.addEventListener('pointerdown', (event) => {
+        if (!stageRemoteVocalsAvailable || event.button !== 0) {
             return;
         }
-        stageRemoteVocalsVolume = Math.max(0, Math.min(1, nextVolume));
-        updateStageRemoteVocalsUi();
+        stageRemoteVocalsPointerState = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            dragged: false,
+        };
+        stageRemoteVocalsSuppressClick = false;
+        stageRemoteVocalsBubble.setPointerCapture?.(event.pointerId);
+    });
+
+    stageRemoteVocalsBubble.addEventListener('pointermove', (event) => {
+        if (!stageRemoteVocalsPointerState || stageRemoteVocalsPointerState.pointerId !== event.pointerId) {
+            return;
+        }
+
+        const deltaX = Math.abs(event.clientX - stageRemoteVocalsPointerState.startX);
+        const deltaY = Math.abs(event.clientY - stageRemoteVocalsPointerState.startY);
+        if (deltaX > 4 || deltaY > 4) {
+            stageRemoteVocalsPointerState.dragged = true;
+            stageRemoteVocalsSuppressClick = true;
+        }
+        sendStageVocalsVolume(getVocalsVolumeFromPointerX(event.clientX));
+    });
+
+    stageRemoteVocalsBubble.addEventListener('pointerup', (event) => {
+        if (!stageRemoteVocalsPointerState || stageRemoteVocalsPointerState.pointerId !== event.pointerId) {
+            return;
+        }
+
+        stageRemoteVocalsBubble.releasePointerCapture?.(event.pointerId);
+        if (stageRemoteVocalsPointerState.dragged) {
+            stageRemoteVocalsSuppressClick = true;
+        }
+        stageRemoteVocalsPointerState = null;
+    });
+
+    stageRemoteVocalsBubble.addEventListener('pointercancel', (event) => {
+        if (!stageRemoteVocalsPointerState || stageRemoteVocalsPointerState.pointerId !== event.pointerId) {
+            return;
+        }
+
+        stageRemoteVocalsBubble.releasePointerCapture?.(event.pointerId);
+        stageRemoteVocalsPointerState = null;
+        stageRemoteVocalsSuppressClick = false;
+    });
+
+    stageRemoteVocalsBubble.addEventListener('click', (event) => {
+        if (stageRemoteVocalsSuppressClick) {
+            stageRemoteVocalsSuppressClick = false;
+            return;
+        }
+        toggleStageVocalsEnabled();
+    });
+
+    stageRemoteVocalsBubble.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggleStageVocalsEnabled();
+            return;
+        }
+        if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
+            event.preventDefault();
+            sendStageVocalsVolume(stageRemoteVocalsVolume + 0.05);
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
+            event.preventDefault();
+            sendStageVocalsVolume(stageRemoteVocalsVolume - 0.05);
+        }
     });
 }
 
@@ -2016,6 +2163,9 @@ window.addEventListener('stage_state_update', (event) => {
     const vocalsVolume = event.detail?.vocals_volume;
     if (typeof vocalsVolume === 'number' && Number.isFinite(vocalsVolume)) {
         stageRemoteVocalsVolume = Math.max(0, Math.min(1, vocalsVolume));
+        if (stageRemoteVocalsVolume > 0) {
+            stageRemoteVocalsLastVolume = stageRemoteVocalsVolume;
+        }
     }
     const lyricsEnabled = event.detail?.lyrics_enabled;
     if (typeof lyricsEnabled === 'boolean') {

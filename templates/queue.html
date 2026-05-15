@@ -4,6 +4,14 @@
 {% block header_icon %}music_note{% endblock %}
 {% block header_title %}{{ t('app.karaoke') }}{% endblock %}
 
+{% block head %}
+<style>
+    #stage-remote-vocals-bubble {
+        touch-action: none;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <main
     class="pt-28 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-4 sm:gap-5 sm:px-6 lg:px-8"
@@ -27,6 +35,75 @@
             <span class="material-symbols-outlined text-base">edit</span>
             {{ t('common.edit') }}
         </button>
+    </section>
+
+    <section class="flex flex-col gap-2 rounded-xl bg-surface-container-low p-4">
+        <div class="flex items-center justify-between gap-3">
+            <div>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.remote') }}</span>
+                <h2 class="font-headline font-black text-2xl tracking-tight text-on-surface">{{ t('queue.stage_controls') }}</h2>
+            </div>
+            <span id="stage-remote-status" class="text-xs text-on-surface-variant">{{ t('queue.connecting') }}</span>
+        </div>
+        <div class="grid grid-cols-3 gap-2 sm:gap-2.5">
+            <button
+                id="stage-remote-play-pause-btn"
+                class="col-span-1 inline-flex min-w-0 items-center justify-center gap-2 rounded-full bg-primary px-2.5 py-2 text-[11px] font-bold text-on-primary transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+                disabled
+            >
+                <span id="stage-remote-play-pause-icon" class="material-symbols-outlined text-base">play_arrow</span>
+                <span id="stage-remote-play-pause-label">{{ t('common.play') }}</span>
+            </button>
+            <button
+                id="stage-remote-skip-btn"
+                class="col-span-1 inline-flex min-w-0 items-center justify-center gap-2 rounded-full bg-secondary px-2.5 py-2 text-[11px] font-bold text-white transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+                disabled
+            >
+                <span class="material-symbols-outlined text-base">skip_next</span>
+                {{ t('common.skip') }}
+            </button>
+            <button
+                id="stage-remote-resync-btn"
+                class="col-span-1 inline-flex min-w-0 items-center justify-center gap-2 rounded-full bg-surface-container-high px-2.5 py-2 text-[11px] font-bold text-on-surface transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+                title="{{ t('stage.force_resync') }}"
+                disabled
+            >
+                <span class="material-symbols-outlined text-base">sync</span>
+                {{ t('stage.resync') }}
+            </button>
+            <div
+                id="stage-remote-vocals-bubble"
+                class="col-span-2 row-start-2 relative flex h-14 w-full max-w-[13.75rem] items-center overflow-hidden rounded-full border border-white/10 bg-[rgba(42,16,66,0.82)] px-3 shadow-[0_14px_34px_rgba(20,10,36,0.42)] backdrop-blur-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/70 sm:h-[3.25rem] sm:max-w-[13.75rem]"
+                role="button"
+                tabindex="0"
+                aria-label="{{ t('stage.toggle_guide_vocals') }}"
+                aria-pressed="true"
+                aria-disabled="false"
+            >
+                <div id="stage-remote-vocals-fill" class="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-[#39ff14] shadow-[0_0_18px_rgba(57,255,20,0.52)] transition-[width,opacity] duration-200 ease-out" style="width:100%;"></div>
+                <div class="relative z-10 flex w-full items-center gap-3">
+                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/12 text-secondary/90 shadow-inner shadow-black/10 sm:h-9 sm:w-9">
+                        <span id="stage-remote-vocals-bubble-icon" class="material-symbols-outlined text-lg sm:text-xl">mic</span>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2">
+                            <span class="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.28em] text-on-surface/80 sm:text-[11px]">{{ t('stage.vocals') }}</span>
+                            <div class="min-w-0 flex-1"></div>
+                            <span id="stage-remote-vocals-bubble-label" class="tabular-nums text-[11px] font-black text-on-surface sm:text-xs">100%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button
+                id="stage-remote-lyrics-toggle-btn"
+                class="col-start-3 row-start-2 inline-flex min-h-11 justify-self-end items-center justify-center gap-2 rounded-full bg-surface-container-high px-2.5 py-2 text-[11px] font-bold text-on-surface transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+                disabled
+            >
+                <span id="stage-remote-lyrics-toggle-icon" class="material-symbols-outlined text-base">subtitles</span>
+                <span id="stage-remote-lyrics-toggle-label">{{ t('stage.lyrics_on') }}</span>
+            </button>
+        </div>
     </section>
 
     {% if is_admin %}
@@ -222,73 +299,6 @@
                     <p class="text-on-surface-variant/60 text-sm">{{ t('queue.add_started') }}</p>
                 </div>
             {% endif %}
-        </div>
-    </section>
-
-    <section class="flex flex-col gap-4 rounded-xl bg-surface-container-low p-4">
-        <div class="flex items-center justify-between gap-3">
-            <div>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.remote') }}</span>
-                <h2 class="font-headline font-black text-2xl tracking-tight text-on-surface">{{ t('queue.stage_controls') }}</h2>
-            </div>
-            <span id="stage-remote-status" class="text-xs text-on-surface-variant">{{ t('queue.connecting') }}</span>
-        </div>
-        <div class="flex items-center gap-3">
-            <button
-                id="stage-remote-play-pause-btn"
-                class="inline-flex items-center gap-2 rounded-full bg-primary text-on-primary px-4 py-2 text-sm font-bold transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled
-            >
-                <span id="stage-remote-play-pause-icon" class="material-symbols-outlined text-base">play_arrow</span>
-                <span id="stage-remote-play-pause-label">{{ t('common.play') }}</span>
-            </button>
-            <button
-                id="stage-remote-skip-btn"
-                class="inline-flex items-center gap-2 rounded-full bg-secondary text-white px-4 py-2 text-sm font-bold transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled
-            >
-                <span class="material-symbols-outlined text-base">skip_next</span>
-                {{ t('common.skip') }}
-            </button>
-            <button
-                id="stage-remote-resync-btn"
-                class="inline-flex items-center gap-2 rounded-full bg-surface-container-high text-on-surface px-4 py-2 text-sm font-bold transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled
-            >
-                <span class="material-symbols-outlined text-base">sync</span>
-                {{ t('stage.resync') }}
-            </button>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-            <button
-                id="stage-remote-vocals-toggle-btn"
-                class="inline-flex items-center gap-2 rounded-full bg-surface-container-high text-on-surface px-4 py-2 text-sm font-bold transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled
-            >
-                <span id="stage-remote-vocals-toggle-icon" class="material-symbols-outlined text-base">mic</span>
-                <span id="stage-remote-vocals-toggle-label">{{ t('stage.vocals_on') }}</span>
-            </button>
-            <label class="flex items-center gap-2 text-sm text-on-surface-variant">
-                <span>{{ t('queue.vocal_vol') }}</span>
-                <input
-                    id="stage-remote-vocals-volume-slider"
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value="100"
-                    class="w-36 accent-primary disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled
-                />
-            </label>
-            <button
-                id="stage-remote-lyrics-toggle-btn"
-                class="inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface-container-high text-on-surface px-4 py-2 text-sm font-bold transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed sm:w-auto"
-                disabled
-            >
-                <span id="stage-remote-lyrics-toggle-icon" class="material-symbols-outlined text-base">subtitles</span>
-                <span id="stage-remote-lyrics-toggle-label">{{ t('stage.lyrics_on') }}</span>
-            </button>
         </div>
     </section>
 
