@@ -556,9 +556,9 @@ def test_queue_page_loads(client):
     assert "queue-move-up-" not in response.text
     assert "skipToSong(" not in response.text
     assert 'aria-label="Settings"' not in response.text
-    assert 'aria-label="Stage View"' not in response.text
-    assert 'aria-label="Media Library"' not in response.text
-    assert 'aria-label="Upload Media"' not in response.text
+    assert 'aria-label="Stage"' not in response.text
+    assert 'aria-label="Media"' not in response.text
+    assert 'aria-label="Upload"' not in response.text
     assert "shield_person" not in response.text
 
 
@@ -718,10 +718,10 @@ def test_queue_page_shows_admin_queue_controls(client):
     assert "queue-move-up-" in response.text
     assert "queue-move-down-" in response.text
     assert "skipToSong(" not in response.text
-    assert 'aria-label="Stage View"' in response.text
+    assert 'aria-label="Stage"' in response.text
     assert 'aria-label="Settings"' in response.text
-    assert 'aria-label="Media Library"' in response.text
-    assert 'aria-label="Upload Media"' not in response.text
+    assert 'aria-label="Media"' in response.text
+    assert 'aria-label="Upload"' not in response.text
 
 
 def test_stage_page_requires_admin(client):
@@ -740,7 +740,7 @@ def test_stage_page_loads_for_admin(client):
     ):
         response = client.get("/stage")
     assert response.status_code == 200
-    assert b"Stage View" in response.content
+    assert b"Stage" in response.content
     assert b"Now Playing" in response.content
     assert b'id="stage-video-player"' in response.content
 
@@ -818,15 +818,15 @@ def test_settings_page_loads_for_admin(client):
     authenticate_admin_client(client)
     response = client.get("/settings")
     assert response.status_code == 200
-    assert b"Admin Settings" in response.content
+    assert b"Settings" in response.content
     assert b"Admin session" in response.content
     assert b"Log out" in response.content
     assert b">Save<" in response.content
     assert b">Refresh<" in response.content
     assert b"Admin Access" not in response.content
     assert 'aria-label="Settings"' in response.text
-    assert 'aria-label="Media Library"' in response.text
-    assert 'aria-label="Upload Media"' not in response.text
+    assert 'aria-label="Media"' in response.text
+    assert 'aria-label="Upload"' not in response.text
     assert "shield_person" not in response.text
 
 
@@ -901,7 +901,7 @@ def test_upload_page_loads(client):
     """Test upload page renders with queue toggle and infer button."""
     response = client.get("/upload")
     assert response.status_code == 200
-    assert "Upload Media" in response.text
+    assert "Upload" in response.text
     assert 'id="add-to-queue" type="checkbox"' in response.text
     assert "Add to queue" in response.text
     assert 'id="artist-name"' in response.text
@@ -1057,7 +1057,7 @@ def test_media_management_page_loads(client):
     """Test media management page renders."""
     response = client.get("/media")
     assert response.status_code == 200
-    assert b"Media Library" in response.content
+    assert b"Media" in response.content
     assert b"Manage Existing Media" in response.content
 
 
