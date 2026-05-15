@@ -6,13 +6,13 @@
 
 {% block content %}
 <main
-    class="pt-28 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-4 sm:gap-5 sm:px-6 lg:px-8"
+    class="pt-24 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-4 sm:px-6 lg:px-8"
     data-singer-name="{{ singer_name }}"
     data-needs-singer-name="{{ 'true' if needs_singer_name else 'false' }}"
     data-is-admin="{{ 'true' if is_admin else 'false' }}"
     data-guest-id="{{ request.cookies.get('karaoke_guest_id', '') }}"
 >
-    <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+    <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2">
         <div class="min-w-0">
             <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.tonight') }}</span>
             <h2 class="truncate font-headline text-xl font-black tracking-tight text-on-surface">
@@ -29,11 +29,66 @@
         </button>
     </section>
 
+    <!-- Search Section -->
+    <section class="flex flex-col gap-2 rounded-2xl bg-surface-container-low p-4">
+        <div class="relative group">
+            <input 
+                id="search-input"
+                class="w-full bg-surface-container border-none h-14 pl-4 pr-24 rounded-full text-on-surface focus:ring-2 focus:ring-primary/30 transition-all font-body text-base shadow-inner focus:outline-none" 
+                placeholder="{{ t('queue.search_placeholder') }}"
+                type="text"
+                autocomplete="off"
+            />
+            <button 
+                id="search-btn"
+                class="absolute right-2 top-1/2 -translate-y-1/2 bg-primary text-on-primary px-4 py-2 rounded-full font-bold text-sm hover:brightness-110 active:scale-95 transition-all"
+            >
+                <span class="material-symbols-outlined text-base">search</span>
+            </button>
+        </div>
+        <div id="queue-library-shortcuts" class="grid grid-cols-2 gap-2">
+            <a
+                href="{{ app_url('/media') }}"
+                class="group inline-flex min-h-10 items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+            >
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <span class="material-symbols-outlined text-[18px] leading-none">folder_open</span>
+                </span>
+                <span class="min-w-0 truncate text-sm font-bold leading-none text-on-surface">{{ t('media.library') }}</span>
+            </a>
+            <a
+                href="{{ app_url('/upload') }}"
+                class="group inline-flex min-h-10 items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+            >
+                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/10 text-secondary">
+                    <span class="material-symbols-outlined text-[18px] leading-none">cloud_upload</span>
+                </span>
+                <span class="min-w-0 truncate text-sm font-bold leading-none text-on-surface">{{ t('common.upload_media') }}</span>
+            </a>
+        </div>
+        <a
+            href="{{ app_url('/queue/lyrics') }}"
+            class="group inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-sm font-bold text-on-surface transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+        >
+            <span class="material-symbols-outlined text-[18px] leading-none text-primary">lyrics</span>
+            <span>{{ t('queue.open_lyrics_viewer') }}</span>
+        </a>
+        {% if is_admin %}
+        <div id="queue-as-settings-panel" class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-1.5">
+            <label class="flex items-center justify-between gap-3">
+                <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_setting_label') }}</span>
+                <input id="queue-as-enabled-toggle" type="checkbox" class="h-4 w-4 accent-primary" />
+            </label>
+        </div>
+        {% endif %}
+        <!-- Search Results -->
+        <div id="search-results" class="flex flex-col gap-3"></div>
+    </section>
+
     <section class="flex flex-col gap-2 rounded-xl bg-surface-container-low p-4">
         <div class="flex items-center justify-between gap-3">
             <div>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.remote') }}</span>
-                <h2 class="font-headline font-black text-2xl tracking-tight text-on-surface">{{ t('queue.stage_controls') }}</h2>
+                <h3 class="font-headline font-black text-2xl tracking-tight text-on-surface">{{ t('queue.stage_controls') }}</h3>
             </div>
             <span id="stage-remote-status" class="text-xs text-on-surface-variant">{{ t('queue.connecting') }}</span>
         </div>
@@ -81,7 +136,7 @@
                 <label class="sr-only" for="stage-remote-vocals-volume-slider">{{ t('stage.vocals_volume') }}</label>
                 <input
                     id="stage-remote-vocals-volume-slider"
-                    class="h-8 w-full min-w-0 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    class="h-8 w-full min-w-0 accent-secondary disabled:cursor-not-allowed disabled:opacity-50"
                     type="range"
                     min="0"
                     max="100"
@@ -104,69 +159,21 @@
         </div>
     </section>
 
-    {% if is_admin %}
-    <section id="queue-as-settings-panel" class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-1.5">
-        <label class="flex items-center justify-between gap-3">
-            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_setting_label') }}</span>
-            <input id="queue-as-enabled-toggle" type="checkbox" class="h-4 w-4 accent-primary" />
-        </label>
-    </section>
-    {% endif %}
-
-    <!-- Search Section -->
-    <section class="flex flex-col gap-2">
-        <div class="relative group">
-            <input 
-                id="search-input"
-                class="w-full bg-surface-container border-none h-16 pl-4 pr-24 rounded-full text-on-surface focus:ring-2 focus:ring-primary/30 transition-all font-body text-lg shadow-inner focus:outline-none" 
-                placeholder="{{ t('queue.search_placeholder') }}"
-                type="text"
-                autocomplete="off"
-            />
-            <button 
-                id="search-btn"
-                class="absolute right-2 top-1/2 -translate-y-1/2 bg-primary text-on-primary px-4 py-2 rounded-full font-bold text-sm hover:brightness-110 active:scale-95 transition-all"
-            >
-                <span class="material-symbols-outlined text-base">search</span>
-            </button>
-        </div>
-        <div id="queue-library-shortcuts" class="grid grid-cols-2 gap-2">
-            <a
-                href="{{ app_url('/media') }}"
-                class="group inline-flex min-h-14 items-center gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
-            >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <span class="material-symbols-outlined text-[18px] leading-none">folder_open</span>
-                </span>
-                <span class="min-w-0 truncate text-sm font-bold leading-none text-on-surface">{{ t('media.library') }}</span>
-            </a>
-            <a
-                href="{{ app_url('/upload') }}"
-                class="group inline-flex min-h-14 items-center gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
-            >
-                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/10 text-secondary">
-                    <span class="material-symbols-outlined text-[18px] leading-none">cloud_upload</span>
-                </span>
-                <span class="min-w-0 truncate text-sm font-bold leading-none text-on-surface">{{ t('common.upload_media') }}</span>
-            </a>
-        </div>
-        <a
-            href="{{ app_url('/queue/lyrics') }}"
-            class="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-sm font-bold text-on-surface transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
-        >
-            <span class="material-symbols-outlined text-[18px] leading-none text-primary">lyrics</span>
-            <span>{{ t('queue.open_lyrics_viewer') }}</span>
-        </a>
-        <!-- Search Results -->
-        <div id="search-results" class="flex flex-col gap-3"></div>
-    </section>
+      <div class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
+          <div class="flex items-center justify-between gap-3">
+              <div>
+                  <h4 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('queue.here_now') }}</h4>
+              </div>
+              <span id="queue-presence-count" class="rounded-full bg-surface-container-highest px-3 py-1 text-xs font-bold text-on-surface-variant">{{ t('queue.no_one_here') }}</span>
+          </div>
+          <div id="queue-presence-list" class="mt-4 flex flex-wrap gap-2"></div>
+      </div>
 
     <!-- Queue Section -->
     <section class="flex flex-col gap-6">
         <div class="flex items-end justify-between gap-3 px-2">
             <div>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.up_next') }}</span>
-                <h2 class="font-headline font-black text-3xl tracking-tight text-on-surface">{{ t('queue.stage') }}</h2>
+                <h3 class="font-headline font-black text-3xl tracking-tight text-on-surface">{{ t('queue.stage') }}</h3>
             </div>
             <div class="flex items-center gap-2">
                 <span
@@ -185,17 +192,6 @@
             </div>
         </div>
 
-        <div class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
-            <div class="flex items-center justify-between gap-3">
-                <div>
-                    <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.live') }}</span>
-                    <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('queue.here_now') }}</h3>
-                </div>
-                <span id="queue-presence-count" class="rounded-full bg-surface-container-highest px-3 py-1 text-xs font-bold text-on-surface-variant">{{ t('queue.no_one_here') }}</span>
-            </div>
-            <div id="queue-presence-list" class="mt-4 flex flex-wrap gap-2"></div>
-        </div>
-        
         <div id="queue-list" class="flex flex-col gap-4">
             {% if queue %}
                 {% for item in queue %}

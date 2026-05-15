@@ -1756,7 +1756,7 @@ function updateStageRemoteVocalsUi() {
 
     if (stageRemoteVocalsVolumeLabel) {
         stageRemoteVocalsVolumeLabel.textContent = `${volume}%`;
-        stageRemoteVocalsVolumeLabel.classList.toggle('text-primary', stageRemoteVocalsEnabled && volume > 0);
+        stageRemoteVocalsVolumeLabel.classList.toggle('text-secondary', stageRemoteVocalsEnabled && volume > 0);
         stageRemoteVocalsVolumeLabel.classList.toggle('text-on-surface-variant', !stageRemoteVocalsEnabled || volume === 0);
     }
 }
