@@ -346,6 +346,7 @@
   "stage.vocals": "人声",
   "stage.vocals_off": "人声关",
   "stage.vocals_on": "人声开",
+  "stage.vocals_volume": "人声音量",
   "upload.add_queue_detail": "保存后将新上传内容加入队列",
   "upload.add_to_queue_label": "加入队列",
   "upload.ai_requires_queue": "AI 卡拉 OK 仅在启用加入队列时生效。",

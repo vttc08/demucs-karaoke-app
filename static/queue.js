@@ -36,10 +36,11 @@ const stageRemoteResyncBtn = document.getElementById('stage-remote-resync-btn');
 const stageRemoteLyricsToggleBtn = document.getElementById('stage-remote-lyrics-toggle-btn');
 const stageRemoteLyricsToggleIcon = document.getElementById('stage-remote-lyrics-toggle-icon');
 const stageRemoteLyricsToggleLabel = document.getElementById('stage-remote-lyrics-toggle-label');
-const stageRemoteVocalsBubble = document.getElementById('stage-remote-vocals-bubble');
-const stageRemoteVocalsBubbleIcon = document.getElementById('stage-remote-vocals-bubble-icon');
-const stageRemoteVocalsBubbleLabel = document.getElementById('stage-remote-vocals-bubble-label');
-const stageRemoteVocalsFill = document.getElementById('stage-remote-vocals-fill');
+const stageRemoteVocalsControl = document.getElementById('stage-remote-vocals-control');
+const stageRemoteVocalsToggleBtn = document.getElementById('stage-remote-vocals-toggle-btn');
+const stageRemoteVocalsToggleIcon = document.getElementById('stage-remote-vocals-toggle-icon');
+const stageRemoteVocalsVolumeSlider = document.getElementById('stage-remote-vocals-volume-slider');
+const stageRemoteVocalsVolumeLabel = document.getElementById('stage-remote-vocals-volume-label');
 const queueConfigModal = document.getElementById('queue-config-modal');
 const queueConfigModalBackdrop = document.getElementById('queue-config-modal-backdrop');
 const queueConfigCloseBtn = document.getElementById('queue-config-close-btn');
@@ -82,8 +83,6 @@ let stageRemoteVocalsEnabled = true;
 let stageRemoteVocalsVolume = 1.0;
 let stageRemoteVocalsLastVolume = 1.0;
 let stageRemoteVocalsAvailable = false;
-let stageRemoteVocalsPointerState = null;
-let stageRemoteVocalsSuppressClick = false;
 let demucsHealth = { healthy: true, detail: t('settings.engine_unknown') };
 let modalSelection = null;
 let modalKaraokeEnabled = false;
@@ -1730,32 +1729,35 @@ function updateStageRemotePlayPauseUi() {
 
 function updateStageRemoteVocalsUi() {
     const isDisabled = !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
-    const volume = stageRemoteVocalsVolume * 100;
+    const volume = Math.round(stageRemoteVocalsVolume * 100);
 
-    if (stageRemoteVocalsBubble) {
-        stageRemoteVocalsBubble.setAttribute('aria-pressed', stageRemoteVocalsEnabled ? 'true' : 'false');
-        stageRemoteVocalsBubble.setAttribute('aria-disabled', isDisabled ? 'true' : 'false');
-        stageRemoteVocalsBubble.setAttribute('aria-valuenow', String(Math.round(volume)));
-        stageRemoteVocalsBubble.setAttribute('aria-valuetext', `${Math.round(volume)}%`);
-        stageRemoteVocalsBubble.classList.toggle('opacity-60', isDisabled);
-        stageRemoteVocalsBubble.classList.toggle('cursor-not-allowed', isDisabled);
-        stageRemoteVocalsBubble.classList.toggle('cursor-pointer', !isDisabled);
+    if (stageRemoteVocalsControl) {
+        stageRemoteVocalsControl.classList.toggle('opacity-70', isDisabled);
     }
 
-    if (stageRemoteVocalsFill) {
-        stageRemoteVocalsFill.style.width = `${Math.max(0, Math.min(100, volume))}%`;
-        stageRemoteVocalsFill.style.opacity = stageRemoteVocalsEnabled ? '1' : '0.35';
+    if (stageRemoteVocalsToggleBtn) {
+        stageRemoteVocalsToggleBtn.disabled = isDisabled;
+        stageRemoteVocalsToggleBtn.setAttribute('aria-pressed', stageRemoteVocalsEnabled ? 'true' : 'false');
+        stageRemoteVocalsToggleBtn.classList.toggle('bg-secondary/15', stageRemoteVocalsEnabled);
+        stageRemoteVocalsToggleBtn.classList.toggle('text-secondary', stageRemoteVocalsEnabled);
+        stageRemoteVocalsToggleBtn.classList.toggle('bg-surface-container-highest', !stageRemoteVocalsEnabled);
+        stageRemoteVocalsToggleBtn.classList.toggle('text-on-surface-variant', !stageRemoteVocalsEnabled);
     }
 
-    if (stageRemoteVocalsBubbleLabel) {
-        stageRemoteVocalsBubbleLabel.textContent = `${Math.round(volume)}%`;
+    if (stageRemoteVocalsToggleIcon) {
+        stageRemoteVocalsToggleIcon.textContent = stageRemoteVocalsEnabled ? 'mic' : 'mic_off';
     }
 
-    if (stageRemoteVocalsBubbleIcon) {
-        stageRemoteVocalsBubbleIcon.textContent = stageRemoteVocalsEnabled ? 'mic' : 'mic_off';
-        stageRemoteVocalsBubbleIcon.className = `material-symbols-outlined text-2xl ${
-            stageRemoteVocalsEnabled ? 'text-secondary' : 'text-on-surface/50'
-        }`;
+    if (stageRemoteVocalsVolumeSlider) {
+        stageRemoteVocalsVolumeSlider.disabled = isDisabled;
+        stageRemoteVocalsVolumeSlider.value = String(volume);
+        stageRemoteVocalsVolumeSlider.setAttribute('aria-valuetext', `${volume}%`);
+    }
+
+    if (stageRemoteVocalsVolumeLabel) {
+        stageRemoteVocalsVolumeLabel.textContent = `${volume}%`;
+        stageRemoteVocalsVolumeLabel.classList.toggle('text-primary', stageRemoteVocalsEnabled && volume > 0);
+        stageRemoteVocalsVolumeLabel.classList.toggle('text-on-surface-variant', !stageRemoteVocalsEnabled || volume === 0);
     }
 }
 
@@ -1978,85 +1980,18 @@ function toggleStageVocalsEnabled() {
     return true;
 }
 
-if (stageRemoteVocalsBubble) {
-    const getVocalsVolumeFromPointerX = (clientX) => {
-        const rect = stageRemoteVocalsBubble.getBoundingClientRect();
-        if (!rect.width) {
-            return stageRemoteVocalsVolume;
-        }
-        return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    };
-
-    stageRemoteVocalsBubble.addEventListener('pointerdown', (event) => {
-        if (!stageRemoteVocalsAvailable || event.button !== 0) {
-            return;
-        }
-        stageRemoteVocalsPointerState = {
-            pointerId: event.pointerId,
-            startX: event.clientX,
-            startY: event.clientY,
-            dragged: false,
-        };
-        stageRemoteVocalsSuppressClick = false;
-        stageRemoteVocalsBubble.setPointerCapture?.(event.pointerId);
-    });
-
-    stageRemoteVocalsBubble.addEventListener('pointermove', (event) => {
-        if (!stageRemoteVocalsPointerState || stageRemoteVocalsPointerState.pointerId !== event.pointerId) {
-            return;
-        }
-
-        const deltaX = Math.abs(event.clientX - stageRemoteVocalsPointerState.startX);
-        const deltaY = Math.abs(event.clientY - stageRemoteVocalsPointerState.startY);
-        if (deltaX > 4 || deltaY > 4) {
-            stageRemoteVocalsPointerState.dragged = true;
-            stageRemoteVocalsSuppressClick = true;
-        }
-        sendStageVocalsVolume(getVocalsVolumeFromPointerX(event.clientX));
-    });
-
-    stageRemoteVocalsBubble.addEventListener('pointerup', (event) => {
-        if (!stageRemoteVocalsPointerState || stageRemoteVocalsPointerState.pointerId !== event.pointerId) {
-            return;
-        }
-
-        stageRemoteVocalsBubble.releasePointerCapture?.(event.pointerId);
-        if (stageRemoteVocalsPointerState.dragged) {
-            stageRemoteVocalsSuppressClick = true;
-        }
-        stageRemoteVocalsPointerState = null;
-    });
-
-    stageRemoteVocalsBubble.addEventListener('pointercancel', (event) => {
-        if (!stageRemoteVocalsPointerState || stageRemoteVocalsPointerState.pointerId !== event.pointerId) {
-            return;
-        }
-
-        stageRemoteVocalsBubble.releasePointerCapture?.(event.pointerId);
-        stageRemoteVocalsPointerState = null;
-        stageRemoteVocalsSuppressClick = false;
-    });
-
-    stageRemoteVocalsBubble.addEventListener('click', (event) => {
-        if (stageRemoteVocalsSuppressClick) {
-            stageRemoteVocalsSuppressClick = false;
-            return;
-        }
+if (stageRemoteVocalsToggleBtn) {
+    stageRemoteVocalsToggleBtn.addEventListener('click', () => {
         toggleStageVocalsEnabled();
     });
+}
 
-    stageRemoteVocalsBubble.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            toggleStageVocalsEnabled();
-            return;
-        }
-        if (event.key === 'ArrowUp' || event.key === 'ArrowRight') {
-            event.preventDefault();
-            sendStageVocalsVolume(stageRemoteVocalsVolume + 0.05);
-        } else if (event.key === 'ArrowDown' || event.key === 'ArrowLeft') {
-            event.preventDefault();
-            sendStageVocalsVolume(stageRemoteVocalsVolume - 0.05);
+if (stageRemoteVocalsVolumeSlider) {
+    stageRemoteVocalsVolumeSlider.addEventListener('input', () => {
+        const nextVolume = Number(stageRemoteVocalsVolumeSlider.value) / 100;
+        const sent = sendStageVocalsVolume(Number.isFinite(nextVolume) ? nextVolume : stageRemoteVocalsVolume);
+        if (!sent) {
+            updateStageRemoteVocalsUi();
         }
     });
 }

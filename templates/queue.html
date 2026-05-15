@@ -4,14 +4,6 @@
 {% block header_icon %}music_note{% endblock %}
 {% block header_title %}{{ t('app.karaoke') }}{% endblock %}
 
-{% block head %}
-<style>
-    #stage-remote-vocals-bubble {
-        touch-action: none;
-    }
-</style>
-{% endblock %}
-
 {% block content %}
 <main
     class="pt-28 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-4 sm:gap-5 sm:px-6 lg:px-8"
@@ -72,27 +64,33 @@
                 {{ t('stage.resync') }}
             </button>
             <div
-                id="stage-remote-vocals-bubble"
-                class="col-span-2 row-start-2 relative flex h-14 w-full max-w-[13.75rem] items-center overflow-hidden rounded-full border border-white/10 bg-[rgba(42,16,66,0.82)] px-3 shadow-[0_14px_34px_rgba(20,10,36,0.42)] backdrop-blur-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary/70 sm:h-[3.25rem] sm:max-w-[13.75rem]"
-                role="button"
-                tabindex="0"
-                aria-label="{{ t('stage.toggle_guide_vocals') }}"
-                aria-pressed="true"
-                aria-disabled="false"
+                id="stage-remote-vocals-control"
+                class="col-span-2 row-start-2 grid min-h-11 w-full grid-cols-[2.25rem_minmax(0,1fr)_2.75rem] items-center gap-2 rounded-full border border-outline-variant/20 bg-surface-container-high px-1.5 py-1 shadow-inner shadow-black/10 sm:min-h-12 sm:grid-cols-[2.5rem_minmax(0,1fr)_3rem] sm:px-2"
             >
-                <div id="stage-remote-vocals-fill" class="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-[#39ff14] shadow-[0_0_18px_rgba(57,255,20,0.52)] transition-[width,opacity] duration-200 ease-out" style="width:100%;"></div>
-                <div class="relative z-10 flex w-full items-center gap-3">
-                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/12 text-secondary/90 shadow-inner shadow-black/10 sm:h-9 sm:w-9">
-                        <span id="stage-remote-vocals-bubble-icon" class="material-symbols-outlined text-lg sm:text-xl">mic</span>
-                    </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-2">
-                            <span class="whitespace-nowrap text-[10px] font-black uppercase tracking-[0.28em] text-on-surface/80 sm:text-[11px]">{{ t('stage.vocals') }}</span>
-                            <div class="min-w-0 flex-1"></div>
-                            <span id="stage-remote-vocals-bubble-label" class="tabular-nums text-[11px] font-black text-on-surface sm:text-xs">100%</span>
-                        </div>
-                    </div>
-                </div>
+                <button
+                    id="stage-remote-vocals-toggle-btn"
+                    type="button"
+                    class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-secondary/15 text-secondary transition-all hover:bg-secondary/25 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9"
+                    aria-label="{{ t('stage.toggle_guide_vocals') }}"
+                    aria-pressed="true"
+                    title="{{ t('stage.toggle_guide_vocals') }}"
+                    disabled
+                >
+                    <span id="stage-remote-vocals-toggle-icon" class="material-symbols-outlined text-lg">mic</span>
+                </button>
+                <label class="sr-only" for="stage-remote-vocals-volume-slider">{{ t('stage.vocals_volume') }}</label>
+                <input
+                    id="stage-remote-vocals-volume-slider"
+                    class="h-8 w-full min-w-0 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value="100"
+                    step="1"
+                    aria-label="{{ t('stage.vocals_volume') }}"
+                    disabled
+                />
+                <span id="stage-remote-vocals-volume-label" class="justify-self-end tabular-nums text-[11px] font-black text-on-surface-variant sm:text-xs">100%</span>
             </div>
 
             <button

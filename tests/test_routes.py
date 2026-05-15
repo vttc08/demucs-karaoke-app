@@ -546,8 +546,9 @@ def test_queue_page_loads(client):
     assert b"queue-toast" in response.content
     assert b"queue-config-lyrics-detail" in response.content
     assert b"flex-none shrink-0" in response.content
-    assert 'id="stage-remote-vocals-bubble"' in response.text
-    assert 'id="stage-remote-vocals-fill"' in response.text
+    assert 'id="stage-remote-vocals-toggle-btn"' in response.text
+    assert 'id="stage-remote-vocals-volume-slider"' in response.text
+    assert 'id="stage-remote-vocals-volume-label"' in response.text
     assert 'id="stage-remote-lyrics-toggle-btn"' in response.text
     assert 'id="qr-toggle-btn"' not in response.text
     assert 'id="queue-library-shortcuts"' in response.text

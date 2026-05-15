@@ -346,6 +346,7 @@
   "stage.vocals": "Vocals",
   "stage.vocals_off": "Vocals Off",
   "stage.vocals_on": "Vocals On",
+  "stage.vocals_volume": "Vocals volume",
   "upload.add_queue_detail": "Queue the new upload after saving it",
   "upload.add_to_queue_label": "Add to queue",
   "upload.ai_requires_queue": "AI karaoke only applies when Add to queue is enabled.",
