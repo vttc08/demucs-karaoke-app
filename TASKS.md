@@ -36,6 +36,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] manage playback on other devices
 - [x] database improvement, periodic and manual cleanup of failed songs and already played/skipped
 - [x] fulltext and file search existing media
+- [x] single-item sidecar refresh for the media edit modal
 - [x] persist settings in database
 - [ ] integrate whisper (lang detect, word by word transcription), align lyrics if lyrics file present
 - [x] explore client side lyrics compositing
@@ -74,7 +75,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [ ] show progress for ytdlp and demucs
 - [x] customize lyric tracks behavior
 - [x] lyrics-assisted add-to-queue flow with manual lyrics override
-- [x] lyrics display page/modal for current song (synced and unsynced) (lyrics viewer screen)
+- [ ] lyrics display page/modal for current song (synced and unsynced) (lyrics viewer screen)
 - [ ] implement lyrics and karaoke demucs behavior for upload and media management 
 - [ ] i frame only video previewer and editor (vibestudio editor)
 - [ ] add vocals to existing karaoke video (audio synchronization)

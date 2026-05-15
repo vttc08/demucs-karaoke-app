@@ -219,8 +219,21 @@
                         <div class="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/60 to-transparent"></div>
                     </div>
                     <div class="mt-8">
-                        <h2 id="media-edit-preview-title" class="font-headline text-3xl font-black leading-tight tracking-tight text-on-surface">{{ t('common.track_title') }}</h2>
-                        <p id="media-edit-preview-artist" class="mt-1 text-lg font-medium text-primary">{{ t('common.artist_name') }}</p>
+                        <div class="flex items-start gap-3">
+                            <div class="min-w-0 flex-1">
+                                <h2 id="media-edit-preview-title" class="truncate font-headline text-3xl font-black leading-tight tracking-tight text-on-surface">{{ t('common.track_title') }}</h2>
+                                <p id="media-edit-preview-artist" class="truncate text-lg font-medium text-primary">{{ t('common.artist_name') }}</p>
+                            </div>
+                            <button
+                                type="button"
+                                data-action="scan-item-sidecars"
+                                aria-label="{{ t('media.refresh_sidecars') }}"
+                                title="{{ t('media.refresh_sidecars') }}"
+                                class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-tertiary/20 bg-tertiary/10 text-tertiary transition-transform hover:scale-105 active:scale-95"
+                            >
+                                <span class="material-symbols-outlined text-[18px]">refresh</span>
+                            </button>
+                        </div>
                         <div class="mt-6 flex flex-wrap gap-2">
                             <span id="media-edit-preview-format" class="rounded-lg bg-surface-container-highest/60 px-3 py-1 text-[11px] font-bold text-on-surface-variant">FORMAT</span>
                             <span id="media-edit-preview-duration" class="rounded-lg bg-surface-container-highest/60 px-3 py-1 text-[11px] font-bold text-on-surface-variant">00:00</span>
@@ -260,6 +273,15 @@
                                 <h4 id="media-edit-preview-title-mobile" class="truncate font-headline text-lg font-black text-on-surface">{{ t('common.track_title') }}</h4>
                                 <p id="media-edit-preview-artist-mobile" class="truncate text-sm font-medium text-on-surface-variant">{{ t('common.artist_name') }}</p>
                             </div>
+                            <button
+                                type="button"
+                                data-action="scan-item-sidecars"
+                                aria-label="{{ t('media.refresh_sidecars') }}"
+                                title="{{ t('media.refresh_sidecars') }}"
+                                class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-tertiary/20 bg-tertiary/10 text-tertiary transition-transform hover:scale-105 active:scale-95"
+                            >
+                                <span class="material-symbols-outlined text-[18px]">refresh</span>
+                            </button>
                         </div>
 
                         <div class="space-y-4">
@@ -319,19 +341,6 @@
                             <div class="h-px bg-white/5"></div>
 
                             <div class="space-y-4">
-                                <button type="button" data-action="scan-sidecar" class="flex w-full items-center justify-between rounded-xl border border-tertiary/20 bg-tertiary/5 p-4 transition-all hover:bg-tertiary/10">
-                                    <div class="flex items-center gap-4">
-                                        <div class="rounded-full bg-tertiary/20 p-2.5 text-tertiary">
-                                            <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1">sync</span>
-                                        </div>
-                                        <div class="text-left">
-                                            <p class="text-sm font-bold text-on-surface">{{ t('media.scan_sidecars') }}</p>
-                                            <p class="text-[11px] text-on-surface-variant">{{ t('media.scan_sidecars_detail') }}</p>
-                                        </div>
-                                    </div>
-                                    <span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
-                                </button>
-
                                 <div class="grid grid-cols-2 gap-4">
                                     <div class="flex flex-col gap-3 rounded-xl bg-surface-container-highest/40 p-4 ring-1 ring-white/5">
                                         <div class="flex items-center justify-between">

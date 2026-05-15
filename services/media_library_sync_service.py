@@ -71,15 +71,14 @@ class MediaLibrarySyncService:
                 row.last_scanned_at = scanned_at
                 continue
 
-            if row.missing:
-                restored += 1
-            row.missing = False
-            row.last_scanned_at = scanned_at
-            row.file_stem = row.file_stem or media_file.stem
-            if self._refresh_sidecars(row, media_file):
-                sidecars_updated += 1
-            if self.thumbnail_service.ensure_thumbnail_for_media_file(media_file):
-                thumbnails_updated += 1
+            restored_delta, sidecars_delta, thumbnails_delta = self._scan_existing_media_row(
+                row,
+                media_file,
+                scanned_at,
+            )
+            restored += restored_delta
+            sidecars_updated += sidecars_delta
+            thumbnails_updated += thumbnails_delta
 
         created = 0
         for media_url, media_file in files_by_url.items():
@@ -123,6 +122,68 @@ class MediaLibrarySyncService:
         )
         return summary
 
+    def scan_media_item(self, db: Session, media_item_id: int) -> dict[str, int]:
+        """Refresh sidecar and missing-state information for one media item."""
+        media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
+        if media_item is None:
+            raise ValueError(f"Media item not found: {media_item_id}")
+
+        scanned_at = datetime.utcnow()
+        media_file = self.queue_service._media_url_to_file(media_item.media_path)
+        if media_file is None:
+            logger.info(
+                "Skipping media item scan because the media path is not scanable media_id=%s media_path=%s",
+                media_item_id,
+                media_item.media_path,
+            )
+            return {
+                "scanned_files": 0,
+                "created": 0,
+                "marked_missing": 0,
+                "restored": 0,
+                "sidecars_updated": 0,
+                "thumbnails_updated": 0,
+                "skipped_rows": 1,
+            }
+
+        if media_file.exists():
+            restored, sidecars_updated, thumbnails_updated = self._scan_existing_media_row(
+                media_item,
+                media_file,
+                scanned_at,
+            )
+            marked_missing = 0
+        else:
+            restored = 0
+            sidecars_updated = 0
+            thumbnails_updated = 0
+            marked_missing = 0 if media_item.missing else 1
+            media_item.missing = True
+            media_item.last_scanned_at = scanned_at
+
+        db.commit()
+
+        summary = {
+            "scanned_files": 1,
+            "created": 0,
+            "marked_missing": marked_missing,
+            "restored": restored,
+            "sidecars_updated": sidecars_updated,
+            "thumbnails_updated": thumbnails_updated,
+            "skipped_rows": 0,
+        }
+        logger.info(
+            "Media item scan complete media_id=%s scanned_files=%s marked_missing=%s restored=%s sidecars_updated=%s thumbnails_updated=%s skipped_rows=%s",
+            media_item_id,
+            summary["scanned_files"],
+            summary["marked_missing"],
+            summary["restored"],
+            summary["sidecars_updated"],
+            summary["thumbnails_updated"],
+            summary["skipped_rows"],
+        )
+        return summary
+
     def _discover_primary_media_files(self, media_root: Path) -> list[Path]:
         if not media_root.exists():
             return []
@@ -148,6 +209,22 @@ class MediaLibrarySyncService:
         media_item.vocals_path = expected_vocals
         media_item.lyrics_path = expected_lyrics
         return changed
+
+    def _scan_existing_media_row(
+        self,
+        media_item: MediaItem,
+        media_file: Path,
+        scanned_at: datetime,
+    ) -> tuple[int, int, int]:
+        """Refresh one existing media row from its backing file."""
+        restored = int(media_item.missing)
+        media_item.missing = False
+        media_item.last_scanned_at = scanned_at
+        media_item.file_stem = media_item.file_stem or media_file.stem
+
+        sidecars_updated = 1 if self._refresh_sidecars(media_item, media_file) else 0
+        thumbnails_updated = 1 if self.thumbnail_service.ensure_thumbnail_for_media_file(media_file) else 0
+        return restored, sidecars_updated, thumbnails_updated
 
     def _find_vocals_sidecar(self, media_file: Path) -> str | None:
         for ext in _VOCALS_AUDIO_EXTENSIONS:

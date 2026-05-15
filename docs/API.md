@@ -406,6 +406,32 @@ Behavior:
 
 ---
 
+### Scan One Media Item
+```
+POST /api/media/{item_id}/scan
+```
+
+Refreshes the vocals and lyrics sidecar paths for one media row without walking the full library.
+If the backing media file is missing, the row is marked missing and left otherwise unchanged.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "summary": {
+    "scanned_files": 1,
+    "created": 0,
+    "marked_missing": 0,
+    "restored": 0,
+    "sidecars_updated": 1,
+    "thumbnails_updated": 0,
+    "skipped_rows": 0
+  }
+}
+```
+
+---
+
 ### Rename Media Item
 ```
 PATCH /api/media/{item_id}

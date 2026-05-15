@@ -428,6 +428,51 @@ def test_media_library_sync_service_reconciles_rows_and_sidecars(db_session, tmp
         settings.media_path = original_media
 
 
+def test_media_library_sync_service_scans_one_item_sidecars(db_session, tmp_path, monkeypatch):
+    """Single-item scans should refresh vocals and lyrics sidecar paths."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "single-item.mp4"
+        vocals_file = settings.media_path / "single-item.vocals.wav"
+        lyrics_file = settings.media_path / "single-item.lrc"
+        media_file.write_text("video", encoding="utf-8")
+        vocals_file.write_text("vocals", encoding="utf-8")
+        lyrics_file.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        media = MediaItem(
+            title="Single Item",
+            media_path="/media/single-item.mp4",
+            missing=True,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibrarySyncService()
+        monkeypatch.setattr(
+            service.thumbnail_service,
+            "ensure_thumbnail_for_media_file",
+            lambda path: False,
+        )
+
+        summary = service.scan_media_item(db_session, media.id)
+
+        assert summary["scanned_files"] == 1
+        assert summary["restored"] == 1
+        assert summary["sidecars_updated"] == 1
+
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.missing is False
+        assert stored.vocals_path == "/media/single-item.vocals.wav"
+        assert stored.lyrics_path == "/media/single-item.lrc"
+        assert stored.last_scanned_at is not None
+    finally:
+        settings.media_path = original_media
+
+
 def test_media_library_sync_service_skips_sidecars_as_primary_media(db_session, tmp_path):
     """Sidecar-only files should not be inserted as standalone media rows."""
     original_media = settings.media_path

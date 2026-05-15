@@ -551,6 +551,48 @@ async function autoRenameMediaItem(actionButton) {
     }
 }
 
+async function refreshMediaItemSidecars(actionButton) {
+    if (!activeEditItemId || !actionButton || actionButton.disabled) {
+        return;
+    }
+
+    const originalHtml = actionButton.innerHTML;
+    actionButton.disabled = true;
+    actionButton.setAttribute("aria-busy", "true");
+    actionButton.classList.add("opacity-70", "cursor-wait");
+    actionButton.innerHTML = `<span class="material-symbols-outlined animate-spin text-[18px]">sync</span>`;
+
+    try {
+        const response = await fetch(appUrl(`/api/media/${Number(activeEditItemId)}/scan`), {
+            method: "POST",
+        });
+
+        if (!response.ok) {
+            let detail = null;
+            try {
+                const error = await response.json();
+                detail = error.detail || null;
+            } catch (_error) {
+                detail = null;
+            }
+            throw new Error(detail || t("media.scan_failed_status", { status: response.status }));
+        }
+
+        await response.json();
+        showToast(t("media.sidecars_refreshed"));
+        window.setTimeout(() => {
+            window.location.reload();
+        }, 400);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : t("media.scan_failed");
+        showToast(message);
+        actionButton.disabled = false;
+        actionButton.removeAttribute("aria-busy");
+        actionButton.classList.remove("opacity-70", "cursor-wait");
+        actionButton.innerHTML = originalHtml || `<span class="material-symbols-outlined text-[18px]">refresh</span>`;
+    }
+}
+
 async function runLibraryScan(actionButton) {
     if (!actionButton) {
         return;
@@ -600,6 +642,11 @@ function handleActionClick(event) {
 
     if (action === "auto-rename") {
         autoRenameMediaItem(button);
+        return;
+    }
+
+    if (action === "scan-item-sidecars") {
+        refreshMediaItemSidecars(button);
         return;
     }
 

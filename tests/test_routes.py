@@ -1172,8 +1172,56 @@ def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
             assert created.title == "scan-song"
 
             missing_row = db.query(MediaItem).filter(MediaItem.media_path == "/media/should-be-missing.mp4").first()
-            assert missing_row is not None
-            assert missing_row.missing is True
+        assert missing_row is not None
+        assert missing_row.missing is True
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_scan_single_item_route_refreshes_sidecars(client, tmp_path, monkeypatch):
+    """Single-item media scan route should refresh vocals and lyrics sidecars."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "route-single-item.mp4"
+        vocals_file = settings.media_path / "route-single-item.vocals.mp3"
+        lyrics_file = settings.media_path / "route-single-item.lrc"
+        media_file.write_text("video", encoding="utf-8")
+        vocals_file.write_text("vocals", encoding="utf-8")
+        lyrics_file.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Route Single Item",
+                media_path="/media/route-single-item.mp4",
+                missing=True,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        monkeypatch.setattr(
+            "routes.media_library.media_library_sync_service.thumbnail_service.ensure_thumbnail_for_media_file",
+            lambda path: False,
+        )
+
+        response = client.post(f"/api/media/{media_id}/scan")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["summary"]["scanned_files"] == 1
+        assert payload["summary"]["restored"] == 1
+        assert payload["summary"]["sidecars_updated"] == 1
+
+        with TestingSessionLocal() as db:
+            stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+            assert stored is not None
+            assert stored.missing is False
+            assert stored.vocals_path == "/media/route-single-item.vocals.mp3"
+            assert stored.lyrics_path == "/media/route-single-item.lrc"
+            assert stored.last_scanned_at is not None
     finally:
         settings.media_path = original_media
 

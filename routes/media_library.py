@@ -141,6 +141,16 @@ def scan_media_library(db: Session = Depends(get_db)):
     return {"status": "ok", "summary": summary}
 
 
+@router.post("/{item_id}/scan")
+def scan_media_item(item_id: int, db: Session = Depends(get_db)):
+    """Refresh sidecar and missing-state data for one media item."""
+    try:
+        summary = media_library_sync_service.scan_media_item(db, item_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"status": "ok", "summary": summary}
+
+
 @router.delete("/{item_id}")
 def delete_media_item(
     item_id: int,
