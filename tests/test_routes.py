@@ -563,7 +563,6 @@ def test_queue_page_loads(client):
     assert "skipToSong(" not in response.text
     assert 'aria-label="Settings"' not in response.text
     assert 'aria-label="Stage"' not in response.text
-    assert 'aria-label="Media"' not in response.text
     assert 'aria-label="Upload"' not in response.text
     assert "shield_person" not in response.text
 
@@ -1111,13 +1110,12 @@ def test_media_management_page_uses_database_rows(client):
     assert b"https://i.ytimg.com/vi/realabc12345/hqdefault.jpg" in content
     assert b'data-media-path="/media/real-song-one.mp4"' in content
 
-    assert b'data-action="edit"' in content
+    assert b'data-action="add-to-queue"' in content
+    assert b'data-action="edit"' not in content
     assert b'data-action="delete"' not in content
     assert b'data-action="rename"' not in content
     assert b"synced" not in content.lower()
-    assert b"Filename on disk" in content
-    assert b'id="media-edit-rename-disk" type="checkbox"' in content
-    assert b'id="media-edit-rename-disk" type="checkbox" class="peer h-5 w-5 appearance-none rounded border-2 border-outline-variant bg-transparent transition-all checked:border-secondary checked:bg-secondary" checked />' in content
+    assert b'id="media-edit-modal"' not in content
     assert b"Missing" in content
     assert b'data-has-multi-track="true"' in content
     assert b'data-has-lyrics="true"' in content
@@ -1129,8 +1127,31 @@ def test_media_management_page_uses_database_rows(client):
     assert content.count(b">2</p>") >= 1
 
 
-def test_media_management_page_shows_delete_for_admin(client):
-    """Admin media library should include delete actions."""
+def test_media_management_page_hides_edit_controls_for_guest(client):
+    """Guest media library should be queue-only."""
+    with TestingSessionLocal() as db:
+        db.add(
+            MediaItem(
+                title="Admin Delete Song",
+                artist="Artist",
+                media_path="/media/admin-delete-song.mp4",
+                missing=False,
+            )
+        )
+        db.commit()
+
+    response = client.get("/media")
+
+    assert response.status_code == 200
+    assert b'data-action="add-to-queue"' in response.content
+    assert b'data-action="edit"' not in response.content
+    assert b'data-action="delete"' not in response.content
+    assert b'data-action="scan-library"' not in response.content
+    assert b'data-action="upload-media"' not in response.content
+
+
+def test_media_management_page_shows_edit_controls_for_admin(client):
+    """Admin media library should include edit and delete actions."""
     authenticate_admin_client(client)
     with TestingSessionLocal() as db:
         db.add(
@@ -1146,11 +1167,15 @@ def test_media_management_page_shows_delete_for_admin(client):
     response = client.get("/media")
 
     assert response.status_code == 200
+    assert b'data-action="edit"' in response.content
     assert b'data-action="delete"' in response.content
+    assert b'data-action="scan-library"' in response.content
+    assert b'data-action="upload-media"' in response.content
 
 
 def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
     """Manual media scan route should create and mark rows from filesystem diff."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     try:
         settings.media_path = tmp_path / "media"
@@ -1186,8 +1211,17 @@ def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
         settings.media_path = original_media
 
 
+def test_media_scan_route_requires_admin(client):
+    """Guest users should not be able to trigger library scans."""
+    response = client.post("/api/media/scan")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
+
+
 def test_media_scan_single_item_route_refreshes_sidecars(client, tmp_path, monkeypatch):
     """Single-item media scan route should refresh vocals and lyrics sidecars."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     try:
         settings.media_path = tmp_path / "media"
@@ -1339,6 +1373,7 @@ def test_media_delete_route_requires_admin(client):
 
 def test_media_rename_route_updates_database_and_files(client, tmp_path):
     """Rename route should update metadata and on-disk assets."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     original_cache = settings.cache_path
     try:
@@ -1401,8 +1436,34 @@ def test_media_rename_route_updates_database_and_files(client, tmp_path):
         settings.cache_path = original_cache
 
 
+def test_media_rename_route_requires_admin(client):
+    """Guest users should not be able to edit media metadata."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Guest Edit Blocked",
+            media_path="/media/guest-edit-blocked.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        media_id = media.id
+
+    response = client.patch(
+        f"/api/media/{media_id}",
+        json={
+            "title": "Blocked",
+            "artist": None,
+            "rename_on_disk": False,
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
+
+
 def test_media_rename_route_persists_lyrics_text(client, tmp_path):
     """Media edit should be able to save lyrics text as a sidecar."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     original_cache = settings.cache_path
     try:
@@ -1454,6 +1515,7 @@ def test_media_rename_route_persists_lyrics_text(client, tmp_path):
 
 def test_media_scan_preserves_edited_media_adjacent_lyrics(client, tmp_path):
     """Library scan should keep lyrics saved from the edit modal."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     original_cache = settings.cache_path
     try:

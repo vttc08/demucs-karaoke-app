@@ -163,10 +163,11 @@ and `/static/...`.
          - View title, artist, and capability badges (multi-track, lyrics)
           - Local audio files reuse embedded album art as the thumbnail when cached cover art is available
           - Use **Add to Queue** to enqueue a local media row through the existing queue API
-          - Use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
-          - Use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
+          - Guests can browse and queue items only; edit, scan, upload, and delete controls are admin-only
+          - Admin users can use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
+          - Admin users can use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
           - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
-          - Trigger **Scan Library** to reconcile DB with filesystem on demand
+          - Admin users can trigger **Scan Library** to reconcile DB with filesystem on demand
           - App also performs one media-library scan on startup/restart
 
 6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`

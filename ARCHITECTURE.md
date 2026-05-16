@@ -45,6 +45,13 @@ This project currently uses two services:
 - Only frontend UI elements are translated. Backend content such as song titles, artist names, lyrics,
   filenames, provider output, and API payload data stays in its original language.
 
+## Media library permissions
+
+- The media library page is browse-first for guests.
+- Guests can view entries and add them to the queue.
+- Edit, refresh-sidecar, scan, upload-shortcut, and delete controls are admin-only.
+- The media edit and scan API routes enforce admin sessions server-side so the page stays queue-only even if a guest tampers with the DOM.
+
 ## Real-time queue update architecture
 
 The queue page uses a hybrid update model:
