@@ -235,6 +235,7 @@ class QueueItemResponse(BaseModel):
     artist: Optional[str] = None
     requested_by_name: Optional[str] = None
     can_remove: bool = False
+    can_control_stage: bool = False
     is_karaoke: bool
     status: QueueStatus
     thumbnail: Optional[str] = None
