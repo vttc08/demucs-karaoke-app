@@ -96,3 +96,25 @@ html.dark {
     white-space: nowrap;
     border: 0;
 }
+
+@media (min-width: 1024px) {
+    .queue-page {
+        --queue-sticky-top: 6.5rem;
+        --queue-stage-max-height: calc(100dvh - var(--queue-sticky-top) - 1.5rem);
+    }
+
+    .queue-stage-rail {
+        position: sticky;
+        top: var(--queue-sticky-top);
+    }
+
+    .queue-stage-panel {
+        max-height: var(--queue-stage-max-height);
+    }
+
+    .queue-stage-panel #queue-list {
+        min-height: 0;
+        overflow-y: auto;
+        padding-right: 0.25rem;
+    }
+}
