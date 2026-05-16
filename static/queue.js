@@ -79,6 +79,7 @@ const LYRICS_TITLE_HINT_RE = /\b(lyrics?|lyric\s+video|with\s+lyrics)\b/i;
 let stageRemotePaused = false;
 let stageRemoteLyricsEnabled = true;
 let stageRemoteLyricsAvailable = false;
+let stageRemoteCanControl = isAdminUser;
 let stageRemoteVocalsEnabled = true;
 let stageRemoteVocalsVolume = 1.0;
 let stageRemoteVocalsLastVolume = 1.0;
@@ -1240,6 +1241,7 @@ async function refreshQueue(force = false) {
     try {
         const response = await fetch(`${API_BASE}/api/queue/`);
         const serverQueue = await response.json();
+        syncStageControlAvailability(serverQueue);
         syncStageVocalsAvailability(serverQueue);
         syncStageLyricsAvailability(serverQueue);
         
@@ -1511,13 +1513,16 @@ class QueueWebSocket {
 
     updateRemoteControlsState() {
         const connected = this.ws && this.ws.readyState === WebSocket.OPEN;
-        if (stageRemotePlayPauseBtn) stageRemotePlayPauseBtn.disabled = !connected;
-        if (stageRemoteSkipBtn) stageRemoteSkipBtn.disabled = !connected;
-        if (stageRemoteResyncBtn) stageRemoteResyncBtn.disabled = !connected;
+        const canControl = connected && stageRemoteCanControl;
+        if (stageRemotePlayPauseBtn) stageRemotePlayPauseBtn.disabled = !canControl;
+        if (stageRemoteSkipBtn) stageRemoteSkipBtn.disabled = !canControl;
+        if (stageRemoteResyncBtn) stageRemoteResyncBtn.disabled = !canControl;
         updateStageRemoteLyricsUi();
         updateStageRemoteVocalsUi();
         if (stageRemoteStatus) {
-            stageRemoteStatus.textContent = connected ? t('queue.connected') : t('queue.offline');
+            stageRemoteStatus.textContent = connected
+                ? (stageRemoteCanControl ? t('queue.connected') : t('queue.stage_controls_limited'))
+                : t('queue.offline');
         }
     }
     
@@ -1696,6 +1701,14 @@ class QueueWebSocket {
             case 'stage_state_update':
                 window.dispatchEvent(new CustomEvent('stage_state_update', { detail: message.data }));
                 break;
+            case 'error':
+                if (message.data?.detail) {
+                    const detail = message.data.detail === 'Not allowed to control this stage item'
+                        ? t('queue.stage_control_denied')
+                        : message.data.detail;
+                    showQueueToast(detail);
+                }
+                break;
             default:
                 console.log('[WebSocket] Unknown message type:', message.type);
         }
@@ -1728,7 +1741,7 @@ function updateStageRemotePlayPauseUi() {
 }
 
 function updateStageRemoteVocalsUi() {
-    const isDisabled = !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
+    const isDisabled = !stageRemoteCanControl || !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
     const volume = Math.round(stageRemoteVocalsVolume * 100);
 
     if (stageRemoteVocalsControl) {
@@ -1763,7 +1776,7 @@ function updateStageRemoteVocalsUi() {
 
 function updateStageRemoteLyricsUi() {
     if (stageRemoteLyricsToggleBtn) {
-        stageRemoteLyricsToggleBtn.disabled = !stageRemoteLyricsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
+        stageRemoteLyricsToggleBtn.disabled = !stageRemoteCanControl || !stageRemoteLyricsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
     }
     if (stageRemoteLyricsToggleIcon) {
         stageRemoteLyricsToggleIcon.textContent = stageRemoteLyricsEnabled ? 'subtitles' : 'subtitles_off';
@@ -1771,6 +1784,16 @@ function updateStageRemoteLyricsUi() {
     if (stageRemoteLyricsToggleLabel) {
         stageRemoteLyricsToggleLabel.textContent = stageRemoteLyricsAvailable ? (stageRemoteLyricsEnabled ? t('stage.lyrics_on') : t('stage.lyrics_off')) : t('stage.no_lyrics');
     }
+}
+
+function syncStageControlAvailability(queue) {
+    if (isAdminUser) {
+        stageRemoteCanControl = true;
+    } else {
+        const playingItem = Array.isArray(queue) ? queue.find((item) => item.status === 'playing') : null;
+        stageRemoteCanControl = Boolean(playingItem && playingItem.can_control_stage);
+    }
+    queueWebSocket?.updateRemoteControlsState();
 }
 
 function syncStageVocalsAvailability(queue) {
@@ -1791,6 +1814,14 @@ function syncStageLyricsAvailability(queue) {
     updateStageRemoteLyricsUi();
 }
 
+function canSendStageControl() {
+    if (stageRemoteCanControl) {
+        return true;
+    }
+    alert(t('queue.stage_control_denied'));
+    return false;
+}
+
 // Initialize WebSocket connection
 let queueWebSocket = null;
 initializeQueueAsSettings();
@@ -1802,6 +1833,7 @@ if (window.location.pathname === appUrl('/queue') || window.location.pathname ==
 if (stageRemotePlayPauseBtn) {
     stageRemotePlayPauseBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
+        if (!canSendStageControl()) return;
         const command = stageRemotePaused ? 'play' : 'pause';
         const sent = queueWebSocket.send({
             type: 'stage_command',
@@ -1823,6 +1855,7 @@ if (stageRemotePlayPauseBtn) {
 if (stageRemoteSkipBtn) {
     stageRemoteSkipBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
+        if (!canSendStageControl()) return;
         const sent = queueWebSocket.send({
             type: 'stage_command',
             data: {
@@ -1840,6 +1873,7 @@ if (stageRemoteSkipBtn) {
 if (stageRemoteResyncBtn) {
     stageRemoteResyncBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
+        if (!canSendStageControl()) return;
         const sent = queueWebSocket.send({
             type: 'stage_command',
             data: {
@@ -1857,6 +1891,7 @@ if (stageRemoteResyncBtn) {
 if (stageRemoteLyricsToggleBtn) {
     stageRemoteLyricsToggleBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
+        if (!canSendStageControl()) return;
         if (!stageRemoteLyricsAvailable) {
             alert(t('queue.no_lyrics_track'));
             return;
@@ -1881,7 +1916,7 @@ if (stageRemoteLyricsToggleBtn) {
 }
 
 function sendStageVocalsVolume(nextVolume) {
-    if (!queueWebSocket || !stageRemoteVocalsAvailable) {
+    if (!queueWebSocket || !stageRemoteCanControl || !stageRemoteVocalsAvailable) {
         return false;
     }
 
@@ -1936,6 +1971,7 @@ function sendStageVocalsVolume(nextVolume) {
 
 function toggleStageVocalsEnabled() {
     if (!queueWebSocket) return false;
+    if (!canSendStageControl()) return false;
     if (!stageRemoteVocalsAvailable) {
         alert(t('queue.no_vocals_track'));
         return false;

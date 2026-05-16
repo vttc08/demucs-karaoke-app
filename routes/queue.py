@@ -8,12 +8,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from sqlalchemy.orm import Session
 from config import settings
 from database import SessionLocal, get_db
-from models import QueueItemCreate, QueueItemMoveRequest, QueueItemResponse, QueueStatus
-from routes.auth import get_admin_user, require_admin_user
+from models import QueueItem, QueueItemCreate, QueueItemMoveRequest, QueueItemResponse, QueueStatus
+from routes.auth import auth_service, get_admin_user, require_admin_user
 from services.lyrics_service import LyricsService
+from services.auth_service import ADMIN_SESSION_COOKIE
 from services.queue_service import QueueService
 from services.websocket_manager import manager
-from models import QueueItem
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,56 @@ def _normalize_presence_value(value: str | None, *, max_length: int = 80) -> str
 def _current_guest_id(request: Request) -> str | None:
     """Return the normalized persistent guest id for the current request."""
     return _normalize_presence_value(request.cookies.get("karaoke_guest_id"))
+
+
+def _websocket_guest_id(websocket: WebSocket) -> str | None:
+    """Return the normalized persistent guest id for a websocket connection."""
+    return _normalize_presence_value(websocket.cookies.get("karaoke_guest_id"))
+
+
+def _is_admin_websocket(websocket: WebSocket, db: Session) -> bool:
+    """Return whether a websocket connection has a valid admin session."""
+    return (
+        auth_service.get_admin_for_session(
+            db, websocket.cookies.get(ADMIN_SESSION_COOKIE)
+        )
+        is not None
+    )
+
+
+def _can_control_current_stage(
+    db: Session,
+    *,
+    is_admin: bool,
+    requester_id: str | None,
+) -> bool:
+    """Return whether the viewer may control the currently playing item."""
+    if is_admin:
+        return True
+    current = (
+        db.query(QueueItem)
+        .filter(QueueItem.status == QueueStatus.PLAYING)
+        .order_by(QueueItem.position.asc(), QueueItem.id.asc())
+        .first()
+    )
+    if current is None:
+        return False
+    return queue_service.can_control_stage_item(
+        current,
+        requester_id=requester_id,
+    )
+
+
+async def _send_ws_error(websocket: WebSocket, detail: str) -> None:
+    """Send a structured websocket error to one client."""
+    await manager.send_personal_message(
+        {
+            "type": "error",
+            "data": {"detail": detail},
+            "timestamp": asyncio.get_event_loop().time(),
+        },
+        websocket,
+    )
 
 
 def _process_item_background(item_id: int):
@@ -150,8 +200,16 @@ def get_lyrics_cues(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/skip", response_model=QueueItemResponse | None)
-async def skip_current(db: Session = Depends(get_db)):
+async def skip_current(request: Request, db: Session = Depends(get_db)):
     """Skip current item and promote next ready item to playing."""
+    is_admin = get_admin_user(request, db) is not None
+    if not _can_control_current_stage(
+        db,
+        is_admin=is_admin,
+        requester_id=_current_guest_id(request),
+    ):
+        raise HTTPException(status_code=403, detail="Not allowed to control this stage item")
+
     current = queue_service.get_current_item(db)
     result = queue_service.skip_current_item(db)
 
@@ -164,7 +222,10 @@ async def skip_current(db: Session = Depends(get_db)):
 
 
 @router.post("/complete-current", response_model=QueueItemResponse | None)
-async def complete_current(db: Session = Depends(get_db)):
+async def complete_current(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
     """Complete current item and promote next ready item to playing."""
     current = queue_service.get_current_item(db)
     result = queue_service.complete_current_item(db)
@@ -178,7 +239,11 @@ async def complete_current(db: Session = Depends(get_db)):
 
 
 @router.post("/skip-to/{item_id}", response_model=QueueItemResponse | None)
-async def skip_to_item(item_id: int, db: Session = Depends(get_db)):
+async def skip_to_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
     """Skip to a specific item in the queue."""
     item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
     if not item:
@@ -406,6 +471,18 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                     )
                     continue
 
+                is_admin = _is_admin_websocket(websocket, db)
+                if not _can_control_current_stage(
+                    db,
+                    is_admin=is_admin,
+                    requester_id=_websocket_guest_id(websocket),
+                ):
+                    await _send_ws_error(
+                        websocket,
+                        "Not allowed to control this stage item",
+                    )
+                    continue
+
                 if command == "skip":
                     current = queue_service.get_current_item(db)
                     result = queue_service.skip_current_item(db)
@@ -538,6 +615,13 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                 continue
 
             if data.get("type") == "stage_time_update":
+                if not _is_admin_websocket(websocket, db):
+                    await _send_ws_error(
+                        websocket,
+                        "Admin session required for stage time updates",
+                    )
+                    continue
+
                 payload = data.get("data")
                 if not isinstance(payload, dict):
                     await manager.send_personal_message(

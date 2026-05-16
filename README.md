@@ -120,7 +120,7 @@ and `/static/...`.
      - Confirm to add to queue
      - Queue items show who requested them
       - Open **Lyrics Viewer** from the queue page to read current-song lyrics on phone/secondary display
-     - Use remote stage controls, including lyrics on/off, for the currently playing item
+     - Admins can use remote stage controls for any current song; guests can use them only while their own queued song is playing
     - Admin users can clear queued songs, remove individual queued items, and move non-playing queue items up or down
     - Guest users can remove only their own non-playing queue items from the queue page
     - Queue status updates in real time (downloading, processing, ready, playing, failed)
@@ -256,7 +256,8 @@ See [docs/API.md](docs/API.md) for full API documentation.
   - Client response: `pong`
   - Queue events: `queue_item_added`, `queue_item_updated`, `queue_item_removed`, `queue_cleared`, `current_item_changed`, `queue_item_failed`
   - Stage control events: `stage_control_command`, `stage_state_update`
-  - Client command message: `stage_command` (`play`, `pause`, `skip`)
+  - Client command message: `stage_command` (`play`, `pause`, `skip`, `seek`, `resync`, vocals, lyrics)
+  - Stage commands require an admin session unless the current queue item belongs to the guest sending the command
 
 ## Architecture
 

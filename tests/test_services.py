@@ -172,9 +172,13 @@ def test_queue_service_get_queue_sets_can_remove_for_owner_and_admin(db_session)
 
     assert permission_by_id[owner_result.id] is True
     assert permission_by_id[other_result.id] is False
+    control_by_id = {item.id: item.can_control_stage for item in items_for_owner}
+    assert control_by_id[owner_result.id] is True
+    assert control_by_id[other_result.id] is False
 
     items_for_admin = service.get_queue(db_session, is_admin=True)
     assert all(item.can_remove is True for item in items_for_admin)
+    assert all(item.can_control_stage is True for item in items_for_admin)
 
 
 def test_auth_service_stores_salted_password_hash(db_session):

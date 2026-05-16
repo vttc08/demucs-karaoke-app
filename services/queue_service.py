@@ -747,6 +747,11 @@ class QueueService:
     ) -> QueueItemResponse:
         """Map a queue row into a response enriched with viewer permissions."""
         response = self._to_response(item)
+        response.can_control_stage = self.can_control_stage_item(
+            item,
+            is_admin=is_admin,
+            requester_id=requester_id,
+        )
         response.can_remove = self.can_remove_queue_item(
             item,
             is_admin=is_admin,
@@ -764,6 +769,20 @@ class QueueService:
         """Return whether the current viewer may remove the queue item."""
         if QueueStatus(item.status) == QueueStatus.PLAYING:
             return False
+        return self.can_manage_queue_item(
+            item,
+            is_admin=is_admin,
+            requester_id=requester_id,
+        )
+
+    def can_control_stage_item(
+        self,
+        item: QueueItem,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+    ) -> bool:
+        """Return whether the viewer may send stage controls for this item."""
         return self.can_manage_queue_item(
             item,
             is_admin=is_admin,

@@ -81,6 +81,11 @@ The stage page uses a websocket-first model:
 - `routes/queue.py` also accepts stage mix commands (`set_vocals_enabled`, `set_vocals_volume`)
   for runtime-only vocal assist control.
 - `routes/queue.py` also accepts `set_lyrics_enabled` for runtime-only lyrics overlay visibility.
+- Stage control commands are authorized server-side. Admin sessions may control any current item.
+  Guest websocket/REST skip commands are accepted only when the currently playing item is owned by
+  that guest's persistent `karaoke_guest_id`.
+- `stage_time_update` messages are accepted only from admin sessions because they represent the
+  authoritative stage playback clock.
 - For `play`/`pause`, the server broadcasts:
   - `stage_control_command`
   - `stage_state_update`
@@ -124,6 +129,8 @@ The stage page uses a websocket-first model:
 - Presence join toasts are only shown for incremental `user_joined` events, not for the initial roster snapshot.
 - Queue actions no longer rely on full-page reloads; UI updates are driven by pushed events.
 - Queue page now includes stage remote controls that send websocket `stage_command` messages.
+- Queue clients disable remote stage controls for guests unless the active queue item exposes
+  `can_control_stage` for that viewer.
 - Queue page includes stage vocal-assist controls (toggle + volume slider) that send websocket
   mix commands and mirror live `stage_state_update` broadcasts.
 - Queue page includes a lyrics overlay toggle that mirrors the stage lyrics visibility state.
@@ -256,7 +263,8 @@ The stage page uses a websocket-first model:
   management APIs require an active admin session. The stage page and stage navbar entry are also
   admin-only. Queue clear actions and media delete actions are restricted to admins in both the UI and
   API, while queue item removal is available to admins for any non-playing item and to guests only for
-  their own non-playing items. Other media/queue authorization gates can still be refined in a later pass.
+  their own non-playing items. Stage controls are available to admins for any current song and to
+  guests only for the current song they queued. Other media/queue authorization gates can still be refined in a later pass.
 - Queue add supports an optional admin-only `queue_as_name` field so shared admin tablets can submit
   songs on behalf of someone else without changing device ownership cookies. The frontend "queue as"
   toggle is stored locally per device (not persisted in backend runtime settings).
