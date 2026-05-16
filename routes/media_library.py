@@ -135,14 +135,21 @@ async def upload_media(
 
 
 @router.post("/scan")
-def scan_media_library(db: Session = Depends(get_db)):
+def scan_media_library(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
     """Run an on-demand filesystem sync for media library rows."""
     summary = media_library_sync_service.scan_library(db)
     return {"status": "ok", "summary": summary}
 
 
 @router.post("/{item_id}/scan")
-def scan_media_item(item_id: int, db: Session = Depends(get_db)):
+def scan_media_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
     """Refresh sidecar and missing-state data for one media item."""
     try:
         summary = media_library_sync_service.scan_media_item(db, item_id)
@@ -171,7 +178,12 @@ def delete_media_item(
 
 
 @router.patch("/{item_id}")
-def rename_media_item(item_id: int, payload: dict, db: Session = Depends(get_db)):
+def rename_media_item(
+    item_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
     """Rename a media item in the database, and optionally on disk."""
     title = payload.get("title")
     if not isinstance(title, str) or not title.strip():

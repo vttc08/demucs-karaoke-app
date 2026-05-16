@@ -83,31 +83,25 @@
     <header class="fixed top-0 left-0 right-0 z-50 glass-card border-b border-outline-variant/20">
         <div class="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
             <div class="flex min-w-0 items-center gap-3">
-                <div class="w-8 h-8 overflow-hidden rounded-full bg-primary/20">
+                <a href="{{ app_url('/queue') }}" class="w-8 h-8 overflow-hidden rounded-full bg-primary/20 hover:bg-primary/30 transition-colors" title="{{ t('queue.title') }}">
                     <img
                         src="{{ app_url('/static/karaoke-icon.png') }}"
-                        alt=""
+                        alt="Karaoke"
                         class="h-full w-full object-cover"
-                        aria-hidden="true"
                     >
-                </div>
+                </a>
                 <div class="min-w-0">
                     <h1 class="truncate font-headline font-bold text-lg text-on-surface">{% block header_title %}{{ t('app.karaoke') }}{% endblock %}</h1>
-                    <p class="truncate text-xs text-on-surface-variant font-medium">{% block header_subtitle %}{{ t('header.queue_manager') }}{% endblock %}</p>
                 </div>
             </div>
             <nav class="flex min-w-0 flex-wrap items-center justify-end gap-1 sm:gap-2">
-                <form action="{{ app_url('/language') }}" method="post" class="mr-1">
-                    <input type="hidden" name="next" value="{{ request.url.path }}">
-                    <label class="sr-only" for="language-select">{{ t('app.language') }}</label>
-                    <div class="relative inline-flex h-9 w-16 flex-none items-center justify-center rounded-full bg-surface-container-high/70 text-primary transition-colors hover:bg-primary/10">
-                        <span class="material-symbols-outlined pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[14px]">language</span>
+                <div class="relative inline-flex">
+                    <form id="language-form" action="{{ app_url('/language') }}" method="post" class="hidden">
+                        <input type="hidden" name="next" value="{{ request.url.path }}">
                         <select
                             id="language-select"
                             name="language"
-                            class="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent text-transparent outline-none"
-                            aria-label="{{ t('app.language') }}"
-                            onchange="this.form.submit()"
+                            class="hidden"
                         >
                             {% for locale in supported_locales() %}
                             <option value="{{ locale.code }}" {% if locale.code == current_locale(request) %}selected{% endif %}>
@@ -115,21 +109,53 @@
                             </option>
                             {% endfor %}
                         </select>
-                        <span class="material-symbols-outlined pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[14px] text-on-surface-variant">expand_more</span>
+                    </form>
+                    <button
+                        id="language-selector-btn"
+                        type="button"
+                        class="flex-none text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2"
+                        aria-label="{{ t('app.language') }}"
+                        title="{{ t('app.language') }}"
+                    >
+                        <span class="material-symbols-outlined">language</span>
+                    </button>
+                    <!-- Language Popover Menu -->
+                    <div
+                        id="language-popover"
+                        class="hidden absolute top-full right-0 mt-1 z-50 min-w-32 rounded-lg bg-surface-container border border-white/10 shadow-lg"
+                    >
+                        <div class="py-2">
+                            <button
+                                type="button"
+                                data-language="en"
+                                class="w-full flex items-center gap-3 px-4 py-2 text-sm text-on-surface hover:bg-surface-container-high/50 transition-colors {% if current_locale(request) == 'en' %}bg-primary/10 text-primary{% endif %}"
+                            >
+                                <span class="material-symbols-outlined text-base">language</span>
+                                <span>English</span>
+                            </button>
+                            <button
+                                type="button"
+                                data-language="zh-CN"
+                                class="w-full flex items-center gap-3 px-4 py-2 text-sm text-on-surface hover:bg-surface-container-high/50 transition-colors {% if current_locale(request) == 'zh-CN' %}bg-primary/10 text-primary{% endif %}"
+                            >
+                                <span class="material-symbols-outlined text-base">language</span>
+                                <span>中文</span>
+                            </button>
+                        </div>
                     </div>
-                    <button type="submit" class="sr-only">{{ t('language.submit') }}</button>
-                </form>
+                </div>
                 <a href="{{ app_url('/queue') }}" class="flex-none text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/queue') or request.url.path == app_url('/') %}bg-primary/10{% endif %}" aria-label="{{ t('queue.title') }}">
                     <span class="material-symbols-outlined">queue_music</span>
-                </a>
-                {% if request.cookies.get("karaoke_admin_session") %}
-                <a href="{{ app_url('/stage') }}" class="flex-none text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/stage') %}bg-primary/10{% endif %}" aria-label="{{ t('stage.title') }}">
-                    <span class="material-symbols-outlined">live_tv</span>
                 </a>
                 <a href="{{ app_url('/media') }}" class="flex-none text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/media') %}bg-primary/10{% endif %}" aria-label="{{ t('media.library') }}">
                     <span class="material-symbols-outlined">folder_open</span>
                 </a>
-                <a href="{{ app_url('/settings') }}" class="flex-none text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/settings') %}bg-primary/10{% endif %}" aria-label="{{ t('nav.settings') }}">
+ 
+              {% if request.cookies.get("karaoke_admin_session") %}
+                <a href="{{ app_url('/stage') }}" class="flex-none text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/stage') %}bg-primary/10{% endif %}" aria-label="{{ t('stage.title') }}">
+                    <span class="material-symbols-outlined">live_tv</span>
+                </a>
+               <a href="{{ app_url('/settings') }}" class="flex-none text-primary active:scale-95 transition-transform p-1.5 hover:bg-primary/10 rounded-full sm:p-2 {% if is_active_path(request, '/settings') %}bg-primary/10{% endif %}" aria-label="{{ t('nav.settings') }}">
                     <span class="material-symbols-outlined">settings</span>
                 </a>
                 {% endif %}
@@ -156,6 +182,7 @@
         };
     </script>
     <script src="{{ app_url('/static/app-urls.js') }}"></script>
+    <script src="{{ app_url('/static/language-selector.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

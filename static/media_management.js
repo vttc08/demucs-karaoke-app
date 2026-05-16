@@ -17,6 +17,7 @@ const editAiToggle = document.getElementById("media-edit-ai-toggle");
 const editLyricsToggle = document.getElementById("media-edit-lyrics-toggle");
 const editFilenamePreview = document.getElementById("media-edit-filename-preview");
 const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
+const isAdmin = document.querySelector('main[data-is-admin]')?.dataset.isAdmin === "true";
 const AUTO_RENAME_DEFAULT_HTML = `<span class="material-symbols-outlined text-[16px]">auto_fix_high</span><span>${t('common.auto')}</span>`;
 const AUTO_RENAME_LOADING_HTML = `<span class="material-symbols-outlined animate-spin text-[16px]">sync</span><span>${t('media.inferring')}</span>`;
 
@@ -252,6 +253,9 @@ function setCapabilityFilter(nextFilter) {
 }
 
 function openEditModal(itemNode) {
+    if (!isAdmin) {
+        return;
+    }
     const itemId = itemNode.dataset.itemId;
     const currentTitle = getItemFieldText(itemNode, "title");
     const currentArtistText = getItemFieldText(itemNode, "artist");
@@ -337,7 +341,7 @@ function closeEditModal() {
 
 async function saveEditModal(event) {
     event.preventDefault();
-    if (!activeEditItemId || !editTitleInput) {
+    if (!isAdmin || !activeEditItemId || !editTitleInput) {
         return;
     }
     const nextTitle = editTitleInput.value.trim();
@@ -490,7 +494,7 @@ async function deleteItem(itemNode) {
 }
 
 async function autoRenameMediaItem(actionButton) {
-    if (!editTitleInput || !editArtistInput) {
+    if (!isAdmin || !editTitleInput || !editArtistInput) {
         return;
     }
 
@@ -552,7 +556,7 @@ async function autoRenameMediaItem(actionButton) {
 }
 
 async function refreshMediaItemSidecars(actionButton) {
-    if (!activeEditItemId || !actionButton || actionButton.disabled) {
+    if (!isAdmin || !activeEditItemId || !actionButton || actionButton.disabled) {
         return;
     }
 
@@ -594,7 +598,7 @@ async function refreshMediaItemSidecars(actionButton) {
 }
 
 async function runLibraryScan(actionButton) {
-    if (!actionButton) {
+    if (!isAdmin || !actionButton) {
         return;
     }
     const originalLabel = actionButton.textContent;
@@ -629,6 +633,10 @@ function handleActionClick(event) {
         return;
     }
     const action = button.dataset.action;
+
+    if (!isAdmin && action !== "add-to-queue") {
+        return;
+    }
 
     if (action === "scan-library") {
         runLibraryScan(button);

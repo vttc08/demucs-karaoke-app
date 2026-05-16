@@ -26,6 +26,23 @@ html.dark {
     filter: drop-shadow(0 0 10px rgba(0, 242, 255, 0.3));
 }
 
+/* Collapsible panels used on the queue page */
+.collapsible-summary {
+    list-style: none;
+}
+
+.collapsible-summary::-webkit-details-marker {
+    display: none;
+}
+
+.collapsible-chevron {
+    transition: transform 0.2s ease;
+}
+
+.collapsible-panel[open] .collapsible-chevron {
+    transform: rotate(180deg);
+}
+
 /* Smooth transitions for interactive elements */
 .transition-all {
     transition: all 0.3s ease;

@@ -120,7 +120,7 @@ and `/static/...`.
      - Confirm to add to queue
      - Queue items show who requested them
       - Open **Lyrics Viewer** from the queue page to read current-song lyrics on phone/secondary display
-     - Use remote stage controls, including lyrics on/off, for the currently playing item
+     - Admins can use remote stage controls for any current song; guests can use them only while their own queued song is playing
     - Admin users can clear queued songs, remove individual queued items, and move non-playing queue items up or down
     - Guest users can remove only their own non-playing queue items from the queue page
     - Queue status updates in real time (downloading, processing, ready, playing, failed)
@@ -163,10 +163,11 @@ and `/static/...`.
          - View title, artist, and capability badges (multi-track, lyrics)
           - Local audio files reuse embedded album art as the thumbnail when cached cover art is available
           - Use **Add to Queue** to enqueue a local media row through the existing queue API
-          - Use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
-          - Use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
+          - Guests can browse and queue items only; edit, scan, upload, and delete controls are admin-only
+          - Admin users can use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
+          - Admin users can use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
           - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
-          - Trigger **Scan Library** to reconcile DB with filesystem on demand
+          - Admin users can trigger **Scan Library** to reconcile DB with filesystem on demand
           - App also performs one media-library scan on startup/restart
 
 6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
@@ -256,7 +257,8 @@ See [docs/API.md](docs/API.md) for full API documentation.
   - Client response: `pong`
   - Queue events: `queue_item_added`, `queue_item_updated`, `queue_item_removed`, `queue_cleared`, `current_item_changed`, `queue_item_failed`
   - Stage control events: `stage_control_command`, `stage_state_update`
-  - Client command message: `stage_command` (`play`, `pause`, `skip`)
+  - Client command message: `stage_command` (`play`, `pause`, `skip`, `seek`, `resync`, vocals, lyrics)
+  - Stage commands require an admin session unless the current queue item belongs to the guest sending the command
 
 ## Architecture
 

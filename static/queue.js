@@ -36,10 +36,11 @@ const stageRemoteResyncBtn = document.getElementById('stage-remote-resync-btn');
 const stageRemoteLyricsToggleBtn = document.getElementById('stage-remote-lyrics-toggle-btn');
 const stageRemoteLyricsToggleIcon = document.getElementById('stage-remote-lyrics-toggle-icon');
 const stageRemoteLyricsToggleLabel = document.getElementById('stage-remote-lyrics-toggle-label');
+const stageRemoteVocalsControl = document.getElementById('stage-remote-vocals-control');
 const stageRemoteVocalsToggleBtn = document.getElementById('stage-remote-vocals-toggle-btn');
 const stageRemoteVocalsToggleIcon = document.getElementById('stage-remote-vocals-toggle-icon');
-const stageRemoteVocalsToggleLabel = document.getElementById('stage-remote-vocals-toggle-label');
 const stageRemoteVocalsVolumeSlider = document.getElementById('stage-remote-vocals-volume-slider');
+const stageRemoteVocalsVolumeLabel = document.getElementById('stage-remote-vocals-volume-label');
 const queueConfigModal = document.getElementById('queue-config-modal');
 const queueConfigModalBackdrop = document.getElementById('queue-config-modal-backdrop');
 const queueConfigCloseBtn = document.getElementById('queue-config-close-btn');
@@ -78,8 +79,10 @@ const LYRICS_TITLE_HINT_RE = /\b(lyrics?|lyric\s+video|with\s+lyrics)\b/i;
 let stageRemotePaused = false;
 let stageRemoteLyricsEnabled = true;
 let stageRemoteLyricsAvailable = false;
+let stageRemoteCanControl = isAdminUser;
 let stageRemoteVocalsEnabled = true;
 let stageRemoteVocalsVolume = 1.0;
+let stageRemoteVocalsLastVolume = 1.0;
 let stageRemoteVocalsAvailable = false;
 let demucsHealth = { healthy: true, detail: t('settings.engine_unknown') };
 let modalSelection = null;
@@ -446,7 +449,7 @@ function getModalDefaults() {
  */
 function initializeLyricsManager() {
     if (lyricsManager) return;
-    
+
     lyricsManager = new LyricsManager({ apiBase: API_BASE });
     lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
         titleInput: '#queue-config-lyrics-title',
@@ -461,7 +464,7 @@ function initializeLyricsManager() {
         googleLink: '#queue-config-lyrics-google-link',
         panel: '#queue-config-lyrics-panel',
     });
-    
+
     lyricsUIAdapter.initialize();
     lyricsManager.on(() => {
         syncQueueConfigModalUi();
@@ -1009,7 +1012,7 @@ function syncQueueConfigModalUi() {
     if (!lyricsEnabled && lyricsManager?.state.lyricsEnabled) {
         lyricsManager.setEnabled(false);
     }
-    
+
     if (queueConfigLyricsToggle) {
         queueConfigLyricsToggle.disabled = !lyricsEnabled;
         queueConfigLyricsToggle.classList.toggle('opacity-50', !lyricsEnabled);
@@ -1238,6 +1241,7 @@ async function refreshQueue(force = false) {
     try {
         const response = await fetch(`${API_BASE}/api/queue/`);
         const serverQueue = await response.json();
+        syncStageControlAvailability(serverQueue);
         syncStageVocalsAvailability(serverQueue);
         syncStageLyricsAvailability(serverQueue);
         
@@ -1509,13 +1513,16 @@ class QueueWebSocket {
 
     updateRemoteControlsState() {
         const connected = this.ws && this.ws.readyState === WebSocket.OPEN;
-        if (stageRemotePlayPauseBtn) stageRemotePlayPauseBtn.disabled = !connected;
-        if (stageRemoteSkipBtn) stageRemoteSkipBtn.disabled = !connected;
-        if (stageRemoteResyncBtn) stageRemoteResyncBtn.disabled = !connected;
+        const canControl = connected && stageRemoteCanControl;
+        if (stageRemotePlayPauseBtn) stageRemotePlayPauseBtn.disabled = !canControl;
+        if (stageRemoteSkipBtn) stageRemoteSkipBtn.disabled = !canControl;
+        if (stageRemoteResyncBtn) stageRemoteResyncBtn.disabled = !canControl;
         updateStageRemoteLyricsUi();
         updateStageRemoteVocalsUi();
         if (stageRemoteStatus) {
-            stageRemoteStatus.textContent = connected ? t('queue.connected') : t('queue.offline');
+            stageRemoteStatus.textContent = connected
+                ? (stageRemoteCanControl ? t('queue.connected') : t('queue.stage_controls_limited'))
+                : t('queue.offline');
         }
     }
     
@@ -1694,6 +1701,14 @@ class QueueWebSocket {
             case 'stage_state_update':
                 window.dispatchEvent(new CustomEvent('stage_state_update', { detail: message.data }));
                 break;
+            case 'error':
+                if (message.data?.detail) {
+                    const detail = message.data.detail === 'Not allowed to control this stage item'
+                        ? t('queue.stage_control_denied')
+                        : message.data.detail;
+                    showQueueToast(detail);
+                }
+                break;
             default:
                 console.log('[WebSocket] Unknown message type:', message.type);
         }
@@ -1726,24 +1741,42 @@ function updateStageRemotePlayPauseUi() {
 }
 
 function updateStageRemoteVocalsUi() {
+    const isDisabled = !stageRemoteCanControl || !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
+    const volume = Math.round(stageRemoteVocalsVolume * 100);
+
+    if (stageRemoteVocalsControl) {
+        stageRemoteVocalsControl.classList.toggle('opacity-70', isDisabled);
+    }
+
     if (stageRemoteVocalsToggleBtn) {
-        stageRemoteVocalsToggleBtn.disabled = !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
+        stageRemoteVocalsToggleBtn.disabled = isDisabled;
+        stageRemoteVocalsToggleBtn.setAttribute('aria-pressed', stageRemoteVocalsEnabled ? 'true' : 'false');
+        stageRemoteVocalsToggleBtn.classList.toggle('bg-secondary/15', stageRemoteVocalsEnabled);
+        stageRemoteVocalsToggleBtn.classList.toggle('text-secondary', stageRemoteVocalsEnabled);
+        stageRemoteVocalsToggleBtn.classList.toggle('bg-surface-container-highest', !stageRemoteVocalsEnabled);
+        stageRemoteVocalsToggleBtn.classList.toggle('text-on-surface-variant', !stageRemoteVocalsEnabled);
     }
-    if (stageRemoteVocalsVolumeSlider) {
-        stageRemoteVocalsVolumeSlider.disabled = !stageRemoteVocalsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
-        stageRemoteVocalsVolumeSlider.value = String(Math.round(stageRemoteVocalsVolume * 100));
-    }
+
     if (stageRemoteVocalsToggleIcon) {
         stageRemoteVocalsToggleIcon.textContent = stageRemoteVocalsEnabled ? 'mic' : 'mic_off';
     }
-    if (stageRemoteVocalsToggleLabel) {
-        stageRemoteVocalsToggleLabel.textContent = stageRemoteVocalsEnabled ? t('stage.vocals_on') : t('stage.vocals_off');
+
+    if (stageRemoteVocalsVolumeSlider) {
+        stageRemoteVocalsVolumeSlider.disabled = isDisabled;
+        stageRemoteVocalsVolumeSlider.value = String(volume);
+        stageRemoteVocalsVolumeSlider.setAttribute('aria-valuetext', `${volume}%`);
+    }
+
+    if (stageRemoteVocalsVolumeLabel) {
+        stageRemoteVocalsVolumeLabel.textContent = `${volume}%`;
+        stageRemoteVocalsVolumeLabel.classList.toggle('text-secondary', stageRemoteVocalsEnabled && volume > 0);
+        stageRemoteVocalsVolumeLabel.classList.toggle('text-on-surface-variant', !stageRemoteVocalsEnabled || volume === 0);
     }
 }
 
 function updateStageRemoteLyricsUi() {
     if (stageRemoteLyricsToggleBtn) {
-        stageRemoteLyricsToggleBtn.disabled = !stageRemoteLyricsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
+        stageRemoteLyricsToggleBtn.disabled = !stageRemoteCanControl || !stageRemoteLyricsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
     }
     if (stageRemoteLyricsToggleIcon) {
         stageRemoteLyricsToggleIcon.textContent = stageRemoteLyricsEnabled ? 'subtitles' : 'subtitles_off';
@@ -1753,15 +1786,21 @@ function updateStageRemoteLyricsUi() {
     }
 }
 
+function syncStageControlAvailability(queue) {
+    if (isAdminUser) {
+        stageRemoteCanControl = true;
+    } else {
+        const playingItem = Array.isArray(queue) ? queue.find((item) => item.status === 'playing') : null;
+        stageRemoteCanControl = Boolean(playingItem && playingItem.can_control_stage);
+    }
+    queueWebSocket?.updateRemoteControlsState();
+}
+
 function syncStageVocalsAvailability(queue) {
     const playingItem = Array.isArray(queue) ? queue.find((item) => item.status === 'playing') : null;
     stageRemoteVocalsAvailable = Boolean(playingItem && playingItem.vocals_path);
     if (!stageRemoteVocalsAvailable) {
         stageRemoteVocalsEnabled = false;
-        stageRemoteVocalsVolume = 0;
-    } else if (stageRemoteVocalsVolume <= 0) {
-        stageRemoteVocalsEnabled = true;
-        stageRemoteVocalsVolume = 1.0;
     }
     updateStageRemoteVocalsUi();
 }
@@ -1775,6 +1814,14 @@ function syncStageLyricsAvailability(queue) {
     updateStageRemoteLyricsUi();
 }
 
+function canSendStageControl() {
+    if (stageRemoteCanControl) {
+        return true;
+    }
+    alert(t('queue.stage_control_denied'));
+    return false;
+}
+
 // Initialize WebSocket connection
 let queueWebSocket = null;
 initializeQueueAsSettings();
@@ -1786,6 +1833,7 @@ if (window.location.pathname === appUrl('/queue') || window.location.pathname ==
 if (stageRemotePlayPauseBtn) {
     stageRemotePlayPauseBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
+        if (!canSendStageControl()) return;
         const command = stageRemotePaused ? 'play' : 'pause';
         const sent = queueWebSocket.send({
             type: 'stage_command',
@@ -1807,6 +1855,7 @@ if (stageRemotePlayPauseBtn) {
 if (stageRemoteSkipBtn) {
     stageRemoteSkipBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
+        if (!canSendStageControl()) return;
         const sent = queueWebSocket.send({
             type: 'stage_command',
             data: {
@@ -1824,6 +1873,7 @@ if (stageRemoteSkipBtn) {
 if (stageRemoteResyncBtn) {
     stageRemoteResyncBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
+        if (!canSendStageControl()) return;
         const sent = queueWebSocket.send({
             type: 'stage_command',
             data: {
@@ -1841,6 +1891,7 @@ if (stageRemoteResyncBtn) {
 if (stageRemoteLyricsToggleBtn) {
     stageRemoteLyricsToggleBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
+        if (!canSendStageControl()) return;
         if (!stageRemoteLyricsAvailable) {
             alert(t('queue.no_lyrics_track'));
             return;
@@ -1864,40 +1915,94 @@ if (stageRemoteLyricsToggleBtn) {
     });
 }
 
-if (stageRemoteVocalsToggleBtn) {
-    stageRemoteVocalsToggleBtn.addEventListener('click', () => {
-        if (!queueWebSocket) return;
-        if (!stageRemoteVocalsAvailable) {
-            alert(t('queue.no_vocals_track'));
-            return;
-        }
-        const nextEnabled = !stageRemoteVocalsEnabled;
-        const sent = queueWebSocket.send({
+function sendStageVocalsVolume(nextVolume) {
+    if (!queueWebSocket || !stageRemoteCanControl || !stageRemoteVocalsAvailable) {
+        return false;
+    }
+
+    const clampedVolume = Math.max(0, Math.min(1, nextVolume));
+    const commands = [];
+
+    if (clampedVolume > 0 && !stageRemoteVocalsEnabled) {
+        commands.push({
+            command: 'set_vocals_enabled',
+            payload: { vocals_enabled: true },
+        });
+    }
+
+    commands.push({
+        command: 'set_vocals_volume',
+        payload: { vocals_volume: clampedVolume },
+    });
+
+    if (clampedVolume === 0 && stageRemoteVocalsEnabled) {
+        commands.push({
+            command: 'set_vocals_enabled',
+            payload: { vocals_enabled: false },
+        });
+    }
+
+    let sent = false;
+    commands.forEach(({ command, payload }) => {
+        sent = queueWebSocket.send({
             type: 'stage_command',
             data: {
-                command: 'set_vocals_enabled',
+                command,
                 source: 'queue',
-                vocals_enabled: nextEnabled,
+                ...payload,
             },
             timestamp: Date.now(),
-        });
-        if (!sent) {
-            alert(t('queue.stage_offline'));
-            return;
-        }
-        stageRemoteVocalsEnabled = nextEnabled;
-        updateStageRemoteVocalsUi();
+        }) || sent;
     });
+
+    if (sent) {
+        stageRemoteVocalsVolume = clampedVolume;
+        if (clampedVolume > 0) {
+            stageRemoteVocalsLastVolume = clampedVolume;
+            stageRemoteVocalsEnabled = true;
+        } else {
+            stageRemoteVocalsEnabled = false;
+        }
+        updateStageRemoteVocalsUi();
+    }
+
+    return sent;
 }
 
-if (stageRemoteVocalsVolumeSlider) {
-    stageRemoteVocalsVolumeSlider.addEventListener('input', () => {
-        if (!queueWebSocket) return;
-        if (!stageRemoteVocalsAvailable) {
-            return;
+function toggleStageVocalsEnabled() {
+    if (!queueWebSocket) return false;
+    if (!canSendStageControl()) return false;
+    if (!stageRemoteVocalsAvailable) {
+        alert(t('queue.no_vocals_track'));
+        return false;
+    }
+
+    const nextEnabled = !stageRemoteVocalsEnabled;
+    const fallbackVolume = stageRemoteVocalsLastVolume > 0 ? stageRemoteVocalsLastVolume : 1.0;
+    const nextVolume = nextEnabled && stageRemoteVocalsVolume <= 0 ? fallbackVolume : stageRemoteVocalsVolume;
+
+    const sent = queueWebSocket.send({
+        type: 'stage_command',
+        data: {
+            command: 'set_vocals_enabled',
+            source: 'queue',
+            vocals_enabled: nextEnabled,
+        },
+        timestamp: Date.now(),
+    });
+
+    if (!sent) {
+        alert(t('queue.stage_offline'));
+        return false;
+    }
+
+    stageRemoteVocalsEnabled = nextEnabled;
+    if (nextEnabled && nextVolume !== stageRemoteVocalsVolume) {
+        stageRemoteVocalsVolume = nextVolume;
+        if (nextVolume > 0) {
+            stageRemoteVocalsLastVolume = nextVolume;
         }
-        const nextVolume = Number(stageRemoteVocalsVolumeSlider.value) / 100;
-        const sent = queueWebSocket.send({
+        queueWebSocket.send({
             type: 'stage_command',
             data: {
                 command: 'set_vocals_volume',
@@ -1906,11 +2011,24 @@ if (stageRemoteVocalsVolumeSlider) {
             },
             timestamp: Date.now(),
         });
+    }
+    updateStageRemoteVocalsUi();
+    return true;
+}
+
+if (stageRemoteVocalsToggleBtn) {
+    stageRemoteVocalsToggleBtn.addEventListener('click', () => {
+        toggleStageVocalsEnabled();
+    });
+}
+
+if (stageRemoteVocalsVolumeSlider) {
+    stageRemoteVocalsVolumeSlider.addEventListener('input', () => {
+        const nextVolume = Number(stageRemoteVocalsVolumeSlider.value) / 100;
+        const sent = sendStageVocalsVolume(Number.isFinite(nextVolume) ? nextVolume : stageRemoteVocalsVolume);
         if (!sent) {
-            return;
+            updateStageRemoteVocalsUi();
         }
-        stageRemoteVocalsVolume = Math.max(0, Math.min(1, nextVolume));
-        updateStageRemoteVocalsUi();
     });
 }
 
@@ -2016,6 +2134,9 @@ window.addEventListener('stage_state_update', (event) => {
     const vocalsVolume = event.detail?.vocals_volume;
     if (typeof vocalsVolume === 'number' && Number.isFinite(vocalsVolume)) {
         stageRemoteVocalsVolume = Math.max(0, Math.min(1, vocalsVolume));
+        if (stageRemoteVocalsVolume > 0) {
+            stageRemoteVocalsLastVolume = stageRemoteVocalsVolume;
+        }
     }
     const lyricsEnabled = event.detail?.lyrics_enabled;
     if (typeof lyricsEnabled === 'boolean') {

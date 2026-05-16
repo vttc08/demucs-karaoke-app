@@ -546,19 +546,24 @@ def test_queue_page_loads(client):
     assert b"queue-toast" in response.content
     assert b"queue-config-lyrics-detail" in response.content
     assert b"flex-none shrink-0" in response.content
+    assert 'id="stage-remote-vocals-toggle-btn"' in response.text
+    assert 'id="stage-remote-vocals-volume-slider"' in response.text
+    assert 'id="stage-remote-vocals-volume-label"' in response.text
+    assert 'id="stage-remote-lyrics-toggle-btn"' in response.text
+    assert 'id="qr-toggle-btn"' not in response.text
     assert 'id="queue-library-shortcuts"' in response.text
     assert 'href="/media"' in response.text
     assert 'href="/upload"' in response.text
     assert 'href="/queue/lyrics"' in response.text
+    assert response.text.index('id="search-input"') < response.text.index('id="stage-remote-play-pause-btn"')
     assert 'id="queue-as-settings-panel"' not in response.text
     assert 'id="queue-config-queue-as-panel"' not in response.text
     assert 'id="clear-all-btn"' not in response.text
     assert "queue-move-up-" not in response.text
     assert "skipToSong(" not in response.text
     assert 'aria-label="Settings"' not in response.text
-    assert 'aria-label="Stage View"' not in response.text
-    assert 'aria-label="Media Library"' not in response.text
-    assert 'aria-label="Upload Media"' not in response.text
+    assert 'aria-label="Stage"' not in response.text
+    assert 'aria-label="Upload"' not in response.text
     assert "shield_person" not in response.text
 
 
@@ -586,6 +591,8 @@ def test_queue_page_admin_shows_queue_as_controls(client):
     assert 'id="queue-as-enabled-toggle"' in response.text
     assert 'id="queue-as-modal"' in response.text
     assert 'id="queue-config-queue-as-panel"' in response.text
+    assert response.text.index('href="/queue/lyrics"') < response.text.index('id="queue-as-settings-panel"')
+    assert response.text.index('id="queue-as-settings-panel"') < response.text.index('id="search-results"')
 
 
 def test_queue_page_renders_simplified_chinese_locale(client):
@@ -718,10 +725,10 @@ def test_queue_page_shows_admin_queue_controls(client):
     assert "queue-move-up-" in response.text
     assert "queue-move-down-" in response.text
     assert "skipToSong(" not in response.text
-    assert 'aria-label="Stage View"' in response.text
+    assert 'aria-label="Stage"' in response.text
     assert 'aria-label="Settings"' in response.text
-    assert 'aria-label="Media Library"' in response.text
-    assert 'aria-label="Upload Media"' not in response.text
+    assert 'aria-label="Media"' in response.text
+    assert 'aria-label="Upload"' not in response.text
 
 
 def test_stage_page_requires_admin(client):
@@ -740,7 +747,7 @@ def test_stage_page_loads_for_admin(client):
     ):
         response = client.get("/stage")
     assert response.status_code == 200
-    assert b"Stage View" in response.content
+    assert b"Stage" in response.content
     assert b"Now Playing" in response.content
     assert b'id="stage-video-player"' in response.content
 
@@ -818,15 +825,15 @@ def test_settings_page_loads_for_admin(client):
     authenticate_admin_client(client)
     response = client.get("/settings")
     assert response.status_code == 200
-    assert b"Admin Settings" in response.content
+    assert b"Settings" in response.content
     assert b"Admin session" in response.content
     assert b"Log out" in response.content
     assert b">Save<" in response.content
     assert b">Refresh<" in response.content
     assert b"Admin Access" not in response.content
     assert 'aria-label="Settings"' in response.text
-    assert 'aria-label="Media Library"' in response.text
-    assert 'aria-label="Upload Media"' not in response.text
+    assert 'aria-label="Media"' in response.text
+    assert 'aria-label="Upload"' not in response.text
     assert "shield_person" not in response.text
 
 
@@ -901,7 +908,7 @@ def test_upload_page_loads(client):
     """Test upload page renders with queue toggle and infer button."""
     response = client.get("/upload")
     assert response.status_code == 200
-    assert "Upload Media" in response.text
+    assert "Upload" in response.text
     assert 'id="add-to-queue" type="checkbox"' in response.text
     assert "Add to queue" in response.text
     assert 'id="artist-name"' in response.text
@@ -1057,7 +1064,7 @@ def test_media_management_page_loads(client):
     """Test media management page renders."""
     response = client.get("/media")
     assert response.status_code == 200
-    assert b"Media Library" in response.content
+    assert b"Media" in response.content
     assert b"Manage Existing Media" in response.content
 
 
@@ -1103,13 +1110,12 @@ def test_media_management_page_uses_database_rows(client):
     assert b"https://i.ytimg.com/vi/realabc12345/hqdefault.jpg" in content
     assert b'data-media-path="/media/real-song-one.mp4"' in content
 
-    assert b'data-action="edit"' in content
+    assert b'data-action="add-to-queue"' in content
+    assert b'data-action="edit"' not in content
     assert b'data-action="delete"' not in content
     assert b'data-action="rename"' not in content
     assert b"synced" not in content.lower()
-    assert b"Filename on disk" in content
-    assert b'id="media-edit-rename-disk" type="checkbox"' in content
-    assert b'id="media-edit-rename-disk" type="checkbox" class="peer h-5 w-5 appearance-none rounded border-2 border-outline-variant bg-transparent transition-all checked:border-secondary checked:bg-secondary" checked />' in content
+    assert b'id="media-edit-modal"' not in content
     assert b"Missing" in content
     assert b'data-has-multi-track="true"' in content
     assert b'data-has-lyrics="true"' in content
@@ -1121,8 +1127,31 @@ def test_media_management_page_uses_database_rows(client):
     assert content.count(b">2</p>") >= 1
 
 
-def test_media_management_page_shows_delete_for_admin(client):
-    """Admin media library should include delete actions."""
+def test_media_management_page_hides_edit_controls_for_guest(client):
+    """Guest media library should be queue-only."""
+    with TestingSessionLocal() as db:
+        db.add(
+            MediaItem(
+                title="Admin Delete Song",
+                artist="Artist",
+                media_path="/media/admin-delete-song.mp4",
+                missing=False,
+            )
+        )
+        db.commit()
+
+    response = client.get("/media")
+
+    assert response.status_code == 200
+    assert b'data-action="add-to-queue"' in response.content
+    assert b'data-action="edit"' not in response.content
+    assert b'data-action="delete"' not in response.content
+    assert b'data-action="scan-library"' not in response.content
+    assert b'data-action="upload-media"' not in response.content
+
+
+def test_media_management_page_shows_edit_controls_for_admin(client):
+    """Admin media library should include edit and delete actions."""
     authenticate_admin_client(client)
     with TestingSessionLocal() as db:
         db.add(
@@ -1138,11 +1167,15 @@ def test_media_management_page_shows_delete_for_admin(client):
     response = client.get("/media")
 
     assert response.status_code == 200
+    assert b'data-action="edit"' in response.content
     assert b'data-action="delete"' in response.content
+    assert b'data-action="scan-library"' in response.content
+    assert b'data-action="upload-media"' in response.content
 
 
 def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
     """Manual media scan route should create and mark rows from filesystem diff."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     try:
         settings.media_path = tmp_path / "media"
@@ -1178,8 +1211,17 @@ def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
         settings.media_path = original_media
 
 
+def test_media_scan_route_requires_admin(client):
+    """Guest users should not be able to trigger library scans."""
+    response = client.post("/api/media/scan")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
+
+
 def test_media_scan_single_item_route_refreshes_sidecars(client, tmp_path, monkeypatch):
     """Single-item media scan route should refresh vocals and lyrics sidecars."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     try:
         settings.media_path = tmp_path / "media"
@@ -1331,6 +1373,7 @@ def test_media_delete_route_requires_admin(client):
 
 def test_media_rename_route_updates_database_and_files(client, tmp_path):
     """Rename route should update metadata and on-disk assets."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     original_cache = settings.cache_path
     try:
@@ -1393,8 +1436,34 @@ def test_media_rename_route_updates_database_and_files(client, tmp_path):
         settings.cache_path = original_cache
 
 
+def test_media_rename_route_requires_admin(client):
+    """Guest users should not be able to edit media metadata."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Guest Edit Blocked",
+            media_path="/media/guest-edit-blocked.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        media_id = media.id
+
+    response = client.patch(
+        f"/api/media/{media_id}",
+        json={
+            "title": "Blocked",
+            "artist": None,
+            "rename_on_disk": False,
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
+
+
 def test_media_rename_route_persists_lyrics_text(client, tmp_path):
     """Media edit should be able to save lyrics text as a sidecar."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     original_cache = settings.cache_path
     try:
@@ -1446,6 +1515,7 @@ def test_media_rename_route_persists_lyrics_text(client, tmp_path):
 
 def test_media_scan_preserves_edited_media_adjacent_lyrics(client, tmp_path):
     """Library scan should keep lyrics saved from the edit modal."""
+    authenticate_admin_client(client)
     original_media = settings.media_path
     original_cache = settings.cache_path
     try:
@@ -1729,6 +1799,7 @@ def test_update_runtime_settings_rejects_invalid_crf(client):
 
 def test_skip_current_promotes_next_ready(client):
     """Test skip endpoint removes current item and promotes next."""
+    authenticate_admin_client(client)
     first = client.post(
         "/api/queue/",
         json={"youtube_id": "first", "title": "First", "is_karaoke": False},
@@ -1764,6 +1835,7 @@ def test_skip_current_promotes_next_ready(client):
 
 def test_skip_current_without_next_returns_none(client):
     """Test skip endpoint when only current playing exists."""
+    authenticate_admin_client(client)
     first = client.post(
         "/api/queue/",
         json={"youtube_id": "only", "title": "Only", "is_karaoke": False},
@@ -1782,8 +1854,59 @@ def test_skip_current_without_next_returns_none(client):
     assert response.json() is None
 
 
+def test_guest_cannot_skip_other_guest_current_item(client):
+    """Guest users should not be able to skip a current song they did not queue."""
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    first = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-rest-skip-denied", "title": "Guest Rest Skip Denied", "is_karaoke": False},
+    ).json()
+
+    with TestingSessionLocal() as db:
+        row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        row.status = QueueStatus.PLAYING
+        db.commit()
+
+    client.cookies.set("karaoke_guest_id", "guest-other")
+    response = client.post("/api/queue/skip")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not allowed to control this stage item"
+    with TestingSessionLocal() as db:
+        assert db.query(QueueItem).filter(QueueItem.id == first["id"]).first() is not None
+
+
+def test_guest_can_skip_owned_current_item(client):
+    """Guest users may skip their own currently playing song."""
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    first = client.post(
+        "/api/queue/",
+        json={"youtube_id": "guest-rest-skip-owned", "title": "Guest Rest Skip Owned", "is_karaoke": False},
+    ).json()
+
+    with TestingSessionLocal() as db:
+        row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        row.status = QueueStatus.PLAYING
+        db.commit()
+
+    response = client.post("/api/queue/skip")
+
+    assert response.status_code == 200
+    assert response.json() is None
+    with TestingSessionLocal() as db:
+        assert db.query(QueueItem).filter(QueueItem.id == first["id"]).first() is None
+
+
+def test_complete_current_requires_admin(client):
+    """Guests should not be able to complete the current stage item."""
+    response = client.post("/api/queue/complete-current")
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
+
+
 def test_complete_current_promotes_next_ready(client):
     """Test complete-current endpoint removes current item and promotes next."""
+    authenticate_admin_client(client)
     first = client.post(
         "/api/queue/",
         json={"youtube_id": "first-c", "title": "First C", "is_karaoke": False},
@@ -1819,6 +1942,7 @@ def test_complete_current_promotes_next_ready(client):
 
 def test_complete_current_without_next_returns_none(client):
     """Test complete-current endpoint when only current playing exists."""
+    authenticate_admin_client(client)
     first = client.post(
         "/api/queue/",
         json={"youtube_id": "only-c", "title": "Only C", "is_karaoke": False},
@@ -2456,6 +2580,7 @@ def test_websocket_broadcasts_queue_item_updated_on_move(client):
 
 def test_websocket_broadcasts_current_item_changed_on_skip(client):
     """Skipping current item should broadcast current_item_changed."""
+    authenticate_admin_client(client)
     first = client.post(
         "/api/queue/",
         json={"youtube_id": "ws-skip-1", "title": "WS Skip 1", "is_karaoke": False},
@@ -2519,6 +2644,7 @@ def test_websocket_broadcasts_queue_cleared(client):
 
 def test_websocket_stage_command_pause_broadcasts_control_and_state(client):
     """Pause stage command should broadcast control command and paused state."""
+    authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         with client.websocket_connect("/api/queue/ws") as receiver:
@@ -2553,6 +2679,7 @@ def test_websocket_stage_command_pause_broadcasts_control_and_state(client):
 
 def test_websocket_stage_command_set_lyrics_enabled_broadcasts_state(client):
     """Lyrics toggle should broadcast a stage state update."""
+    authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         with client.websocket_connect("/api/queue/ws") as receiver:
@@ -2579,8 +2706,78 @@ def test_websocket_stage_command_set_lyrics_enabled_broadcasts_state(client):
             assert state_event["data"]["vocals_enabled"] is True
 
 
+def test_websocket_guest_cannot_control_other_guest_current_item(client):
+    """Guest websocket stage commands should be denied for other guests' songs."""
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    first = client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-guest-denied", "title": "WS Guest Denied", "is_karaoke": False},
+    ).json()
+
+    with TestingSessionLocal() as db:
+        row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        row.status = QueueStatus.PLAYING
+        db.commit()
+
+    client.cookies.set("karaoke_guest_id", "guest-other")
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        sender.send_json(
+            {
+                "type": "stage_command",
+                "data": {"command": "pause", "source": "queue"},
+                "timestamp": 123,
+            }
+        )
+
+        response = sender.receive_json()
+        if response["type"] == "ping":
+            sender.send_json({"type": "pong"})
+            response = sender.receive_json()
+        assert response["type"] == "error"
+        assert response["data"]["detail"] == "Not allowed to control this stage item"
+
+
+def test_websocket_guest_can_control_owned_current_item(client):
+    """Guest websocket stage commands should be allowed for their own current song."""
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    first = client.post(
+        "/api/queue/",
+        json={"youtube_id": "ws-guest-owned", "title": "WS Guest Owned", "is_karaoke": False},
+    ).json()
+
+    with TestingSessionLocal() as db:
+        row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        row.status = QueueStatus.PLAYING
+        db.commit()
+
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "set_lyrics_enabled",
+                        "source": "queue",
+                        "lyrics_enabled": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            state_event = receiver.receive_json()
+            if state_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                state_event = receiver.receive_json()
+            assert state_event["type"] == "stage_state_update"
+            assert state_event["data"]["lyrics_enabled"] is False
+
+
 def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
     """Seek stage command should broadcast target timestamp and paused state."""
+    authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         with client.websocket_connect("/api/queue/ws") as receiver:
@@ -2620,6 +2817,7 @@ def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
 
 def test_websocket_stage_time_update_broadcasts_state(client):
     """Stage time updates should refresh the shared playback clock."""
+    authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         with client.websocket_connect("/api/queue/ws") as receiver:
@@ -2642,8 +2840,29 @@ def test_websocket_stage_time_update_broadcasts_state(client):
             assert state_event["data"]["is_paused"] is True
 
 
+def test_websocket_stage_time_update_requires_admin(client):
+    """Guest clients should not be able to spoof authoritative stage time."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        sender.send_json(
+            {
+                "type": "stage_time_update",
+                "data": {"current_time": 18.25, "is_paused": True, "source": "stage"},
+                "timestamp": 123,
+            }
+        )
+
+        response = sender.receive_json()
+        if response["type"] == "ping":
+            sender.send_json({"type": "pong"})
+            response = sender.receive_json()
+        assert response["type"] == "error"
+        assert response["data"]["detail"] == "Admin session required for stage time updates"
+
+
 def test_websocket_stage_command_seek_rejects_invalid_time(client):
     """Invalid seek_time values should return websocket error."""
+    authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         sender.send_json(
@@ -2664,6 +2883,7 @@ def test_websocket_stage_command_seek_rejects_invalid_time(client):
 
 def test_websocket_stage_command_resync_broadcasts_control(client):
     """Resync stage command should broadcast control command with a sync version."""
+    authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         with client.websocket_connect("/api/queue/ws") as receiver:
@@ -2688,6 +2908,7 @@ def test_websocket_stage_command_resync_broadcasts_control(client):
 
 def test_websocket_stage_command_resync_accepts_optional_timeline(client):
     """Resync can carry a concrete timeline when sent by the stage client."""
+    authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         with client.websocket_connect("/api/queue/ws") as receiver:
@@ -2719,6 +2940,7 @@ def test_websocket_stage_command_resync_accepts_optional_timeline(client):
 
 def test_websocket_stage_command_set_vocals_enabled_broadcasts_state(client):
     """Vocals enabled command should broadcast updated stage mix state."""
+    authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         with client.websocket_connect("/api/queue/ws") as receiver:
@@ -2742,6 +2964,7 @@ def test_websocket_stage_command_set_vocals_enabled_broadcasts_state(client):
 
 def test_websocket_stage_command_set_vocals_volume_broadcasts_state(client):
     """Vocals volume command should broadcast updated stage mix state."""
+    authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         with client.websocket_connect("/api/queue/ws") as receiver:
@@ -2777,6 +3000,7 @@ def test_websocket_stage_command_set_vocals_volume_broadcasts_state(client):
 
 def test_websocket_stage_command_set_vocals_volume_rejects_out_of_bounds(client):
     """Out-of-range vocals volume should return websocket error and not broadcast state."""
+    authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         sender.send_json(
@@ -2797,6 +3021,7 @@ def test_websocket_stage_command_set_vocals_volume_rejects_out_of_bounds(client)
 
 def test_websocket_stage_command_skip_broadcasts_and_changes_current(client):
     """Skip stage command should advance queue and broadcast item change."""
+    authenticate_admin_client(client)
     first = client.post(
         "/api/queue/",
         json={"youtube_id": "ws-stage-skip-1", "title": "WS Stage Skip 1", "is_karaoke": False},

@@ -45,6 +45,10 @@ Allowed `command` values:
 - `set_vocals_volume` (requires numeric `vocals_volume` between `0.0` and `1.0`)
 - `set_lyrics_enabled` (requires boolean `lyrics_enabled`)
 
+Stage commands are authorized server-side. Admin sessions can control any current item. Guest clients
+can send stage commands only when the currently playing queue item belongs to their `karaoke_guest_id`.
+Unauthorized commands return a websocket `error` event and are not broadcast.
+
 **Server → client events (selected):**
 - Queue lifecycle:
   - `queue_item_added`
@@ -76,6 +80,7 @@ Allowed `command` values:
 ```
 
 The stage page sends this message from the active media element so lyrics viewers can follow the authoritative playback clock instead of a local timer.
+Only admin sessions may send `stage_time_update`.
 
 **Queue presence client message:**
 ```json
@@ -203,6 +208,7 @@ When `lyrics_text` is supplied for karaoke items, the app persists it as a reusa
   "title": "Song Title",
   "artist": "Artist Name",
   "can_remove": false,
+  "can_control_stage": false,
   "is_karaoke": true,
   "status": "pending",
   "media_path": "/media/dQw4w9WgXcQ.mp4",
@@ -656,6 +662,7 @@ POST /api/queue/skip
 ```
 
 Removes the currently playing item from the active queue and promotes the next `ready` item to `playing`.
+Requires an admin session unless the current item belongs to the guest sending the request.
 
 **Response:**
 - Queue item object for the newly playing item, or `null` if no next item is available.
@@ -669,6 +676,7 @@ POST /api/queue/complete-current
 
 Removes the currently playing item from the active queue and promotes the next `ready` item to `playing`.
 This endpoint is used by playback `ended` handling for automatic queue advance.
+Requires an admin session.
 
 **Response:**
 - Queue item object for the newly playing item, or `null` if no next item is available.

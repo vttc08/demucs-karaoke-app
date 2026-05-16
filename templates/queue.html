@@ -3,17 +3,16 @@
 {% block title %}{{ t('queue.title') }}{% endblock %}
 {% block header_icon %}music_note{% endblock %}
 {% block header_title %}{{ t('app.karaoke') }}{% endblock %}
-{% block header_subtitle %}{{ t('header.queue_manager') }}{% endblock %}
 
 {% block content %}
 <main
-    class="pt-28 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-4 sm:gap-5 sm:px-6 lg:px-8"
+    class="pt-24 pb-32 px-4 max-w-2xl mx-auto flex flex-col gap-4 sm:px-6 lg:px-8"
     data-singer-name="{{ singer_name }}"
     data-needs-singer-name="{{ 'true' if needs_singer_name else 'false' }}"
     data-is-admin="{{ 'true' if is_admin else 'false' }}"
     data-guest-id="{{ request.cookies.get('karaoke_guest_id', '') }}"
 >
-    <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+    <section class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2">
         <div class="min-w-0">
             <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.tonight') }}</span>
             <h2 class="truncate font-headline text-xl font-black tracking-tight text-on-surface">
@@ -30,21 +29,12 @@
         </button>
     </section>
 
-    {% if is_admin %}
-    <section id="queue-as-settings-panel" class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-1.5">
-        <label class="flex items-center justify-between gap-3">
-            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_setting_label') }}</span>
-            <input id="queue-as-enabled-toggle" type="checkbox" class="h-4 w-4 accent-primary" />
-        </label>
-    </section>
-    {% endif %}
-
     <!-- Search Section -->
-    <section class="flex flex-col gap-2">
+    <section class="flex flex-col gap-2 rounded-2xl bg-surface-container-low p-4">
         <div class="relative group">
             <input 
                 id="search-input"
-                class="w-full bg-surface-container border-none h-16 pl-4 pr-24 rounded-full text-on-surface focus:ring-2 focus:ring-primary/30 transition-all font-body text-lg shadow-inner focus:outline-none" 
+                class="w-full bg-surface-container border-none h-14 pl-4 pr-24 rounded-full text-on-surface focus:ring-2 focus:ring-primary/30 transition-all font-body text-base shadow-inner focus:outline-none" 
                 placeholder="{{ t('queue.search_placeholder') }}"
                 type="text"
                 autocomplete="off"
@@ -59,7 +49,7 @@
         <div id="queue-library-shortcuts" class="grid grid-cols-2 gap-2">
             <a
                 href="{{ app_url('/media') }}"
-                class="group inline-flex min-h-14 items-center gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+                class="group inline-flex min-h-10 items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <span class="material-symbols-outlined text-[18px] leading-none">folder_open</span>
@@ -68,7 +58,7 @@
             </a>
             <a
                 href="{{ app_url('/upload') }}"
-                class="group inline-flex min-h-14 items-center gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+                class="group inline-flex min-h-10 items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
             >
                 <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/10 text-secondary">
                     <span class="material-symbols-outlined text-[18px] leading-none">cloud_upload</span>
@@ -78,21 +68,122 @@
         </div>
         <a
             href="{{ app_url('/queue/lyrics') }}"
-            class="group inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-sm font-bold text-on-surface transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+            class="group inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-sm font-bold text-on-surface transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
         >
             <span class="material-symbols-outlined text-[18px] leading-none text-primary">lyrics</span>
             <span>{{ t('queue.open_lyrics_viewer') }}</span>
         </a>
+        {% if is_admin %}
+        <div id="queue-as-settings-panel" class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-1.5">
+            <label class="flex items-center justify-between gap-3">
+                <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_setting_label') }}</span>
+                <input id="queue-as-enabled-toggle" type="checkbox" class="h-4 w-4 accent-primary" />
+            </label>
+        </div>
+        {% endif %}
         <!-- Search Results -->
         <div id="search-results" class="flex flex-col gap-3"></div>
     </section>
+
+    <details class="collapsible-panel group rounded-xl bg-surface-container-low p-4" {% if is_admin %}open{% endif %}>
+        <summary class="collapsible-summary flex cursor-pointer items-center justify-between gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+            <div class="min-w-0">
+                <h3 class="font-headline font-black text-xl tracking-tight text-on-surface">{{ t('queue.stage_controls') }}</h3>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+                <span id="stage-remote-status" class="text-xs text-on-surface-variant">{{ t('queue.connecting') }}</span>
+                <span class="collapsible-chevron material-symbols-outlined text-base text-on-surface-variant">expand_more</span>
+            </div>
+        </summary>
+        <div class="pt-4">
+            <div class="grid grid-cols-3 gap-2 sm:gap-2.5">
+                <button
+                    id="stage-remote-play-pause-btn"
+                    class="col-span-1 inline-flex min-w-0 items-center justify-center gap-2 rounded-full bg-primary px-2.5 py-2 text-[11px] font-bold text-on-primary transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+                    disabled
+                >
+                    <span id="stage-remote-play-pause-icon" class="material-symbols-outlined text-base">play_arrow</span>
+                    <span id="stage-remote-play-pause-label">{{ t('common.play') }}</span>
+                </button>
+                <button
+                    id="stage-remote-skip-btn"
+                    class="col-span-1 inline-flex min-w-0 items-center justify-center gap-2 rounded-full bg-secondary px-2.5 py-2 text-[11px] font-bold text-white transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+                    disabled
+                >
+                    <span class="material-symbols-outlined text-base">skip_next</span>
+                    {{ t('common.skip') }}
+                </button>
+                <button
+                    id="stage-remote-resync-btn"
+                    class="col-span-1 inline-flex min-w-0 items-center justify-center gap-2 rounded-full bg-surface-container-high px-2.5 py-2 text-[11px] font-bold text-on-surface transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+                    title="{{ t('stage.force_resync') }}"
+                    disabled
+                >
+                    <span class="material-symbols-outlined text-base">sync</span>
+                    {{ t('stage.resync') }}
+                </button>
+                <div
+                    id="stage-remote-vocals-control"
+                    class="col-span-2 row-start-2 grid min-h-11 w-full grid-cols-[2.25rem_minmax(0,1fr)_2.75rem] items-center gap-2 rounded-full border border-outline-variant/20 bg-surface-container-high px-1.5 py-1 shadow-inner shadow-black/10 sm:min-h-12 sm:grid-cols-[2.5rem_minmax(0,1fr)_3rem] sm:px-2"
+                >
+                    <button
+                        id="stage-remote-vocals-toggle-btn"
+                        type="button"
+                        class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-secondary/15 text-secondary transition-all hover:bg-secondary/25 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9"
+                        aria-label="{{ t('stage.toggle_guide_vocals') }}"
+                        aria-pressed="true"
+                        title="{{ t('stage.toggle_guide_vocals') }}"
+                        disabled
+                    >
+                        <span id="stage-remote-vocals-toggle-icon" class="material-symbols-outlined text-lg">mic</span>
+                    </button>
+                    <label class="sr-only" for="stage-remote-vocals-volume-slider">{{ t('stage.vocals_volume') }}</label>
+                    <input
+                        id="stage-remote-vocals-volume-slider"
+                        class="h-8 w-full min-w-0 accent-secondary disabled:cursor-not-allowed disabled:opacity-50"
+                        type="range"
+                        min="0"
+                        max="100"
+                        value="100"
+                        step="1"
+                        aria-label="{{ t('stage.vocals_volume') }}"
+                        disabled
+                    />
+                    <span id="stage-remote-vocals-volume-label" class="justify-self-end tabular-nums text-[11px] font-black text-on-surface-variant sm:text-xs">100%</span>
+                </div>
+
+                <button
+                    id="stage-remote-lyrics-toggle-btn"
+                    class="col-start-3 row-start-2 inline-flex min-h-11 justify-self-end items-center justify-center gap-2 rounded-full bg-surface-container-high px-2.5 py-2 text-[11px] font-bold text-on-surface transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+                    disabled
+                >
+                    <span id="stage-remote-lyrics-toggle-icon" class="material-symbols-outlined text-base">subtitles</span>
+                    <span id="stage-remote-lyrics-toggle-label">{{ t('stage.lyrics_on') }}</span>
+                </button>
+            </div>
+        </div>
+    </details>
+
+    <details class="collapsible-panel group rounded-xl bg-surface-container-low" {% if is_admin %}open{% endif %}>
+        <summary class="collapsible-summary flex cursor-pointer items-center justify-between gap-3 px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
+            <div class="min-w-0">
+                <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('queue.here_now') }}</h3>
+            </div>
+            <div class="flex shrink-0 items-center gap-2">
+                <span id="queue-presence-count" class="rounded-full bg-surface-container-highest px-3 py-1 text-xs font-bold text-on-surface-variant">{{ t('queue.no_one_here') }}</span>
+                <span class="collapsible-chevron material-symbols-outlined text-base text-on-surface-variant">expand_more</span>
+            </div>
+        </summary>
+        <div class="px-4 pb-4">
+            <div id="queue-presence-list" class="flex flex-wrap gap-2"></div>
+        </div>
+    </details>
 
     <!-- Queue Section -->
     <section class="flex flex-col gap-6">
         <div class="flex items-end justify-between gap-3 px-2">
             <div>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.up_next') }}</span>
-                <h2 class="font-headline font-black text-3xl tracking-tight text-on-surface">{{ t('queue.stage') }}</h2>
+                <h3 class="font-headline font-black text-3xl tracking-tight text-on-surface">{{ t('queue.stage') }}</h3>
             </div>
             <div class="flex items-center gap-2">
                 <span
@@ -111,17 +202,6 @@
             </div>
         </div>
 
-        <div class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
-            <div class="flex items-center justify-between gap-3">
-                <div>
-                    <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.live') }}</span>
-                    <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('queue.here_now') }}</h3>
-                </div>
-                <span id="queue-presence-count" class="rounded-full bg-surface-container-highest px-3 py-1 text-xs font-bold text-on-surface-variant">{{ t('queue.no_one_here') }}</span>
-            </div>
-            <div id="queue-presence-list" class="mt-4 flex flex-wrap gap-2"></div>
-        </div>
-        
         <div id="queue-list" class="flex flex-col gap-4">
             {% if queue %}
                 {% for item in queue %}
@@ -223,73 +303,6 @@
                     <p class="text-on-surface-variant/60 text-sm">{{ t('queue.add_started') }}</p>
                 </div>
             {% endif %}
-        </div>
-    </section>
-
-    <section class="flex flex-col gap-4 rounded-xl bg-surface-container-low p-4">
-        <div class="flex items-center justify-between gap-3">
-            <div>
-                <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.remote') }}</span>
-                <h2 class="font-headline font-black text-2xl tracking-tight text-on-surface">{{ t('queue.stage_controls') }}</h2>
-            </div>
-            <span id="stage-remote-status" class="text-xs text-on-surface-variant">{{ t('queue.connecting') }}</span>
-        </div>
-        <div class="flex items-center gap-3">
-            <button
-                id="stage-remote-play-pause-btn"
-                class="inline-flex items-center gap-2 rounded-full bg-primary text-on-primary px-4 py-2 text-sm font-bold transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled
-            >
-                <span id="stage-remote-play-pause-icon" class="material-symbols-outlined text-base">play_arrow</span>
-                <span id="stage-remote-play-pause-label">{{ t('common.play') }}</span>
-            </button>
-            <button
-                id="stage-remote-skip-btn"
-                class="inline-flex items-center gap-2 rounded-full bg-secondary text-white px-4 py-2 text-sm font-bold transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled
-            >
-                <span class="material-symbols-outlined text-base">skip_next</span>
-                {{ t('common.skip') }}
-            </button>
-            <button
-                id="stage-remote-resync-btn"
-                class="inline-flex items-center gap-2 rounded-full bg-surface-container-high text-on-surface px-4 py-2 text-sm font-bold transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled
-            >
-                <span class="material-symbols-outlined text-base">sync</span>
-                {{ t('stage.resync') }}
-            </button>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-            <button
-                id="stage-remote-vocals-toggle-btn"
-                class="inline-flex items-center gap-2 rounded-full bg-surface-container-high text-on-surface px-4 py-2 text-sm font-bold transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled
-            >
-                <span id="stage-remote-vocals-toggle-icon" class="material-symbols-outlined text-base">mic</span>
-                <span id="stage-remote-vocals-toggle-label">{{ t('stage.vocals_on') }}</span>
-            </button>
-            <label class="flex items-center gap-2 text-sm text-on-surface-variant">
-                <span>{{ t('queue.vocal_vol') }}</span>
-                <input
-                    id="stage-remote-vocals-volume-slider"
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="1"
-                    value="100"
-                    class="w-36 accent-primary disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled
-                />
-            </label>
-            <button
-                id="stage-remote-lyrics-toggle-btn"
-                class="inline-flex w-full items-center justify-center gap-2 rounded-full bg-surface-container-high text-on-surface px-4 py-2 text-sm font-bold transition-all hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed sm:w-auto"
-                disabled
-            >
-                <span id="stage-remote-lyrics-toggle-icon" class="material-symbols-outlined text-base">subtitles</span>
-                <span id="stage-remote-lyrics-toggle-label">{{ t('stage.lyrics_on') }}</span>
-            </button>
         </div>
     </section>
 
