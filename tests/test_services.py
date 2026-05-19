@@ -497,6 +497,82 @@ def test_media_library_sync_service_skips_sidecars_as_primary_media(db_session, 
         settings.media_path = original_media
 
 
+def test_media_library_sync_service_skips_audio_scratch_files_as_primary_media(
+    db_session, tmp_path
+):
+    """Transient *.audio.* files should not be inserted as standalone media rows."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        (settings.media_path / "track.mp4").write_text("video", encoding="utf-8")
+        (settings.media_path / "track.audio.webm").write_text("audio", encoding="utf-8")
+        (settings.media_path / "track.vocals.mp3").write_text("vocals", encoding="utf-8")
+
+        service = MediaLibrarySyncService()
+        summary = service.scan_library(db_session)
+
+        assert summary["scanned_files"] == 1
+        assert summary["created"] == 1
+        rows = db_session.query(MediaItem).all()
+        assert len(rows) == 1
+        assert rows[0].media_path == "/media/track.mp4"
+        assert rows[0].vocals_path == "/media/track.vocals.mp3"
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_library_sync_service_skips_legacy_karaoke_duplicate_when_canonical_exists(
+    db_session, tmp_path
+):
+    """Legacy *.karaoke.mp4 should not become a duplicate row if canonical media exists."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        (settings.media_path / "track.mp4").write_text("video", encoding="utf-8")
+        (settings.media_path / "track.karaoke.mp4").write_text("legacy-video", encoding="utf-8")
+        (settings.media_path / "track.vocals.mp3").write_text("vocals", encoding="utf-8")
+
+        service = MediaLibrarySyncService()
+        summary = service.scan_library(db_session)
+
+        assert summary["scanned_files"] == 1
+        assert summary["created"] == 1
+        rows = db_session.query(MediaItem).all()
+        assert len(rows) == 1
+        assert rows[0].media_path == "/media/track.mp4"
+        assert rows[0].vocals_path == "/media/track.vocals.mp3"
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_library_sync_service_keeps_legacy_karaoke_file_when_no_canonical_exists(
+    db_session, tmp_path
+):
+    """Legacy *.karaoke.mp4 remains importable when it is the only playable media file."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        (settings.media_path / "track.karaoke.mp4").write_text("legacy-video", encoding="utf-8")
+        (settings.media_path / "track.vocals.mp3").write_text("vocals", encoding="utf-8")
+
+        service = MediaLibrarySyncService()
+        summary = service.scan_library(db_session)
+
+        assert summary["scanned_files"] == 1
+        assert summary["created"] == 1
+        row = db_session.query(MediaItem).one()
+        assert row.media_path == "/media/track.karaoke.mp4"
+        assert row.vocals_path == "/media/track.vocals.mp3"
+    finally:
+        settings.media_path = original_media
+
+
 def test_media_library_sync_service_generates_thumbnails_for_videos(db_session, tmp_path, monkeypatch):
     """Library scans should request thumbnail generation for local video files."""
     original_media = settings.media_path
@@ -1672,10 +1748,13 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session,
     """Non-karaoke processing should use video+audio direct download."""
     queue_service = QueueService()
     original_media = settings.media_path
+    original_cache = settings.cache_path
     try:
         settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
         settings.media_path.mkdir(parents=True, exist_ok=True)
-        downloaded_file = settings.media_path / "plain123.mp4"
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+        downloaded_file = settings.cache_path / "plain123.mp4"
         downloaded_file.write_text("video", encoding="utf-8")
 
         item = queue_service.add_to_queue(
@@ -1694,7 +1773,10 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session,
 
         await service.process_queue_item(db_session, item.id)
 
-        service.youtube_service.download_video_with_audio.assert_called_once_with("plain123")
+        service.youtube_service.download_video_with_audio.assert_called_once_with(
+            "plain123",
+            settings.cache_path / "ytdlp",
+        )
         service.youtube_service.download_video.assert_not_called()
         service.youtube_service.download_audio.assert_not_called()
 
@@ -1704,8 +1786,11 @@ async def test_karaoke_service_non_karaoke_uses_progressive_download(db_session,
         assert updated_item.media is not None
         expected_stem = build_media_stem("Plain Song", None, fallback="plain123")
         assert updated_item.media.media_path == f"/media/{expected_stem}.mp4"
+        assert (settings.media_path / f"{expected_stem}.mp4").exists()
+        assert not downloaded_file.exists()
     finally:
         settings.media_path = original_media
+        settings.cache_path = original_cache
 
 
 @pytest.mark.asyncio
@@ -1725,6 +1810,18 @@ async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(d
         lyrics_file.parent.mkdir(parents=True, exist_ok=True)
         media_file.write_text("video", encoding="utf-8")
         lyrics_file.write_text("[00:01.00]Existing lyrics", encoding="utf-8")
+        db_session.add(
+            MediaItem(
+                youtube_id="karaoke-ready",
+                title="Karaoke Ready",
+                artist="Singer",
+                file_stem=expected_stem,
+                media_path=f"/media/{expected_stem}.mp4",
+                lyrics_path=f"/cache/lyrics/{expected_stem}.lrc",
+                missing=False,
+            )
+        )
+        db_session.flush()
 
         queue_service = QueueService()
         item = queue_service.add_to_queue(
@@ -1755,13 +1852,16 @@ async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(d
         no_vocals_path.parent.mkdir(parents=True, exist_ok=True)
         no_vocals_path.write_text("no vocals", encoding="utf-8")
         vocals_path.write_text("vocals", encoding="utf-8")
+        def fake_combine_audio_video(*, video_path, audio_path, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text("karaoke video", encoding="utf-8")
         service.demucs_client.separate_vocals = AsyncMock(
             return_value=DemucsResponse(
                 no_vocals_path=str(no_vocals_path),
                 vocals_path=str(vocals_path),
             )
         )
-        service.ffmpeg.combine_audio_video.return_value = None
+        service.ffmpeg.combine_audio_video.side_effect = fake_combine_audio_video
         await service.process_queue_item(db_session, item.id)
 
         updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
@@ -2843,8 +2943,8 @@ async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_p
     service.demucs_client = Mock()
     service.ffmpeg = Mock()
     expected_stem = build_media_stem("Kara Song", "Singer", fallback="kara123")
-    downloaded_video = settings.media_path / "kara123.mp4"
-    downloaded_audio = settings.media_path / "kara123.audio.m4a"
+    downloaded_video = settings.cache_path / "kara123.mp4"
+    downloaded_audio = settings.cache_path / "kara123.audio.m4a"
     downloaded_video.write_text("video", encoding="utf-8")
     downloaded_audio.write_text("audio", encoding="utf-8")
     service.youtube_service.download_video.return_value = downloaded_video
@@ -2853,11 +2953,27 @@ async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_p
     vocals_file = tmp_path / f"{expected_stem}.vocals.wav"
     no_vocals_file.write_bytes(b"no-vocals")
     vocals_file.write_bytes(b"vocals")
+    def fake_combine_audio_video(*, video_path, audio_path, output_path):
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"karaoke-video")
     service.demucs_client.separate_vocals = AsyncMock(
         return_value=Mock(no_vocals_path=str(no_vocals_file), vocals_path=str(vocals_file))
     )
+    service.ffmpeg.combine_audio_video.side_effect = fake_combine_audio_video
     try:
+        expected_media_file = settings.media_path / f"{expected_stem}.mp4"
+        expected_vocals_file = settings.media_path / f"{expected_stem}.vocals.wav"
         await service.process_queue_item(db_session, item.id)
+        service.youtube_service.download_video.assert_called_once_with(
+            "kara123",
+            settings.cache_path / "ytdlp",
+        )
+        service.youtube_service.download_audio.assert_called_once_with(
+            "kara123",
+            settings.cache_path / "ytdlp",
+        )
+        assert expected_media_file.exists()
+        assert expected_vocals_file.exists()
     finally:
         settings.cache_path = original_cache
         settings.media_path = original_media
@@ -2866,7 +2982,7 @@ async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_p
     updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
     assert updated_item is not None
     assert updated_item.media is not None
-    assert updated_item.media.media_path == f"/media/{expected_stem}.karaoke.mp4"
+    assert updated_item.media.media_path == f"/media/{expected_stem}.mp4"
     assert updated_item.media.vocals_path == f"/media/{expected_stem}.vocals.wav"
 
 
@@ -3004,7 +3120,8 @@ async def test_karaoke_service_retries_demucs_with_downloaded_audio_after_500(
         )
 
         extracted_audio = settings.cache_path / "audio" / "retry001.m4a"
-        fallback_audio = settings.media_path / "retry001.m4a"
+        fallback_audio = settings.cache_path / "retry001.m4a"
+        fallback_audio.write_text("audio", encoding="utf-8")
         service.ffmpeg.extract_audio.return_value = extracted_audio
         service.youtube_service.download_audio.return_value = fallback_audio
 
@@ -3026,10 +3143,17 @@ async def test_karaoke_service_retries_demucs_with_downloaded_audio_after_500(
                 ),
             ]
         )
+        def fake_combine_audio_video(*, video_path, audio_path, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"karaoke-video")
+        service.ffmpeg.combine_audio_video.side_effect = fake_combine_audio_video
 
         await service.process_queue_item(db_session, item.id)
 
-        service.youtube_service.download_audio.assert_called_once_with("retry001")
+        service.youtube_service.download_audio.assert_called_once_with(
+            "retry001",
+            settings.cache_path / "ytdlp",
+        )
         assert service.demucs_client.separate_vocals.await_count == 2
         updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
         assert updated_item is not None

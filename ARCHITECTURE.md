@@ -163,6 +163,8 @@ The stage page uses a websocket-first model:
 - Queue/API mapping normalizes persisted filesystem paths into app-served URLs (`/media/...` or `/cache/...`)
   and attempts sidecar recovery when vocals metadata is misassigned (e.g. lyrics accidentally saved into
   `vocals_path`).
+- yt-dlp downloads and Demucs scratch outputs are staged under `cache/` first; they are not durable
+  library assets and should never be imported as standalone media rows.
 - Stage playback is sidecar-first (not browser multi-audio-track MP4 selection):
   - `<video>` plays `media_path`
   - optional hidden `<audio>` plays `vocals_path`
@@ -172,8 +174,12 @@ The stage page uses a websocket-first model:
   Resync therefore performs a hard relock with retry and page-reload fallback instead of only nudging
   the vocals element while playback continues.
 - Karaoke processing persists stems with explicit mapping:
-  - `no_vocals` is muxed into the final `media_path` video under `media_path`
-  - `vocals` is persisted separately to `vocals_path` under `media_path`
+  - yt-dlp source video/audio downloads stay in `cache/`
+  - `no_vocals` is muxed into the final canonical `media_path` video as `/media/<stem>.mp4`
+  - `vocals` is persisted separately to canonical `vocals_path` as `/media/<stem>.vocals.<ext>`
+- Media-library scan treats transient files such as `*.audio.*` as scratch artifacts, skips duplicate
+  legacy `*.karaoke.*` files when a canonical `/media/<stem>.<ext>` sibling exists, and reattaches
+  canonical `*.vocals.*` sidecars when possible.
 - Vocal mix state is runtime-only and resets when the current queue item changes.
 
 ## Local thumbnails and audio cover art

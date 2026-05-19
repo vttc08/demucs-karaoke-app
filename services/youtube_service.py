@@ -272,7 +272,7 @@ class YouTubeService:
             deduped.append(item)
         return deduped
 
-    def download_audio(self, youtube_id: str) -> Path:
+    def download_audio(self, youtube_id: str, output_dir: Path | None = None) -> Path:
         """
         Download audio from YouTube video.
 
@@ -282,9 +282,9 @@ class YouTubeService:
         Returns:
             Path to downloaded audio file
         """
-        return self.ytdlp.download_audio(youtube_id, self._media_path())
+        return self.ytdlp.download_audio(youtube_id, output_dir or self._media_path())
 
-    def download_video(self, youtube_id: str) -> Path:
+    def download_video(self, youtube_id: str, output_dir: Path | None = None) -> Path:
         """
         Download video from YouTube.
 
@@ -294,9 +294,9 @@ class YouTubeService:
         Returns:
             Path to downloaded video file
         """
-        return self.ytdlp.download_video(youtube_id, self._media_path())
+        return self.ytdlp.download_video(youtube_id, output_dir or self._media_path())
 
-    def download_video_with_audio(self, youtube_id: str) -> Path:
+    def download_video_with_audio(self, youtube_id: str, output_dir: Path | None = None) -> Path:
         """
         Download progressive video with audio for direct playback.
 
@@ -306,4 +306,4 @@ class YouTubeService:
         Returns:
             Path to downloaded video file containing audio
         """
-        return self.ytdlp.download_video_with_audio(youtube_id, self._media_path())
+        return self.ytdlp.download_video_with_audio(youtube_id, output_dir or self._media_path())
