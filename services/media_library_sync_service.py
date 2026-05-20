@@ -196,9 +196,22 @@ class MediaLibrarySyncService:
                 continue
             if candidate.stem.lower().endswith(".vocals"):
                 continue
+            if candidate.stem.lower().endswith(".audio"):
+                continue
+            if self._is_legacy_karaoke_duplicate(candidate):
+                continue
             results.append(candidate.resolve())
         results.sort()
         return results
+
+    @staticmethod
+    def _is_legacy_karaoke_duplicate(candidate: Path) -> bool:
+        stem = candidate.stem
+        if not stem.lower().endswith(".karaoke"):
+            return False
+        canonical_stem = stem[: -len(".karaoke")]
+        canonical_candidate = candidate.with_name(f"{canonical_stem}{candidate.suffix}")
+        return canonical_candidate.exists() and canonical_candidate.is_file()
 
     def _refresh_sidecars(self, media_item: MediaItem, media_file: Path) -> bool:
         expected_vocals = self._find_vocals_sidecar(media_file)
@@ -227,18 +240,27 @@ class MediaLibrarySyncService:
         return restored, sidecars_updated, thumbnails_updated
 
     def _find_vocals_sidecar(self, media_file: Path) -> str | None:
-        for ext in _VOCALS_AUDIO_EXTENSIONS:
-            candidate = media_file.with_name(f"{media_file.stem}.vocals{ext}")
-            if candidate.exists() and candidate.is_file():
-                return self.queue_service.build_media_url(candidate)
+        for stem in self._sidecar_stems_for_media(media_file):
+            for ext in _VOCALS_AUDIO_EXTENSIONS:
+                candidate = media_file.with_name(f"{stem}.vocals{ext}")
+                if candidate.exists() and candidate.is_file():
+                    return self.queue_service.build_media_url(candidate)
         return None
 
     def _find_lyrics_sidecar(self, media_file: Path) -> str | None:
-        for ext in _LYRICS_EXTENSIONS:
-            candidate = media_file.with_suffix(ext)
-            if candidate.exists() and candidate.is_file():
-                return self.queue_service.build_media_url(candidate)
+        for stem in self._sidecar_stems_for_media(media_file):
+            for ext in _LYRICS_EXTENSIONS:
+                candidate = media_file.with_name(f"{stem}{ext}")
+                if candidate.exists() and candidate.is_file():
+                    return self.queue_service.build_media_url(candidate)
         return None
+
+    @staticmethod
+    def _sidecar_stems_for_media(media_file: Path) -> list[str]:
+        stems = [media_file.stem]
+        if media_file.stem.lower().endswith(".karaoke"):
+            stems.append(media_file.stem[: -len(".karaoke")])
+        return stems
 
     def _normalize_media_url(self, value: str | None) -> str | None:
         if value is None:

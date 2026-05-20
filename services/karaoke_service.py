@@ -27,6 +27,12 @@ class KaraokeService:
         self.queue_service = QueueService()
         self.ffmpeg = FFmpegAdapter()
 
+    @staticmethod
+    def _processing_cache_dir() -> Path:
+        path = settings.cache_path / "ytdlp"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     async def process_queue_item(self, db: Session, item_id: int):
         """
         Process a queue item end-to-end.
@@ -107,8 +113,11 @@ class KaraokeService:
                 else:
                     # Karaoke flow prefers separate tracks for processing.
                     media_stem = self._media_stem(item)
+                    processing_dir = self._processing_cache_dir()
                     video_path = await asyncio.to_thread(
-                        self.youtube_service.download_video, item.media.youtube_id
+                        self.youtube_service.download_video,
+                        item.media.youtube_id,
+                        processing_dir,
                     )
                     video_path = await asyncio.to_thread(
                         self._rename_downloaded_file,
@@ -118,7 +127,9 @@ class KaraokeService:
                     )
                     # Download audio only for karaoke flow
                     audio_path = await asyncio.to_thread(
-                        self.youtube_service.download_audio, item.media.youtube_id
+                        self.youtube_service.download_audio,
+                        item.media.youtube_id,
+                        processing_dir,
                     )
                     audio_path = await asyncio.to_thread(
                         self._rename_downloaded_file,
@@ -141,8 +152,11 @@ class KaraokeService:
                     return
                 # Non-karaoke flow: prefer single file with built-in audio.
                 media_stem = self._media_stem(item)
+                processing_dir = self._processing_cache_dir()
                 video_path = await asyncio.to_thread(
-                    self.youtube_service.download_video_with_audio, item.media.youtube_id
+                    self.youtube_service.download_video_with_audio,
+                    item.media.youtube_id,
+                    processing_dir,
                 )
                 video_path = await asyncio.to_thread(
                     self._rename_downloaded_file,
@@ -150,11 +164,20 @@ class KaraokeService:
                     media_stem,
                     "media",
                 )
-                self.queue_service.set_media_path(db, item_id, str(video_path))
+                final_media_path = await asyncio.to_thread(
+                    self._persist_primary_media,
+                    media_stem,
+                    video_path,
+                )
+                self.queue_service.set_media_path(db, item_id, str(final_media_path))
                 await self.queue_service.update_status_async(
                     db, item_id, QueueStatus.READY
                 )
-                logger.info("Non-karaoke processing completed item_id=%s output=%s", item_id, video_path)
+                logger.info(
+                    "Non-karaoke processing completed item_id=%s output=%s",
+                    item_id,
+                    final_media_path,
+                )
 
         except Exception as e:
             logger.exception("Failed processing queue item %s", item_id)
@@ -200,6 +223,17 @@ class KaraokeService:
         shutil.copy2(source_path, target_path)
         return target_path
 
+    def _persist_primary_media(self, media_stem: str, source_path: Path) -> Path:
+        """Move the finalized playable media file into durable media storage."""
+        target_path = settings.media_path / f"{media_stem}{source_path.suffix.lower()}"
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if source_path.resolve() == target_path.resolve():
+            return target_path
+        if target_path.exists():
+            target_path.unlink()
+        shutil.move(str(source_path), str(target_path))
+        return target_path
+
     async def _process_karaoke(
         self, db: Session, item, video_path: Path, audio_path: Path
     ):
@@ -236,18 +270,29 @@ class KaraokeService:
         )
         self.queue_service.set_vocals_path(db, item.id, str(vocals_sidecar_path))
 
-        output_path = settings.media_path / f"{self._media_stem(item)}.karaoke.mp4"
+        media_stem = self._media_stem(item)
+        output_path = settings.cache_path / "processed" / f"{media_stem}.mp4"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         await asyncio.to_thread(
             self.ffmpeg.combine_audio_video,
             video_path=video_path,
             audio_path=no_vocals_path,
             output_path=output_path,
         )
+        final_media_path = await asyncio.to_thread(
+            self._persist_primary_media,
+            media_stem,
+            output_path,
+        )
 
         # Update item with final media path
-        self.queue_service.set_media_path(db, item.id, str(output_path))
+        self.queue_service.set_media_path(db, item.id, str(final_media_path))
         await self.queue_service.update_status_async(db, item.id, QueueStatus.READY)
-        logger.info("Karaoke processing completed item_id=%s output=%s", item.id, output_path)
+        logger.info(
+            "Karaoke processing completed item_id=%s output=%s",
+            item.id,
+            final_media_path,
+        )
 
     @staticmethod
     def _media_stem(item: QueueItem) -> str:
@@ -302,8 +347,10 @@ class KaraokeService:
                 item.id,
                 status_code,
             )
+            processing_dir = self._processing_cache_dir()
             fallback_audio_path = await asyncio.to_thread(
                 self.youtube_service.download_audio,
                 item.media.youtube_id,
+                processing_dir,
             )
             return await self.demucs_client.separate_vocals(fallback_audio_path)

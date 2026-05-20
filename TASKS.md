@@ -76,7 +76,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] lyrics-assisted add-to-queue flow with manual lyrics override
 - [x] lyrics display page/modal for current song (synced and unsynced) (lyrics viewer screen)
 - [x] simplify the bubble card to something more dev friendly and user friendly
-- [ ] regression: yt-dlp bug (karaoke mode), downloads .mp4 first likely no sound, then download a .audio.webm, then .karaoke.mp4 after demucs, receives .vocals.mp3; work in db initially, but after scan, no longer works, db create 2 new entries, one for .audio.webm and the other likely for karaoke
+- [x] regression: yt-dlp karaoke staging now keeps temp downloads in cache, persists only canonical video + vocals files in media, and scan ignores transient `.audio.*`/legacy duplicate karaoke artifacts
 - [ ] bug, admin requested as the guest still cannot control
 - [ ] standardize yt-dlp input, demucs output and import into karaoke_media folder 
 - [ ] implement lyrics and karaoke demucs behavior for upload and media management 
