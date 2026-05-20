@@ -76,20 +76,11 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] lyrics-assisted add-to-queue flow with manual lyrics override
 - [x] lyrics display page/modal for current song (synced and unsynced) (lyrics viewer screen)
 - [x] simplify the bubble card to something more dev friendly and user friendly
-- [x] regression: yt-dlp karaoke staging now keeps temp downloads in cache, persists only canonical video + vocals files in media, and scan ignores transient `.audio.*`/legacy duplicate karaoke artifacts
-- [ ] bug, admin requested as the guest still cannot control
-- [ ] standardize yt-dlp input, demucs output and import into karaoke_media folder 
+- [x] regression: yt-dlp bug (karaoke mode), downloads .mp4 first likely no sound, then download a .audio.webm, then .karaoke.mp4 after demucs, receives .vocals.mp3; work in db initially, but after scan, no longer works, db create 2 new entries, one for .audio.webm and the other likely for karaoke
+- [x] bug, admin requested as the guest still cannot control
+- [x] standardize yt-dlp input, demucs output and import into karaoke_media folder 
 - [ ] implement lyrics and karaoke demucs behavior for upload and media management 
 - [ ] i frame only video previewer and editor (vibestudio editor)
 - [ ] add vocals to existing karaoke video (audio synchronization)
 - [ ] oidc authelia support
 - [ ] batching demucs using load balancer and split file into small segments for batch processing
-
-## Next steps (future sprints)
-- [x] Integrate real lyrics API (Genius/MusixMatch)
-- [ ] Add Whisper for lyrics alignment
-- [ ] Add file upload support
-- [ ] Implement background job queue (Redis + RQ)
-- [ ] Add authentication
-- [ ] Add real-time streaming optimization
-- [ ] Add user profiles

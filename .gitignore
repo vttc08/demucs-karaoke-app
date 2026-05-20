@@ -55,6 +55,7 @@ htmlcov/
 
 # Logs
 *.log
+logs/
 
 # Playwright CLI artifacts
 .playwright-cli/
