@@ -72,6 +72,7 @@ const queueToast = document.getElementById('queue-toast');
 const queueToastText = document.getElementById('queue-toast-text');
 const QUEUE_AS_ENABLED_STORAGE_KEY = 'karaoke.queueAs.enabled';
 const QUEUE_AS_LAST_NAME_STORAGE_KEY = 'karaoke.queueAs.lastName';
+const QUEUE_AS_LAST_GUEST_ID_STORAGE_KEY = 'karaoke.queueAs.lastGuestId';
 const QUEUE_CONFIRM_DEFAULT_HTML = `<span class="material-symbols-outlined text-base" style="font-variation-settings: 'FILL' 1">add_circle</span>${t('common.add_to_queue')}`;
 const QUEUE_CONFIRM_LOADING_HTML = `<span class="material-symbols-outlined animate-spin text-base">sync</span>${t('lyrics.searching_providers')}`;
 const KARAOKE_TITLE_HINT_RE = /\b(karaoke|ktv|sing[-\s]?along|off[-\s]?vocal|no[-\s]?vocal|instrumental|noraebang)\b/i;
@@ -91,6 +92,7 @@ let queueToastTimer = null;
 let queuePresenceUsers = [];
 let queueAsEnabled = false;
 let queueAsModalResolver = null;
+let queueConfigSelectedQueueAsGuestId = null;
 
 function getCookieValue(name) {
     const match = document.cookie
@@ -162,12 +164,29 @@ function getQueueAsLastName() {
     return sanitizeQueueAsName(getLocalStorageValue(QUEUE_AS_LAST_NAME_STORAGE_KEY, '') || '');
 }
 
-function setQueueAsLastName(name) {
+function getQueueAsLastGuestId() {
+    return sanitizePresenceValue(getLocalStorageValue(QUEUE_AS_LAST_GUEST_ID_STORAGE_KEY, '') || '');
+}
+
+function setQueueAsSelection(name, guestId = null) {
     const normalized = sanitizeQueueAsName(name);
     if (normalized) {
         setLocalStorageValue(QUEUE_AS_LAST_NAME_STORAGE_KEY, normalized);
     }
-    return normalized;
+    const normalizedGuestId = sanitizePresenceValue(guestId);
+    if (normalizedGuestId) {
+        setLocalStorageValue(QUEUE_AS_LAST_GUEST_ID_STORAGE_KEY, normalizedGuestId);
+    } else {
+        try {
+            localStorage.removeItem(QUEUE_AS_LAST_GUEST_ID_STORAGE_KEY);
+        } catch (_) {
+            // Storage is optional for queue interactions.
+        }
+    }
+    return {
+        name: normalized,
+        guestId: normalizedGuestId || null,
+    };
 }
 
 function updateQueueAsCurrentLabel(nameOverride = null) {
@@ -205,9 +224,16 @@ function getQueueAsSuggestions() {
         if (!normalized) {
             return;
         }
-        const key = normalized.toLowerCase();
+        const guestId = sanitizePresenceValue(user?.guest_id);
+        if (!guestId) {
+            return;
+        }
+        const key = guestId.toLowerCase();
         if (!unique.has(key)) {
-            unique.set(key, normalized);
+            unique.set(key, {
+                name: normalized,
+                guestId,
+            });
         }
     });
     return Array.from(unique.values());
@@ -222,11 +248,12 @@ function renderQueueAsSuggestions(targetElement = queueAsSuggestions) {
         targetElement.innerHTML = `<p class="text-xs text-on-surface-variant">${escapeHtml(t('queue.queue_as_no_recent'))}</p>`;
         return;
     }
-    targetElement.innerHTML = suggestions.map((name) => `
+    targetElement.innerHTML = suggestions.map(({ name, guestId }) => `
         <button
             type="button"
             class="queue-as-suggestion-btn inline-flex items-center rounded-full bg-surface-container-highest px-3 py-1.5 text-xs font-semibold text-on-surface transition-colors hover:text-primary"
             data-queue-as-name="${escapeHtml(name)}"
+            data-queue-as-guest-id="${escapeHtml(guestId)}"
         >
             ${escapeHtml(name)}
         </button>
@@ -254,13 +281,15 @@ function resolveQueueAsModal(value) {
     }
 }
 
-function openQueueAsModal(defaultName = '') {
+function openQueueAsModal(defaultSelection = {}) {
     if (!queueAsModal) {
-        return Promise.resolve(sanitizeQueueAsName(defaultName) || null);
+        const fallbackName = sanitizeQueueAsName(defaultSelection?.name || '');
+        return Promise.resolve(fallbackName ? { name: fallbackName, guestId: null } : null);
     }
     renderQueueAsSuggestions();
     if (queueAsInput) {
-        queueAsInput.value = sanitizeQueueAsName(defaultName);
+        queueAsInput.value = sanitizeQueueAsName(defaultSelection?.name || '');
+        queueAsInput.dataset.selectedGuestId = sanitizePresenceValue(defaultSelection?.guestId || '');
         window.setTimeout(() => queueAsInput.focus(), 60);
     }
     queueAsModal.classList.remove('hidden');
@@ -292,7 +321,20 @@ function initializeQueueAsSettings() {
             return;
         }
         queueAsInput.value = sanitizeQueueAsName(button.dataset.queueAsName);
+        queueAsInput.dataset.selectedGuestId = sanitizePresenceValue(button.dataset.queueAsGuestId);
         queueAsInput.focus();
+    });
+
+    queueAsInput?.addEventListener('input', () => {
+        const selectedGuestId = sanitizePresenceValue(queueAsInput.dataset.selectedGuestId || '');
+        const selectedName = sanitizeQueueAsName(queueAsInput.value);
+        const matchingUser = queuePresenceUsers.find((user) => (
+            sanitizeQueueAsName(user?.display_name) === selectedName
+            && sanitizePresenceValue(user?.guest_id) === selectedGuestId
+        ));
+        if (!matchingUser) {
+            queueAsInput.dataset.selectedGuestId = '';
+        }
     });
 
     queueAsConfirmBtn?.addEventListener('click', () => {
@@ -303,9 +345,12 @@ function initializeQueueAsSettings() {
             }
             return;
         }
-        setQueueAsLastName(selectedName);
-        updateQueueAsCurrentLabel(selectedName);
-        resolveQueueAsModal(selectedName);
+        const selection = setQueueAsSelection(
+            selectedName,
+            sanitizePresenceValue(queueAsInput?.dataset.selectedGuestId || '') || null,
+        );
+        updateQueueAsCurrentLabel(selection.name);
+        resolveQueueAsModal(selection.name ? selection : null);
     });
 
     const cancelQueueAs = () => resolveQueueAsModal(null);
@@ -318,12 +363,18 @@ async function submitQueueItemWithQueueAs(selection, buttonElement, options = {}
     if (!isAdminUser || !queueAsEnabled) {
         return submitQueueItem(selection, buttonElement, options);
     }
-    const defaultName = getQueueAsLastName() || getCurrentSingerName();
-    const queueAsName = await openQueueAsModal(defaultName);
-    if (!queueAsName) {
+    const queueAsSelection = await openQueueAsModal({
+        name: getQueueAsLastName() || getCurrentSingerName(),
+        guestId: getQueueAsLastGuestId() || null,
+    });
+    if (!queueAsSelection) {
         return;
     }
-    return submitQueueItem(selection, buttonElement, { ...options, queueAsName });
+    return submitQueueItem(selection, buttonElement, {
+        ...options,
+        queueAsName: queueAsSelection.name,
+        queueAsGuestId: queueAsSelection.guestId,
+    });
 }
 
 function renderPresenceList() {
@@ -812,7 +863,11 @@ function syncQueueAsInQueueConfig() {
         if (!current) {
             queueConfigQueueAsInput.value = getQueueAsLastName() || getCurrentSingerName();
         }
+        if (!sanitizePresenceValue(queueConfigQueueAsInput.dataset.selectedGuestId || '')) {
+            queueConfigQueueAsInput.dataset.selectedGuestId = getQueueAsLastGuestId() || '';
+        }
     }
+    queueConfigSelectedQueueAsGuestId = sanitizePresenceValue(queueConfigQueueAsInput?.dataset.selectedGuestId || '') || null;
 }
 
 async function openQueueConfigModal(resultElement, triggerButton) {
@@ -855,7 +910,9 @@ async function openQueueConfigModal(resultElement, triggerButton) {
 
     if (queueConfigQueueAsInput) {
         queueConfigQueueAsInput.value = getQueueAsLastName() || getCurrentSingerName();
+        queueConfigQueueAsInput.dataset.selectedGuestId = getQueueAsLastGuestId() || '';
     }
+    queueConfigSelectedQueueAsGuestId = getQueueAsLastGuestId() || null;
     syncQueueConfigModalUi();
 
     if (lyricsManager.state.lyricsEnabled && modalKaraokeEnabled && lyricsManager.shouldAutoResolve()) {
@@ -970,14 +1027,18 @@ async function addToQueueFromModal(selection, buttonElement) {
     const queueAsName = isAdminUser && queueAsEnabled && selection?.source !== 'local' && queueConfigQueueAsCheckbox?.checked
         ? sanitizeQueueAsName(queueConfigQueueAsInput?.value || '')
         : null;
+    const queueAsGuestId = queueAsName
+        ? sanitizePresenceValue(queueConfigQueueAsInput?.dataset.selectedGuestId || queueConfigSelectedQueueAsGuestId || '')
+        : '';
     if (queueAsName) {
-        setQueueAsLastName(queueAsName);
-        updateQueueAsCurrentLabel(queueAsName);
+        const queueAsSelection = setQueueAsSelection(queueAsName, queueAsGuestId || null);
+        updateQueueAsCurrentLabel(queueAsSelection.name);
     }
     return submitQueueItem(selection, buttonElement, {
         isKaraoke: modalKaraokeEnabled,
         lyricsEnabled: Boolean(lyricsManager?.state.lyricsEnabled),
         queueAsName,
+        queueAsGuestId,
     });
 }
 
@@ -1042,6 +1103,7 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
     const isKaraoke = Boolean(options.isKaraoke);
     const lyricsEnabled = Boolean(options.lyricsEnabled && isKaraoke && lyricsManager);
     const queueAsName = sanitizeQueueAsName(options.queueAsName);
+    const queueAsGuestId = sanitizePresenceValue(options.queueAsGuestId);
     
     // Get title/artist from manager if available, otherwise fall back to selection
     const title = lyricsEnabled && lyricsManager.state.title 
@@ -1085,6 +1147,9 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
         }
         if (queueAsName) {
             payload.queue_as_name = queueAsName;
+            if (queueAsGuestId) {
+                payload.queue_as_guest_id = queueAsGuestId;
+            }
         }
 
         const response = await fetch(`${API_BASE}/api/queue/`, {
@@ -1182,6 +1247,8 @@ if (queueConfigLyricsToggle) {
                 return;
             }
             queueConfigQueueAsInput.value = sanitizeQueueAsName(button.dataset.queueAsName);
+            queueConfigQueueAsInput.dataset.selectedGuestId = sanitizePresenceValue(button.dataset.queueAsGuestId);
+            queueConfigSelectedQueueAsGuestId = sanitizePresenceValue(button.dataset.queueAsGuestId) || null;
             queueConfigQueueAsInput.focus();
             if (queueConfigQueueAsCheckbox) {
                 queueConfigQueueAsCheckbox.checked = true;
@@ -1192,12 +1259,26 @@ if (queueConfigLyricsToggle) {
 
     if (queueConfigQueueAsInput) {
         queueConfigQueueAsInput.addEventListener('input', () => {
+            const selectedGuestId = sanitizePresenceValue(queueConfigQueueAsInput.dataset.selectedGuestId || '');
+            const selectedName = sanitizeQueueAsName(queueConfigQueueAsInput.value);
+            const matchingUser = queuePresenceUsers.find((user) => (
+                sanitizeQueueAsName(user?.display_name) === selectedName
+                && sanitizePresenceValue(user?.guest_id) === selectedGuestId
+            ));
+            if (!matchingUser) {
+                queueConfigQueueAsInput.dataset.selectedGuestId = '';
+                queueConfigSelectedQueueAsGuestId = null;
+            }
             syncQueueConfirmState();
         });
     }
 
     if (queueConfigQueueAsCheckbox) {
         queueConfigQueueAsCheckbox.addEventListener('change', () => {
+            if (!queueConfigQueueAsCheckbox.checked && queueConfigQueueAsInput) {
+                queueConfigQueueAsInput.dataset.selectedGuestId = '';
+                queueConfigSelectedQueueAsGuestId = null;
+            }
             syncQueueConfirmState();
         });
     }

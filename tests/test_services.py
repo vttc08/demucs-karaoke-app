@@ -181,6 +181,33 @@ def test_queue_service_get_queue_sets_can_remove_for_owner_and_admin(db_session)
     assert all(item.can_control_stage is True for item in items_for_admin)
 
 
+def test_queue_service_add_to_queue_can_delegate_owner_guest_id(db_session):
+    """Queue items may be owned by a delegated guest while showing a delegated label."""
+    service = QueueService()
+
+    result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="delegated-owner",
+            title="Delegated Owner Song",
+            is_karaoke=False,
+            queue_as_name="Taylor",
+            queue_as_guest_id="guest-target",
+        ),
+        requester_id="guest-admin-device",
+        requester_session_id="tab-admin-device",
+        requester_name="Taylor",
+        owner_guest_id="guest-target",
+    )
+
+    stored = db_session.query(QueueItem).filter(QueueItem.id == result.id).first()
+    assert stored is not None
+    assert stored.user_id == "guest-target"
+    assert stored.session_id == "tab-admin-device"
+    assert stored.requester_name == "Taylor"
+    assert result.requested_by_name == "Taylor"
+
+
 def test_auth_service_stores_salted_password_hash(db_session):
     """Admin passwords should be stored as salted hashes, not plaintext."""
     service = AuthService()

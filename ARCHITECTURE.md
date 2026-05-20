@@ -91,6 +91,9 @@ The stage page uses a websocket-first model:
 - Stage control commands are authorized server-side. Admin sessions may control any current item.
   Guest websocket/REST skip commands are accepted only when the currently playing item is owned by
   that guest's persistent `karaoke_guest_id`.
+- Admin queue-as ownership transfer is presence-bound: selecting a live guest stores that guest's
+  `guest_id` in `queue_items.user_id`, while manually typed queue-as names only change the visible
+  requester label and do not transfer control.
 - `stage_time_update` messages are accepted only from admin sessions because they represent the
   authoritative stage playback clock.
 - For `play`/`pause`, the server broadcasts:

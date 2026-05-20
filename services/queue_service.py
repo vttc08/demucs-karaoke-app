@@ -36,6 +36,7 @@ class QueueService:
         requester_id: str | None = None,
         requester_session_id: str | None = None,
         requester_name: str | None = None,
+        owner_guest_id: str | None = None,
     ) -> QueueItemResponse:
         """
         Add item to queue.
@@ -116,11 +117,14 @@ class QueueService:
                 lyrics_format=item.lyrics_format,
             )
 
+        normalized_requester_id = self._normalize_optional_metadata(requester_id)
+        normalized_owner_guest_id = self._normalize_optional_metadata(owner_guest_id)
+
         db_item = QueueItem(
             media_id=media_item.id,
             position=self.append_to_end(db),
             requested_karaoke=item.is_karaoke,
-            user_id=self._normalize_optional_metadata(requester_id),
+            user_id=normalized_owner_guest_id or normalized_requester_id,
             session_id=self._normalize_optional_metadata(requester_session_id),
             requester_name=self._normalize_optional_metadata(requester_name),
             status=QueueStatus.PENDING,

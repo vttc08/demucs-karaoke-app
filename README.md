@@ -121,6 +121,7 @@ and `/static/...`.
      - Queue items show who requested them
       - Open **Lyrics Viewer** from the queue page to read current-song lyrics on phone/secondary display
      - Admins can use remote stage controls for any current song; guests can use them only while their own queued song is playing
+     - When an admin queues a song as a live guest from the queue presence list, that guest becomes the owner for later stage controls and queue-item actions; manual typed queue-as names remain display-only
     - Admin users can clear queued songs, remove individual queued items, and move non-playing queue items up or down
     - Guest users can remove only their own non-playing queue items from the queue page
     - Queue status updates in real time (downloading, processing, ready, playing, failed)

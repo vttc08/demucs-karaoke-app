@@ -157,6 +157,7 @@ class QueueItemCreate(BaseModel):
     lyrics_text: Optional[str] = None
     lyrics_format: Optional[Literal["lrc", "txt"]] = None
     queue_as_name: Optional[str] = None
+    queue_as_guest_id: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_source(self):
@@ -168,6 +169,9 @@ class QueueItemCreate(BaseModel):
         if isinstance(self.queue_as_name, str):
             normalized_queue_as = " ".join(self.queue_as_name.split()).strip()
             self.queue_as_name = normalized_queue_as[:40] or None
+        if isinstance(self.queue_as_guest_id, str):
+            normalized_queue_as_guest_id = " ".join(self.queue_as_guest_id.split()).strip()
+            self.queue_as_guest_id = normalized_queue_as_guest_id[:80] or None
         if self.youtube_id is None and self.media_item_id is None:
             raise ValueError("Either youtube_id or media_item_id is required")
         return self

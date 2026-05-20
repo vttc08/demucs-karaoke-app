@@ -320,6 +320,52 @@ def test_add_to_queue_admin_can_override_requester_name(client):
         assert row.requester_name == "Taylor"
 
 
+def test_add_to_queue_admin_can_delegate_guest_ownership(client):
+    """Admin queue adds may transfer ownership to a selected guest id."""
+    authenticate_admin_client(client)
+    client.cookies.set("karaoke_guest_id", "guest-admin-device")
+    client.cookies.set("karaoke_queue_tab_id", "tab-admin-device")
+    client.cookies.set("karaoke_singer", "Admin Device")
+
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "queue-as-admin-delegated",
+            "title": "Queue As Delegated",
+            "is_karaoke": False,
+            "queue_as_name": "Taylor",
+            "queue_as_guest_id": "guest-target",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["requested_by_name"] == "Taylor"
+
+    with TestingSessionLocal() as db:
+        row = db.query(QueueItem).filter(QueueItem.id == data["id"]).first()
+        assert row is not None
+        assert row.user_id == "guest-target"
+        assert row.session_id == "tab-admin-device"
+        assert row.requester_name == "Taylor"
+
+
+def test_add_to_queue_rejects_queue_as_guest_id_for_non_admin(client):
+    """Non-admin queue adds cannot set a delegated guest id."""
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "queue-as-guest-id-denied",
+            "title": "Queue As Guest Id Denied",
+            "is_karaoke": False,
+            "queue_as_guest_id": "guest-target",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "queue_as_guest_id requires an admin session"
+
+
 def test_add_to_queue_non_karaoke(client):
     """Non-karaoke queue items should be accepted without burn settings."""
     response = client.post(
@@ -1897,6 +1943,35 @@ def test_guest_can_skip_owned_current_item(client):
         assert db.query(QueueItem).filter(QueueItem.id == first["id"]).first() is None
 
 
+def test_delegated_guest_can_skip_admin_queued_current_item(client):
+    """A delegated guest should control the admin-queued current item."""
+    authenticate_admin_client(client)
+    client.cookies.set("karaoke_guest_id", "guest-admin-device")
+    client.cookies.set("karaoke_queue_tab_id", "tab-admin-device")
+    created = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "delegated-rest-skip-owned",
+            "title": "Delegated REST Skip Owned",
+            "is_karaoke": False,
+            "queue_as_name": "Taylor",
+            "queue_as_guest_id": "guest-owner",
+        },
+    ).json()
+
+    with TestingSessionLocal() as db:
+        row = db.query(QueueItem).filter(QueueItem.id == created["id"]).first()
+        row.status = QueueStatus.PLAYING
+        db.commit()
+
+    client.cookies.pop(ADMIN_SESSION_COOKIE, None)
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    response = client.post("/api/queue/skip")
+
+    assert response.status_code == 200
+    assert response.json() is None
+
+
 def test_complete_current_requires_admin(client):
     """Guests should not be able to complete the current stage item."""
     response = client.post("/api/queue/complete-current")
@@ -2225,6 +2300,35 @@ def test_get_queue_marks_can_remove_for_guest_owner(client):
     assert items[other_item["id"]]["can_remove"] is False
 
 
+def test_get_queue_marks_delegated_owner_permissions(client):
+    """Queue list permissions should follow delegated guest ownership."""
+    authenticate_admin_client(client)
+    client.cookies.set("karaoke_guest_id", "guest-admin-device")
+    delegated = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "delegated-queue-list",
+            "title": "Delegated Queue List",
+            "is_karaoke": False,
+            "queue_as_name": "Taylor",
+            "queue_as_guest_id": "guest-target",
+        },
+    ).json()
+
+    client.cookies.pop(ADMIN_SESSION_COOKIE, None)
+    client.cookies.set("karaoke_guest_id", "guest-target")
+    response = client.get("/api/queue/")
+
+    assert response.status_code == 200
+    items = {item["id"]: item for item in response.json()}
+    assert items[delegated["id"]]["can_remove"] is True
+
+    client.cookies.set("karaoke_guest_id", "guest-admin-device")
+    response = client.get("/api/queue/")
+    items = {item["id"]: item for item in response.json()}
+    assert items[delegated["id"]]["can_remove"] is False
+
+
 def test_get_queue_marks_can_remove_for_admin(client):
     """Admin queue list should allow removal of all non-playing items."""
     first = client.post(
@@ -2258,6 +2362,29 @@ def test_guest_can_remove_owned_queue_item(client):
         json={"youtube_id": "guest-remove-own", "title": "Guest Remove Own", "is_karaoke": False},
     ).json()
 
+    response = client.delete(f"/api/queue/{created['id']}")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "removed", "item_id": created["id"]}
+
+
+def test_delegated_guest_can_remove_admin_queued_item(client):
+    """A delegated guest should remove the admin-queued non-playing item."""
+    authenticate_admin_client(client)
+    client.cookies.set("karaoke_guest_id", "guest-admin-device")
+    created = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "delegated-remove-own",
+            "title": "Delegated Remove Own",
+            "is_karaoke": False,
+            "queue_as_name": "Taylor",
+            "queue_as_guest_id": "guest-owner",
+        },
+    ).json()
+
+    client.cookies.pop(ADMIN_SESSION_COOKIE, None)
+    client.cookies.set("karaoke_guest_id", "guest-owner")
     response = client.delete(f"/api/queue/{created['id']}")
 
     assert response.status_code == 200
@@ -2751,6 +2878,52 @@ def test_websocket_guest_can_control_owned_current_item(client):
         row.status = QueueStatus.PLAYING
         db.commit()
 
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "set_lyrics_enabled",
+                        "source": "queue",
+                        "lyrics_enabled": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            state_event = receiver.receive_json()
+            if state_event["type"] == "ping":
+                receiver.send_json({"type": "pong"})
+                state_event = receiver.receive_json()
+            assert state_event["type"] == "stage_state_update"
+            assert state_event["data"]["lyrics_enabled"] is False
+
+
+def test_websocket_delegated_guest_can_control_admin_queued_current_item(client):
+    """A delegated guest should be authorized for websocket stage commands."""
+    authenticate_admin_client(client)
+    client.cookies.set("karaoke_guest_id", "guest-admin-device")
+    first = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "ws-delegated-owned",
+            "title": "WS Delegated Owned",
+            "is_karaoke": False,
+            "queue_as_name": "Taylor",
+            "queue_as_guest_id": "guest-owner",
+        },
+    ).json()
+
+    with TestingSessionLocal() as db:
+        row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        row.status = QueueStatus.PLAYING
+        db.commit()
+
+    client.cookies.pop(ADMIN_SESSION_COOKIE, None)
+    client.cookies.set("karaoke_guest_id", "guest-owner")
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         with client.websocket_connect("/api/queue/ws") as receiver:

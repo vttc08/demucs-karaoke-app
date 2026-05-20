@@ -42,6 +42,19 @@ def _websocket_guest_id(websocket: WebSocket) -> str | None:
     return _normalize_presence_value(websocket.cookies.get("karaoke_guest_id"))
 
 
+def _validated_queue_as_guest_id(item: QueueItemCreate) -> str | None:
+    """Validate the delegated guest id for an admin queue-as request."""
+    if item.queue_as_guest_id is None:
+        return None
+    guest_id = _normalize_presence_value(item.queue_as_guest_id)
+    if guest_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="queue_as_guest_id must be a non-empty guest id",
+        )
+    return guest_id
+
+
 def _is_admin_websocket(websocket: WebSocket, db: Session) -> bool:
     """Return whether a websocket connection has a valid admin session."""
     return (
@@ -111,6 +124,7 @@ async def add_to_queue(
     requester_name = _normalize_presence_value(
         request.cookies.get("karaoke_singer"), max_length=40
     )
+    queue_as_guest_id: str | None = None
     if item.queue_as_name is not None:
         if not is_admin:
             raise HTTPException(
@@ -118,6 +132,12 @@ async def add_to_queue(
                 detail="queue_as_name requires an admin session",
             )
         requester_name = _normalize_presence_value(item.queue_as_name, max_length=40)
+        queue_as_guest_id = _validated_queue_as_guest_id(item)
+    elif item.queue_as_guest_id is not None:
+        raise HTTPException(
+            status_code=403,
+            detail="queue_as_guest_id requires an admin session",
+        )
 
     try:
         response = queue_service.add_to_queue(
@@ -130,6 +150,7 @@ async def add_to_queue(
                 request.cookies.get("karaoke_queue_tab_id")
             ),
             requester_name=requester_name,
+            owner_guest_id=queue_as_guest_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
