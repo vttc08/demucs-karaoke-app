@@ -807,6 +807,11 @@ def test_stage_page_loads_for_admin(client):
     assert b"Stage" in response.content
     assert b"Now Playing" in response.content
     assert b'id="stage-video-player"' in response.content
+    assert b'stage-control-cluster--transport' in response.content
+    assert b'stage-control-label' in response.content
+    assert b'stage-vocals-volume-slider' in response.content
+    assert b'stage-fullscreen-button' in response.content
+    assert b'aria-label="Fullscreen"' in response.content
 
 
 def test_stage_page_renders_audio_mode_for_current_mp3(client, tmp_path):

@@ -50,6 +50,87 @@
         transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
     }
 
+    .stage-chrome {
+        width: min(100%, 72rem);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background:
+            linear-gradient(180deg, rgba(10, 10, 10, 0.72), rgba(10, 10, 10, 0.52)),
+            rgba(0, 0, 0, 0.35);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+    }
+
+    .stage-control-cluster {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+    }
+
+    .stage-control-cluster--transport {
+        flex: 0 1 auto;
+    }
+
+    .stage-control-cluster--utilities {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+
+    .stage-vocals-control {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+        flex: 0 1 auto;
+    }
+
+    .stage-control-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        min-height: 2.75rem;
+        padding: 0.6rem 0.95rem;
+        white-space: nowrap;
+    }
+
+    .stage-control-button--icon {
+        padding-inline: 0.85rem;
+    }
+
+    .stage-control-label {
+        display: none;
+        align-items: center;
+    }
+
+    .stage-vocals-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+        flex: 1 1 auto;
+        color: rgba(255, 255, 255, 0.78);
+    }
+
+    .stage-vocals-label-text {
+        display: none;
+        align-items: center;
+        font-size: 0.75rem;
+        white-space: nowrap;
+    }
+
+    .stage-vocals-volume-slider {
+        width: 6rem;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
     .stage-media.is-fullscreen .stage-controls-shell {
         opacity: 0;
         transform: translateY(12px);
@@ -201,16 +282,111 @@
         color: rgba(255, 255, 255, 0.9);
         font-size: clamp(3rem, 6vw, 5rem);
     }
+
+    @media (min-width: 960px) {
+        .stage-control-label {
+            display: inline-flex;
+        }
+
+        .stage-vocals-label-text {
+            display: inline-flex;
+        }
+    }
+
+    @media (max-width: 959px) {
+        .stage-controls-shell {
+            padding-inline: 0.4rem;
+            padding-bottom: 0.4rem;
+        }
+
+        .stage-chrome {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            align-items: center;
+            column-gap: 0.35rem;
+            row-gap: 0.45rem;
+            border-radius: 1.2rem;
+            padding: 0.45rem;
+        }
+
+        .stage-control-cluster {
+            display: contents;
+        }
+
+        .stage-vocals-control {
+            grid-column: 1 / -1;
+            order: 0;
+            width: 100%;
+            min-width: 0;
+            justify-content: space-between;
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.5rem 0.65rem;
+        }
+
+        .stage-control-button {
+            min-height: 3rem;
+            min-width: 0;
+            padding: 0.65rem 0.8rem;
+        }
+
+        .stage-control-cluster .stage-control-button {
+            width: 100%;
+        }
+
+        .stage-vocals-control .stage-control-button {
+            width: auto;
+        }
+
+        .stage-control-button--icon {
+            padding-inline: 0.8rem;
+        }
+
+        .stage-control-label {
+            display: none;
+        }
+
+        .stage-vocals-volume-slider {
+            width: min(12rem, 100%);
+        }
+    }
+
+    @media (max-width: 767px) {
+        .stage-controls-shell {
+            padding-inline: 0.3rem;
+            padding-bottom: 0.3rem;
+        }
+
+        .stage-chrome {
+            padding: 0.4rem;
+        }
+
+        .stage-control-button {
+            min-height: 2.9rem;
+            min-width: 2.9rem;
+            padding: 0.6rem 0.75rem;
+        }
+
+        .stage-vocals-control {
+            padding: 0.45rem 0.55rem;
+        }
+
+        .stage-vocals-volume-slider {
+            width: min(11rem, 100%);
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div id="stage-page" class="min-h-screen bg-surface pt-20">
-    <main class="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[1800px] flex-col gap-4 px-3 pb-3 sm:px-4 sm:pb-4">
+    <main class="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[1800px] flex-col gap-4 px-3 pb-3 sm:px-4 sm:pb-4 lg:h-[calc(100dvh-5rem)] lg:min-h-0 lg:overflow-hidden lg:gap-3">
         {% set current_media_path = current.media_path if current else stage_lobby_media_url %}
         {% set lower_media_path = (current_media_path or '')|lower %}
         {% set current_is_audio = current and (lower_media_path.endswith('.mp3') or lower_media_path.endswith('.wav') or lower_media_path.endswith('.m4a') or lower_media_path.endswith('.flac') or lower_media_path.endswith('.aac') or lower_media_path.endswith('.ogg') or lower_media_path.endswith('.opus')) %}
-        <section class="stage-media relative flex-1 overflow-hidden rounded-xl bg-black">
+        <section class="stage-media relative flex-1 min-h-0 overflow-hidden rounded-xl bg-black">
             <div id="stage-audio-hero" class="stage-audio-hero{% if not current_is_audio %} hidden{% endif %}" aria-hidden="true">
                 <div id="stage-audio-cover-bg" class="stage-audio-cover{% if current_is_audio and current and current.thumbnail %} is-visible{% endif %}"{% if current_is_audio and current and current.thumbnail %} style="background-image: url('{{ current.thumbnail|public_url }}');"{% endif %}></div>
                 <div id="stage-audio-placeholder" class="stage-audio-placeholder{% if current_is_audio and (not current or not current.thumbnail) %} is-visible{% endif %}"></div>
@@ -229,7 +405,7 @@
             </div>
             <video
                 id="stage-video-player"
-                class="{% if current_is_audio %}hidden{% else %}block{% endif %} h-full min-h-[50vh] w-full object-contain bg-black"
+                class="{% if current_is_audio %}hidden{% else %}block{% endif %} h-full min-h-0 w-full object-contain bg-black"
                 autoplay
                 playsinline
             >
@@ -267,78 +443,93 @@
             </div>
 
             <div class="stage-controls-shell pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-3 pb-3 sm:px-5 sm:pb-5">
-                <div id="stage-controls" class="stage-chrome pointer-events-auto flex w-full max-w-6xl items-center justify-between gap-3 rounded-full border border-white/10 bg-black/55 px-3 py-2 shadow-2xl shadow-black/40 backdrop-blur-xl sm:px-4 sm:py-3">
-                    <div class="inline-flex items-center gap-2">
+                <div id="stage-controls" class="stage-chrome pointer-events-auto px-3 py-2 sm:px-4 sm:py-3">
+                    <div class="stage-control-cluster stage-control-cluster--transport">
                         <button
                             id="play-pause-btn"
-                            class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            class="stage-control-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            aria-label="{{ t('stage.pause') }}"
+                            title="{{ t('stage.pause') }}"
                         >
                             <span id="play-pause-icon" class="material-symbols-outlined text-base">pause</span>
-                            <span id="play-pause-label">{{ t('stage.pause') }}</span>
+                            <span id="play-pause-label" class="stage-control-label">{{ t('stage.pause') }}</span>
                         </button>
                         <button
                             id="skip-btn"
-                            class="inline-flex items-center gap-2 rounded-full bg-primary/85 px-3 py-2 text-sm font-semibold text-on-primary transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            class="stage-control-button stage-control-button--icon rounded-full bg-primary/85 text-sm font-semibold text-on-primary transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            aria-label="{{ t('common.skip') }}"
+                            title="{{ t('common.skip') }}"
                         >
                             <span class="material-symbols-outlined text-base">skip_next</span>
-                            {{ t('common.skip') }}
+                            <span class="stage-control-label">{{ t('common.skip') }}</span>
                         </button>
+                    </div>
+                    <button
+                        id="fullscreen-btn"
+                        class="stage-control-button stage-fullscreen-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                        aria-label="{{ t('stage.fullscreen') }}"
+                        title="{{ t('stage.fullscreen') }}"
+                    >
+                        <span id="fullscreen-icon" class="material-symbols-outlined text-base">fullscreen</span>
+                        <span id="fullscreen-label" class="stage-control-label">{{ t('stage.fullscreen') }}</span>
+                    </button>
+                    <div class="stage-control-cluster stage-control-cluster--utilities">
                         <button
                             id="force-resync-btn"
-                            class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            class="stage-control-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
                             title="{{ t('stage.force_resync') }}"
+                            aria-label="{{ t('stage.resync') }}"
                         >
                             <span class="material-symbols-outlined text-base">sync</span>
-                            {{ t('stage.resync') }}
+                            <span class="stage-control-label">{{ t('stage.resync') }}</span>
                         </button>
                         <button
                             id="lyrics-toggle-btn"
-                            class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 disabled:cursor-not-allowed disabled:opacity-50"
+                            class="stage-control-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 disabled:cursor-not-allowed disabled:opacity-50"
                             title="{{ t('stage.toggle_lyrics') }}"
+                            aria-label="{{ t('stage.lyrics_on') }}"
                             {% if not current or not current.lyrics_path %}disabled{% endif %}
                         >
                             <span id="lyrics-toggle-icon" class="material-symbols-outlined text-base">subtitles</span>
-                            <span id="lyrics-toggle-label">{{ t('stage.lyrics_on') }}</span>
+                            <span id="lyrics-toggle-label" class="stage-control-label">{{ t('stage.lyrics_on') }}</span>
                         </button>
                         <button
                             id="qr-toggle-btn"
-                            class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            class="stage-control-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            aria-label="{{ t('stage.qr') }}"
+                            title="{{ t('stage.qr') }}"
                         >
                             <span class="material-symbols-outlined text-base">qr_code_2</span>
-                            {{ t('stage.qr') }}
+                            <span class="stage-control-label">{{ t('stage.qr') }}</span>
                         </button>
                     </div>
-                    <div class="inline-flex items-center gap-3 rounded-full border border-white/10 bg-black/35 px-3 py-1.5">
+                    <div class="stage-vocals-control rounded-full border border-white/10 bg-black/35 px-3 py-1.5">
                         <button
                             id="stage-vocals-toggle-btn"
-                            class="inline-flex items-center gap-1.5 rounded-full bg-surface-container-high/75 px-3 py-1.5 text-xs font-semibold text-on-surface transition hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-50"
+                            class="stage-control-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-xs font-semibold text-on-surface transition hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-50"
                             title="{{ t('stage.toggle_guide_vocals') }}"
+                            aria-label="{{ t('stage.vocals_on') }}"
+                            aria-pressed="true"
                             {% if not current or not current.vocals_path %}disabled{% endif %}
                         >
                             <span id="stage-vocals-toggle-icon" class="material-symbols-outlined text-sm">mic</span>
-                            <span id="stage-vocals-toggle-label">{{ t('stage.vocals_on') }}</span>
+                            <span id="stage-vocals-toggle-label" class="stage-control-label">{{ t('stage.vocals_on') }}</span>
                         </button>
-                        <label class="inline-flex items-center gap-2 text-xs text-on-surface-variant">
-                            <span>{{ t('stage.vocals') }}</span>
+                        <label class="stage-vocals-label">
+                            <span class="stage-vocals-label-text">{{ t('stage.vocals') }}</span>
                             <input
                                 id="stage-vocals-volume-slider"
-                                class="h-1.5 w-24 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+                                class="stage-vocals-volume-slider h-1.5 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
                                 type="range"
                                 min="0"
                                 max="100"
                                 value="100"
                                 step="1"
+                                aria-label="{{ t('stage.vocals_volume') }}"
                                 {% if not current or not current.vocals_path %}disabled{% endif %}
                             />
                         </label>
                     </div>
-                    <button
-                        id="fullscreen-btn"
-                        class="inline-flex items-center gap-2 rounded-full bg-surface-container-high/75 px-3 py-2 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-                    >
-                        <span id="fullscreen-icon" class="material-symbols-outlined text-base">fullscreen</span>
-                        <span id="fullscreen-label">{{ t('stage.fullscreen') }}</span>
-                    </button>
                 </div>
             </div>
 
@@ -348,7 +539,7 @@
             </aside>
         </section>
 
-        <aside class="stage-chrome stage-chrome--upnext rounded-xl bg-surface-container-low px-4 py-3 sm:px-5">
+        <aside class="stage-chrome stage-chrome--upnext flex-none rounded-xl bg-surface-container-low px-4 py-3 sm:px-5">
             <div class="flex items-center justify-between gap-3">
                 <h3 class="text-sm font-semibold uppercase tracking-[0.15em] text-on-surface-variant">{{ t('stage.up_next') }}</h3>
                 <span id="up-next-count" class="text-xs text-on-surface-variant"></span>
@@ -549,9 +740,15 @@ function updateAudioArtwork(item) {
 function updateLyricsUi() {
     if (!lyricsToggleBtn || !lyricsToggleLabel || !lyricsToggleIcon) return;
     const connected = !!stageSocket && stageSocket.readyState === WebSocket.OPEN;
+    const label = lyricsState.available
+        ? (lyricsState.enabled ? t("stage.lyrics_on") : t("stage.lyrics_off"))
+        : t("stage.no_lyrics");
     lyricsToggleBtn.disabled = !lyricsState.available || !connected;
+    lyricsToggleBtn.setAttribute("aria-pressed", lyricsState.available && lyricsState.enabled ? "true" : "false");
+    lyricsToggleBtn.setAttribute("aria-label", label);
+    lyricsToggleBtn.setAttribute("title", label);
     lyricsToggleIcon.textContent = lyricsState.enabled ? "subtitles" : "subtitles_off";
-    lyricsToggleLabel.textContent = lyricsState.available ? (lyricsState.enabled ? t("stage.lyrics_on") : t("stage.lyrics_off")) : t("stage.no_lyrics");
+    lyricsToggleLabel.textContent = label;
 }
 
 function setLyricsOverlayVisible(visible) {
@@ -880,13 +1077,21 @@ async function refreshStageState() {
 function updatePlayPauseUi() {
     if (!playPauseIcon || !playPauseLabel) return;
     const isPaused = isPrimaryPaused();
+    const label = isPaused ? t("common.play") : t("stage.pause");
     playPauseIcon.textContent = isPaused ? "play_arrow" : "pause";
-    playPauseLabel.textContent = isPaused ? t("common.play") : t("stage.pause");
+    playPauseLabel.textContent = label;
+    if (playPauseBtn) {
+        playPauseBtn.setAttribute("aria-label", label);
+        playPauseBtn.setAttribute("title", label);
+    }
 }
 
 function updateVocalsUi() {
     if (!vocalsToggleBtn || !vocalsToggleLabel || !vocalsVolumeSlider) return;
     vocalsToggleBtn.disabled = !vocalsAvailable;
+    vocalsToggleBtn.setAttribute("aria-pressed", mixState.vocals_enabled ? "true" : "false");
+    vocalsToggleBtn.setAttribute("aria-label", mixState.vocals_enabled ? t("stage.vocals_on") : t("stage.vocals_off"));
+    vocalsToggleBtn.setAttribute("title", mixState.vocals_enabled ? t("stage.vocals_on") : t("stage.vocals_off"));
     vocalsVolumeSlider.disabled = !vocalsAvailable;
     if (vocalsToggleIcon) {
         vocalsToggleIcon.textContent = mixState.vocals_enabled ? "mic" : "mic_off";
@@ -1276,8 +1481,13 @@ function applyStageStateFromServer(data) {
 function updateFullscreenUi() {
     if (!fullscreenIcon || !fullscreenLabel) return;
     const inFullscreen = !!document.fullscreenElement;
+    const label = inFullscreen ? t("stage.exit_fullscreen") : t("stage.fullscreen");
     fullscreenIcon.textContent = inFullscreen ? "fullscreen_exit" : "fullscreen";
-    fullscreenLabel.textContent = inFullscreen ? t("stage.exit_fullscreen") : t("stage.fullscreen");
+    fullscreenLabel.textContent = label;
+    if (fullscreenBtn) {
+        fullscreenBtn.setAttribute("aria-label", label);
+        fullscreenBtn.setAttribute("title", label);
+    }
 }
 
 function resolveStageQrUrl() {
@@ -1303,6 +1513,7 @@ function setQrOverlayVisible(visible) {
     if (!qrOverlay || !qrToggleBtn) return;
     isQrVisible = visible;
     qrOverlay.classList.toggle("is-visible", visible);
+    qrToggleBtn.setAttribute("aria-pressed", visible ? "true" : "false");
     qrToggleBtn.classList.toggle("bg-primary/85", visible);
     qrToggleBtn.classList.toggle("text-on-primary", visible);
     qrToggleBtn.classList.toggle("bg-surface-container-high/75", !visible);
