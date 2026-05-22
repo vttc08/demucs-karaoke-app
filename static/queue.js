@@ -6,10 +6,15 @@ const appWsUrl = window.KaraokeURLs?.appWsUrl || ((path) => {
     return `${protocol}//${window.location.host}${path}`;
 });
 const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
+const WS_DEBUG = window.KARAOKE_WS_DEBUG === true;
 
 // Simple logger for frontend debugging
 const logger = {
-    log: (...args) => console.log(...args),
+    log: (...args) => {
+        if (WS_DEBUG) {
+            console.log(...args);
+        }
+    },
     warn: (...args) => console.warn(...args),
     error: (...args) => console.error(...args),
 };
@@ -1614,14 +1619,14 @@ class QueueWebSocket {
         
         const wsUrl = appWsUrl('/api/queue/ws');
         
-        console.log('[WebSocket] Connecting to', wsUrl);
+        logger.log('[WebSocket] Connecting to', wsUrl);
         this.updateStatus('reconnecting', 'Connecting...');
         
         try {
             this.ws = new WebSocket(wsUrl);
             
             this.ws.onopen = () => {
-                console.log('[WebSocket] Connected');
+                logger.log('[WebSocket] Connected');
                 this.isConnected = true;
                 this.isReconnecting = false;
                 this.reconnectAttempts = 0;
@@ -1633,6 +1638,11 @@ class QueueWebSocket {
                     clearInterval(refreshInterval);
                     refreshInterval = null;
                 }
+                this.send({
+                    type: 'client_subscribe',
+                    data: { page: 'queue' },
+                    timestamp: Date.now(),
+                });
                 this.sendPresenceHello();
             };
             
@@ -1646,11 +1656,11 @@ class QueueWebSocket {
             };
             
             this.ws.onerror = (error) => {
-                console.error('[WebSocket] Error:', error);
+                logger.error('[WebSocket] Error:', error);
             };
-            
+
             this.ws.onclose = () => {
-                console.log('[WebSocket] Disconnected');
+                logger.log('[WebSocket] Disconnected');
                 this.isConnected = false;
                 
                 if (this.heartbeatTimeout) {
@@ -1662,13 +1672,13 @@ class QueueWebSocket {
                 if (this.reconnectAttempts < this.maxReconnectAttempts) {
                     this.reconnect();
                 } else {
-                    console.log('[WebSocket] Max reconnection attempts reached, falling back to polling');
+                    logger.warn('[WebSocket] Max reconnection attempts reached, falling back to polling');
                     this.updateStatus('fallback', 'Using polling');
                     this.fallbackToPolling();
                 }
             };
         } catch (error) {
-            console.error('[WebSocket] Connection error:', error);
+            logger.error('[WebSocket] Connection error:', error);
             this.reconnect();
         }
     }
@@ -1681,7 +1691,7 @@ class QueueWebSocket {
         
         const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), this.maxReconnectDelay);
         
-        console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        logger.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         this.updateStatus('reconnecting', `Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         
         setTimeout(() => {
@@ -1691,7 +1701,7 @@ class QueueWebSocket {
     }
     
     fallbackToPolling() {
-        console.log('[WebSocket] Falling back to polling mode');
+        logger.warn('[WebSocket] Falling back to polling mode');
         refreshPresenceFallback();
         // Start the traditional polling interval
         if (!refreshInterval) {
@@ -1732,11 +1742,9 @@ class QueueWebSocket {
     }
     
     handleMessage(message) {
-        console.log('[WebSocket] Received:', message.type, message.data);
-        
         switch (message.type) {
             case 'connected':
-                console.log('[WebSocket] Connection confirmed, active connections:', message.data.connection_count);
+                logger.log('[WebSocket] Connection confirmed, active connections:', message.data.connection_count);
                 if (message.data && message.data.stage_state) {
                     window.dispatchEvent(new CustomEvent('stage_state_update', { detail: message.data.stage_state }));
                 }
@@ -1791,7 +1799,7 @@ class QueueWebSocket {
                 }
                 break;
             default:
-                console.log('[WebSocket] Unknown message type:', message.type);
+                logger.log('[WebSocket] Unknown message type:', message.type);
         }
     }
     
@@ -2115,23 +2123,19 @@ if (stageRemoteVocalsVolumeSlider) {
 
 // WebSocket event handlers
 window.addEventListener('queue_item_added', (event) => {
-    console.log('[Event] Queue item added:', event.detail);
     // Refresh the entire queue to maintain order
     refreshQueue(true);
 });
 
 window.addEventListener('queue_item_updated', (event) => {
-    console.log('[Event] Queue item updated:', event.detail);
     refreshQueue(true);
 });
 
 window.addEventListener('queue_item_removed', (event) => {
-    console.log('[Event] Queue item removed:', event.detail);
     refreshQueue(true);
 });
 
 window.addEventListener('queue_cleared', (event) => {
-    console.log('[Event] Queue cleared');
     const queueList = document.getElementById('queue-list');
     
     if (queueList) {
@@ -2168,13 +2172,11 @@ window.addEventListener('queue_cleared', (event) => {
 });
 
 window.addEventListener('current_item_changed', (event) => {
-    console.log('[Event] Current item changed:', event.detail);
     // Refresh to update playing state visuals
     refreshQueue(true);
 });
 
 window.addEventListener('queue_item_failed', (event) => {
-    console.log('[Event] Queue item failed:', event.detail);
     const { id, error } = event.detail;
     
     // Show error notification

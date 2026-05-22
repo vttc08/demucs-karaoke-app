@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 class ConnectionManager:
     """Manages WebSocket connections, queue events, and live queue presence."""
 
+    QUEUE_EVENT_ROLES = frozenset({"queue", "stage"})
+    STAGE_STATE_ROLES = frozenset({"queue", "stage", "lyrics_viewer"})
+    STAGE_CLOCK_ROLES = frozenset({"stage", "lyrics_viewer"})
+
     def __init__(self):
         self.active_connections: list[Any] = []
         self._lock = asyncio.Lock()
@@ -110,6 +114,27 @@ class ConnectionManager:
                 and self._connection_context.get(connection, {}).get("page") == "queue"
             ]
 
+    async def _get_connections_by_roles(
+        self,
+        roles: set[str] | frozenset[str],
+        *,
+        exclude: Any | None = None,
+    ) -> list[Any]:
+        async with self._lock:
+            return [
+                connection
+                for connection in self.active_connections
+                if connection is not exclude
+                and self._connection_context.get(connection, {}).get("role") in roles
+            ]
+
+    async def set_connection_role(self, websocket: Any, role: str):
+        """Assign a logical websocket role used for targeted broadcasts."""
+        async with self._lock:
+            context = self._connection_context.get(websocket, {}).copy()
+            context["role"] = role
+            self._connection_context[websocket] = context
+
     def get_queue_presence_snapshot(self) -> list[dict[str, Any]]:
         """Return a stable snapshot of active queue viewers."""
         users = [
@@ -150,6 +175,7 @@ class ConnectionManager:
         async with self._lock:
             self._connection_context[websocket] = {
                 "page": "queue",
+                "role": "queue",
                 "guest_id": guest_id,
                 "tab_id": tab_id,
             }
@@ -203,12 +229,14 @@ class ConnectionManager:
             if presence is None:
                 self._connection_context[websocket] = {
                     "page": "queue",
+                    "role": "queue",
                     "guest_id": guest_id,
                     "tab_id": tab_id,
                 }
             else:
                 self._connection_context[websocket] = {
                     "page": "queue",
+                    "role": "queue",
                     "guest_id": guest_id,
                     "tab_id": tab_id,
                 }
@@ -251,61 +279,73 @@ class ConnectionManager:
 
     async def broadcast_queue_item_added(self, item_data: dict):
         """Broadcast when a new item is added to the queue."""
-        await self.broadcast(
+        targets = await self._get_connections_by_roles(self.QUEUE_EVENT_ROLES)
+        await self._broadcast_to_connections(
             {
                 "type": "queue_item_added",
                 "data": item_data,
                 "timestamp": self._timestamp(),
-            }
+            },
+            targets,
         )
 
     async def broadcast_queue_item_updated(self, item_data: dict):
         """Broadcast when a queue item's status or data is updated."""
-        await self.broadcast(
+        targets = await self._get_connections_by_roles(self.QUEUE_EVENT_ROLES)
+        await self._broadcast_to_connections(
             {
                 "type": "queue_item_updated",
                 "data": item_data,
                 "timestamp": self._timestamp(),
-            }
+            },
+            targets,
         )
 
     async def broadcast_queue_item_removed(self, item_id: int):
         """Broadcast when a queue item is removed."""
-        await self.broadcast(
+        targets = await self._get_connections_by_roles(self.QUEUE_EVENT_ROLES)
+        await self._broadcast_to_connections(
             {
                 "type": "queue_item_removed",
                 "data": {"id": item_id},
                 "timestamp": self._timestamp(),
-            }
+            },
+            targets,
         )
 
     async def broadcast_queue_cleared(self):
         """Broadcast when the queue is cleared."""
-        await self.broadcast(
-            {"type": "queue_cleared", "data": {}, "timestamp": self._timestamp()}
+        targets = await self._get_connections_by_roles(self.QUEUE_EVENT_ROLES)
+        await self._broadcast_to_connections(
+            {"type": "queue_cleared", "data": {}, "timestamp": self._timestamp()},
+            targets,
         )
 
     async def broadcast_current_item_changed(
         self, current_id: int | None, previous_id: int | None = None
     ):
         """Broadcast when the currently playing item changes."""
-        await self.broadcast(
+        targets = await self._get_connections_by_roles(self.STAGE_STATE_ROLES)
+        await self._broadcast_to_connections(
             {
                 "type": "current_item_changed",
                 "data": {"id": current_id, "previous_id": previous_id},
                 "timestamp": self._timestamp(),
-            }
+            },
+            targets,
         )
         await self.reset_stage_state(source="queue")
 
     async def broadcast_queue_item_failed(self, item_id: int, error: str):
         """Broadcast when a queue item fails."""
-        await self.broadcast(
+        targets = await self._get_connections_by_roles(self.QUEUE_EVENT_ROLES)
+        await self._broadcast_to_connections(
             {
                 "type": "queue_item_failed",
                 "data": {"id": item_id, "error": error},
                 "timestamp": self._timestamp(),
-            }
+            },
+            targets,
         )
 
     async def broadcast_stage_control_command(
@@ -318,18 +358,21 @@ class ConnectionManager:
         payload = {"command": command, "source": source}
         if extra_data:
             payload.update(extra_data)
-        await self.broadcast(
+        targets = await self._get_connections_by_roles(self.STAGE_STATE_ROLES)
+        await self._broadcast_to_connections(
             {
                 "type": "stage_control_command",
                 "data": payload,
                 "timestamp": self._timestamp(),
-            }
+            },
+            targets,
         )
 
     async def broadcast_stage_state_update(self, source: str = "unknown"):
         """Broadcast stage playback + mix state update to all connected clients."""
         state = self.get_stage_state()
-        await self.broadcast(
+        targets = await self._get_connections_by_roles(self.STAGE_STATE_ROLES)
+        await self._broadcast_to_connections(
             {
                 "type": "stage_state_update",
                 "data": {
@@ -341,7 +384,25 @@ class ConnectionManager:
                     "source": source,
                 },
                 "timestamp": self._timestamp(),
-            }
+            },
+            targets,
+        )
+
+    async def broadcast_stage_time_update(self, source: str = "unknown"):
+        """Broadcast the authoritative playback clock to stage and lyrics viewers."""
+        state = self.get_stage_state()
+        targets = await self._get_connections_by_roles(self.STAGE_CLOCK_ROLES)
+        await self._broadcast_to_connections(
+            {
+                "type": "stage_time_update",
+                "data": {
+                    "current_time": state["current_time"],
+                    "is_paused": state["is_paused"],
+                    "source": source,
+                },
+                "timestamp": self._timestamp(),
+            },
+            targets,
         )
 
     def get_stage_state(self) -> dict:
@@ -365,12 +426,16 @@ class ConnectionManager:
         current_time: float,
         source: str = "unknown",
         is_paused: bool | None = None,
+        broadcast_state: bool = False,
     ):
-        """Set the current playback timestamp and broadcast full stage state."""
+        """Set the current playback timestamp and broadcast clock or full state."""
         self._stage_state["current_time"] = max(0.0, float(current_time))
         if isinstance(is_paused, bool):
             self._stage_state["is_paused"] = is_paused
-        await self.broadcast_stage_state_update(source=source)
+        if broadcast_state:
+            await self.broadcast_stage_state_update(source=source)
+        else:
+            await self.broadcast_stage_time_update(source=source)
 
     async def set_stage_vocals_enabled(
         self, vocals_enabled: bool, source: str = "unknown"

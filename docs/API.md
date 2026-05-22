@@ -23,6 +23,24 @@ WebSocket endpoint for real-time queue updates and stage control.
 - Server sends: `{"type":"ping","timestamp":...}`
 - Client responds: `{"type":"pong","timestamp":...}`
 
+**Client subscription message:**
+```json
+{
+  "type": "client_subscribe",
+  "data": {
+    "page": "queue"
+  },
+  "timestamp": 1712345678901
+}
+```
+
+Supported `page` values:
+- `queue`
+- `stage`
+- `lyrics_viewer`
+
+Clients should send this immediately after websocket connect so the server can target event delivery.
+
 **Client → server command message:**
 ```json
 {
@@ -65,6 +83,12 @@ Unauthorized commands return a websocket `error` event and are not broadcast.
 - Stage control:
   - `stage_control_command` with `{command, source}`, optional seek payload (`seek_time`, `is_paused`), and `sync_version` for resync commands
   - `stage_state_update` with `{current_time, is_paused, vocals_enabled, vocals_volume, lyrics_enabled, source}`
+  - `stage_time_update` with `{current_time, is_paused, source}`
+
+Event delivery is role-based:
+- `queue` clients receive queue lifecycle, presence, and low-frequency stage state/control events.
+- `stage` clients receive queue lifecycle plus stage state/control/clock events.
+- `lyrics_viewer` clients receive current-item changes plus stage state/clock events.
 
 **Client → server playback clock update:**
 ```json

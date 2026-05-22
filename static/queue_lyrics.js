@@ -988,6 +988,11 @@ function connectSocket() {
     setLiveStatus(t("queue_lyrics.connecting"));
 
     ws.onopen = () => {
+        ws?.send(JSON.stringify({
+            type: "client_subscribe",
+            data: { page: "lyrics_viewer" },
+            timestamp: Date.now(),
+        }));
         setLiveStatus(t("queue.connected"), "online");
     };
 

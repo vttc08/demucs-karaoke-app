@@ -74,6 +74,8 @@ The stage page uses a websocket-first model:
 
 - `routes/queue.py` hosts the WebSocket endpoint and heartbeat loop (server `ping`, client `pong`).
 - `services/websocket_manager.py` tracks active connections and broadcasts queue events.
+- WebSocket clients now register a page role after connect (`queue`, `stage`, `lyrics_viewer`) so the
+  server can target event delivery instead of broadcasting every event to every page.
 - `services/websocket_manager.py` also tracks in-memory queue presence keyed by guest id and deduplicates multiple browser tabs for the same guest.
 - `routes/queue.py` also accepts client `stage_command` messages (`play`, `pause`, `skip`).
 - `routes/queue.py` also accepts queue-page presence messages:
@@ -96,6 +98,7 @@ The stage page uses a websocket-first model:
   requester label and do not transfer control.
 - `stage_time_update` messages are accepted only from admin sessions because they represent the
   authoritative stage playback clock.
+- Periodic playback clock updates are rebroadcast only to `stage` and `lyrics_viewer` clients.
 - For `play`/`pause`, the server broadcasts:
   - `stage_control_command`
   - `stage_state_update`
@@ -111,7 +114,9 @@ The stage page uses a websocket-first model:
   - `vocals_enabled`
   - `vocals_volume` (`0.0` to `1.0`)
   - `lyrics_enabled`
-  and includes it in `stage_state_update` broadcasts.
+  and includes it in low-frequency `stage_state_update` broadcasts.
+- Playback clock fan-out uses a dedicated `stage_time_update` event instead of reusing
+  `stage_state_update` for every timer tick.
 - Queue REST routes broadcast immediate state changes:
   - `queue_item_added`
   - `queue_item_updated` for admin reorders and status refreshes
@@ -133,6 +138,8 @@ The stage page uses a websocket-first model:
 ### WebSocket client flow
 
 - `static/queue.js` maintains a single `QueueWebSocket` connection.
+- Queue clients subscribe as `queue`, so they receive queue/presence events and low-frequency stage
+  control state, but not the periodic playback clock.
 - On disconnect, it retries with exponential backoff (1s, 2s, 4s, 8s up to max attempts).
 - If retries fail, it falls back to polling every 15s.
 - Queue clients send guest presence metadata (`guest_id`, display name, tab id) after connect and when the local singer name changes.
@@ -145,7 +152,10 @@ The stage page uses a websocket-first model:
   mix commands and mirror live `stage_state_update` broadcasts.
 - Queue page includes a lyrics overlay toggle that mirrors the stage lyrics visibility state.
 - Queue page also renders a live "Here Now" roster from presence events and shows requester labels on queue items.
-- Stage page consumes websocket queue events and stage-control events to stay in sync without polling.
+- The queue lyrics viewer subscribes as `lyrics_viewer` and follows the authoritative playback clock
+  from websocket `stage_time_update` events.
+- Stage page subscribes as `stage`, consumes websocket queue events and stage-control events, and
+  publishes authoritative playback clock updates at a throttled cadence for lyrics sync.
 - Stage page refreshes queue/current state over API and applies source changes to existing media
   elements instead of reloading the page.
 

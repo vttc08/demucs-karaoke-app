@@ -42,6 +42,16 @@ def _websocket_guest_id(websocket: WebSocket) -> str | None:
     return _normalize_presence_value(websocket.cookies.get("karaoke_guest_id"))
 
 
+def _normalize_websocket_role(value: object) -> str | None:
+    """Validate and normalize a websocket client role."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"queue", "stage", "lyrics_viewer"}:
+        return normalized
+    return None
+
+
 def _validated_queue_as_guest_id(item: QueueItemCreate) -> str | None:
     """Validate the delegated guest id for an admin queue-as request."""
     if item.queue_as_guest_id is None:
@@ -410,10 +420,37 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
         # Listen for client messages
         while True:
             data = await websocket.receive_json()
-            
+
             # Handle pong response
             if data.get("type") == "pong":
                 logger.debug("Received pong from client")
+                continue
+
+            if data.get("type") == "client_subscribe":
+                payload = data.get("data")
+                if not isinstance(payload, dict):
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "data": {"detail": "Invalid client_subscribe payload"},
+                            "timestamp": asyncio.get_event_loop().time(),
+                        },
+                        websocket,
+                    )
+                    continue
+
+                role = _normalize_websocket_role(payload.get("page"))
+                if role is None:
+                    await manager.send_personal_message(
+                        {
+                            "type": "error",
+                            "data": {"detail": "client_subscribe requires page=queue|stage|lyrics_viewer"},
+                            "timestamp": asyncio.get_event_loop().time(),
+                        },
+                        websocket,
+                    )
+                    continue
+                await manager.set_connection_role(websocket, role)
                 continue
 
             if data.get("type") in {"presence_hello", "presence_update"}:
@@ -549,6 +586,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         current_time=seek_time,
                         source=source,
                         is_paused=is_paused if isinstance(is_paused, bool) else None,
+                        broadcast_state=True,
                     )
                 elif command == "resync":
                     extra_data = {"sync_version": manager.next_stage_sync_version()}
@@ -579,6 +617,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                             current_time=extra_data["seek_time"],
                             source=source,
                             is_paused=is_paused if isinstance(is_paused, bool) else None,
+                            broadcast_state=True,
                         )
                 elif command == "set_vocals_enabled":
                     vocals_enabled = payload.get("vocals_enabled")

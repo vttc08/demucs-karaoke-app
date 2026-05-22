@@ -63,6 +63,17 @@ def db_session():
     Base.metadata.drop_all(bind=engine)
 
 
+@pytest.fixture(autouse=True)
+def reset_proxy_url_setting():
+    """Keep HTTP client tests isolated from proxy-setting mutations in other cases."""
+    original_proxy = settings.ytdlp_proxy_url
+    settings.ytdlp_proxy_url = ""
+    try:
+        yield
+    finally:
+        settings.ytdlp_proxy_url = original_proxy
+
+
 def test_queue_service_add_to_queue(db_session):
     """Test adding item to queue via service."""
     service = QueueService()
@@ -1269,6 +1280,7 @@ async def test_queue_service_update_status_async_broadcasts(db_session):
 
     socket = DummySocket()
     manager.active_connections.append(socket)
+    manager._connection_context[socket] = {"role": "queue"}
 
     with patch("services.websocket_manager.manager", manager):
         await service.update_status_async(db_session, created.id, QueueStatus.READY)
@@ -1298,6 +1310,7 @@ async def test_queue_service_update_status_async_promotes_ready_item_when_idle(d
 
     socket = DummySocket()
     manager.active_connections.append(socket)
+    manager._connection_context[socket] = {"role": "queue"}
 
     with patch("services.websocket_manager.manager", manager):
         await service.update_status_async(db_session, created.id, QueueStatus.READY)
@@ -1401,6 +1414,34 @@ async def test_connection_manager_presence_deduplicates_tabs_until_last_disconne
         message["type"] == "user_left" and message["data"]["guest_id"] == "guest-1"
         for message in observer.messages
     )
+
+
+@pytest.mark.asyncio
+async def test_connection_manager_stage_time_update_targets_stage_and_lyrics_only():
+    """Playback clock broadcasts should not fan out to generic queue viewers."""
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self, name):
+            self.name = name
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    queue_socket = DummySocket("queue")
+    stage_socket = DummySocket("stage")
+    lyrics_socket = DummySocket("lyrics")
+    manager.active_connections.extend([queue_socket, stage_socket, lyrics_socket])
+    manager._connection_context[queue_socket] = {"role": "queue"}
+    manager._connection_context[stage_socket] = {"role": "stage"}
+    manager._connection_context[lyrics_socket] = {"role": "lyrics_viewer"}
+
+    await manager.set_stage_current_time(12.5, source="stage", is_paused=False)
+
+    assert not any(message["type"] == "stage_time_update" for message in queue_socket.messages)
+    assert any(message["type"] == "stage_time_update" for message in stage_socket.messages)
+    assert any(message["type"] == "stage_time_update" for message in lyrics_socket.messages)
 
 
 def test_queue_service_skip_current_item_promotes_next_ready(db_session):

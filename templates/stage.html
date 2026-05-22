@@ -945,7 +945,7 @@ function sendPlaybackTimeUpdate(force = false) {
         return;
     }
     const now = performance.now();
-    if (!force && now - lastPlaybackStateBroadcastAt < 250) {
+    if (!force && now - lastPlaybackStateBroadcastAt < 500) {
         return;
     }
     lastPlaybackStateBroadcastAt = now;
@@ -1392,6 +1392,14 @@ async function skipCurrentSong() {
 function connectStageWebSocket() {
     const wsUrl = window.KaraokeURLs.appWsUrl('/api/queue/ws');
     stageSocket = new WebSocket(wsUrl);
+
+    stageSocket.onopen = () => {
+        sendStageCommandRaw({
+            type: "client_subscribe",
+            data: { page: "stage" },
+            timestamp: Date.now(),
+        });
+    };
 
     stageSocket.onmessage = async (event) => {
         try {

@@ -98,6 +98,17 @@ def authenticate_admin_client(client: TestClient) -> str:
     return token
 
 
+def subscribe_websocket(websocket, page: str) -> None:
+    """Register a websocket client role for targeted broadcasts."""
+    websocket.send_json(
+        {
+            "type": "client_subscribe",
+            "data": {"page": page},
+            "timestamp": 123,
+        }
+    )
+
+
 def test_health_check(client):
     """Test health check endpoint."""
     response = client.get("/health")
@@ -2624,6 +2635,7 @@ def test_websocket_broadcasts_queue_item_added_event(client):
     with client.websocket_connect("/api/queue/ws") as websocket:
         connected = websocket.receive_json()
         assert connected["type"] == "connected"
+        subscribe_websocket(websocket, "queue")
 
         response = client.post(
             "/api/queue/",
@@ -2652,6 +2664,7 @@ def test_websocket_broadcasts_queue_item_removed_event(client):
     with client.websocket_connect("/api/queue/ws") as websocket:
         connected = websocket.receive_json()
         assert connected["type"] == "connected"
+        subscribe_websocket(websocket, "queue")
 
         response = client.delete(f"/api/queue/{created['id']}")
         assert response.status_code == 200
@@ -2691,6 +2704,7 @@ def test_websocket_broadcasts_queue_item_updated_on_move(client):
     with client.websocket_connect("/api/queue/ws") as websocket:
         connected = websocket.receive_json()
         assert connected["type"] == "connected"
+        subscribe_websocket(websocket, "queue")
 
         response = client.post(f"/api/queue/{third['id']}/move", json={"direction": "up"})
         assert response.status_code == 200
@@ -2730,6 +2744,7 @@ def test_websocket_broadcasts_current_item_changed_on_skip(client):
     with client.websocket_connect("/api/queue/ws") as websocket:
         connected = websocket.receive_json()
         assert connected["type"] == "connected"
+        subscribe_websocket(websocket, "queue")
 
         response = client.post("/api/queue/skip")
         assert response.status_code == 200
@@ -2758,6 +2773,7 @@ def test_websocket_broadcasts_queue_cleared(client):
     with client.websocket_connect("/api/queue/ws") as websocket:
         connected = websocket.receive_json()
         assert connected["type"] == "connected"
+        subscribe_websocket(websocket, "queue")
 
         response = client.post("/api/queue/clear")
         assert response.status_code == 200
@@ -2774,8 +2790,10 @@ def test_websocket_stage_command_pause_broadcasts_control_and_state(client):
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "queue")
 
             sender.send_json(
                 {
@@ -2809,8 +2827,10 @@ def test_websocket_stage_command_set_lyrics_enabled_broadcasts_state(client):
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "queue")
 
             sender.send_json(
                 {
@@ -2849,6 +2869,7 @@ def test_websocket_guest_cannot_control_other_guest_current_item(client):
     client.cookies.set("karaoke_guest_id", "guest-other")
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         sender.send_json(
             {
                 "type": "stage_command",
@@ -2880,8 +2901,10 @@ def test_websocket_guest_can_control_owned_current_item(client):
 
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "queue")
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -2926,8 +2949,10 @@ def test_websocket_delegated_guest_can_control_admin_queued_current_item(client)
     client.cookies.set("karaoke_guest_id", "guest-owner")
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "queue")
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -2953,8 +2978,10 @@ def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "queue")
 
             sender.send_json(
                 {
@@ -2988,13 +3015,15 @@ def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
             assert state_event["data"]["current_time"] == 42.5
 
 
-def test_websocket_stage_time_update_broadcasts_state(client):
-    """Stage time updates should refresh the shared playback clock."""
+def test_websocket_stage_time_update_broadcasts_to_lyrics_viewers(client):
+    """Stage time updates should refresh the shared playback clock for lyrics viewers."""
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "stage")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "lyrics_viewer")
 
             sender.send_json(
                 {
@@ -3008,7 +3037,7 @@ def test_websocket_stage_time_update_broadcasts_state(client):
             if state_event["type"] == "ping":
                 receiver.send_json({"type": "pong"})
                 state_event = receiver.receive_json()
-            assert state_event["type"] == "stage_state_update"
+            assert state_event["type"] == "stage_time_update"
             assert state_event["data"]["current_time"] == 18.25
             assert state_event["data"]["is_paused"] is True
 
@@ -3017,6 +3046,7 @@ def test_websocket_stage_time_update_requires_admin(client):
     """Guest clients should not be able to spoof authoritative stage time."""
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "stage")
         sender.send_json(
             {
                 "type": "stage_time_update",
@@ -3038,6 +3068,7 @@ def test_websocket_stage_command_seek_rejects_invalid_time(client):
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         sender.send_json(
             {
                 "type": "stage_command",
@@ -3059,8 +3090,10 @@ def test_websocket_stage_command_resync_broadcasts_control(client):
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "queue")
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -3084,8 +3117,10 @@ def test_websocket_stage_command_resync_accepts_optional_timeline(client):
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "stage")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "stage")
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -3116,8 +3151,10 @@ def test_websocket_stage_command_set_vocals_enabled_broadcasts_state(client):
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "queue")
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -3140,8 +3177,10 @@ def test_websocket_stage_command_set_vocals_volume_broadcasts_state(client):
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "queue")
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -3176,6 +3215,7 @@ def test_websocket_stage_command_set_vocals_volume_rejects_out_of_bounds(client)
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         sender.send_json(
             {
                 "type": "stage_command",
@@ -3216,8 +3256,10 @@ def test_websocket_stage_command_skip_broadcasts_and_changes_current(client):
 
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
+        subscribe_websocket(sender, "queue")
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
+            subscribe_websocket(receiver, "queue")
             sender.send_json(
                 {
                     "type": "stage_command",
