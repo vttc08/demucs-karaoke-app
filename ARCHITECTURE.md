@@ -156,6 +156,7 @@ The stage page uses a websocket-first model:
   from websocket `stage_time_update` events.
 - Stage page subscribes as `stage`, consumes websocket queue events and stage-control events, and
   publishes authoritative playback clock updates at a throttled cadence for lyrics sync.
+- Stage page also exposes desktop keyboard shortcuts for seek/resync/vocals/lyrics/QR and a desktop-only help popover. The help panel stays open until explicitly dismissed, and keyboard or remote-control actions do not auto-reveal the stage chrome.
 - Stage page refreshes queue/current state over API and applies source changes to existing media
   elements instead of reloading the page.
 
@@ -208,6 +209,8 @@ The stage page uses a websocket-first model:
 
 - Stage uses a custom HTML/CSS/JS overlay (not native WebVTT rendering) on top of the
   `#stage-video-player`.
+- The lyrics overlay only becomes visible when the stage player is in fullscreen mode so mobile
+  controls stay unobstructed in the default windowed view.
 - Lyrics cues are fetched from `GET /api/queue/{item_id}/lyrics-cues`.
 - Backend cue source is media sidecar `lyrics_path` and supports:
   - `.lrc` sidecars parsed into timestamped cues

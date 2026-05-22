@@ -204,6 +204,73 @@
         transform: translateY(0) scale(1);
     }
 
+    .stage-shortcuts-control {
+        display: none;
+        position: relative;
+    }
+
+    .stage-shortcuts-panel {
+        position: absolute;
+        right: 0;
+        bottom: calc(100% + 0.75rem);
+        width: min(24rem, 90vw);
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(0, 0, 0, 0.82);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        padding: 0.9rem;
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        z-index: 25;
+    }
+
+    .stage-shortcuts-panel-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .stage-shortcuts-panel-list {
+        display: grid;
+        gap: 0.55rem;
+    }
+
+    .stage-shortcuts-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 0.875rem;
+    }
+
+    .stage-shortcuts-row-desc {
+        min-width: 0;
+    }
+
+    .stage-shortcuts-kbd {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2.2rem;
+        padding: 0.22rem 0.5rem;
+        border-radius: 0.45rem;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: rgba(255, 255, 255, 0.08);
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: rgba(255, 255, 255, 0.95);
+        white-space: nowrap;
+    }
+
+    .stage-shortcuts-hint {
+        margin-top: 0.75rem;
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.62);
+    }
+
     .stage-lyrics-overlay {
         position: absolute;
         left: 0;
@@ -214,6 +281,10 @@
         display: flex;
         justify-content: center;
         padding: 0 1rem;
+    }
+
+    .stage-media:not(.is-fullscreen) .stage-lyrics-overlay {
+        display: none !important;
     }
 
     .stage-lyrics-lines {
@@ -326,6 +397,10 @@
 
         .stage-vocals-label-text {
             display: inline-flex;
+        }
+
+        .stage-shortcuts-control {
+            display: block;
         }
     }
 
@@ -548,6 +623,52 @@
                             <span class="material-symbols-outlined text-base">qr_code_2</span>
                             <span class="stage-control-label">{{ t('stage.qr') }}</span>
                         </button>
+                        <div class="stage-shortcuts-control">
+                            <button
+                                id="stage-shortcuts-btn"
+                                class="stage-control-button stage-shortcuts-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                                aria-label="{{ t('stage.shortcuts_help') }}"
+                                title="{{ t('stage.shortcuts_help') }}"
+                                aria-controls="stage-shortcuts-panel"
+                                aria-expanded="false"
+                            >
+                                <span class="material-symbols-outlined text-base">info</span>
+                                <span class="stage-control-label">{{ t('stage.shortcuts_help') }}</span>
+                            </button>
+                            <div id="stage-shortcuts-panel" class="stage-shortcuts-panel hidden" role="dialog" aria-label="{{ t('stage.shortcuts_title') }}">
+                                <div class="stage-shortcuts-panel-title">
+                                    <h3 class="text-sm font-semibold text-on-surface">{{ t('stage.shortcuts_title') }}</h3>
+                                    <span class="text-[11px] uppercase tracking-[0.18em] text-on-surface-variant">{{ t('stage.shortcuts_desktop_only') }}</span>
+                                </div>
+                                <div class="stage-shortcuts-panel-list">
+                                    <div class="stage-shortcuts-row">
+                                        <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_seek') }}</span>
+                                        <span class="stage-shortcuts-kbd">← / →</span>
+                                    </div>
+                                    <div class="stage-shortcuts-row">
+                                        <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_resync') }}</span>
+                                        <span class="stage-shortcuts-kbd">R</span>
+                                    </div>
+                                    <div class="stage-shortcuts-row">
+                                        <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_vocals') }}</span>
+                                        <span class="stage-shortcuts-kbd">V</span>
+                                    </div>
+                                    <div class="stage-shortcuts-row">
+                                        <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_lyrics') }}</span>
+                                        <span class="stage-shortcuts-kbd">L</span>
+                                    </div>
+                                    <div class="stage-shortcuts-row">
+                                        <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_qr') }}</span>
+                                        <span class="stage-shortcuts-kbd">Q</span>
+                                    </div>
+                                    <div class="stage-shortcuts-row">
+                                        <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_help_toggle') }}</span>
+                                        <span class="stage-shortcuts-kbd">?</span>
+                                    </div>
+                                </div>
+                                <p class="stage-shortcuts-hint">{{ t('stage.shortcuts_hint') }}</p>
+                            </div>
+                        </div>
                     </div>
                     <div class="stage-vocals-control rounded-full border border-white/10 bg-black/35 px-3 py-1.5">
                         <button
@@ -670,6 +791,8 @@ const lyricsToggleBtn = document.getElementById("lyrics-toggle-btn");
 const lyricsToggleIcon = document.getElementById("lyrics-toggle-icon");
 const lyricsToggleLabel = document.getElementById("lyrics-toggle-label");
 const qrToggleBtn = document.getElementById("qr-toggle-btn");
+const shortcutsBtn = document.getElementById("stage-shortcuts-btn");
+const shortcutsPanel = document.getElementById("stage-shortcuts-panel");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const fullscreenIcon = document.getElementById("fullscreen-icon");
 const fullscreenLabel = document.getElementById("fullscreen-label");
@@ -683,6 +806,7 @@ const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
 const QR_IMAGE_SIZE = 320;
 let controlsHideTimer = null;
 let isQrVisible = false;
+let shortcutsPanelVisible = false;
 let stageSocket = null;
 let mixState = {
     vocals_enabled: true,
@@ -844,7 +968,24 @@ async function commitPlaybarSeek() {
     if (!sendStageCommand("seek", { seek_time: targetTime, is_paused: shouldPausePlayback })) {
         await seekAndResyncPlayback(targetTime, shouldPausePlayback);
     }
-    showStageControls();
+}
+
+async function seekByOffset(offsetSeconds) {
+    const primary = getPrimaryPlayer();
+    if (!primary) {
+        return;
+    }
+    const duration = getPrimaryDuration();
+    const currentTime = getPrimaryCurrentTime();
+    const nextTime = Math.max(0, currentTime + offsetSeconds);
+    const targetTime = duration > 0 ? Math.min(nextTime, duration) : nextTime;
+    const shouldPausePlayback = isPrimaryPaused();
+
+    updatePlaybarUi(targetTime);
+
+    if (!sendStageCommand("seek", { seek_time: targetTime, is_paused: shouldPausePlayback })) {
+        await seekAndResyncPlayback(targetTime, shouldPausePlayback);
+    }
 }
 
 function updateAudioArtwork(item) {
@@ -890,7 +1031,7 @@ function updateLyricsUi() {
 
 function setLyricsOverlayVisible(visible) {
     if (!lyricsOverlay) return;
-    lyricsOverlay.classList.toggle("hidden", !visible);
+    lyricsOverlay.classList.toggle("hidden", !visible || !isFullscreenActive());
 }
 
 function normalizeCue(rawCue) {
@@ -1441,7 +1582,6 @@ async function seekAndResyncPlayback(targetTime, shouldPausePlayback) {
     updatePlaybarUi(seekTime);
     if (shouldPausePlayback) {
         updatePlayPauseUi();
-        showStageControls();
         return;
     }
     try {
@@ -1454,7 +1594,6 @@ async function seekAndResyncPlayback(targetTime, shouldPausePlayback) {
         console.error("Seek/resync playback failed:", error);
     } finally {
         updatePlayPauseUi();
-        showStageControls();
     }
 }
 
@@ -1515,7 +1654,6 @@ async function hardResyncPlayback({
         updatePlaybarUi(seekTime);
         if (pauseAfterRelock) {
             updatePlayPauseUi();
-            showStageControls();
             return;
         }
 
@@ -1551,7 +1689,6 @@ async function hardResyncPlayback({
     } finally {
         hardSyncInProgress = false;
         updatePlayPauseUi();
-        showStageControls();
     }
 
 }
@@ -1668,6 +1805,27 @@ function setQrOverlayVisible(visible) {
     qrToggleBtn.classList.toggle("text-on-surface", !visible);
 }
 
+function updateShortcutsUi() {
+    if (!shortcutsBtn || !shortcutsPanel) return;
+    shortcutsBtn.setAttribute("aria-expanded", shortcutsPanelVisible ? "true" : "false");
+    shortcutsPanel.classList.toggle("hidden", !shortcutsPanelVisible);
+}
+
+function setShortcutsPanelVisible(visible) {
+    shortcutsPanelVisible = Boolean(visible);
+    updateShortcutsUi();
+}
+
+function toggleShortcutsPanel() {
+    const nextVisible = !shortcutsPanelVisible;
+    setShortcutsPanelVisible(nextVisible);
+    if (nextVisible) {
+        showStageControls();
+    } else {
+        scheduleHideStageControls();
+    }
+}
+
 function isFullscreenActive() {
     return !!document.fullscreenElement;
 }
@@ -1680,6 +1838,10 @@ function showStageControls() {
     if (controlsHideTimer) {
         window.clearTimeout(controlsHideTimer);
         controlsHideTimer = null;
+    }
+
+    if (shortcutsPanelVisible) {
+        return;
     }
 
     if (isFullscreenActive() && !isPrimaryPaused()) {
@@ -1823,7 +1985,6 @@ function connectStageWebSocket() {
                     pausePrimary();
                 }
                 updatePlayPauseUi();
-                showStageControls();
                 return;
             }
             if (messageType === "stage_state_update") {
@@ -1840,7 +2001,6 @@ function connectStageWebSocket() {
                     syncVocalsToVideo(true);
                 }
                 updatePlayPauseUi();
-                showStageControls();
             }
         } catch (error) {
             console.error("Failed to process stage websocket message:", error);
@@ -1898,8 +2058,6 @@ function bindPrimaryMediaEvents(mediaElement) {
 
     mediaElement.addEventListener("play", updatePlayPauseUi);
     mediaElement.addEventListener("pause", updatePlayPauseUi);
-    mediaElement.addEventListener("play", showStageControls);
-    mediaElement.addEventListener("pause", showStageControls);
     mediaElement.addEventListener("loadedmetadata", () => {
         if (mediaElement !== getPrimaryPlayer()) {
             return;
@@ -1996,8 +2154,6 @@ if (playPauseBtn) {
             } else {
                 pausePrimary();
             }
-        } else {
-            showStageControls();
         }
         updatePlayPauseUi();
     });
@@ -2107,7 +2263,12 @@ if (qrToggleBtn) {
             updateQrOverlayContent();
         }
         setQrOverlayVisible(!isQrVisible);
-        showStageControls();
+    });
+}
+
+if (shortcutsBtn) {
+    shortcutsBtn.addEventListener("click", () => {
+        toggleShortcutsPanel();
     });
 }
 
@@ -2163,6 +2324,63 @@ window.addEventListener("keydown", async (event) => {
         return;
     }
 
+    if (event.key === "Escape" && shortcutsPanelVisible) {
+        event.preventDefault();
+        setShortcutsPanelVisible(false);
+        scheduleHideStageControls();
+        return;
+    }
+
+    if (event.code === "ArrowLeft") {
+        event.preventDefault();
+        await seekByOffset(-5);
+        return;
+    }
+
+    if (event.code === "ArrowRight") {
+        event.preventDefault();
+        await seekByOffset(5);
+        return;
+    }
+
+    if (event.key.toLowerCase() === "r") {
+        event.preventDefault();
+        if (forceResyncBtn) {
+            forceResyncBtn.click();
+        }
+        return;
+    }
+
+    if (event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        if (vocalsToggleBtn) {
+            vocalsToggleBtn.click();
+        }
+        return;
+    }
+
+    if (event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        if (lyricsToggleBtn) {
+            lyricsToggleBtn.click();
+        }
+        return;
+    }
+
+    if (event.key.toLowerCase() === "q") {
+        event.preventDefault();
+        if (qrToggleBtn) {
+            qrToggleBtn.click();
+        }
+        return;
+    }
+
+    if (event.key === "?" || (event.shiftKey && event.code === "Slash")) {
+        event.preventDefault();
+        toggleShortcutsPanel();
+        return;
+    }
+
     if (event.code === "Space") {
         event.preventDefault();
         const primary = getPrimaryPlayer();
@@ -2172,7 +2390,6 @@ window.addEventListener("keydown", async (event) => {
             } else {
                 pausePrimary();
             }
-            showStageControls();
         }
         return;
     }
@@ -2196,6 +2413,12 @@ window.addEventListener("keydown", async (event) => {
 document.addEventListener("fullscreenchange", () => {
     syncFullscreenState();
     updateFullscreenUi();
+    if (lyricsState.enabled) {
+        activeLyricCueIndex = null;
+        updateLyricsForTime(getPrimaryCurrentTime());
+    } else {
+        setLyricsOverlayVisible(false);
+    }
 });
 syncFullscreenState();
 updateFullscreenUi();
@@ -2206,6 +2429,7 @@ updateVocalsUi();
 updateLyricsUi();
 updatePlaybarUi();
 updateQrOverlayContent();
+updateShortcutsUi();
 connectStageWebSocket();
 updateNowPlayingMeta(INITIAL_CURRENT_ITEM);
 updatePlaybackModeFlags(INITIAL_CURRENT_ITEM);

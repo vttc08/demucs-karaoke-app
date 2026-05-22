@@ -813,6 +813,9 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-playbar-slider"' in response.content
     assert b'stage-vocals-volume-slider' in response.content
     assert b'stage-fullscreen-button' in response.content
+    assert b'id="stage-shortcuts-btn"' in response.content
+    assert b'id="stage-shortcuts-panel"' in response.content
+    assert re.search(rb'id="stage-lyrics-overlay"[^>]*class="[^"]*\bhidden\b', response.content)
     assert b'aria-label="Fullscreen"' in response.content
 
 
