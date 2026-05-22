@@ -53,6 +53,7 @@
     .stage-chrome {
         width: min(100%, 72rem);
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
         gap: 0.75rem;
@@ -129,6 +130,41 @@
         width: 6rem;
         min-width: 0;
         flex: 1 1 auto;
+    }
+
+    .stage-playbar {
+        flex: 1 1 100%;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-width: 0;
+        padding: 0.1rem 0.2rem 0;
+    }
+
+    .stage-playbar-time {
+        min-width: 3.5rem;
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .stage-playbar-track {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0.7rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .stage-playbar-slider {
+        width: 100%;
+        min-width: 0;
+        accent-color: rgb(239 68 68);
     }
 
     .stage-media.is-fullscreen .stage-controls-shell {
@@ -315,15 +351,15 @@
         }
 
         .stage-vocals-control {
-            grid-column: 1 / -1;
+            grid-column: 1 / span 1;
             order: 0;
-            width: 100%;
+            width: auto;
             min-width: 0;
-            justify-content: space-between;
-            border-radius: 1rem;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(255, 255, 255, 0.05);
-            padding: 0.5rem 0.65rem;
+            justify-content: stretch;
+            border-radius: 0;
+            border: 0;
+            background: transparent;
+            padding: 0;
         }
 
         .stage-control-button {
@@ -337,7 +373,7 @@
         }
 
         .stage-vocals-control .stage-control-button {
-            width: auto;
+            width: 100%;
         }
 
         .stage-control-button--icon {
@@ -349,7 +385,21 @@
         }
 
         .stage-vocals-volume-slider {
-            width: min(12rem, 100%);
+            display: none;
+        }
+
+        .stage-playbar {
+            grid-column: 2 / -1;
+            gap: 0.45rem;
+            padding: 0;
+        }
+
+        .stage-playbar-time {
+            display: none;
+        }
+
+        .stage-playbar-track {
+            padding: 0.4rem 0.6rem;
         }
     }
 
@@ -370,11 +420,7 @@
         }
 
         .stage-vocals-control {
-            padding: 0.45rem 0.55rem;
-        }
-
-        .stage-vocals-volume-slider {
-            width: min(11rem, 100%);
+            min-width: 2.9rem;
         }
     }
 </style>
@@ -530,6 +576,24 @@
                             />
                         </label>
                     </div>
+                    <div class="stage-playbar">
+                        <span id="stage-playbar-elapsed" class="stage-playbar-time">0:00</span>
+                        <div class="stage-playbar-track">
+                            <label class="sr-only" for="stage-playbar-slider">{{ t('stage.playback_position') }}</label>
+                            <input
+                                id="stage-playbar-slider"
+                                class="stage-playbar-slider h-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                                type="range"
+                                min="0"
+                                max="0"
+                                value="0"
+                                step="0.01"
+                                aria-label="{{ t('stage.playback_position') }}"
+                                disabled
+                            />
+                        </div>
+                        <span id="stage-playbar-duration" class="stage-playbar-time">0:00</span>
+                    </div>
                 </div>
             </div>
 
@@ -593,6 +657,9 @@ const upNextCount = document.getElementById("up-next-count");
 const playPauseBtn = document.getElementById("play-pause-btn");
 const playPauseIcon = document.getElementById("play-pause-icon");
 const playPauseLabel = document.getElementById("play-pause-label");
+const playbarSlider = document.getElementById("stage-playbar-slider");
+const playbarElapsed = document.getElementById("stage-playbar-elapsed");
+const playbarDuration = document.getElementById("stage-playbar-duration");
 const vocalsToggleBtn = document.getElementById("stage-vocals-toggle-btn");
 const vocalsToggleIcon = document.getElementById("stage-vocals-toggle-icon");
 const vocalsToggleLabel = document.getElementById("stage-vocals-toggle-label");
@@ -642,6 +709,8 @@ let initialMultitrackResyncCompleted = !vocalsAvailable;
 let currentPrimaryKind = null;
 let currentPrimarySrc = null;
 let lastPlaybackStateBroadcastAt = 0;
+let isPlaybarScrubbing = false;
+let playbarPreviewTime = 0;
 const SOFT_DRIFT_THRESHOLD_SECONDS = 0.12;
 const MEDIA_SEEK_TIMEOUT_MS = 1200;
 const MEDIA_READY_TIMEOUT_MS = 1200;
@@ -689,6 +758,12 @@ function getPrimaryCurrentTime() {
     return primary ? (primary.currentTime || 0) : 0;
 }
 
+function getPrimaryDuration() {
+    const primary = getPrimaryPlayer();
+    const duration = primary ? primary.duration : null;
+    return Number.isFinite(duration) && duration > 0 ? duration : 0;
+}
+
 function isPrimaryPaused() {
     const primary = getPrimaryPlayer();
     return primary ? primary.paused : true;
@@ -708,6 +783,68 @@ function pausePrimary() {
         return;
     }
     primary.pause();
+}
+
+function formatPlaybackTime(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) {
+        return "--:--";
+    }
+    const totalSeconds = Math.floor(seconds);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const secs = totalSeconds % 60;
+    if (hours > 0) {
+        return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
+    return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function updatePlaybarUi(currentTime = getPrimaryCurrentTime()) {
+    if (!playbarSlider || !playbarElapsed || !playbarDuration) {
+        return;
+    }
+
+    const duration = getPrimaryDuration();
+    const hasDuration = duration > 0;
+    const effectiveTime = isPlaybarScrubbing ? playbarPreviewTime : currentTime;
+    const clampedTime = hasDuration
+        ? Math.max(0, Math.min(Number.isFinite(effectiveTime) ? effectiveTime : 0, duration))
+        : 0;
+
+    playbarSlider.disabled = !hasDuration || hardSyncInProgress;
+    playbarSlider.max = hasDuration ? String(duration) : "0";
+    playbarSlider.value = hasDuration ? String(clampedTime) : "0";
+    playbarSlider.setAttribute("aria-valuetext", hasDuration
+        ? `${formatPlaybackTime(clampedTime)} / ${formatPlaybackTime(duration)}`
+        : formatPlaybackTime(0));
+
+    playbarElapsed.textContent = formatPlaybackTime(clampedTime);
+    playbarDuration.textContent = formatPlaybackTime(hasDuration ? duration : 0);
+}
+
+async function commitPlaybarSeek() {
+    if (!playbarSlider) {
+        return;
+    }
+    const duration = getPrimaryDuration();
+    const nextTime = Number(playbarSlider.value);
+    const targetTime = duration > 0 && Number.isFinite(nextTime)
+        ? Math.max(0, Math.min(nextTime, duration))
+        : 0;
+
+    isPlaybarScrubbing = false;
+    playbarPreviewTime = targetTime;
+    updatePlaybarUi(targetTime);
+
+    if (duration <= 0 || hardSyncInProgress) {
+        return;
+    }
+
+    const shouldPausePlayback = isPrimaryPaused();
+    if (!sendStageCommand("seek", { seek_time: targetTime, is_paused: shouldPausePlayback })) {
+        await seekAndResyncPlayback(targetTime, shouldPausePlayback);
+    }
+    showStageControls();
 }
 
 function updateAudioArtwork(item) {
@@ -1005,10 +1142,12 @@ async function applyCurrentPlaybackItem(item) {
     updatePlaybackModeFlags(item);
     updateNowPlayingMeta(item);
     updateAudioArtwork(item);
+    updatePlaybarUi(0);
     vocalsAvailable = Boolean(nextVocalsSrc);
     if (!sourceChanged) {
         updateVocalsUi();
         await loadLyricsCues();
+        updatePlaybarUi();
         return;
     }
     resetSyncStateForSourceSwap();
@@ -1057,6 +1196,7 @@ async function applyCurrentPlaybackItem(item) {
         console.warn("Failed to start switched playback source:", error);
     } finally {
         updatePlayPauseUi();
+        updatePlaybarUi();
         showStageControls();
     }
 }
@@ -1149,6 +1289,7 @@ function sendPlaybackTimeUpdate(force = false) {
     if (!primary) {
         return;
     }
+    updatePlaybarUi(primary.currentTime || 0);
     const now = performance.now();
     if (!force && now - lastPlaybackStateBroadcastAt < 500) {
         return;
@@ -1297,6 +1438,7 @@ async function seekAndResyncPlayback(targetTime, shouldPausePlayback) {
     }
     await Promise.all(seeks);
     updateLyricsForTime(seekTime);
+    updatePlaybarUi(seekTime);
     if (shouldPausePlayback) {
         updatePlayPauseUi();
         showStageControls();
@@ -1370,6 +1512,7 @@ async function hardResyncPlayback({
         if (operationId !== syncOperationId) return;
 
         updateLyricsForTime(seekTime);
+        updatePlaybarUi(seekTime);
         if (pauseAfterRelock) {
             updatePlayPauseUi();
             showStageControls();
@@ -1461,6 +1604,11 @@ function applyStageStateFromServer(data) {
     }
     if (typeof data.vocals_volume === "number" && Number.isFinite(data.vocals_volume)) {
         mixState.vocals_volume = Math.max(0, Math.min(1, data.vocals_volume));
+    }
+    if (typeof data.current_time === "number" && Number.isFinite(data.current_time)) {
+        updatePlaybarUi(data.current_time);
+    } else {
+        updatePlaybarUi();
     }
     if (typeof data.lyrics_enabled === "boolean") {
         setLyricsEnabled(data.lyrics_enabled);
@@ -1752,6 +1900,18 @@ function bindPrimaryMediaEvents(mediaElement) {
     mediaElement.addEventListener("pause", updatePlayPauseUi);
     mediaElement.addEventListener("play", showStageControls);
     mediaElement.addEventListener("pause", showStageControls);
+    mediaElement.addEventListener("loadedmetadata", () => {
+        if (mediaElement !== getPrimaryPlayer()) {
+            return;
+        }
+        updatePlaybarUi(mediaElement.currentTime || 0);
+    });
+    mediaElement.addEventListener("durationchange", () => {
+        if (mediaElement !== getPrimaryPlayer()) {
+            return;
+        }
+        updatePlaybarUi(mediaElement.currentTime || 0);
+    });
     mediaElement.addEventListener("play", async () => {
         if (mediaElement !== getPrimaryPlayer()) {
             return;
@@ -1773,6 +1933,7 @@ function bindPrimaryMediaEvents(mediaElement) {
             return;
         }
         sendPlaybackTimeUpdate(true);
+        updatePlaybarUi(mediaElement.currentTime || 0);
         stopSyncTimer();
         stopLyricsTicker();
         if (vocalsAudio && !vocalsAudio.paused) {
@@ -1783,6 +1944,7 @@ function bindPrimaryMediaEvents(mediaElement) {
         if (mediaElement !== getPrimaryPlayer()) {
             return;
         }
+        updatePlaybarUi(mediaElement.currentTime || 0);
         sendPlaybackTimeUpdate(false);
         updateLyricsForTime(mediaElement.currentTime || 0);
     });
@@ -1790,6 +1952,7 @@ function bindPrimaryMediaEvents(mediaElement) {
         if (mediaElement !== getPrimaryPlayer()) {
             return;
         }
+        updatePlaybarUi(mediaElement.currentTime || 0);
         sendPlaybackTimeUpdate(true);
         if (vocalsAvailable && vocalsAudio) {
             vocalsAudio.currentTime = mediaElement.currentTime || 0;
@@ -1865,6 +2028,29 @@ if (vocalsVolumeSlider) {
             updateVocalsUi();
             applyVocalsMix();
         }
+    });
+}
+
+if (playbarSlider) {
+    playbarSlider.addEventListener("pointerdown", () => {
+        isPlaybarScrubbing = true;
+        showStageControls();
+    });
+    playbarSlider.addEventListener("input", () => {
+        isPlaybarScrubbing = true;
+        playbarPreviewTime = Number(playbarSlider.value) || 0;
+        updatePlaybarUi(playbarPreviewTime);
+        showStageControls();
+    });
+    playbarSlider.addEventListener("change", async () => {
+        await commitPlaybarSeek();
+    });
+    playbarSlider.addEventListener("blur", () => {
+        if (!isPlaybarScrubbing) {
+            return;
+        }
+        isPlaybarScrubbing = false;
+        updatePlaybarUi();
     });
 }
 
@@ -2018,6 +2204,7 @@ currentPrimarySrc = INITIAL_CURRENT_ITEM?.media_path || STAGE_LOBBY_MEDIA_URL;
 updateAudioArtwork(INITIAL_CURRENT_ITEM);
 updateVocalsUi();
 updateLyricsUi();
+updatePlaybarUi();
 updateQrOverlayContent();
 connectStageWebSocket();
 updateNowPlayingMeta(INITIAL_CURRENT_ITEM);

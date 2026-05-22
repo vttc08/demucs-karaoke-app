@@ -140,7 +140,7 @@ and `/static/...`.
      - Always-on playback shell: queue items switch in-place without full page reload, so fullscreen is preserved during track transitions
      - Audio-only items such as MP3s use embedded album art as the stage background when available, with a branded fallback background otherwise
      - When the queue is empty, stage loops lobby media; when a song becomes playable, stage switches to it automatically and returns to lobby when queue drains
-     - Responsive controls overlay: icon-first on mobile so fullscreen fits in portrait, with clearer labeled control groups on desktop
+     - Responsive controls overlay: desktop adds a dedicated playback seek bar row, while mobile stays icon-first and moves detailed vocals volume adjustment to `/queue`
      - Toggle the lyrics overlay on or off while playback is running
     - Compact "up next" chips without queue-management actions
     - Auto-advances when song ends

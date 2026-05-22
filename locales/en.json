@@ -331,6 +331,7 @@
   "stage.no_upcoming": "No upcoming songs",
   "stage.now_playing": "Now Playing",
   "stage.pause": "Pause",
+  "stage.playback_position": "Playback position",
   "stage.presentation_output": "Presentation Output",
   "stage.lyrics_off": "Lyrics Off",
   "stage.lyrics_on": "Lyrics On",
