@@ -38,6 +38,7 @@ const stageRemotePlayPauseIcon = document.getElementById('stage-remote-play-paus
 const stageRemotePlayPauseLabel = document.getElementById('stage-remote-play-pause-label');
 const stageRemoteSkipBtn = document.getElementById('stage-remote-skip-btn');
 const stageRemoteResyncBtn = document.getElementById('stage-remote-resync-btn');
+const stageRemoteSeekForwardBtn = document.getElementById('stage-remote-seek-forward-btn');
 const stageRemoteLyricsToggleBtn = document.getElementById('stage-remote-lyrics-toggle-btn');
 const stageRemoteLyricsToggleIcon = document.getElementById('stage-remote-lyrics-toggle-icon');
 const stageRemoteLyricsToggleLabel = document.getElementById('stage-remote-lyrics-toggle-label');
@@ -90,6 +91,7 @@ let stageRemoteVocalsEnabled = true;
 let stageRemoteVocalsVolume = 1.0;
 let stageRemoteVocalsLastVolume = 1.0;
 let stageRemoteVocalsAvailable = false;
+let stageRemoteCurrentTime = null;
 let demucsHealth = { healthy: true, detail: t('settings.engine_unknown') };
 let modalSelection = null;
 let modalKaraokeEnabled = false;
@@ -1603,6 +1605,7 @@ class QueueWebSocket {
         if (stageRemotePlayPauseBtn) stageRemotePlayPauseBtn.disabled = !canControl;
         if (stageRemoteSkipBtn) stageRemoteSkipBtn.disabled = !canControl;
         if (stageRemoteResyncBtn) stageRemoteResyncBtn.disabled = !canControl;
+        updateStageRemoteSeekForwardUi();
         updateStageRemoteLyricsUi();
         updateStageRemoteVocalsUi();
         if (stageRemoteStatus) {
@@ -1790,6 +1793,9 @@ class QueueWebSocket {
             case 'stage_state_update':
                 window.dispatchEvent(new CustomEvent('stage_state_update', { detail: message.data }));
                 break;
+            case 'stage_time_update':
+                window.dispatchEvent(new CustomEvent('stage_time_update', { detail: message.data }));
+                break;
             case 'error':
                 if (message.data?.detail) {
                     const detail = message.data.detail === 'Not allowed to control this stage item'
@@ -1827,6 +1833,13 @@ function updateStageRemotePlayPauseUi() {
     if (!stageRemotePlayPauseIcon || !stageRemotePlayPauseLabel) return;
     stageRemotePlayPauseIcon.textContent = stageRemotePaused ? 'play_arrow' : 'pause';
     stageRemotePlayPauseLabel.textContent = stageRemotePaused ? t('common.play') : t('stage.pause');
+}
+
+function updateStageRemoteSeekForwardUi() {
+    if (!stageRemoteSeekForwardBtn) return;
+    const connected = !!(queueWebSocket && queueWebSocket.isConnected);
+    const hasKnownTime = typeof stageRemoteCurrentTime === 'number' && Number.isFinite(stageRemoteCurrentTime);
+    stageRemoteSeekForwardBtn.disabled = !connected || !stageRemoteCanControl || !hasKnownTime;
 }
 
 function updateStageRemoteVocalsUi() {
@@ -1968,6 +1981,30 @@ if (stageRemoteResyncBtn) {
             data: {
                 command: 'resync',
                 source: 'queue',
+            },
+            timestamp: Date.now(),
+        });
+        if (!sent) {
+            alert(t('queue.stage_offline'));
+        }
+    });
+}
+
+if (stageRemoteSeekForwardBtn) {
+    stageRemoteSeekForwardBtn.addEventListener('click', () => {
+        if (!queueWebSocket) return;
+        if (!canSendStageControl()) return;
+        if (typeof stageRemoteCurrentTime !== 'number' || !Number.isFinite(stageRemoteCurrentTime)) {
+            alert(t('queue.stage_offline'));
+            return;
+        }
+        const sent = queueWebSocket.send({
+            type: 'stage_command',
+            data: {
+                command: 'seek',
+                source: 'queue',
+                seek_time: Math.max(0, stageRemoteCurrentTime + 5),
+                is_paused: stageRemotePaused,
             },
             timestamp: Date.now(),
         });
@@ -2210,6 +2247,10 @@ window.addEventListener('stage_state_update', (event) => {
         stageRemotePaused = isPaused;
         updateStageRemotePlayPauseUi();
     }
+    const currentTime = event.detail?.current_time;
+    if (typeof currentTime === 'number' && Number.isFinite(currentTime)) {
+        stageRemoteCurrentTime = Math.max(0, currentTime);
+    }
     const vocalsEnabled = event.detail?.vocals_enabled;
     if (typeof vocalsEnabled === 'boolean') {
         stageRemoteVocalsEnabled = vocalsEnabled;
@@ -2227,6 +2268,20 @@ window.addEventListener('stage_state_update', (event) => {
     }
     updateStageRemoteVocalsUi();
     updateStageRemoteLyricsUi();
+    updateStageRemoteSeekForwardUi();
+});
+
+window.addEventListener('stage_time_update', (event) => {
+    const currentTime = event.detail?.current_time;
+    if (typeof currentTime === 'number' && Number.isFinite(currentTime)) {
+        stageRemoteCurrentTime = Math.max(0, currentTime);
+    }
+    const isPaused = event.detail?.is_paused;
+    if (typeof isPaused === 'boolean') {
+        stageRemotePaused = isPaused;
+        updateStageRemotePlayPauseUi();
+    }
+    updateStageRemoteSeekForwardUi();
 });
 
 // Much gentler auto-refresh - only when user is not actively using search

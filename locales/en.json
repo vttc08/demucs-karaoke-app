@@ -339,6 +339,8 @@
   "stage.queue_count": "{count} queued",
   "stage.queue_qr": "Queue QR code",
   "stage.resync": "Resync",
+  "stage.seek_forward_five": "Skip forward 5 seconds",
+  "stage.seek_forward_short": "+5",
   "stage.skip_failed": "Skip failed",
   "stage.title": "Stage",
   "stage.toggle_guide_vocals": "Toggle guide vocals",

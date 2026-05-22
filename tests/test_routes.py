@@ -607,6 +607,7 @@ def test_queue_page_loads(client):
     assert 'id="stage-remote-vocals-volume-slider"' in response.text
     assert 'id="stage-remote-vocals-volume-label"' in response.text
     assert 'id="stage-remote-lyrics-toggle-btn"' in response.text
+    assert 'id="stage-remote-seek-forward-btn"' in response.text
     assert 'id="qr-toggle-btn"' not in response.text
     assert 'id="queue-library-shortcuts"' in response.text
     assert 'href="/media"' in response.text
@@ -3021,31 +3022,42 @@ def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
             assert state_event["data"]["current_time"] == 42.5
 
 
-def test_websocket_stage_time_update_broadcasts_to_lyrics_viewers(client):
-    """Stage time updates should refresh the shared playback clock for lyrics viewers."""
+def test_websocket_stage_time_update_broadcasts_to_queue_and_lyrics_viewers(client):
+    """Stage time updates should refresh the shared playback clock for queue and lyrics viewers."""
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         subscribe_websocket(sender, "stage")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "lyrics_viewer")
+        with client.websocket_connect("/api/queue/ws") as queue_receiver:
+            queue_receiver.receive_json()
+            subscribe_websocket(queue_receiver, "queue")
+            with client.websocket_connect("/api/queue/ws") as lyrics_receiver:
+                lyrics_receiver.receive_json()
+                subscribe_websocket(lyrics_receiver, "lyrics_viewer")
 
-            sender.send_json(
-                {
-                    "type": "stage_time_update",
-                    "data": {"current_time": 18.25, "is_paused": True, "source": "stage"},
-                    "timestamp": 123,
-                }
-            )
+                sender.send_json(
+                    {
+                        "type": "stage_time_update",
+                        "data": {"current_time": 18.25, "is_paused": True, "source": "stage"},
+                        "timestamp": 123,
+                    }
+                )
 
-            state_event = receiver.receive_json()
-            if state_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                state_event = receiver.receive_json()
-            assert state_event["type"] == "stage_time_update"
-            assert state_event["data"]["current_time"] == 18.25
-            assert state_event["data"]["is_paused"] is True
+                queue_event = queue_receiver.receive_json()
+                if queue_event["type"] == "ping":
+                    queue_receiver.send_json({"type": "pong"})
+                    queue_event = queue_receiver.receive_json()
+                assert queue_event["type"] == "stage_time_update"
+                assert queue_event["data"]["current_time"] == 18.25
+                assert queue_event["data"]["is_paused"] is True
+
+                lyrics_event = lyrics_receiver.receive_json()
+                if lyrics_event["type"] == "ping":
+                    lyrics_receiver.send_json({"type": "pong"})
+                    lyrics_event = lyrics_receiver.receive_json()
+                assert lyrics_event["type"] == "stage_time_update"
+                assert lyrics_event["data"]["current_time"] == 18.25
+                assert lyrics_event["data"]["is_paused"] is True
 
 
 def test_websocket_stage_time_update_requires_admin(client):

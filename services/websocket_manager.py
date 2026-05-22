@@ -14,7 +14,7 @@ class ConnectionManager:
 
     QUEUE_EVENT_ROLES = frozenset({"queue", "stage"})
     STAGE_STATE_ROLES = frozenset({"queue", "stage", "lyrics_viewer"})
-    STAGE_CLOCK_ROLES = frozenset({"stage", "lyrics_viewer"})
+    STAGE_CLOCK_ROLES = frozenset({"queue", "stage", "lyrics_viewer"})
 
     def __init__(self):
         self.active_connections: list[Any] = []

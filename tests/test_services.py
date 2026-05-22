@@ -1417,8 +1417,8 @@ async def test_connection_manager_presence_deduplicates_tabs_until_last_disconne
 
 
 @pytest.mark.asyncio
-async def test_connection_manager_stage_time_update_targets_stage_and_lyrics_only():
-    """Playback clock broadcasts should not fan out to generic queue viewers."""
+async def test_connection_manager_stage_time_update_targets_queue_stage_and_lyrics():
+    """Playback clock broadcasts should reach queue, stage, and lyrics viewers."""
     manager = ConnectionManager()
 
     class DummySocket:
@@ -1439,7 +1439,7 @@ async def test_connection_manager_stage_time_update_targets_stage_and_lyrics_onl
 
     await manager.set_stage_current_time(12.5, source="stage", is_paused=False)
 
-    assert not any(message["type"] == "stage_time_update" for message in queue_socket.messages)
+    assert any(message["type"] == "stage_time_update" for message in queue_socket.messages)
     assert any(message["type"] == "stage_time_update" for message in stage_socket.messages)
     assert any(message["type"] == "stage_time_update" for message in lyrics_socket.messages)
 

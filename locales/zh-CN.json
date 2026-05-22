@@ -339,6 +339,8 @@
   "stage.queue_count": "{count} 首排队中",
   "stage.queue_qr": "队列二维码",
   "stage.resync": "重新同步",
+  "stage.seek_forward_five": "快进 5 秒",
+  "stage.seek_forward_short": "+5",
   "stage.skip_failed": "跳过失败",
   "stage.title": "舞台",
   "stage.toggle_guide_vocals": "切换引导人声",

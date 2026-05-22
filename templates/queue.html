@@ -98,7 +98,7 @@
                     </div>
                 </summary>
                 <div class="pt-4">
-                    <div class="grid grid-cols-3 gap-2 sm:gap-2.5">
+                    <div class="grid grid-cols-4 gap-2 sm:gap-2.5">
                         <button
                             id="stage-remote-play-pause-btn"
                             class="col-span-1 inline-flex min-w-0 items-center justify-center gap-2 rounded-full bg-primary px-2.5 py-2 text-[11px] font-bold text-on-primary transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
@@ -124,9 +124,19 @@
                             <span class="material-symbols-outlined text-base">sync</span>
                             {{ t('stage.resync') }}
                         </button>
+                        <button
+                            id="stage-remote-seek-forward-btn"
+                            class="col-span-1 inline-flex min-w-0 items-center justify-center gap-2 rounded-full bg-surface-container-high px-2.5 py-2 text-[11px] font-bold text-on-surface transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+                            aria-label="{{ t('stage.seek_forward_five') }}"
+                            title="{{ t('stage.seek_forward_five') }}"
+                            disabled
+                        >
+                            <span class="material-symbols-outlined text-base">fast_forward</span>
+                            <span>{{ t('stage.seek_forward_short') }}</span>
+                        </button>
                         <div
                             id="stage-remote-vocals-control"
-                            class="col-span-2 row-start-2 grid min-h-11 w-full grid-cols-[2.25rem_minmax(0,1fr)_2.75rem] items-center gap-2 rounded-full border border-outline-variant/20 bg-surface-container-high px-1.5 py-1 shadow-inner shadow-black/10 sm:min-h-12 sm:grid-cols-[2.5rem_minmax(0,1fr)_3rem] sm:px-2"
+                            class="col-span-3 row-start-2 grid min-h-11 w-full grid-cols-[2.25rem_minmax(0,1fr)_2.75rem] items-center gap-2 rounded-full border border-outline-variant/20 bg-surface-container-high px-1.5 py-1 shadow-inner shadow-black/10 sm:min-h-12 sm:grid-cols-[2.5rem_minmax(0,1fr)_3rem] sm:px-2"
                         >
                             <button
                                 id="stage-remote-vocals-toggle-btn"
@@ -156,7 +166,7 @@
 
                         <button
                             id="stage-remote-lyrics-toggle-btn"
-                            class="col-start-3 row-start-2 inline-flex min-h-11 justify-self-end items-center justify-center gap-2 rounded-full bg-surface-container-high px-2.5 py-2 text-[11px] font-bold text-on-surface transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
+                            class="col-start-4 row-start-2 inline-flex min-h-11 justify-self-end items-center justify-center gap-2 rounded-full bg-surface-container-high px-2.5 py-2 text-[11px] font-bold text-on-surface transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:text-sm"
                             disabled
                         >
                             <span id="stage-remote-lyrics-toggle-icon" class="material-symbols-outlined text-base">subtitles</span>
