@@ -4,13 +4,79 @@
 {% block header_icon %}folder_open{% endblock %}
 {% block header_title %}{{ t('media.library') }}{% endblock %}
 
+{% block head %}
+<style>
+    @media (min-width: 1024px) and (max-width: 1280px) {
+        #media-table {
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        #media-table [data-field="title"] {
+            max-width: clamp(12ch, 16vw, 18ch);
+        }
+
+        #media-table th:nth-child(1),
+        #media-table td:nth-child(1) {
+            width: auto;
+        }
+
+        #media-table th:nth-child(2),
+        #media-table td:nth-child(2) {
+            width: 9rem;
+        }
+
+        #media-table th:nth-child(3),
+        #media-table td:nth-child(3) {
+            width: 14rem;
+        }
+    }
+
+    @media (min-width: 921px) and (max-width: 1023px) {
+        #media-table {
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        #media-table [data-field="title"] {
+            max-width: clamp(11ch, 18vw, 20ch);
+        }
+
+        #media-table th:nth-child(2),
+        #media-table td:nth-child(2) {
+            width: 9rem;
+        }
+
+        #media-table th:nth-child(3),
+        #media-table td:nth-child(3) {
+            width: 14rem;
+        }
+
+        #media-table td:last-child > div {
+            justify-content: flex-end;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        #media-list-scroll {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        #media-list-scroll::-webkit-scrollbar {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <main
-    class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-12 pt-28 sm:px-6 lg:px-8"
+    class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-12 pt-24 sm:px-6 lg:h-[calc(100dvh-4rem)] lg:overflow-hidden lg:px-8 lg:pb-0"
     data-is-admin="{{ 'true' if is_admin else 'false' }}"
 >
-    <div class="flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(18rem,23rem)_minmax(0,1fr)] lg:items-start lg:gap-6">
-        <div class="flex min-w-0 flex-col gap-6 lg:self-start">
+    <div class="flex flex-col gap-4 lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[minmax(18rem,23rem)_minmax(0,1fr)] lg:items-start lg:gap-6">
+        <div class="flex min-w-0 flex-col gap-3 lg:self-start">
             <section class="glass-card rounded-2xl border border-white/10 p-3 sm:p-4">
                 <div class="flex flex-col gap-4">
                     <div class="max-w-2xl">
@@ -51,8 +117,8 @@
                 </div>
             </section>
 
-            <section class="glass-card rounded-2xl border border-white/10 p-4 sm:p-6">
-                <div class="flex flex-col gap-3 lg:flex-col xl:flex-row xl:items-center xl:justify-between">
+            <section class="glass-card rounded-2xl border border-white/10 p-3">
+                <div class="flex flex-col gap-3">
                     <div class="relative xl:max-w-md xl:flex-1">
                         <span class="pointer-events-none material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
                         <input
@@ -72,7 +138,7 @@
             </section>
         </div>
 
-        <section class="min-w-0">
+        <section class="min-w-0 lg:flex lg:h-full lg:min-h-0 lg:flex-col">
             <div class="space-y-3 md:hidden" id="media-cards-list">
                 {% for item in media_items %}
                 <article
@@ -133,75 +199,77 @@
                 {% endfor %}
             </div>
 
-            <div class="hidden overflow-x-auto rounded-2xl border border-white/10 bg-surface-container-low md:block">
-                <table class="min-w-[48rem] divide-y divide-white/10 xl:min-w-full" id="media-table">
-                    <thead class="bg-surface-container-highest/60">
-                        <tr class="text-left text-[11px] font-bold uppercase tracking-[0.16em] text-on-surface-variant">
-                            <th class="px-4 py-3">{{ t('media.title_artist') }}</th>
-                            <th class="px-4 py-3">{{ t('media.capabilities') }}</th>
-                            <th class="px-4 py-3">{{ t('common.actions') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-white/10" id="media-table-body">
-                        {% for item in media_items %}
-                        <tr
-                            class="media-item-row"
-                            data-item-id="{{ item.id }}"
-                            data-title="{{ item.title|lower }}"
-                            data-artist="{{ (item.artist or '')|lower }}"
-                            data-media-path="{{ item.media_path }}"
-                            data-thumbnail="{{ item.thumbnail|public_url if item.thumbnail else app_url('/static/placeholder.png') }}"
-                            data-has-multi-track="{{ 'true' if item.has_multi_track else 'false' }}"
-                            data-has-lyrics="{{ 'true' if item.has_lyrics else 'false' }}"
-                            data-missing="{{ 'true' if item.status == 'missing' else 'false' }}"
-                        >
-                            <td class="px-4 py-3">
-                                <div class="flex items-center gap-3">
-                                    <div class="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-surface-container-high">
-                                        {% if item.thumbnail %}
-                                        <img src="{{ item.thumbnail|public_url }}" alt="{{ item.title }} {{ t('media.cover') }}" class="h-full w-full object-cover" loading="lazy" decoding="async" />
-                                        {% else %}
-                                        <div class="flex h-full w-full items-center justify-center">
-                                            <span class="material-symbols-outlined text-on-surface-variant">music_note</span>
+            <div class="hidden min-h-0 flex-1 flex-col rounded-2xl border border-white/10 bg-surface-container-low md:flex lg:overflow-hidden">
+                <div id="media-list-scroll" class="min-h-0 flex-1 overflow-x-auto lg:overflow-y-auto lg:overscroll-contain lg:pr-2">
+                    <table class="min-w-[48rem] divide-y divide-white/10 xl:min-w-full" id="media-table">
+                        <thead class="bg-surface-container-highest/60">
+                            <tr class="text-left text-[11px] font-bold uppercase tracking-[0.16em] text-on-surface-variant">
+                                <th class="px-4 py-3">{{ t('media.title_artist') }}</th>
+                                <th class="px-4 py-3">{{ t('media.capabilities') }}</th>
+                                <th class="px-4 py-3">{{ t('common.actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/10" id="media-table-body">
+                            {% for item in media_items %}
+                            <tr
+                                class="media-item-row"
+                                data-item-id="{{ item.id }}"
+                                data-title="{{ item.title|lower }}"
+                                data-artist="{{ (item.artist or '')|lower }}"
+                                data-media-path="{{ item.media_path }}"
+                                data-thumbnail="{{ item.thumbnail|public_url if item.thumbnail else app_url('/static/placeholder.png') }}"
+                                data-has-multi-track="{{ 'true' if item.has_multi_track else 'false' }}"
+                                data-has-lyrics="{{ 'true' if item.has_lyrics else 'false' }}"
+                                data-missing="{{ 'true' if item.status == 'missing' else 'false' }}"
+                            >
+                                <td class="px-4 py-3">
+                                    <div class="flex items-center gap-3">
+                                        <div class="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-surface-container-high">
+                                            {% if item.thumbnail %}
+                                            <img src="{{ item.thumbnail|public_url }}" alt="{{ item.title }} {{ t('media.cover') }}" class="h-full w-full object-cover" loading="lazy" decoding="async" />
+                                            {% else %}
+                                            <div class="flex h-full w-full items-center justify-center">
+                                                <span class="material-symbols-outlined text-on-surface-variant">music_note</span>
+                                            </div>
+                                            {% endif %}
                                         </div>
+                                        <div class="min-w-0">
+                                            <p data-field="title" class="truncate text-sm font-bold text-on-surface">{{ item.title }}</p>
+                                            <p data-field="artist" class="truncate text-xs text-on-surface-variant">{{ item.artist or t('common.unknown_artist') }}</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <div class="flex flex-wrap gap-1.5">
+                                        {% if item.status == "missing" %}
+                                        <span class="inline-flex items-center rounded-full border border-error/40 bg-error/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-error">{{ t('common.missing') }}</span>
+                                        {% elif item.has_multi_track or item.has_lyrics %}
+                                        <span class="rounded-full border border-secondary/30 bg-secondary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-secondary {% if not item.has_multi_track %}hidden{% endif %}">{{ t('common.multi_track') }}</span>
+                                        <span class="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary {% if not item.has_lyrics %}hidden{% endif %}">{{ t('common.lyrics') }}</span>
+                                        {% else %}
+                                        <span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('common.basic') }}</span>
                                         {% endif %}
                                     </div>
-                                    <div class="min-w-0">
-                                        <p data-field="title" class="truncate text-sm font-bold text-on-surface">{{ item.title }}</p>
-                                        <p data-field="artist" class="truncate text-xs text-on-surface-variant">{{ item.artist or t('common.unknown_artist') }}</p>
+                                </td>
+                                <td class="px-4 py-3">
+                                    <div class="flex flex-wrap gap-1.5 md:flex-nowrap">
+                                        <button type="button" data-action="add-to-queue" {% if item.status == "missing" %}disabled{% endif %} class="whitespace-nowrap rounded-full bg-primary px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-primary {% if item.status == 'missing' %}cursor-not-allowed opacity-60{% endif %}">{{ t('common.add_to_queue') }}</button>
+                                        {% if is_admin and item.status != "missing" %}
+                                        <button type="button" data-action="edit" class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-surface">
+                                            <span class="material-symbols-outlined text-[14px]">edit</span>
+                                            {{ t('common.edit') }}
+                                        </button>
+                                        {% endif %}
+                                        {% if is_admin %}
+                                        <button type="button" data-action="delete" class="whitespace-nowrap rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-error">{{ t('common.delete') }}</button>
+                                        {% endif %}
                                     </div>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">
-                                <div class="flex flex-wrap gap-1.5">
-                                    {% if item.status == "missing" %}
-                                    <span class="inline-flex items-center rounded-full border border-error/40 bg-error/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-error">{{ t('common.missing') }}</span>
-                                    {% elif item.has_multi_track or item.has_lyrics %}
-                                    <span class="rounded-full border border-secondary/30 bg-secondary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-secondary {% if not item.has_multi_track %}hidden{% endif %}">{{ t('common.multi_track') }}</span>
-                                    <span class="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-primary {% if not item.has_lyrics %}hidden{% endif %}">{{ t('common.lyrics') }}</span>
-                                    {% else %}
-                                    <span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('common.basic') }}</span>
-                                    {% endif %}
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">
-                                <div class="flex flex-wrap gap-1.5 md:flex-nowrap">
-                                    <button type="button" data-action="add-to-queue" {% if item.status == "missing" %}disabled{% endif %} class="whitespace-nowrap rounded-full bg-primary px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-primary {% if item.status == 'missing' %}cursor-not-allowed opacity-60{% endif %}">{{ t('common.add_to_queue') }}</button>
-                                    {% if is_admin and item.status != "missing" %}
-                                    <button type="button" data-action="edit" class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-surface">
-                                        <span class="material-symbols-outlined text-[14px]">edit</span>
-                                        {{ t('common.edit') }}
-                                    </button>
-                                    {% endif %}
-                                    {% if is_admin %}
-                                    <button type="button" data-action="delete" class="whitespace-nowrap rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-error">{{ t('common.delete') }}</button>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
             <p id="media-empty-state" class="hidden rounded-xl border border-white/10 bg-surface-container-low px-4 py-5 text-center text-sm text-on-surface-variant">{{ t('media.empty_filter') }}</p>
         </section>
