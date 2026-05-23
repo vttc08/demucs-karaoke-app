@@ -798,34 +798,6 @@ async function deleteItem(itemNode) {
     }
 }
 
-async function startKaraokeTask(itemNode) {
-    if (!isAdmin) {
-        return;
-    }
-    const itemId = itemNode.dataset.itemId;
-    const title = getItemFieldText(itemNode, "title") || t("common.track_title");
-    setButtonsForAction(itemId, "make-karaoke", { disabled: true, label: t("media.processing") });
-    try {
-        const response = await fetch(appUrl(`/api/media/${Number(itemId)}/karaoke`), {
-            method: "POST",
-        });
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || t("media.karaoke_task_failed"));
-        }
-        const payload = await response.json();
-        showToast(t("media.karaoke_task_started", { title }));
-        await refreshTaskList();
-        if (payload.task_id) {
-            openTaskLog(payload.task_id);
-        }
-    } catch (error) {
-        const message = error instanceof Error ? error.message : t("media.karaoke_task_failed");
-        showToast(message);
-        setButtonsForAction(itemId, "make-karaoke", { disabled: false, label: t("media.make_karaoke") });
-    }
-}
-
 async function autoRenameMediaItem(actionButton) {
     if (!isAdmin || !editTitleInput || !editArtistInput) {
         return;
@@ -1009,8 +981,6 @@ function handleActionClick(event) {
         deleteItem(itemNode);
     } else if (action === "add-to-queue") {
         addToQueue(itemNode);
-    } else if (action === "make-karaoke") {
-        startKaraokeTask(itemNode);
     }
 }
 
