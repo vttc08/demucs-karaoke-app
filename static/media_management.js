@@ -73,6 +73,7 @@ let activeTaskId = null;
 let taskSummarySource = null;
 let taskDetailSource = null;
 let currentTasks = [];
+let taskRefreshTimer = null;
 
 function isMobile() {
     return window.innerWidth < 640;
@@ -298,6 +299,106 @@ async function refreshTaskList() {
     }
 }
 
+function updateTaskLiveSnapshot(task, snapshot) {
+    if (!task || !snapshot) {
+        return false;
+    }
+    const nextProgress = snapshot.progress_percent;
+    const nextLabel = snapshot.progress_label;
+    const nextSequence = snapshot.sequence ?? snapshot.event_sequence ?? task.live?.event_sequence ?? 0;
+    const currentProgress = task.live?.progress_percent;
+    const currentLabel = task.live?.progress_label;
+    const currentSequence = task.live?.event_sequence ?? 0;
+    const statusChanged = snapshot.status !== undefined && snapshot.status !== null && task.status !== snapshot.status;
+    const stageChanged = snapshot.stage !== undefined && snapshot.stage !== null && task.stage !== snapshot.stage;
+    const liveChanged = currentProgress !== nextProgress || currentLabel !== nextLabel || currentSequence !== nextSequence;
+
+    if (!statusChanged && !stageChanged && !liveChanged) {
+        return false;
+    }
+
+    task.live = {
+        ...(task.live || {}),
+        progress_percent: nextProgress ?? null,
+        progress_label: nextLabel ?? null,
+        event_sequence: nextSequence,
+        event_count: task.live?.event_count ?? 0,
+    };
+    if (statusChanged) {
+        task.status = snapshot.status;
+    }
+    if (stageChanged) {
+        task.stage = snapshot.stage;
+    }
+    return true;
+}
+
+function scheduleTaskListRefresh(delayMs = 250) {
+    if (!isAdmin || !taskList) {
+        return;
+    }
+    if (taskRefreshTimer) {
+        window.clearTimeout(taskRefreshTimer);
+    }
+    taskRefreshTimer = window.setTimeout(() => {
+        taskRefreshTimer = null;
+        refreshTaskList();
+    }, delayMs);
+}
+
+function applyTaskSummarySnapshot(snapshots) {
+    if (!Array.isArray(snapshots) || !currentTasks.length) {
+        if (Array.isArray(snapshots) && snapshots.length) {
+            scheduleTaskListRefresh(0);
+        }
+        return;
+    }
+    const snapshotById = new Map(
+        snapshots
+            .filter((snapshot) => snapshot && snapshot.task_id !== undefined && snapshot.task_id !== null)
+            .map((snapshot) => [Number(snapshot.task_id), snapshot])
+    );
+    let changed = false;
+    currentTasks.forEach((task) => {
+        const snapshot = snapshotById.get(Number(task.id));
+        if (snapshot && updateTaskLiveSnapshot(task, snapshot)) {
+            changed = true;
+        }
+    });
+    if (changed) {
+        renderTaskList(currentTasks);
+    }
+    if (snapshots.some((snapshot) => !currentTasks.some((task) => Number(task.id) === Number(snapshot.task_id)))) {
+        scheduleTaskListRefresh(0);
+    }
+}
+
+function applyTaskStreamEvent(payload) {
+    if (!payload || typeof payload !== "object") {
+        return;
+    }
+    if (payload.event_type === "snapshot" && Array.isArray(payload.tasks)) {
+        applyTaskSummarySnapshot(payload.tasks);
+        return;
+    }
+
+    const taskId = Number(payload.task_id);
+    if (!Number.isFinite(taskId)) {
+        return;
+    }
+    const task = currentTasks.find((entry) => Number(entry.id) === taskId);
+    if (!task) {
+        scheduleTaskListRefresh(0);
+        return;
+    }
+    if (updateTaskLiveSnapshot(task, payload)) {
+        renderTaskList(currentTasks);
+    }
+    if (["done", "error"].includes(payload.event_type)) {
+        scheduleTaskListRefresh();
+    }
+}
+
 function appendTaskLogLine(text) {
     if (!taskLogOutput) {
         return;
@@ -343,8 +444,13 @@ function connectTaskStream() {
         taskSummarySource.close();
     }
     taskSummarySource = new EventSource(appUrl("/api/tasks/stream"));
-    taskSummarySource.onmessage = async () => {
-        await refreshTaskList();
+    taskSummarySource.onmessage = (event) => {
+        try {
+            applyTaskStreamEvent(JSON.parse(event.data));
+        } catch (error) {
+            console.warn("Task summary parse failed:", error);
+            scheduleTaskListRefresh();
+        }
     };
     taskSummarySource.onerror = () => {
         window.setTimeout(() => {

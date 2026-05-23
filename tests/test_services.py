@@ -20,7 +20,9 @@ from services.media_library_maintenance_service import (
     MediaItemRenameConflictError,
     MediaLibraryMaintenanceService,
 )
+from services.processing_task_service import processing_task_service
 from services.runtime_settings_service import RuntimeSettingsService
+from services.task_stream_service import task_stream_manager
 from services.websocket_manager import ConnectionManager
 from services.media_library_sync_service import MediaLibrarySyncService
 from services.media_library_service import MediaLibraryService
@@ -34,6 +36,8 @@ from models import (
     DemucsHealthResponse,
     DemucsResponse,
     MediaItem,
+    ProcessingTask,
+    ProcessingTaskStatus,
     QueueItem,
     QueueItemCreate,
     RuntimeSetting,
@@ -1322,6 +1326,157 @@ async def test_queue_service_update_status_async_promotes_ready_item_when_idle(d
         msg["type"] == "current_item_changed" and msg["data"]["id"] == created.id
         for msg in socket.messages
     )
+
+
+@pytest.mark.asyncio
+async def test_processing_task_emit_progress_broadcasts_queue_item_update(db_session):
+    """Live task progress should push queue updates without waiting for polling."""
+    service = QueueService()
+    created = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="progress-live", title="Live Progress", is_karaoke=False),
+    )
+    task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="youtube",
+        target_queue_item_id=created.id,
+        target_media_item_id=created.media_id,
+        status=ProcessingTaskStatus.DOWNLOADING.value,
+        stage="download",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self):
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    socket = DummySocket()
+    manager.active_connections.append(socket)
+    manager._connection_context[socket] = {"role": "queue"}
+
+    with (
+        patch("services.websocket_manager.manager", manager),
+        patch("services.processing_task_service.SessionLocal", TestingSessionLocal),
+    ):
+        await processing_task_service.emit_progress(
+            task.id,
+            progress_percent=42,
+            progress_label="Downloading media",
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+
+    updated_events = [msg for msg in socket.messages if msg["type"] == "queue_item_updated"]
+    assert len(updated_events) == 1
+    assert updated_events[0]["data"]["id"] == created.id
+    assert updated_events[0]["data"]["processing_progress"] == 42
+    assert updated_events[0]["data"]["processing_label"] == "Downloading media"
+
+    await task_stream_manager.clear_task(task.id)
+
+
+def test_karaoke_progress_callback_throttles_to_about_once_per_second():
+    """yt-dlp progress callbacks should not emit queue updates every tick."""
+    service = KaraokeService()
+    emitted = []
+    fake_future = Mock()
+    fake_future.result.return_value = None
+
+    class FakeLoop:
+        def __init__(self):
+            self.current_time = 0.0
+
+        def time(self):
+            return self.current_time
+
+    loop = FakeLoop()
+
+    with patch("services.karaoke_service.asyncio.run_coroutine_threadsafe") as mock_run:
+        def capture(coro, target_loop):
+            emitted.append(coro)
+            coro.close()
+            return fake_future
+
+        mock_run.side_effect = capture
+        callback = service._progress_callback(
+            loop,
+            task_id=123,
+            start_percent=0,
+            end_percent=100,
+            label="Downloading media",
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+
+        callback(1, "[download][karaoke-progress] 1.0")
+        callback(2, "[download][karaoke-progress] 2.0")
+        loop.current_time = 0.5
+        callback(3, "[download][karaoke-progress] 3.0")
+        loop.current_time = 1.1
+        callback(4, "[download][karaoke-progress] 4.0")
+        loop.current_time = 1.2
+        callback(4, "[download][karaoke-progress] 4.0")
+        loop.current_time = 1.3
+        callback(100, "[download][karaoke-progress] 100.0")
+
+    assert mock_run.call_count == 3
+    assert len(emitted) == 3
+
+
+@pytest.mark.asyncio
+async def test_processing_task_emit_log_does_not_broadcast_queue_item_update(db_session):
+    """Log lines should stay in the task stream and not spam queue websocket updates."""
+    service = QueueService()
+    created = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="log-only", title="Log Only", is_karaoke=False),
+    )
+    task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="youtube",
+        target_queue_item_id=created.id,
+        target_media_item_id=created.media_id,
+        status=ProcessingTaskStatus.DOWNLOADING.value,
+        stage="download",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self):
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    socket = DummySocket()
+    manager.active_connections.append(socket)
+    manager._connection_context[socket] = {"role": "queue"}
+
+    with (
+        patch("services.websocket_manager.manager", manager),
+        patch("services.processing_task_service.SessionLocal", TestingSessionLocal),
+    ):
+        await processing_task_service.emit_log(
+            task.id,
+            message="[download][karaoke-progress] 12.0",
+            stream="stdout",
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+
+    assert not any(msg["type"] == "queue_item_updated" for msg in socket.messages)
+    await task_stream_manager.clear_task(task.id)
 
 
 @pytest.mark.asyncio

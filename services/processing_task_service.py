@@ -275,6 +275,7 @@ class ProcessingTaskService:
             progress_label=progress_label,
             stream="system",
         )
+        await self._broadcast_live_queue_progress(task_id)
 
     async def emit_log(
         self,
@@ -386,6 +387,30 @@ class ProcessingTaskService:
             promoted = queue_service.promote_next_ready_if_idle(db)
             if promoted:
                 await manager.broadcast_current_item_changed(promoted.id, None)
+
+    async def _broadcast_live_queue_progress(self, task_id: int):
+        """Push queue item progress updates without waiting for the polling loop."""
+        db = SessionLocal()
+        try:
+            task = self.get_task(db, task_id)
+            if task is None or task.target_queue_item_id is None:
+                return
+
+            queue_item = (
+                db.query(QueueItem)
+                .filter(QueueItem.id == task.target_queue_item_id)
+                .first()
+            )
+            if queue_item is None:
+                return
+
+            from services.queue_service import QueueService
+            from services.websocket_manager import manager
+
+            response = QueueService()._to_response(queue_item)
+            await manager.broadcast_queue_item_updated(response.model_dump(mode="json"))
+        finally:
+            db.close()
 
 
 class TaskExecutionCoordinator:

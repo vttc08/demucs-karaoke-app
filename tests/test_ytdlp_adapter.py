@@ -103,6 +103,44 @@ def test_download_video_with_audio_falls_back_to_best(monkeypatch, tmp_path):
     assert "-f" not in calls[-1]
 
 
+def test_streaming_download_adds_newline_for_live_progress(monkeypatch, tmp_path):
+    """Streaming downloads should force line-delimited yt-dlp progress output."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "stream123"
+    expected_output = tmp_path / f"{youtube_id}.mp4"
+    captured_cmd = {}
+
+    def fake_streaming_download(cmd, *, progress_callback=None, log_callback=None):
+        captured_cmd["cmd"] = cmd
+        expected_output.write_bytes(b"video")
+        if progress_callback:
+            progress_callback(42, "[download] 42.0%")
+
+    monkeypatch.setattr(adapter, "_run_streaming_download", fake_streaming_download)
+
+    progress_events = []
+    result = adapter.download_video_with_progress(
+        youtube_id,
+        tmp_path,
+        progress_callback=lambda percent, line: progress_events.append((percent, line)),
+    )
+
+    assert result == expected_output
+    assert "--newline" in captured_cmd["cmd"]
+    assert "--progress" in captured_cmd["cmd"]
+    assert "--no-colors" in captured_cmd["cmd"]
+    assert "--progress-template" in captured_cmd["cmd"]
+    assert "[download][karaoke-progress]" in captured_cmd["cmd"][captured_cmd["cmd"].index("--progress-template") + 1]
+    assert progress_events == [(42, "[download] 42.0%")]
+
+
+def test_parse_progress_line_prefers_structured_marker():
+    """Structured yt-dlp progress lines should parse into bounded integer percentages."""
+    assert YtDlpAdapter._parse_progress_line("[download][karaoke-progress] 42.500000") == 42
+    assert YtDlpAdapter._parse_progress_line("[download] 87.1% of 12.3MiB") == 87
+    assert YtDlpAdapter._parse_progress_line("some unrelated output") is None
+
+
 def test_download_audio_default_fallback_can_return_mp4(monkeypatch, tmp_path):
     """Audio fallback should accept container outputs when yt-dlp default picks mp4."""
     adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")

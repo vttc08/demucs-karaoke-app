@@ -527,14 +527,30 @@ class KaraokeService:
         status: str,
         stage: str,
     ):
+        last_emit_time = float("-inf")
+        last_emit_percent: int | None = None
+
         def callback(percent: int, raw_line: str):
+            nonlocal last_emit_time, last_emit_percent
             mapped = start_percent
             if end_percent > start_percent:
                 mapped = start_percent + int((percent / 100.0) * (end_percent - start_percent))
+            mapped = max(0, min(100, mapped))
+            now = loop.time()
+            if (
+                last_emit_percent is not None
+                and mapped != 100
+                and mapped == last_emit_percent
+            ):
+                return
+            if last_emit_percent is not None and mapped != 100 and (now - last_emit_time) < 1.0:
+                return
+            last_emit_time = now
+            last_emit_percent = mapped
             future = asyncio.run_coroutine_threadsafe(
                 processing_task_service.emit_progress(
                     task_id,
-                    progress_percent=max(0, min(100, mapped)),
+                    progress_percent=mapped,
                     progress_label=label,
                     status=status,
                     stage=stage,

@@ -9,6 +9,7 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 _DOWNLOAD_PROGRESS_RE = re.compile(r"\[download\]\s+(\d+(?:\.\d+)?)%")
+_STRUCTURED_PROGRESS_RE = re.compile(r"\[download\]\[karaoke-progress\]\s+(\d+(?:\.\d+)?)")
 
 
 class YtDlpAdapter:
@@ -394,6 +395,18 @@ class YtDlpAdapter:
                 cmd[2:2] = ["--extractor-args", f"youtube:player_client={client}"]
             if merge_mp4:
                 cmd.extend(["--merge-output-format", "mp4"])
+            if progress_callback or log_callback:
+                # yt-dlp writes progress updates with carriage returns by default,
+                # which line-based readers only see after the process exits.
+                cmd.extend(
+                    [
+                        "--newline",
+                        "--progress",
+                        "--no-colors",
+                        "--progress-template",
+                        "download:[download][karaoke-progress] %(progress._percent)f",
+                    ]
+                )
             cmd.extend(self._proxy_args())
 
             try:
@@ -487,9 +500,9 @@ class YtDlpAdapter:
                 if log_callback:
                     stream_name = "stderr" if line.startswith(("ERROR:", "WARNING:")) else "stdout"
                     log_callback(stream_name, line)
-                match = _DOWNLOAD_PROGRESS_RE.search(line)
+                match = self._parse_progress_line(line)
                 if match and progress_callback:
-                    progress_callback(int(float(match.group(1))), line)
+                    progress_callback(match, line)
 
         return_code = process.wait(timeout=300)
         if return_code != 0:
@@ -518,6 +531,19 @@ class YtDlpAdapter:
 
         # Return primary expected path for clearer error messages upstream.
         return exact_candidates[0]
+
+    @staticmethod
+    def _parse_progress_line(line: str) -> int | None:
+        """Return parsed yt-dlp progress percent from a console line."""
+        structured_match = _STRUCTURED_PROGRESS_RE.search(line)
+        if structured_match:
+            return max(0, min(100, int(float(structured_match.group(1)))))
+
+        fallback_match = _DOWNLOAD_PROGRESS_RE.search(line)
+        if fallback_match:
+            return max(0, min(100, int(float(fallback_match.group(1)))))
+
+        return None
 
     @staticmethod
     def _decode_stderr(stderr: Any) -> str:

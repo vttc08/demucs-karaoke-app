@@ -341,6 +341,14 @@ def test_tasks_api_lists_active_tasks(client):
     assert payload[0]["status"] == "pending"
 
 
+def test_tasks_stream_route_returns_sse_snapshot(client):
+    """Task summary stream should resolve to the SSE route, not the task-id route."""
+    response = client.get("/api/tasks/stream")
+
+    assert response.status_code in {401, 403}
+    assert response.status_code != 422
+
+
 def test_add_to_queue_uses_guest_cookies_for_requester(client):
     """Queue add should expose requester label from guest cookies."""
     client.cookies.set("karaoke_guest_id", "guest-123")

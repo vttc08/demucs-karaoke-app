@@ -100,6 +100,10 @@ let queuePresenceUsers = [];
 let queueAsEnabled = false;
 let queueAsModalResolver = null;
 let queueConfigSelectedQueueAsGuestId = null;
+let currentQueueState = [];
+let refreshInterval = null;
+let queueRefreshPromise = null;
+let queueRefreshPending = false;
 
 function getCookieValue(name) {
     const match = document.cookie
@@ -1187,9 +1191,7 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
         button.classList.remove('bg-primary', 'text-on-primary');
         button.classList.add('bg-secondary', 'text-white');
 
-        // Refresh queue
         setTimeout(() => {
-            refreshQueue();
             // Clear search results after successful add
             searchInput.value = '';
             searchResults.innerHTML = '';
@@ -1325,56 +1327,34 @@ async function refreshQueue(force = false) {
         searchResults.children.length > 0)) {
         return;
     }
-    
-    try {
-        const response = await fetch(`${API_BASE}/api/queue/`);
-        const serverQueue = await response.json();
-        syncStageControlAvailability(serverQueue);
-        syncStageVocalsAvailability(serverQueue);
-        syncStageLyricsAvailability(serverQueue);
-        
-        // Get current queue from DOM
-        const currentQueueElements = document.querySelectorAll('#queue-list .queue-item');
-        const currentQueueIds = Array.from(currentQueueElements).map(el => el.dataset.id);
-        const serverQueueIds = serverQueue.map(item => item.id.toString());
-        
-        // Only reload if queue actually changed (items added, removed, or status changed)
-        const queueChanged = currentQueueIds.length !== serverQueueIds.length ||
-                            !currentQueueIds.every((id, index) => id === serverQueueIds[index]);
-        
-        if (queueChanged) {
-            // Gentle refresh - just update queue section instead of full page reload
-            updateQueueDisplay(serverQueue);
-        } else {
-            // Check for status changes
-            let statusChanged = false;
-            serverQueue.forEach(item => {
-                const element = document.querySelector(`[data-id="${item.id}"]`);
-                if (!element) {
-                    return;
-                }
-                const currentProgress = element.dataset.processingProgress || '';
-                const nextProgress = item.processing_progress === null || item.processing_progress === undefined
-                    ? ''
-                    : String(item.processing_progress);
-                const currentLabel = element.dataset.processingLabel || '';
-                const nextLabel = item.processing_label || '';
-                if (
-                    element.dataset.status !== item.status ||
-                    currentProgress !== nextProgress ||
-                    currentLabel !== nextLabel
-                ) {
-                    statusChanged = true;
-                }
-            });
-            
-            if (statusChanged) {
-                updateQueueDisplay(serverQueue);
+
+    if (queueRefreshPromise) {
+        queueRefreshPending = queueRefreshPending || force;
+        return queueRefreshPromise;
+    }
+
+    queueRefreshPromise = (async () => {
+        try {
+            const response = await fetch(`${API_BASE}/api/queue/`);
+            if (!response.ok) {
+                throw new Error(`Queue refresh failed: ${response.status}`);
+            }
+            const serverQueue = await response.json();
+            applyQueueState(serverQueue);
+        } catch (error) {
+            console.error('Refresh queue error:', error);
+        } finally {
+            queueRefreshPromise = null;
+            if (queueRefreshPending) {
+                queueRefreshPending = false;
+                window.setTimeout(() => {
+                    refreshQueue(true);
+                }, 0);
             }
         }
-    } catch (error) {
-        console.error('Refresh queue error:', error);
-    }
+    })();
+
+    return queueRefreshPromise;
 }
 
 function updateQueueDisplay(queue) {
@@ -1531,6 +1511,96 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function normalizeQueueItem(item) {
+    if (!item || typeof item !== 'object') {
+        return null;
+    }
+    return {
+        ...item,
+        id: Number(item.id),
+        position: Number.isFinite(Number(item.position)) ? Number(item.position) : 0,
+    };
+}
+
+function sortQueueItems(queue) {
+    return [...queue].sort((a, b) => {
+        const positionDelta = Number(a?.position || 0) - Number(b?.position || 0);
+        if (positionDelta !== 0) {
+            return positionDelta;
+        }
+        return Number(a?.id || 0) - Number(b?.id || 0);
+    });
+}
+
+function applyQueueState(queue, { render = true } = {}) {
+    const normalized = Array.isArray(queue)
+        ? sortQueueItems(queue.map(normalizeQueueItem).filter(Boolean))
+        : [];
+    currentQueueState = normalized;
+    syncStageControlAvailability(currentQueueState);
+    syncStageVocalsAvailability(currentQueueState);
+    syncStageLyricsAvailability(currentQueueState);
+    if (render) {
+        updateQueueDisplay(currentQueueState);
+    }
+}
+
+function updateQueueState(mutator, options = {}) {
+    const snapshot = sortQueueItems(currentQueueState.map((item) => ({ ...item })));
+    const nextQueue = mutator(snapshot);
+    applyQueueState(Array.isArray(nextQueue) ? nextQueue : snapshot, options);
+}
+
+function upsertQueueItemState(item) {
+    const normalized = normalizeQueueItem(item);
+    if (!normalized) {
+        return false;
+    }
+    updateQueueState((queue) => {
+        const index = queue.findIndex((entry) => entry.id === normalized.id);
+        if (index >= 0) {
+            queue[index] = { ...queue[index], ...normalized };
+        } else {
+            queue.push(normalized);
+        }
+        return queue;
+    });
+    return true;
+}
+
+function removeQueueItemState(itemId) {
+    const normalizedId = Number(itemId);
+    if (!Number.isFinite(normalizedId)) {
+        return false;
+    }
+    updateQueueState((queue) => queue.filter((item) => item.id !== normalizedId));
+    return true;
+}
+
+function handleCurrentItemChanged(eventDetail) {
+    const currentId = Number(eventDetail?.id);
+    const previousId = Number(eventDetail?.previous_id);
+    const hasCurrentId = Number.isFinite(currentId) && currentId > 0;
+    const hasPreviousId = Number.isFinite(previousId) && previousId > 0;
+
+    if (hasCurrentId && !currentQueueState.some((item) => item.id === currentId)) {
+        refreshQueue(true);
+        return;
+    }
+
+    updateQueueState((queue) => queue
+        .filter((item) => !(hasPreviousId && item.id === previousId && item.id !== currentId))
+        .map((item) => {
+            if (hasCurrentId && item.id === currentId) {
+                return { ...item, status: 'playing' };
+            }
+            if (item.status === 'playing' && item.id !== currentId) {
+                return { ...item, status: 'ready' };
+            }
+            return item;
+        }));
+}
+
 async function moveSong(songId, direction) {
     try {
         const response = await fetch(window.KaraokeURLs.appUrl(`/api/queue/${songId}/move`), {
@@ -1542,7 +1612,6 @@ async function moveSong(songId, direction) {
         });
 
         if (response.ok) {
-            await refreshQueue(true);
             return;
         }
 
@@ -1669,6 +1738,7 @@ class QueueWebSocket {
                     timestamp: Date.now(),
                 });
                 this.sendPresenceHello();
+                refreshQueue(true);
             };
             
             this.ws.onmessage = (event) => {
@@ -1728,15 +1798,7 @@ class QueueWebSocket {
     fallbackToPolling() {
         logger.warn('[WebSocket] Falling back to polling mode');
         refreshPresenceFallback();
-        // Start the traditional polling interval
-        if (!refreshInterval) {
-            refreshInterval = setInterval(() => {
-                if (document.visibilityState === 'visible') {
-                    refreshQueue();
-                    refreshPresenceFallback();
-                }
-            }, 15000); // 15 seconds in fallback mode
-        }
+        startQueueRefresh();
     }
 
     buildPresencePayload() {
@@ -2182,57 +2244,29 @@ if (stageRemoteVocalsVolumeSlider) {
 
 // WebSocket event handlers
 window.addEventListener('queue_item_added', (event) => {
-    // Refresh the entire queue to maintain order
-    refreshQueue(true);
-});
-
-window.addEventListener('queue_item_updated', (event) => {
-    refreshQueue(true);
-});
-
-window.addEventListener('queue_item_removed', (event) => {
-    refreshQueue(true);
-});
-
-window.addEventListener('queue_cleared', (event) => {
-    const queueList = document.getElementById('queue-list');
-    
-    if (queueList) {
-        // Remove all non-playing items with animation
-        const items = queueList.querySelectorAll('.queue-item');
-        items.forEach((item, index) => {
-            if (item.dataset.status !== 'playing') {
-                setTimeout(() => {
-                    item.style.transition = 'all 0.3s ease-out';
-                    item.style.opacity = '0';
-                    item.style.transform = 'translateX(100%)';
-                    
-                    setTimeout(() => {
-                        item.remove();
-                        
-                        // Check if only playing item or empty
-                        const remainingItems = queueList.querySelectorAll('.queue-item');
-                        if (remainingItems.length === 0) {
-                            queueList.innerHTML = `
-                                <div class="text-center py-12">
-                                    <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">
-                                        <span class="material-symbols-outlined text-4xl text-on-surface-variant">queue_music</span>
-                                    </div>
-                                    <p class="text-on-surface-variant text-lg font-medium">${t('queue.empty')}</p>
-                                    <p class="text-on-surface-variant/60 text-sm">${t('queue.add_started')}</p>
-                                </div>
-                            `;
-                        }
-                    }, 300);
-                }, index * 50); // Stagger the animations
-            }
-        });
+    if (!upsertQueueItemState(event.detail)) {
+        refreshQueue(true);
     }
 });
 
+window.addEventListener('queue_item_updated', (event) => {
+    if (!upsertQueueItemState(event.detail)) {
+        refreshQueue(true);
+    }
+});
+
+window.addEventListener('queue_item_removed', (event) => {
+    if (!removeQueueItemState(event.detail?.id)) {
+        refreshQueue(true);
+    }
+});
+
+window.addEventListener('queue_cleared', () => {
+    updateQueueState((queue) => queue.filter((item) => item.status === 'playing'));
+});
+
 window.addEventListener('current_item_changed', (event) => {
-    // Refresh to update playing state visuals
-    refreshQueue(true);
+    handleCurrentItemChanged(event.detail);
 });
 
 window.addEventListener('queue_item_failed', (event) => {
@@ -2259,8 +2293,18 @@ window.addEventListener('queue_item_failed', (event) => {
         setTimeout(() => notification.remove(), 300);
     }, 5000);
     
-    // Refresh queue to show failed status
-    refreshQueue(true);
+    updateQueueState((queue) => queue.map((item) => {
+        if (item.id !== Number(id)) {
+            return item;
+        }
+        return {
+            ...item,
+            status: 'failed',
+            error,
+            processing_progress: null,
+            processing_label: null,
+        };
+    }));
 });
 
 window.addEventListener('stage_state_update', (event) => {
@@ -2306,18 +2350,16 @@ window.addEventListener('stage_time_update', (event) => {
     updateStageRemoteSeekForwardUi();
 });
 
-// Keep a light refresh loop so task progress can advance even when queue order/status is stable.
-let refreshInterval;
 function startQueueRefresh() {
     if (refreshInterval) clearInterval(refreshInterval);
     refreshInterval = setInterval(() => {
         if (document.visibilityState === 'visible') {
             refreshQueue();
+            refreshPresenceFallback();
         }
-    }, 3000);
+    }, 15000);
 }
 
-startQueueRefresh();
 refreshDemucsHealth();
 updateStageRemotePlayPauseUi();
 updateStageRemoteVocalsUi();

@@ -36,19 +36,6 @@ def list_tasks(
     )
 
 
-@router.get("/{task_id}", response_model=ProcessingTaskResponse)
-def get_task(
-    task_id: int,
-    db: Session = Depends(get_db),
-    _admin=Depends(require_admin_user),
-):
-    """Get one durable task."""
-    task = processing_task_service.get_task(db, task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return processing_task_service.to_response(task)
-
-
 @router.get("/stream")
 async def stream_task_summaries(_admin=Depends(require_admin_user)):
     """Stream live summary events for all tasks."""
@@ -68,6 +55,19 @@ async def stream_task_summaries(_admin=Depends(require_admin_user)):
             await task_stream_manager.unregister_summary_subscriber(subscriber)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/{task_id}", response_model=ProcessingTaskResponse)
+def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Get one durable task."""
+    task = processing_task_service.get_task(db, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return processing_task_service.to_response(task)
 
 
 @router.get("/{task_id}/stream")
