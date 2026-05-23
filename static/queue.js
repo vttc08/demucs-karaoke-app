@@ -1311,6 +1311,8 @@ if (queueConfigModalBackdrop) {
     queueConfigModalBackdrop.addEventListener('click', closeQueueConfigModal);
 }
 
+queueList?.addEventListener('click', handleQueueItemCardClick);
+
 window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && queueConfigModal && !queueConfigModal.classList.contains('hidden')) {
         closeQueueConfigModal();
@@ -1381,6 +1383,7 @@ function updateQueueDisplay(queue) {
     queueList.innerHTML = queue.map(item => {
         const statusInfo = getStatusInfo(item.status);
         const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/placeholder.png'));
+        const canOpenTaskDetails = ['downloading', 'processing'].includes(item.status) && Number.isFinite(Number(item.task_id));
         const leftActionHtml = item.status === 'playing' ? `
                     <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="${t('queue.playing')}">
                         <span class="material-symbols-outlined">equalizer</span>
@@ -1429,7 +1432,7 @@ function updateQueueDisplay(queue) {
                     </div>
                     ` : '';
         return `
-            <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
+            <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} ${canOpenTaskDetails ? 'cursor-pointer hover:border-primary/30' : ''} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
                 ${leftColumnHtml}
                 <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 ${item.status !== 'playing' ? 'grayscale-[50%]' : ''}">
                     <img src="${thumbnail}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'">
@@ -1456,6 +1459,36 @@ function updateQueueDisplay(queue) {
             </div>
         `;
     }).join('');
+}
+
+function openQueueTaskInMedia(taskId) {
+    const numericTaskId = Number(taskId);
+    if (!Number.isFinite(numericTaskId) || numericTaskId <= 0) {
+        return;
+    }
+    const targetUrl = new URL(appUrl('/media'), window.location.origin);
+    targetUrl.searchParams.set('task_id', String(numericTaskId));
+    targetUrl.hash = 'media-task-panel';
+    window.location.assign(targetUrl.toString());
+}
+
+function handleQueueItemCardClick(event) {
+    if (!queueList) {
+        return;
+    }
+    const queueItem = event.target.closest('.queue-item');
+    if (!queueItem || !queueList.contains(queueItem)) {
+        return;
+    }
+    if (event.target.closest('button, a, input, select, textarea, label, [role="button"]')) {
+        return;
+    }
+    const status = queueItem.dataset.status;
+    const taskId = Number(queueItem.dataset.taskId);
+    if (!['downloading', 'processing'].includes(status) || !Number.isFinite(taskId) || taskId <= 0) {
+        return;
+    }
+    openQueueTaskInMedia(taskId);
 }
 
 function getStatusInfo(status) {

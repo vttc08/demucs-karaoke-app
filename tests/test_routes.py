@@ -1,4 +1,5 @@
 """Tests for API routes."""
+import asyncio
 import json
 import re
 import pytest
@@ -24,6 +25,7 @@ from services.auth_service import ADMIN_SESSION_COOKIE, AuthService
 from services.i18n_service import LOCALE_COOKIE
 from services.media_naming import build_media_stem
 from services.media_thumbnail_service import MediaThumbnailService
+from services.processing_task_service import processing_task_service
 from config import settings
 
 # Test database
@@ -629,6 +631,50 @@ def test_queue_page_renders_thumbnail_for_local_media(client, tmp_path, monkeypa
 
     assert response.status_code == 200
     assert MediaThumbnailService.thumbnail_url_for_media_file(media_file) in response.text
+
+
+def test_queue_page_renders_clickable_processing_items_with_task_ids(client):
+    """Processing queue items should expose task metadata for media drill-down."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="queue-task-link",
+            title="Queue Task Link",
+            artist="Artist",
+            media_path="/media/queue-task-link.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1000,
+            requested_karaoke=False,
+            status=QueueStatus.PENDING,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+
+        task = processing_task_service.get_or_create_queue_task(db, queue_item.id)
+        asyncio.run(
+            processing_task_service.set_stage(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.DOWNLOADING,
+                stage="download",
+                progress_label="Downloading media",
+                progress_percent=42,
+            )
+        )
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert f'data-task-id="{task.id}"' in response.text
+    assert 'data-status="downloading"' in response.text
+    assert 'cursor-pointer hover:border-primary/30' in response.text
 
 
 def test_get_empty_queue(client):

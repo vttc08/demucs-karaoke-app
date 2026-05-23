@@ -74,6 +74,15 @@ let taskSummarySource = null;
 let taskDetailSource = null;
 let currentTasks = [];
 let taskRefreshTimer = null;
+let taskRefreshPromise = null;
+let taskRefreshPending = false;
+let lastTaskRefreshAt = 0;
+let shouldScrollToTaskPanel = false;
+const initialTaskId = (() => {
+    const rawTaskId = new URLSearchParams(window.location.search).get("task_id");
+    const parsedTaskId = Number(rawTaskId);
+    return Number.isFinite(parsedTaskId) && parsedTaskId > 0 ? parsedTaskId : null;
+})();
 
 function isMobile() {
     return window.innerWidth < 640;
@@ -140,6 +149,19 @@ function updateEmptyState() {
     }
     const visibleItems = [...mediaRows].filter((item) => !item.classList.contains("hidden")).length;
     emptyState.classList.toggle("hidden", visibleItems > 0);
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = String(text ?? "");
+    return div.innerHTML;
+}
+
+function scrollTaskPanelIntoView() {
+    if (!taskPanel) {
+        return;
+    }
+    taskPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function getMediaItemNodes(itemId) {
@@ -252,6 +274,7 @@ function renderTaskList(tasks) {
         return;
     }
     taskList.innerHTML = currentTasks.map((task) => {
+        const isSelectedTask = Number(activeTaskId) === Number(task.id);
         const progress = task.live?.progress_percent;
         const label = task.live?.progress_label || task.stage || task.status;
         const targetId = task.target_media_item_id || task.target_queue_item_id || task.id;
@@ -269,7 +292,7 @@ function renderTaskList(tasks) {
                 </div>
             `;
         return `
-            <article class="rounded-xl border border-white/10 bg-surface-container-low p-3 cursor-pointer" data-task-id="${task.id}">
+            <article class="rounded-xl border ${isSelectedTask ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20' : 'border-white/10 bg-surface-container-low'} p-3 cursor-pointer transition-colors" data-task-id="${task.id}" aria-current="${isSelectedTask ? 'true' : 'false'}">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-on-surface">${escapeHtml(task.target_media_item_id ? t("media.media_task_target", { id: targetId }) : t("media.queue_task_target", { id: targetId }))}</p>
@@ -278,25 +301,47 @@ function renderTaskList(tasks) {
                     <span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">${escapeHtml(task.status)}</span>
                 </div>
                 ${progressHtml}
-            </article>
+        </article>
         `;
     }).join("");
+    if (shouldScrollToTaskPanel && currentTasks.length > 0) {
+        shouldScrollToTaskPanel = false;
+        scrollTaskPanelIntoView();
+    }
 }
 
 async function refreshTaskList() {
     if (!isAdmin || !taskList) {
         return;
     }
-    try {
-        const response = await fetch(appUrl("/api/tasks/"));
-        if (!response.ok) {
-            throw new Error(`task list ${response.status}`);
-        }
-        const tasks = await response.json();
-        renderTaskList(tasks);
-    } catch (error) {
-        console.warn("Task list refresh failed:", error);
+    if (taskRefreshPromise) {
+        taskRefreshPending = true;
+        return taskRefreshPromise;
     }
+
+    taskRefreshPromise = (async () => {
+        try {
+            const response = await fetch(appUrl("/api/tasks/"));
+            if (!response.ok) {
+                throw new Error(`task list ${response.status}`);
+            }
+            const tasks = await response.json();
+            renderTaskList(tasks);
+            lastTaskRefreshAt = Date.now();
+        } catch (error) {
+            console.warn("Task list refresh failed:", error);
+        } finally {
+            taskRefreshPromise = null;
+            if (taskRefreshPending) {
+                taskRefreshPending = false;
+                const elapsed = Date.now() - lastTaskRefreshAt;
+                const delayMs = elapsed >= 1000 ? 0 : 1000 - elapsed;
+                scheduleTaskListRefresh(delayMs);
+            }
+        }
+    })();
+
+    return taskRefreshPromise;
 }
 
 function updateTaskLiveSnapshot(task, snapshot) {
@@ -333,23 +378,29 @@ function updateTaskLiveSnapshot(task, snapshot) {
     return true;
 }
 
-function scheduleTaskListRefresh(delayMs = 250) {
+function scheduleTaskListRefresh(delayMs = 1000) {
     if (!isAdmin || !taskList) {
         return;
     }
+    if (taskRefreshPromise) {
+        taskRefreshPending = true;
+        return;
+    }
+    const elapsed = Date.now() - lastTaskRefreshAt;
+    const effectiveDelay = Math.max(delayMs, elapsed >= 1000 ? 0 : 1000 - elapsed);
     if (taskRefreshTimer) {
         window.clearTimeout(taskRefreshTimer);
     }
     taskRefreshTimer = window.setTimeout(() => {
         taskRefreshTimer = null;
         refreshTaskList();
-    }, delayMs);
+    }, effectiveDelay);
 }
 
 function applyTaskSummarySnapshot(snapshots) {
     if (!Array.isArray(snapshots) || !currentTasks.length) {
         if (Array.isArray(snapshots) && snapshots.length) {
-            scheduleTaskListRefresh(0);
+            scheduleTaskListRefresh();
         }
         return;
     }
@@ -369,7 +420,7 @@ function applyTaskSummarySnapshot(snapshots) {
         renderTaskList(currentTasks);
     }
     if (snapshots.some((snapshot) => !currentTasks.some((task) => Number(task.id) === Number(snapshot.task_id)))) {
-        scheduleTaskListRefresh(0);
+        scheduleTaskListRefresh();
     }
 }
 
@@ -388,7 +439,7 @@ function applyTaskStreamEvent(payload) {
     }
     const task = currentTasks.find((entry) => Number(entry.id) === taskId);
     if (!task) {
-        scheduleTaskListRefresh(0);
+        scheduleTaskListRefresh();
         return;
     }
     if (updateTaskLiveSnapshot(task, payload)) {
@@ -407,18 +458,22 @@ function appendTaskLogLine(text) {
     taskLogOutput.scrollTop = taskLogOutput.scrollHeight;
 }
 
-function openTaskLog(taskId) {
+function openTaskLog(taskId, { scrollIntoView = false } = {}) {
     if (!isAdmin || !taskLogShell || !taskLogOutput || !taskLogTitle) {
         return;
     }
-    activeTaskId = taskId;
+    const normalizedTaskId = Number(taskId);
+    if (!Number.isFinite(normalizedTaskId) || normalizedTaskId <= 0) {
+        return;
+    }
+    activeTaskId = normalizedTaskId;
     taskLogShell.classList.remove("hidden");
     taskLogOutput.textContent = "";
-    taskLogTitle.textContent = t("media.live_task_log_for", { id: String(taskId) });
+    taskLogTitle.textContent = t("media.live_task_log_for", { id: String(normalizedTaskId) });
     if (taskDetailSource) {
         taskDetailSource.close();
     }
-    taskDetailSource = new EventSource(appUrl(`/api/tasks/${Number(taskId)}/stream`));
+    taskDetailSource = new EventSource(appUrl(`/api/tasks/${normalizedTaskId}/stream`));
     taskDetailSource.onmessage = (event) => {
         try {
             const payload = JSON.parse(event.data);
@@ -434,6 +489,21 @@ function openTaskLog(taskId) {
     taskDetailSource.onerror = () => {
         appendTaskLogLine(t("media.task_stream_reconnecting"));
     };
+    renderTaskList(currentTasks);
+    if (scrollIntoView) {
+        scrollTaskPanelIntoView();
+    }
+}
+
+function openDeepLinkedTaskFromUrl() {
+    if (!initialTaskId) {
+        return;
+    }
+    shouldScrollToTaskPanel = true;
+    openTaskLog(initialTaskId);
+    if (!currentTasks.some((task) => Number(task.id) === initialTaskId)) {
+        scheduleTaskListRefresh();
+    }
 }
 
 function connectTaskStream() {
@@ -1024,3 +1094,4 @@ syncFilterButtonStyles();
 updateEmptyState();
 refreshTaskList();
 connectTaskStream();
+openDeepLinkedTaskFromUrl();
