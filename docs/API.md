@@ -238,6 +238,10 @@ When `lyrics_text` is supplied for karaoke items, the app persists it as a reusa
   "media_path": "/media/dQw4w9WgXcQ.mp4",
   "lyrics_path": null,
   "vocals_path": null,
+  "task_id": 12,
+  "processing_stage": "download",
+  "processing_progress": 18,
+  "processing_label": "Downloading video",
   "error": null,
   "created_at": "2024-01-01T00:00:00"
 }
@@ -669,14 +673,72 @@ POST /api/queue/{item_id}/process
 ```
 
 Triggers background processing of a queue item.
+The endpoint now creates or reuses a durable processing task and starts it in the background.
 
 **Response:**
 ```json
 {
   "status": "processing",
-  "item_id": 1
+  "item_id": 1,
+  "task_id": 12
 }
 ```
+
+---
+
+### Start Karaoke Processing For Existing Media
+```
+POST /api/media/{item_id}/karaoke
+```
+
+Admin-only endpoint for creating or reusing a durable karaoke-processing task for an existing media library item.
+
+**Response:**
+```json
+{
+  "status": "processing",
+  "media_id": 42,
+  "task_id": 17
+}
+```
+
+---
+
+### List Processing Tasks
+```
+GET /api/tasks/
+```
+
+Admin-only endpoint returning active and recently failed processing tasks.
+
+Each item includes durable task fields plus optional live in-memory snapshot data:
+- `live.progress_percent`
+- `live.progress_label`
+- `live.event_sequence`
+- `live.event_count`
+
+---
+
+### Stream Task Summaries
+```
+GET /api/tasks/stream
+```
+
+Admin-only SSE endpoint for live task summary updates.
+The initial SSE message is a snapshot payload with current active tasks, followed by incremental task events.
+
+---
+
+### Stream One Task
+```
+GET /api/tasks/{task_id}/stream
+```
+
+Admin-only SSE endpoint for one task's live progress/log stream.
+On connect, the server emits:
+- one current snapshot event
+- buffered recent task events retained in memory
+- live updates until disconnect
 
 ---
 

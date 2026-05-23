@@ -6,10 +6,11 @@ from pathlib import Path
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from models import MediaItem, QueueItem, QueueItemCreate, QueueItemResponse, QueueStatus
+from models import MediaItem, ProcessingTask, QueueItem, QueueItemCreate, QueueItemResponse, QueueStatus
 from config import settings
 from services.media_naming import build_media_stem
 from services.media_thumbnail_service import MediaThumbnailService
+from services.task_stream_service import task_stream_manager
 
 logger = logging.getLogger(__name__)
 _AUDIO_SUFFIXES = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm"}
@@ -724,6 +725,10 @@ class QueueService:
             vocals_path=vocals_path,
             lyrics_path=lyrics_path,
         )
+        active_task = self._active_task_for_queue_item(item)
+        task_snapshot = (
+            task_stream_manager.snapshot_now(active_task.id) if active_task is not None else None
+        )
         return QueueItemResponse(
             id=item.id,
             media_id=media.id,
@@ -739,6 +744,14 @@ class QueueService:
             lyrics_path=lyrics_path,
             vocals_path=vocals_path,
             error=item.error,
+            task_id=active_task.id if active_task is not None else None,
+            processing_stage=(active_task.stage if active_task is not None else None),
+            processing_progress=(
+                task_snapshot.get("progress_percent") if task_snapshot is not None else None
+            ),
+            processing_label=(
+                task_snapshot.get("progress_label") if task_snapshot is not None else None
+            ),
             created_at=item.created_at,
         )
 
@@ -777,6 +790,23 @@ class QueueService:
             item,
             is_admin=is_admin,
             requester_id=requester_id,
+        )
+
+    @staticmethod
+    def _active_task_for_queue_item(item: QueueItem) -> ProcessingTask | None:
+        if item.id is None:
+            return None
+        session = Session.object_session(item)
+        if session is None:
+            return None
+        return (
+            session.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_queue_item_id == item.id,
+                ProcessingTask.status.in_(["pending", "downloading", "processing"]),
+            )
+            .order_by(ProcessingTask.id.desc())
+            .first()
         )
 
     def can_control_stage_item(

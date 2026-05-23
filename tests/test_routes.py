@@ -13,6 +13,8 @@ from models import (
     Base,
     DemucsHealthResponse,
     MediaItem,
+    ProcessingTask,
+    ProcessingTaskStatus,
     QueueItem,
     QueueStatus,
     RuntimeSetting,
@@ -257,6 +259,86 @@ def test_add_to_queue(client):
     assert data["title"] == "Test Song"
     assert data["is_karaoke"] is True
     assert data["status"] == "pending"
+
+
+def test_process_queue_item_returns_task_id(client):
+    """Queue processing trigger should create or reuse a durable task id."""
+    queue_response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "task123",
+            "title": "Task Song",
+            "is_karaoke": False,
+        },
+    )
+    item_id = queue_response.json()["id"]
+
+    with patch("routes.queue.task_execution_coordinator.start") as mock_start:
+        response = client.post(f"/api/queue/{item_id}/process")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "processing"
+    assert isinstance(payload["task_id"], int)
+    mock_start.assert_called_once_with(payload["task_id"])
+
+
+def test_media_karaoke_route_creates_task(client):
+    """Admin media karaoke trigger should create a durable media task."""
+    authenticate_admin_client(client)
+    with TestingSessionLocal() as db:
+        media_item = MediaItem(
+            title="Local Track",
+            artist="Singer",
+            file_stem="local-track",
+            media_path="/media/local-track.mp4",
+            missing=False,
+        )
+        db.add(media_item)
+        db.commit()
+        db.refresh(media_item)
+        media_id = media_item.id
+
+    with patch("routes.media_library.task_execution_coordinator.start") as mock_start:
+        response = client.post(f"/api/media/{media_id}/karaoke")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["media_id"] == media_id
+    assert isinstance(payload["task_id"], int)
+    mock_start.assert_called_once_with(payload["task_id"])
+
+
+def test_tasks_api_lists_active_tasks(client):
+    """Admin tasks API should include durable task rows."""
+    authenticate_admin_client(client)
+    with TestingSessionLocal() as db:
+        media_item = MediaItem(
+            title="Task Media",
+            artist="Artist",
+            file_stem="task-media",
+            media_path="/media/task-media.mp4",
+            missing=False,
+        )
+        db.add(media_item)
+        db.flush()
+        task = ProcessingTask(
+            task_type="media_karaoke",
+            source_kind="library_media",
+            target_media_item_id=media_item.id,
+            status=ProcessingTaskStatus.PENDING.value,
+            stage="queued",
+        )
+        db.add(task)
+        db.commit()
+
+    response = client.get("/api/tasks/")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["task_type"] == "media_karaoke"
+    assert payload[0]["status"] == "pending"
 
 
 def test_add_to_queue_uses_guest_cookies_for_requester(client):

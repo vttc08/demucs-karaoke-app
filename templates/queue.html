@@ -219,7 +219,7 @@
         <div id="queue-list" class="flex flex-col gap-4">
             {% if queue %}
                 {% for item in queue %}
-                <div class="queue-item {% if item.status.value == 'playing' %}glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]{% else %}bg-surface-container-low hover:bg-surface-container{% endif %} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="{{ item.id }}" data-status="{{ item.status.value }}">
+                <div class="queue-item {% if item.status.value == 'playing' %}glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]{% else %}bg-surface-container-low hover:bg-surface-container{% endif %} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="{{ item.id }}" data-status="{{ item.status.value }}" data-processing-progress="{{ item.processing_progress if item.processing_progress is not none else '' }}" data-processing-label="{{ item.processing_label or '' }}">
                     {% if is_admin %}
                     <div class="flex shrink-0 flex-col items-center gap-1">
                         {% if item.status.value == 'playing' %}
@@ -289,6 +289,14 @@
                                 <span class="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant">{{ t('queue.in_queue') }}</span>
                             {% endif %}
                         </div>
+                    {% if item.processing_progress is not none and item.status.value in ('downloading', 'processing') %}
+                        <div class="mt-2 max-w-xs">
+                            <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
+                                <div class="h-full rounded-full bg-tertiary transition-all" style="width: {{ item.processing_progress }}%"></div>
+                            </div>
+                            <p class="mt-1 text-[10px] text-on-surface-variant">{{ item.processing_label or item.processing_stage or t('queue.processing_ai') }} • {{ item.processing_progress }}%</p>
+                        </div>
+                    {% endif %}
                     {% if item.is_karaoke %}
                         <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
                             <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>

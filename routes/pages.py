@@ -11,6 +11,7 @@ from models import QueueStatus
 from routes.auth import get_admin_user
 from services.queue_service import QueueService
 from services.media_library_service import MediaLibraryService
+from services.processing_task_service import processing_task_service
 from services.runtime_settings_service import RuntimeSettingsService
 from services.stage_lobby_service import StageLobbyService
 from services.auth_service import ADMIN_SESSION_COOKIE, SESSION_DAYS, AuthService
@@ -279,6 +280,11 @@ async def media_management_page(request: Request, db: Session = Depends(get_db))
     media_items = media_library_service.list_media_items(db)
     media_stats = media_library_service.get_media_stats(db)
     is_admin = get_admin_user(request, db) is not None
+    task_items = (
+        processing_task_service.list_tasks(db, include_done=False, include_failed=True, limit=20)
+        if is_admin
+        else []
+    )
     return templates.TemplateResponse(
         "media_management.html",
         {
@@ -286,6 +292,7 @@ async def media_management_page(request: Request, db: Session = Depends(get_db))
             "media_items": media_items,
             "media_stats": media_stats,
             "is_admin": is_admin,
+            "task_items": task_items,
         },
     )
 

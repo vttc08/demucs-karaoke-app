@@ -284,6 +284,22 @@ class YouTubeService:
         """
         return self.ytdlp.download_audio(youtube_id, output_dir or self._media_path())
 
+    def download_audio_with_progress(
+        self,
+        youtube_id: str,
+        output_dir: Path | None = None,
+        *,
+        progress_callback=None,
+        log_callback=None,
+    ) -> Path:
+        """Download audio while streaming yt-dlp progress/logs."""
+        return self.ytdlp.download_audio_with_progress(
+            youtube_id,
+            output_dir or self._media_path(),
+            progress_callback=progress_callback,
+            log_callback=log_callback,
+        )
+
     def download_video(self, youtube_id: str, output_dir: Path | None = None) -> Path:
         """
         Download video from YouTube.
@@ -296,6 +312,22 @@ class YouTubeService:
         """
         return self.ytdlp.download_video(youtube_id, output_dir or self._media_path())
 
+    def download_video_with_progress(
+        self,
+        youtube_id: str,
+        output_dir: Path | None = None,
+        *,
+        progress_callback=None,
+        log_callback=None,
+    ) -> Path:
+        """Download video while streaming yt-dlp progress/logs."""
+        return self.ytdlp.download_video_with_progress(
+            youtube_id,
+            output_dir or self._media_path(),
+            progress_callback=progress_callback,
+            log_callback=log_callback,
+        )
+
     def download_video_with_audio(self, youtube_id: str, output_dir: Path | None = None) -> Path:
         """
         Download progressive video with audio for direct playback.
@@ -307,3 +339,19 @@ class YouTubeService:
             Path to downloaded video file containing audio
         """
         return self.ytdlp.download_video_with_audio(youtube_id, output_dir or self._media_path())
+
+    def download_video_with_audio_progress(
+        self,
+        youtube_id: str,
+        output_dir: Path | None = None,
+        *,
+        progress_callback=None,
+        log_callback=None,
+    ) -> Path:
+        """Download progressive video while streaming yt-dlp progress/logs."""
+        return self.ytdlp.download_video_with_audio_progress(
+            youtube_id,
+            output_dir or self._media_path(),
+            progress_callback=progress_callback,
+            log_callback=log_callback,
+        )

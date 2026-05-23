@@ -2,11 +2,13 @@
 import subprocess
 import json
 import logging
+import re
 from pathlib import Path
-from typing import List, Dict, Any, Iterable, Tuple, Optional
+from typing import List, Dict, Any, Iterable, Tuple, Optional, Callable
 from config import settings
 
 logger = logging.getLogger(__name__)
+_DOWNLOAD_PROGRESS_RE = re.compile(r"\[download\]\s+(\d+(?:\.\d+)?)%")
 
 
 class YtDlpAdapter:
@@ -215,6 +217,34 @@ class YtDlpAdapter:
             media_type="audio",
         )
 
+    def download_audio_with_progress(
+        self,
+        youtube_id: str,
+        output_dir: Path,
+        *,
+        progress_callback: Callable[[int, str], None] | None = None,
+        log_callback: Callable[[str, str], None] | None = None,
+    ) -> Path:
+        """Download audio while streaming progress and log lines."""
+        output_stem = f"{youtube_id}.audio"
+        output_template = str(output_dir / f"{output_stem}.%(ext)s")
+        attempts = [
+            ("bestaudio[ext=m4a]/bestaudio/best", "web", False, True),
+            ("bestaudio/best", "web", False, True),
+            (None, None, False, False),
+        ]
+        return self._download_with_attempts(
+            youtube_id=youtube_id,
+            output_dir=output_dir,
+            output_template=output_template,
+            output_stem=output_stem,
+            attempts=attempts,
+            extensions=[".wav", ".m4a", ".webm", ".mp3", ".opus", ".mp4", ".mkv"],
+            media_type="audio",
+            progress_callback=progress_callback,
+            log_callback=log_callback,
+        )
+
     def download_video(self, youtube_id: str, output_dir: Path) -> Path:
         """
         Download video from YouTube.
@@ -247,6 +277,34 @@ class YtDlpAdapter:
             media_type="video",
         )
 
+    def download_video_with_progress(
+        self,
+        youtube_id: str,
+        output_dir: Path,
+        *,
+        progress_callback: Callable[[int, str], None] | None = None,
+        log_callback: Callable[[str, str], None] | None = None,
+    ) -> Path:
+        """Download video while streaming progress and log lines."""
+        output_template = str(output_dir / f"{youtube_id}.%(ext)s")
+        attempts = [
+            ("bestvideo/best", None, False, False),
+            ("bestvideo[ext=mp4]/best[ext=mp4]/bestvideo/best", "web", False, True),
+            ("bestvideo/best", "web", False, True),
+            (None, None, False, False),
+        ]
+        return self._download_with_attempts(
+            youtube_id=youtube_id,
+            output_dir=output_dir,
+            output_template=output_template,
+            output_stem=youtube_id,
+            attempts=attempts,
+            extensions=[".mp4", ".mkv", ".webm"],
+            media_type="video",
+            progress_callback=progress_callback,
+            log_callback=log_callback,
+        )
+
     def download_video_with_audio(self, youtube_id: str, output_dir: Path) -> Path:
         """
         Download a progressive video that already includes audio.
@@ -277,6 +335,33 @@ class YtDlpAdapter:
             media_type="progressive video+audio",
         )
 
+    def download_video_with_audio_progress(
+        self,
+        youtube_id: str,
+        output_dir: Path,
+        *,
+        progress_callback: Callable[[int, str], None] | None = None,
+        log_callback: Callable[[str, str], None] | None = None,
+    ) -> Path:
+        """Download progressive video while streaming progress and log lines."""
+        output_template = str(output_dir / f"{youtube_id}.%(ext)s")
+        attempts = [
+            ("best[ext=mp4]/best", "web", False, True),
+            ("best", "web", False, True),
+            (None, None, False, False),
+        ]
+        return self._download_with_attempts(
+            youtube_id=youtube_id,
+            output_dir=output_dir,
+            output_template=output_template,
+            output_stem=youtube_id,
+            attempts=attempts,
+            extensions=[".mp4", ".mkv", ".webm"],
+            media_type="progressive video+audio",
+            progress_callback=progress_callback,
+            log_callback=log_callback,
+        )
+
     def _download_with_attempts(
         self,
         youtube_id: str,
@@ -286,6 +371,8 @@ class YtDlpAdapter:
         attempts: Iterable[Tuple[Optional[str], Optional[str], bool, bool]],
         extensions: List[str],
         media_type: str,
+        progress_callback: Callable[[int, str], None] | None = None,
+        log_callback: Callable[[str, str], None] | None = None,
     ) -> Path:
         """Run yt-dlp download attempts with format/client fallbacks."""
         url = f"https://www.youtube.com/watch?v={youtube_id}"
@@ -310,7 +397,14 @@ class YtDlpAdapter:
             cmd.extend(self._proxy_args())
 
             try:
-                subprocess.run(cmd, check=True, capture_output=True, timeout=300)
+                if progress_callback or log_callback:
+                    self._run_streaming_download(
+                        cmd,
+                        progress_callback=progress_callback,
+                        log_callback=log_callback,
+                    )
+                else:
+                    subprocess.run(cmd, check=True, capture_output=True, timeout=300)
                 output_path = self._find_downloaded_file(output_dir, output_stem, extensions)
                 if not output_path.exists():
                     last_error = f"file not found: {output_path}"
@@ -366,6 +460,46 @@ class YtDlpAdapter:
             last_error,
         )
         raise RuntimeError(f"Download failed: {last_error}")
+
+    def _run_streaming_download(
+        self,
+        cmd: list[str],
+        *,
+        progress_callback: Callable[[int, str], None] | None = None,
+        log_callback: Callable[[str, str], None] | None = None,
+    ) -> None:
+        """Run a yt-dlp download command and stream stdout/stderr lines."""
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        stdout_lines: list[str] = []
+
+        if process.stdout is not None:
+            for line in process.stdout:
+                line = line.rstrip()
+                if not line:
+                    continue
+                stdout_lines.append(line)
+                if log_callback:
+                    stream_name = "stderr" if line.startswith(("ERROR:", "WARNING:")) else "stdout"
+                    log_callback(stream_name, line)
+                match = _DOWNLOAD_PROGRESS_RE.search(line)
+                if match and progress_callback:
+                    progress_callback(int(float(match.group(1))), line)
+
+        return_code = process.wait(timeout=300)
+        if return_code != 0:
+            stderr = "\n".join(stdout_lines)
+            raise subprocess.CalledProcessError(
+                returncode=return_code,
+                cmd=cmd,
+                stderr=stderr,
+                output="\n".join(stdout_lines),
+            )
 
     def _find_downloaded_file(self, output_dir: Path, output_stem: str, extensions: List[str]) -> Path:
         """

@@ -1,0 +1,427 @@
+"""Durable processing-task operations and orchestration helpers."""
+from __future__ import annotations
+
+import asyncio
+import logging
+import threading
+from datetime import datetime, timezone
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from database import SessionLocal
+from models import (
+    MediaItem,
+    ProcessingTask,
+    ProcessingTaskResponse,
+    ProcessingTaskSnapshotResponse,
+    ProcessingTaskStatus,
+    QueueItem,
+    QueueStatus,
+)
+from services.task_stream_service import task_stream_manager
+
+logger = logging.getLogger(__name__)
+
+
+def utc_now_naive() -> datetime:
+    """Return naive UTC datetime for SQLite."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+class ProcessingTaskService:
+    """Manage durable tasks and their live stream state."""
+
+    ACTIVE_STATUSES = (
+        ProcessingTaskStatus.PENDING.value,
+        ProcessingTaskStatus.DOWNLOADING.value,
+        ProcessingTaskStatus.PROCESSING.value,
+    )
+
+    def get_or_create_queue_task(self, db: Session, queue_item_id: int) -> ProcessingTask:
+        """Return an existing active queue task or create one."""
+        active = (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_queue_item_id == queue_item_id,
+                ProcessingTask.status.in_(self.ACTIVE_STATUSES),
+            )
+            .order_by(ProcessingTask.id.desc())
+            .first()
+        )
+        if active is not None:
+            return active
+
+        queue_item = db.query(QueueItem).filter(QueueItem.id == queue_item_id).first()
+        if queue_item is None:
+            raise ValueError(f"Queue item not found: {queue_item_id}")
+        source_kind = "youtube"
+        if queue_item.media and not queue_item.media.youtube_id:
+            source_kind = "library_media"
+        task = ProcessingTask(
+            task_type="queue_prepare",
+            source_kind=source_kind,
+            target_queue_item_id=queue_item_id,
+            target_media_item_id=queue_item.media_id,
+            status=ProcessingTaskStatus.PENDING.value,
+            stage="queued",
+        )
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        return task
+
+    def get_or_create_media_task(self, db: Session, media_item_id: int) -> ProcessingTask:
+        """Return an existing active media karaoke task or create one."""
+        active = (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_media_item_id == media_item_id,
+                ProcessingTask.target_queue_item_id.is_(None),
+                ProcessingTask.task_type == "media_karaoke",
+                ProcessingTask.status.in_(self.ACTIVE_STATUSES),
+            )
+            .order_by(ProcessingTask.id.desc())
+            .first()
+        )
+        if active is not None:
+            return active
+
+        media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
+        if media_item is None:
+            raise ValueError(f"Media item not found: {media_item_id}")
+        task = ProcessingTask(
+            task_type="media_karaoke",
+            source_kind="library_media" if not media_item.youtube_id else "uploaded_media",
+            target_media_item_id=media_item_id,
+            status=ProcessingTaskStatus.PENDING.value,
+            stage="queued",
+        )
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        return task
+
+    def list_tasks(
+        self,
+        db: Session,
+        *,
+        include_done: bool = False,
+        include_failed: bool = True,
+        limit: int = 25,
+    ) -> list[ProcessingTaskResponse]:
+        """List recent tasks enriched with current live state."""
+        query = db.query(ProcessingTask)
+        if include_done and include_failed:
+            pass
+        elif include_done:
+            query = query.filter(
+                ProcessingTask.status != ProcessingTaskStatus.FAILED.value
+            )
+        elif include_failed:
+            query = query.filter(
+                ProcessingTask.status != ProcessingTaskStatus.DONE.value
+            )
+        else:
+            query = query.filter(ProcessingTask.status.in_(self.ACTIVE_STATUSES))
+        tasks = (
+            query.order_by(ProcessingTask.updated_at.desc(), ProcessingTask.id.desc())
+            .limit(limit)
+            .all()
+        )
+        return [self.to_response(task) for task in tasks]
+
+    def get_task(self, db: Session, task_id: int) -> ProcessingTask | None:
+        """Fetch one task row."""
+        return db.query(ProcessingTask).filter(ProcessingTask.id == task_id).first()
+
+    def to_response(self, task: ProcessingTask) -> ProcessingTaskResponse:
+        """Map task row to response model with live state if available."""
+        snapshot = task_stream_manager.snapshot_now(task.id)
+        live = None
+        if snapshot is not None:
+            live = ProcessingTaskSnapshotResponse(
+                progress_percent=snapshot.get("progress_percent"),
+                progress_label=snapshot.get("progress_label"),
+                event_sequence=snapshot.get("event_sequence", 0),
+                event_count=snapshot.get("event_count", 0),
+            )
+        return ProcessingTaskResponse(
+            id=task.id,
+            task_type=task.task_type,
+            source_kind=task.source_kind,
+            target_queue_item_id=task.target_queue_item_id,
+            target_media_item_id=task.target_media_item_id,
+            status=ProcessingTaskStatus(task.status),
+            stage=task.stage,
+            attempt_count=task.attempt_count,
+            last_error_summary=task.last_error_summary,
+            last_error_detail=task.last_error_detail,
+            started_at=task.started_at,
+            finished_at=task.finished_at,
+            created_at=task.created_at,
+            updated_at=task.updated_at,
+            live=live,
+        )
+
+    async def initialize_live_state(self, task: ProcessingTask):
+        """Ensure a live stream entry exists for a durable task."""
+        await task_stream_manager.ensure_task(
+            task.id,
+            status=task.status,
+            stage=task.stage,
+        )
+
+    async def set_status(
+        self,
+        db: Session,
+        task_id: int,
+        *,
+        status: ProcessingTaskStatus,
+        stage: str | None = None,
+        error_summary: str | None = None,
+        error_detail: str | None = None,
+        progress_label: str | None = None,
+        progress_percent: int | None = None,
+    ) -> ProcessingTask:
+        """Persist a durable task state change and publish it live."""
+        task = self.get_task(db, task_id)
+        if task is None:
+            raise ValueError(f"Task not found: {task_id}")
+
+        task.status = status.value
+        if stage is not None:
+            task.stage = stage
+        if error_summary is not None:
+            task.last_error_summary = error_summary
+        if error_detail is not None:
+            task.last_error_detail = error_detail
+        now = utc_now_naive()
+        task.updated_at = now
+        if status in (
+            ProcessingTaskStatus.DOWNLOADING,
+            ProcessingTaskStatus.PROCESSING,
+        ) and task.started_at is None:
+            task.started_at = now
+        if status in (ProcessingTaskStatus.DONE, ProcessingTaskStatus.FAILED):
+            task.finished_at = now
+        db.commit()
+        db.refresh(task)
+
+        await task_stream_manager.publish(
+            task.id,
+            event_type="status_changed" if status not in (ProcessingTaskStatus.DONE, ProcessingTaskStatus.FAILED) else ("done" if status == ProcessingTaskStatus.DONE else "error"),
+            status=task.status,
+            stage=task.stage,
+            progress_percent=progress_percent,
+            progress_label=progress_label,
+            message=error_summary,
+            stream="system",
+        )
+        await self._sync_queue_side_effects(db, task)
+        return task
+
+    async def set_stage(
+        self,
+        db: Session,
+        task_id: int,
+        *,
+        status: ProcessingTaskStatus | None = None,
+        stage: str,
+        progress_label: str | None = None,
+        progress_percent: int | None = None,
+    ) -> ProcessingTask:
+        """Persist a stage change and publish it live."""
+        task = self.get_task(db, task_id)
+        if task is None:
+            raise ValueError(f"Task not found: {task_id}")
+        if status is not None:
+            task.status = status.value
+        task.stage = stage
+        task.updated_at = utc_now_naive()
+        if task.started_at is None and task.status in self.ACTIVE_STATUSES:
+            task.started_at = utc_now_naive()
+        db.commit()
+        db.refresh(task)
+
+        await task_stream_manager.publish(
+            task.id,
+            event_type="stage_changed",
+            status=task.status,
+            stage=stage,
+            progress_percent=progress_percent,
+            progress_label=progress_label,
+            stream="system",
+        )
+        await self._sync_queue_side_effects(db, task)
+        return task
+
+    async def emit_progress(
+        self,
+        task_id: int,
+        *,
+        progress_percent: int | None = None,
+        progress_label: str | None = None,
+        status: str | None = None,
+        stage: str | None = None,
+    ):
+        """Publish live progress without writing SQLite."""
+        await task_stream_manager.publish(
+            task_id,
+            event_type="progress",
+            status=status,
+            stage=stage,
+            progress_percent=progress_percent,
+            progress_label=progress_label,
+            stream="system",
+        )
+
+    async def emit_log(
+        self,
+        task_id: int,
+        *,
+        message: str,
+        stream: str,
+        status: str | None = None,
+        stage: str | None = None,
+        progress_percent: int | None = None,
+        progress_label: str | None = None,
+    ):
+        """Publish a live task log line without writing SQLite."""
+        await task_stream_manager.publish(
+            task_id,
+            event_type="log",
+            status=status,
+            stage=stage,
+            progress_percent=progress_percent,
+            progress_label=progress_label,
+            message=message,
+            stream=stream,
+        )
+
+    def recover_interrupted_tasks(self, db: Session) -> list[int]:
+        """Reset interrupted tasks to pending and return ids for restart."""
+        tasks = (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.status.in_(
+                    [
+                        ProcessingTaskStatus.PENDING.value,
+                        ProcessingTaskStatus.DOWNLOADING.value,
+                        ProcessingTaskStatus.PROCESSING.value,
+                    ]
+                )
+            )
+            .order_by(ProcessingTask.id.asc())
+            .all()
+        )
+        task_ids = []
+        for task in tasks:
+            task.status = ProcessingTaskStatus.PENDING.value
+            task.stage = task.stage or "queued"
+            task.attempt_count = int(task.attempt_count or 0) + 1
+            task.last_error_summary = None
+            task.last_error_detail = None
+            task.finished_at = None
+            task.updated_at = utc_now_naive()
+            task_ids.append(task.id)
+        if task_ids:
+            db.commit()
+        return task_ids
+
+    def restartable_task_ids(self, db: Session) -> list[int]:
+        """Return pending task ids in restart order."""
+        tasks = (
+            db.query(ProcessingTask.id)
+            .filter(ProcessingTask.status == ProcessingTaskStatus.PENDING.value)
+            .order_by(ProcessingTask.created_at.asc(), ProcessingTask.id.asc())
+            .all()
+        )
+        return [task_id for (task_id,) in tasks]
+
+    def _mirror_queue_status(self, db: Session, task: ProcessingTask) -> QueueItem | None:
+        """Keep queue_item.status compatible with the durable task state."""
+        if task.target_queue_item_id is None:
+            return None
+        queue_item = (
+            db.query(QueueItem)
+            .filter(QueueItem.id == task.target_queue_item_id)
+            .first()
+        )
+        if queue_item is None:
+            return None
+
+        if task.status == ProcessingTaskStatus.PENDING.value:
+            queue_item.status = QueueStatus.PENDING.value
+        elif task.status == ProcessingTaskStatus.DOWNLOADING.value:
+            queue_item.status = QueueStatus.DOWNLOADING.value
+        elif task.status == ProcessingTaskStatus.PROCESSING.value:
+            queue_item.status = QueueStatus.PROCESSING.value
+        elif task.status == ProcessingTaskStatus.DONE.value:
+            queue_item.status = QueueStatus.READY.value
+        elif task.status == ProcessingTaskStatus.FAILED.value:
+            queue_item.status = QueueStatus.FAILED.value
+            queue_item.error = task.last_error_summary
+        db.commit()
+        db.refresh(queue_item)
+        return queue_item
+
+    async def _sync_queue_side_effects(self, db: Session, task: ProcessingTask):
+        """Broadcast queue changes after task persistence and mirroring."""
+        queue_item = self._mirror_queue_status(db, task)
+        if queue_item is None:
+            return
+
+        from services.queue_service import QueueService
+        from services.websocket_manager import manager
+
+        queue_service = QueueService()
+        response = queue_service._to_response(queue_item)
+        if task.status == ProcessingTaskStatus.FAILED.value and task.last_error_summary:
+            await manager.broadcast_queue_item_failed(queue_item.id, task.last_error_summary)
+        else:
+            await manager.broadcast_queue_item_updated(response.model_dump(mode="json"))
+
+        if task.status == ProcessingTaskStatus.DONE.value:
+            promoted = queue_service.promote_next_ready_if_idle(db)
+            if promoted:
+                await manager.broadcast_current_item_changed(promoted.id, None)
+
+
+class TaskExecutionCoordinator:
+    """Start processing tasks in background threads without duplicate runners."""
+
+    def __init__(self):
+        self._active_task_ids: set[int] = set()
+        self._lock = threading.Lock()
+
+    def start(self, task_id: int):
+        """Start a background worker for the task if one is not already running."""
+        with self._lock:
+            if task_id in self._active_task_ids:
+                return
+            self._active_task_ids.add(task_id)
+        thread = threading.Thread(
+            target=self._run_task,
+            args=(task_id,),
+            daemon=True,
+            name=f"processing-task-{task_id}",
+        )
+        thread.start()
+
+    def _run_task(self, task_id: int):
+        from services.karaoke_service import KaraokeService
+
+        db = SessionLocal()
+        try:
+            asyncio.run(KaraokeService().process_task(db, task_id))
+        except Exception:
+            logger.exception("Background processing task crashed task_id=%s", task_id)
+        finally:
+            db.close()
+            with self._lock:
+                self._active_task_ids.discard(task_id)
+
+
+processing_task_service = ProcessingTaskService()
+task_execution_coordinator = TaskExecutionCoordinator()

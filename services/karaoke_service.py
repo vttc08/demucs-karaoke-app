@@ -1,25 +1,29 @@
-"""Karaoke service for orchestrating karaoke video generation."""
+"""Karaoke service for orchestrating queue and media processing tasks."""
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
 import shutil
 from pathlib import Path
+
 import httpx
 from sqlalchemy.orm import Session
-from models import QueueItem
-from services.youtube_service import YouTubeService
-from services.demucs_client import DemucsClient
-from services.queue_service import QueueService
+
 from adapters.ffmpeg import FFmpegAdapter
-from models import QueueStatus
 from config import settings
+from models import MediaItem, ProcessingTask, ProcessingTaskStatus, QueueItem
+from services.demucs_client import DemucsClient
 from services.media_naming import build_media_stem
+from services.processing_task_service import processing_task_service
+from services.queue_service import QueueService
+from services.youtube_service import YouTubeService
 
 logger = logging.getLogger(__name__)
 
 
 class KaraokeService:
-    """Service for orchestrating karaoke video generation."""
+    """Service for orchestrating karaoke media generation."""
 
     def __init__(self):
         self.youtube_service = YouTubeService()
@@ -34,156 +38,355 @@ class KaraokeService:
         return path
 
     async def process_queue_item(self, db: Session, item_id: int):
-        """
-        Process a queue item end-to-end.
+        """Compatibility wrapper for existing queue processing callers."""
+        task = processing_task_service.get_or_create_queue_task(db, item_id)
+        await self.process_task(db, task.id)
 
-        Args:
-            db: Database session
-            item_id: Queue item ID
-        """
-        # Get item from database
-        item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
-        if not item:
-            logger.warning("Queue item not found for processing item_id=%s", item_id)
+    async def process_task(self, db: Session, task_id: int):
+        """Run one durable processing task."""
+        task = processing_task_service.get_task(db, task_id)
+        if task is None:
+            logger.warning("Processing task not found task_id=%s", task_id)
             return
 
+        await processing_task_service.initialize_live_state(task)
+        await processing_task_service.emit_progress(
+            task.id,
+            progress_percent=0,
+            progress_label="Starting task",
+            status=task.status,
+            stage=task.stage,
+        )
+
         try:
-            if item.media is None:
-                raise RuntimeError(f"Queue item missing media for id={item.id}")
-            existing_media_path = self._existing_media_file(item)
-            existing_vocals_path = self._existing_local_file(item.media.vocals_path)
-            logger.info(
-                "Processing queue item item_id=%s youtube_id=%s karaoke=%s",
-                item.id,
-                item.media.youtube_id,
-                item.requested_karaoke,
-            )
-            # Update status to downloading
-            await self.queue_service.update_status_async(
-                db, item_id, QueueStatus.DOWNLOADING
-            )
-
-            if item.requested_karaoke:
-                if existing_media_path and existing_vocals_path:
-                    logger.info(
-                        "Reusing existing karaoke media item_id=%s media=%s",
-                        item.id,
-                        existing_media_path,
-                    )
-                    await self.queue_service.update_status_async(
-                        db, item_id, QueueStatus.READY
-                    )
-                    return
-                demucs_health = self.demucs_client.health_check()
-                if not demucs_health.healthy:
-                    logger.warning(
-                        "Demucs unhealthy for item_id=%s api_url=%s detail=%s",
-                        item_id,
-                        demucs_health.api_url,
-                        demucs_health.detail,
-                    )
-                    await self.queue_service.update_status_async(
-                        db,
-                        item_id,
-                        QueueStatus.FAILED,
-                        error=(
-                            f"Demucs unavailable at {demucs_health.api_url}: "
-                            f"{demucs_health.detail}"
-                        ),
-                    )
-                    return
-                if existing_media_path:
-                    logger.info(
-                        "Reusing existing media for karaoke item_id=%s media=%s",
-                        item.id,
-                        existing_media_path,
-                    )
-                    media_stem = self._media_stem(item)
-                    extracted_audio_path = (
-                        settings.cache_path
-                        / "audio"
-                        / f"{media_stem}.audio.m4a"
-                    )
-                    audio_path = await asyncio.to_thread(
-                        self.ffmpeg.extract_audio,
-                        existing_media_path,
-                        extracted_audio_path,
-                    )
-                    video_path = existing_media_path
-                else:
-                    # Karaoke flow prefers separate tracks for processing.
-                    media_stem = self._media_stem(item)
-                    processing_dir = self._processing_cache_dir()
-                    video_path = await asyncio.to_thread(
-                        self.youtube_service.download_video,
-                        item.media.youtube_id,
-                        processing_dir,
-                    )
-                    video_path = await asyncio.to_thread(
-                        self._rename_downloaded_file,
-                        video_path,
-                        media_stem,
-                        "media",
-                    )
-                    # Download audio only for karaoke flow
-                    audio_path = await asyncio.to_thread(
-                        self.youtube_service.download_audio,
-                        item.media.youtube_id,
-                        processing_dir,
-                    )
-                    audio_path = await asyncio.to_thread(
-                        self._rename_downloaded_file,
-                        audio_path,
-                        media_stem,
-                        "audio",
-                    )
-                # Karaoke flow
-                await self._process_karaoke(db, item, video_path, audio_path)
+            if task.task_type == "queue_prepare":
+                queue_item = db.query(QueueItem).filter(QueueItem.id == task.target_queue_item_id).first()
+                if queue_item is None:
+                    raise RuntimeError(f"Queue item not found for task {task.id}")
+                await self._process_queue_task(db, task, queue_item)
+            elif task.task_type == "media_karaoke":
+                media_item = db.query(MediaItem).filter(MediaItem.id == task.target_media_item_id).first()
+                if media_item is None:
+                    raise RuntimeError(f"Media item not found for task {task.id}")
+                await self._process_media_task(db, task, media_item)
             else:
-                if existing_media_path:
-                    logger.info(
-                        "Reusing existing media for non-karaoke item_id=%s media=%s",
-                        item.id,
-                        existing_media_path,
-                    )
-                    await self.queue_service.update_status_async(
-                        db, item_id, QueueStatus.READY
-                    )
-                    return
-                # Non-karaoke flow: prefer single file with built-in audio.
-                media_stem = self._media_stem(item)
-                processing_dir = self._processing_cache_dir()
-                video_path = await asyncio.to_thread(
-                    self.youtube_service.download_video_with_audio,
-                    item.media.youtube_id,
-                    processing_dir,
-                )
-                video_path = await asyncio.to_thread(
-                    self._rename_downloaded_file,
-                    video_path,
-                    media_stem,
-                    "media",
-                )
-                final_media_path = await asyncio.to_thread(
-                    self._persist_primary_media,
-                    media_stem,
-                    video_path,
-                )
-                self.queue_service.set_media_path(db, item_id, str(final_media_path))
-                await self.queue_service.update_status_async(
-                    db, item_id, QueueStatus.READY
-                )
-                logger.info(
-                    "Non-karaoke processing completed item_id=%s output=%s",
-                    item_id,
-                    final_media_path,
-                )
-
-        except Exception as e:
-            logger.exception("Failed processing queue item %s", item_id)
-            await self.queue_service.update_status_async(
-                db, item_id, QueueStatus.FAILED, error=str(e)
+                raise RuntimeError(f"Unsupported processing task type: {task.task_type}")
+        except Exception as exc:
+            logger.exception("Processing task failed task_id=%s", task.id)
+            failure_summary = str(exc)
+            failure_detail = failure_summary[-400:]
+            await processing_task_service.set_status(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.FAILED,
+                stage=task.stage or "failed",
+                error_summary=failure_summary,
+                error_detail=failure_detail,
+                progress_label=failure_summary,
             )
+
+    async def _process_queue_task(self, db: Session, task: ProcessingTask, item: QueueItem):
+        if item.media is None:
+            raise RuntimeError(f"Queue item missing media for id={item.id}")
+
+        existing_media_path = self._existing_media_file(item)
+        existing_vocals_path = self._existing_local_file(item.media.vocals_path)
+        logger.info(
+            "Processing queue task task_id=%s queue_item_id=%s youtube_id=%s karaoke=%s",
+            task.id,
+            item.id,
+            item.media.youtube_id,
+            item.requested_karaoke,
+        )
+
+        if item.requested_karaoke:
+            if existing_media_path and existing_vocals_path:
+                await processing_task_service.set_status(
+                    db,
+                    task.id,
+                    status=ProcessingTaskStatus.DONE,
+                    stage="ready",
+                    progress_label="Reused existing karaoke media",
+                    progress_percent=100,
+                )
+                return
+            demucs_health = self.demucs_client.health_check()
+            if not demucs_health.healthy:
+                raise RuntimeError(
+                    f"Demucs unavailable at {demucs_health.api_url}: {demucs_health.detail}"
+                )
+            video_path, audio_path = await self._prepare_karaoke_inputs(
+                db,
+                task,
+                item.media,
+                existing_media_path=existing_media_path,
+                use_queue_item=item,
+            )
+            await self._process_karaoke(db, task, queue_item=item, media_item=item.media, video_path=video_path, audio_path=audio_path)
+            return
+
+        if existing_media_path:
+            await processing_task_service.set_status(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.DONE,
+                stage="ready",
+                progress_label="Reused existing media",
+                progress_percent=100,
+            )
+            return
+
+        if not item.media.youtube_id:
+            raise RuntimeError("Local queue media already exists but is unavailable on disk")
+
+        await processing_task_service.set_stage(
+            db,
+            task.id,
+            status=ProcessingTaskStatus.DOWNLOADING,
+            stage="download",
+            progress_label="Downloading media",
+            progress_percent=0,
+        )
+        loop = asyncio.get_running_loop()
+        media_stem = self._media_stem_for_media(item.media, fallback=f"queue-{item.id}")
+        processing_dir = self._processing_cache_dir()
+        video_path = await asyncio.to_thread(
+            self._download_video_with_audio_for_task,
+            item.media.youtube_id,
+            processing_dir,
+            loop,
+            task.id,
+        )
+        video_path = await asyncio.to_thread(
+            self._rename_downloaded_file,
+            video_path,
+            media_stem,
+            "media",
+        )
+        await processing_task_service.set_stage(
+            db,
+            task.id,
+            status=ProcessingTaskStatus.PROCESSING,
+            stage="finalize",
+            progress_label="Finalizing media",
+            progress_percent=95,
+        )
+        final_media_path = await asyncio.to_thread(
+            self._persist_primary_media,
+            media_stem,
+            video_path,
+        )
+        self._set_media_item_media_path(db, item.media, final_media_path)
+        await processing_task_service.set_status(
+            db,
+            task.id,
+            status=ProcessingTaskStatus.DONE,
+            stage="ready",
+            progress_label="Ready",
+            progress_percent=100,
+        )
+
+    async def _process_media_task(self, db: Session, task: ProcessingTask, media_item: MediaItem):
+        queue_like_item = QueueItem(id=task.id, media=media_item)  # lightweight carrier for naming helpers
+        existing_media_path = self._existing_local_file(media_item.media_path)
+        existing_vocals_path = self._existing_local_file(media_item.vocals_path)
+        if existing_media_path is None:
+            raise RuntimeError("Media item file is missing and cannot be processed")
+        if existing_vocals_path is not None:
+            await processing_task_service.set_status(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.DONE,
+                stage="ready",
+                progress_label="Existing karaoke vocals already available",
+                progress_percent=100,
+            )
+            return
+
+        demucs_health = self.demucs_client.health_check()
+        if not demucs_health.healthy:
+            raise RuntimeError(
+                f"Demucs unavailable at {demucs_health.api_url}: {demucs_health.detail}"
+            )
+
+        video_path, audio_path = await self._prepare_karaoke_inputs(
+            db,
+            task,
+            media_item,
+            existing_media_path=existing_media_path,
+            use_queue_item=queue_like_item,
+        )
+        await self._process_karaoke(
+            db,
+            task,
+            queue_item=None,
+            media_item=media_item,
+            video_path=video_path,
+            audio_path=audio_path,
+        )
+
+    async def _prepare_karaoke_inputs(
+        self,
+        db: Session,
+        task: ProcessingTask,
+        media_item: MediaItem,
+        *,
+        existing_media_path: Path | None,
+        use_queue_item: QueueItem,
+    ) -> tuple[Path, Path]:
+        media_stem = self._media_stem_for_media(
+            media_item,
+            fallback=media_item.youtube_id or f"media-{media_item.id}",
+        )
+        loop = asyncio.get_running_loop()
+        if existing_media_path:
+            await processing_task_service.set_stage(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.PROCESSING,
+                stage="extract_audio",
+                progress_label="Extracting audio",
+                progress_percent=10,
+            )
+            extracted_audio_path = settings.cache_path / "audio" / f"{media_stem}.audio.m4a"
+            audio_path = await asyncio.to_thread(
+                self.ffmpeg.extract_audio,
+                existing_media_path,
+                extracted_audio_path,
+            )
+            await processing_task_service.emit_log(
+                task.id,
+                message=f"Extracted audio to {audio_path.name}",
+                stream="system",
+                status=ProcessingTaskStatus.PROCESSING.value,
+                stage="extract_audio",
+                progress_percent=10,
+                progress_label="Extracting audio",
+            )
+            return existing_media_path, audio_path
+
+        if not media_item.youtube_id:
+            raise RuntimeError("Missing YouTube source for karaoke preparation")
+
+        processing_dir = self._processing_cache_dir()
+        await processing_task_service.set_stage(
+            db,
+            task.id,
+            status=ProcessingTaskStatus.DOWNLOADING,
+            stage="download",
+            progress_label="Downloading video",
+            progress_percent=0,
+        )
+        video_path = await asyncio.to_thread(
+            self._download_video_for_task,
+            media_item.youtube_id,
+            processing_dir,
+            loop,
+            task.id,
+        )
+        video_path = await asyncio.to_thread(
+            self._rename_downloaded_file,
+            video_path,
+            media_stem,
+            "media",
+        )
+        await processing_task_service.set_stage(
+            db,
+            task.id,
+            status=ProcessingTaskStatus.DOWNLOADING,
+            stage="download",
+            progress_label="Downloading audio",
+            progress_percent=25,
+        )
+        audio_path = await asyncio.to_thread(
+            self._download_audio_for_task,
+            media_item.youtube_id,
+            processing_dir,
+            loop,
+            task.id,
+        )
+        audio_path = await asyncio.to_thread(
+            self._rename_downloaded_file,
+            audio_path,
+            media_stem,
+            "audio",
+        )
+        return video_path, audio_path
+
+    async def _process_karaoke(
+        self,
+        db: Session,
+        task: ProcessingTask,
+        *,
+        queue_item: QueueItem | None,
+        media_item: MediaItem,
+        video_path: Path,
+        audio_path: Path,
+    ):
+        await processing_task_service.set_stage(
+            db,
+            task.id,
+            status=ProcessingTaskStatus.PROCESSING,
+            stage="demucs",
+            progress_label="Separating vocals",
+            progress_percent=45,
+        )
+        demucs_response = await self._separate_vocals_with_retry(
+            queue_item or QueueItem(id=task.id, media=media_item),
+            audio_path,
+            task_id=task.id,
+        )
+        no_vocals_path = Path(demucs_response.no_vocals_path)
+        vocals_raw_path = Path(demucs_response.vocals_path) if demucs_response.vocals_path else None
+        if vocals_raw_path is None or not vocals_raw_path.exists():
+            raise RuntimeError("Demucs response missing vocals output path")
+        vocals_sidecar_path = await asyncio.to_thread(
+            self._persist_vocals_sidecar,
+            queue_item or QueueItem(id=task.id, media=media_item),
+            vocals_raw_path,
+        )
+        self._set_media_item_vocals_path(db, media_item, vocals_sidecar_path)
+        await processing_task_service.emit_progress(
+            task.id,
+            progress_percent=85,
+            progress_label="Remuxing karaoke media",
+            status=ProcessingTaskStatus.PROCESSING.value,
+            stage="finalize",
+        )
+        await processing_task_service.set_stage(
+            db,
+            task.id,
+            status=ProcessingTaskStatus.PROCESSING,
+            stage="finalize",
+            progress_label="Remuxing karaoke media",
+            progress_percent=85,
+        )
+        media_stem = self._media_stem_for_media(
+            media_item,
+            fallback=media_item.youtube_id or f"media-{media_item.id}",
+        )
+        output_path = settings.cache_path / "processed" / f"{media_stem}.mp4"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(
+            self.ffmpeg.combine_audio_video,
+            video_path=video_path,
+            audio_path=no_vocals_path,
+            output_path=output_path,
+        )
+        final_media_path = await asyncio.to_thread(
+            self._persist_primary_media,
+            media_stem,
+            output_path,
+        )
+        self._set_media_item_media_path(db, media_item, final_media_path)
+        await processing_task_service.set_status(
+            db,
+            task.id,
+            status=ProcessingTaskStatus.DONE,
+            stage="ready",
+            progress_label="Ready",
+            progress_percent=100,
+        )
 
     @staticmethod
     def _existing_media_file(item: QueueItem) -> Path | None:
@@ -207,7 +410,7 @@ class KaraokeService:
     def _canonical_vocals_stem(item: QueueItem) -> str:
         """Build a stable basename for persisted vocals sidecars."""
         if item.media:
-            return KaraokeService._media_stem(item)
+            return KaraokeService._media_stem_for_media(item.media, fallback=f"queue-{item.id}")
         base = f"queue-{item.id}"
         cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", base).strip("-")
         return cleaned or f"queue-{item.id}"
@@ -234,74 +437,12 @@ class KaraokeService:
         shutil.move(str(source_path), str(target_path))
         return target_path
 
-    async def _process_karaoke(
-        self, db: Session, item, video_path: Path, audio_path: Path
-    ):
-        """
-        Process karaoke-specific flow.
-
-        Args:
-            db: Database session
-            item: Queue item
-            video_path: Path to video file
-            audio_path: Path to audio file
-        """
-        # Update status to processing
-        await self.queue_service.update_status_async(
-            db, item.id, QueueStatus.PROCESSING
-        )
-
-        # Remove vocals using Demucs
-        demucs_response = await self._separate_vocals_with_retry(item, audio_path)
-        no_vocals_path = Path(demucs_response.no_vocals_path)
-        vocals_raw_path = Path(demucs_response.vocals_path) if demucs_response.vocals_path else None
-        if vocals_raw_path is None or not vocals_raw_path.exists():
-            raise RuntimeError("Demucs response missing vocals output path")
-        vocals_sidecar_path = await asyncio.to_thread(
-            self._persist_vocals_sidecar,
-            item,
-            vocals_raw_path,
-        )
-        logger.info(
-            "Demucs separation completed item_id=%s no_vocals=%s vocals=%s",
-            item.id,
-            no_vocals_path,
-            vocals_sidecar_path,
-        )
-        self.queue_service.set_vocals_path(db, item.id, str(vocals_sidecar_path))
-
-        media_stem = self._media_stem(item)
-        output_path = settings.cache_path / "processed" / f"{media_stem}.mp4"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        await asyncio.to_thread(
-            self.ffmpeg.combine_audio_video,
-            video_path=video_path,
-            audio_path=no_vocals_path,
-            output_path=output_path,
-        )
-        final_media_path = await asyncio.to_thread(
-            self._persist_primary_media,
-            media_stem,
-            output_path,
-        )
-
-        # Update item with final media path
-        self.queue_service.set_media_path(db, item.id, str(final_media_path))
-        await self.queue_service.update_status_async(db, item.id, QueueStatus.READY)
-        logger.info(
-            "Karaoke processing completed item_id=%s output=%s",
-            item.id,
-            final_media_path,
-        )
-
     @staticmethod
-    def _media_stem(item: QueueItem) -> str:
-        if item.media is None:
-            return f"queue-{item.id}"
-        return item.media.file_stem or build_media_stem(
-            item.media.title,
-            item.media.artist,
-            fallback=item.media.youtube_id or f"queue-{item.id}",
+    def _media_stem_for_media(media_item: MediaItem, fallback: str) -> str:
+        return media_item.file_stem or build_media_stem(
+            media_item.title,
+            media_item.artist,
+            fallback=fallback,
         )
 
     @staticmethod
@@ -316,18 +457,23 @@ class KaraokeService:
             return source_path
         target_path.parent.mkdir(parents=True, exist_ok=True)
         if target_path.exists():
-            logger.warning("Skipping downloaded file rename due to existing target source=%s target=%s", source_path, target_path)
+            logger.warning(
+                "Skipping downloaded file rename due to existing target source=%s target=%s",
+                source_path,
+                target_path,
+            )
             return source_path
         shutil.move(str(source_path), str(target_path))
         return target_path
 
-    async def _separate_vocals_with_retry(self, item: QueueItem, audio_path: Path):
-        """
-        Run Demucs separation with one fallback retry for extracted local audio.
-
-        Some Demucs environments fail on remuxed extracted containers from local media.
-        When that happens, retry once using a fresh yt-dlp audio download.
-        """
+    async def _separate_vocals_with_retry(
+        self,
+        item: QueueItem,
+        audio_path: Path,
+        *,
+        task_id: int,
+    ):
+        """Run Demucs separation with one fallback retry for extracted local audio."""
         try:
             return await self.demucs_client.separate_vocals(audio_path)
         except httpx.HTTPStatusError as error:
@@ -342,10 +488,14 @@ class KaraokeService:
             if not can_retry:
                 raise
 
-            logger.warning(
-                "Demucs failed for extracted audio item_id=%s status=%s; retrying with yt-dlp audio",
-                item.id,
-                status_code,
+            await processing_task_service.emit_log(
+                task_id,
+                message="Demucs failed on extracted audio; retrying with fresh yt-dlp audio",
+                stream="remote",
+                status=ProcessingTaskStatus.PROCESSING.value,
+                stage="demucs",
+                progress_percent=50,
+                progress_label="Retrying Demucs preparation",
             )
             processing_dir = self._processing_cache_dir()
             fallback_audio_path = await asyncio.to_thread(
@@ -354,3 +504,112 @@ class KaraokeService:
                 processing_dir,
             )
             return await self.demucs_client.separate_vocals(fallback_audio_path)
+
+    @staticmethod
+    def _set_media_item_media_path(db: Session, media_item: MediaItem, media_path: Path):
+        media_item.media_path = QueueService.build_media_url(media_path)
+        media_item.missing = False
+        db.commit()
+
+    @staticmethod
+    def _set_media_item_vocals_path(db: Session, media_item: MediaItem, vocals_path: Path):
+        media_item.vocals_path = QueueService.build_media_url(vocals_path)
+        db.commit()
+
+    @staticmethod
+    def _progress_callback(
+        loop: asyncio.AbstractEventLoop,
+        task_id: int,
+        start_percent: int,
+        end_percent: int,
+        label: str,
+        *,
+        status: str,
+        stage: str,
+    ):
+        def callback(percent: int, raw_line: str):
+            mapped = start_percent
+            if end_percent > start_percent:
+                mapped = start_percent + int((percent / 100.0) * (end_percent - start_percent))
+            future = asyncio.run_coroutine_threadsafe(
+                processing_task_service.emit_progress(
+                    task_id,
+                    progress_percent=max(0, min(100, mapped)),
+                    progress_label=label,
+                    status=status,
+                    stage=stage,
+                ),
+                loop,
+            )
+            future.result(timeout=5)
+        return callback
+
+    @staticmethod
+    def _log_callback(
+        loop: asyncio.AbstractEventLoop,
+        task_id: int,
+        *,
+        status: str,
+        stage: str,
+    ):
+        def callback(stream: str, message: str):
+            future = asyncio.run_coroutine_threadsafe(
+                processing_task_service.emit_log(
+                    task_id,
+                    message=message,
+                    stream=stream,
+                    status=status,
+                    stage=stage,
+                ),
+                loop,
+            )
+            future.result(timeout=5)
+        return callback
+
+    def _download_video_for_task(
+        self,
+        youtube_id: str,
+        output_dir: Path,
+        loop: asyncio.AbstractEventLoop,
+        task_id: int,
+    ) -> Path:
+        if isinstance(self.youtube_service, YouTubeService):
+            return self.youtube_service.download_video_with_progress(
+                youtube_id,
+                output_dir,
+                progress_callback=self._progress_callback(loop, task_id, 0, 25, "Downloading video", status=ProcessingTaskStatus.DOWNLOADING.value, stage="download"),
+                log_callback=self._log_callback(loop, task_id, status=ProcessingTaskStatus.DOWNLOADING.value, stage="download"),
+            )
+        return self.youtube_service.download_video(youtube_id, output_dir)
+
+    def _download_audio_for_task(
+        self,
+        youtube_id: str,
+        output_dir: Path,
+        loop: asyncio.AbstractEventLoop,
+        task_id: int,
+    ) -> Path:
+        if isinstance(self.youtube_service, YouTubeService):
+            return self.youtube_service.download_audio_with_progress(
+                youtube_id,
+                output_dir,
+                progress_callback=self._progress_callback(loop, task_id, 25, 45, "Downloading audio", status=ProcessingTaskStatus.DOWNLOADING.value, stage="download"),
+                log_callback=self._log_callback(loop, task_id, status=ProcessingTaskStatus.DOWNLOADING.value, stage="download"),
+            )
+        return self.youtube_service.download_audio(youtube_id, output_dir)
+
+    def _download_video_with_audio_for_task(
+        self,
+        youtube_id: str,
+        output_dir: Path,
+        loop: asyncio.AbstractEventLoop,
+        task_id: int,
+    ) -> Path:
+        if isinstance(self.youtube_service, YouTubeService):
+            return self.youtube_service.download_video_with_audio_progress(
+                youtube_id,
+                output_dir,
+                progress_callback=self._progress_callback(loop, task_id, 0, 90, "Downloading media", status=ProcessingTaskStatus.DOWNLOADING.value, stage="download"),
+                log_callback=self._log_callback(loop, task_id, status=ProcessingTaskStatus.DOWNLOADING.value, stage="download"),
+            )
+        return self.youtube_service.download_video_with_audio(youtube_id, output_dir)

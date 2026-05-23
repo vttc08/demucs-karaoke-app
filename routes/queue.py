@@ -4,13 +4,14 @@ import json
 import logging
 import math
 from typing import List
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from config import settings
-from database import SessionLocal, get_db
-from models import QueueItem, QueueItemCreate, QueueItemMoveRequest, QueueItemResponse, QueueStatus
+from database import get_db
+from models import ProcessingTaskResponse, QueueItem, QueueItemCreate, QueueItemMoveRequest, QueueItemResponse, QueueStatus
 from routes.auth import auth_service, get_admin_user, require_admin_user
 from services.lyrics_service import LyricsService
+from services.processing_task_service import processing_task_service, task_execution_coordinator
 from services.auth_service import ADMIN_SESSION_COOKIE
 from services.queue_service import QueueService
 from services.websocket_manager import manager
@@ -108,19 +109,6 @@ async def _send_ws_error(websocket: WebSocket, detail: str) -> None:
         },
         websocket,
     )
-
-
-def _process_item_background(item_id: int):
-    """Process queue item in a dedicated background session."""
-    from services.karaoke_service import KaraokeService
-
-    db = SessionLocal()
-    heartbeat_task: asyncio.Task | None = None
-    try:
-        karaoke_service = KaraokeService()
-        asyncio.run(karaoke_service.process_queue_item(db, item_id))
-    finally:
-        db.close()
 
 
 @router.post("/", response_model=QueueItemResponse)
@@ -368,7 +356,6 @@ async def clear_queue(
 @router.post("/{item_id}/process")
 def process_item(
     item_id: int,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """Trigger processing of a queue item without blocking the request."""
@@ -377,10 +364,12 @@ def process_item(
         raise HTTPException(status_code=404, detail="Queue item not found")
 
     if item.status in [QueueStatus.DOWNLOADING, QueueStatus.PROCESSING]:
-        return {"status": "processing", "item_id": item_id}
+        task = processing_task_service.get_or_create_queue_task(db, item_id)
+        return {"status": "processing", "item_id": item_id, "task_id": task.id}
 
-    background_tasks.add_task(_process_item_background, item_id)
-    return {"status": "processing", "item_id": item_id}
+    task = processing_task_service.get_or_create_queue_task(db, item_id)
+    task_execution_coordinator.start(task.id)
+    return {"status": "processing", "item_id": item_id, "task_id": task.id}
 
 
 @router.websocket("/ws")

@@ -18,6 +18,11 @@ const editLyricsToggle = document.getElementById("media-edit-lyrics-toggle");
 const editFilenamePreview = document.getElementById("media-edit-filename-preview");
 const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
 const isAdmin = document.querySelector('main[data-is-admin]')?.dataset.isAdmin === "true";
+const taskPanel = document.getElementById("media-task-panel");
+const taskList = document.getElementById("media-task-list");
+const taskLogShell = document.getElementById("media-task-log-shell");
+const taskLogTitle = document.getElementById("media-task-log-title");
+const taskLogOutput = document.getElementById("media-task-log-output");
 const AUTO_RENAME_DEFAULT_HTML = `<span class="material-symbols-outlined text-[16px]">auto_fix_high</span><span>${t('common.auto')}</span>`;
 const AUTO_RENAME_LOADING_HTML = `<span class="material-symbols-outlined animate-spin text-[16px]">sync</span><span>${t('media.inferring')}</span>`;
 
@@ -64,6 +69,10 @@ const activeCapabilityFilters = new Set();
 let toastTimer = null;
 let activeEditItemId = null;
 let activeEditMediaPath = "";
+let activeTaskId = null;
+let taskSummarySource = null;
+let taskDetailSource = null;
+let currentTasks = [];
 
 function isMobile() {
     return window.innerWidth < 640;
@@ -226,6 +235,126 @@ function applyFilters() {
         row.classList.toggle("hidden", !visible);
     });
     updateEmptyState();
+}
+
+function renderTaskList(tasks) {
+    if (!taskPanel || !taskList) {
+        return;
+    }
+    currentTasks = Array.isArray(tasks) ? tasks : [];
+    taskPanel.classList.toggle("hidden", currentTasks.length === 0);
+    if (!currentTasks.length) {
+        taskList.innerHTML = "";
+        if (taskLogShell) {
+            taskLogShell.classList.add("hidden");
+        }
+        return;
+    }
+    taskList.innerHTML = currentTasks.map((task) => {
+        const progress = task.live?.progress_percent;
+        const label = task.live?.progress_label || task.stage || task.status;
+        const targetId = task.target_media_item_id || task.target_queue_item_id || task.id;
+        const summary = task.last_error_summary
+            ? `<p class="mt-3 line-clamp-3 text-[11px] text-error">${escapeHtml(task.last_error_summary)}</p>`
+            : "";
+        const progressHtml = progress === null || progress === undefined
+            ? summary
+            : `
+                <div class="mt-3">
+                    <div class="h-2 overflow-hidden rounded-full bg-surface-container-highest">
+                        <div class="h-full rounded-full bg-primary transition-all" style="width: ${Math.max(0, Math.min(100, Number(progress) || 0))}%"></div>
+                    </div>
+                    <p class="mt-1 text-[11px] text-on-surface-variant">${escapeHtml(label)} • ${escapeHtml(String(progress))}%</p>
+                </div>
+            `;
+        return `
+            <article class="rounded-xl border border-white/10 bg-surface-container-low p-3 cursor-pointer" data-task-id="${task.id}">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-bold text-on-surface">${escapeHtml(task.target_media_item_id ? t("media.media_task_target", { id: targetId }) : t("media.queue_task_target", { id: targetId }))}</p>
+                        <p class="mt-0.5 text-[11px] uppercase tracking-wider text-on-surface-variant">${escapeHtml(task.stage || task.status)}</p>
+                    </div>
+                    <span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">${escapeHtml(task.status)}</span>
+                </div>
+                ${progressHtml}
+            </article>
+        `;
+    }).join("");
+}
+
+async function refreshTaskList() {
+    if (!isAdmin || !taskList) {
+        return;
+    }
+    try {
+        const response = await fetch(appUrl("/api/tasks/"));
+        if (!response.ok) {
+            throw new Error(`task list ${response.status}`);
+        }
+        const tasks = await response.json();
+        renderTaskList(tasks);
+    } catch (error) {
+        console.warn("Task list refresh failed:", error);
+    }
+}
+
+function appendTaskLogLine(text) {
+    if (!taskLogOutput) {
+        return;
+    }
+    taskLogOutput.textContent += `${text}\n`;
+    taskLogOutput.scrollTop = taskLogOutput.scrollHeight;
+}
+
+function openTaskLog(taskId) {
+    if (!isAdmin || !taskLogShell || !taskLogOutput || !taskLogTitle) {
+        return;
+    }
+    activeTaskId = taskId;
+    taskLogShell.classList.remove("hidden");
+    taskLogOutput.textContent = "";
+    taskLogTitle.textContent = t("media.live_task_log_for", { id: String(taskId) });
+    if (taskDetailSource) {
+        taskDetailSource.close();
+    }
+    taskDetailSource = new EventSource(appUrl(`/api/tasks/${Number(taskId)}/stream`));
+    taskDetailSource.onmessage = (event) => {
+        try {
+            const payload = JSON.parse(event.data);
+            if (payload.message) {
+                appendTaskLogLine(payload.message);
+            } else if (payload.event_type === "snapshot") {
+                appendTaskLogLine(`${payload.progress_label || payload.stage || payload.status || "snapshot"}`);
+            }
+        } catch (error) {
+            console.warn("Task log parse failed:", error);
+        }
+    };
+    taskDetailSource.onerror = () => {
+        appendTaskLogLine(t("media.task_stream_reconnecting"));
+    };
+}
+
+function connectTaskStream() {
+    if (!isAdmin || !taskPanel || typeof EventSource === "undefined") {
+        return;
+    }
+    if (taskSummarySource) {
+        taskSummarySource.close();
+    }
+    taskSummarySource = new EventSource(appUrl("/api/tasks/stream"));
+    taskSummarySource.onmessage = async () => {
+        await refreshTaskList();
+    };
+    taskSummarySource.onerror = () => {
+        window.setTimeout(() => {
+            if (taskSummarySource) {
+                taskSummarySource.close();
+                taskSummarySource = null;
+            }
+            connectTaskStream();
+        }, 2000);
+    };
 }
 
 function syncFilterButtonStyles() {
@@ -493,6 +622,34 @@ async function deleteItem(itemNode) {
     }
 }
 
+async function startKaraokeTask(itemNode) {
+    if (!isAdmin) {
+        return;
+    }
+    const itemId = itemNode.dataset.itemId;
+    const title = getItemFieldText(itemNode, "title") || t("common.track_title");
+    setButtonsForAction(itemId, "make-karaoke", { disabled: true, label: t("media.processing") });
+    try {
+        const response = await fetch(appUrl(`/api/media/${Number(itemId)}/karaoke`), {
+            method: "POST",
+        });
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || t("media.karaoke_task_failed"));
+        }
+        const payload = await response.json();
+        showToast(t("media.karaoke_task_started", { title }));
+        await refreshTaskList();
+        if (payload.task_id) {
+            openTaskLog(payload.task_id);
+        }
+    } catch (error) {
+        const message = error instanceof Error ? error.message : t("media.karaoke_task_failed");
+        showToast(message);
+        setButtonsForAction(itemId, "make-karaoke", { disabled: false, label: t("media.make_karaoke") });
+    }
+}
+
 async function autoRenameMediaItem(actionButton) {
     if (!isAdmin || !editTitleInput || !editArtistInput) {
         return;
@@ -653,6 +810,13 @@ function handleActionClick(event) {
         return;
     }
 
+    if (action === "clear-task-log") {
+        if (taskLogOutput) {
+            taskLogOutput.textContent = "";
+        }
+        return;
+    }
+
     if (action === "scan-item-sidecars") {
         refreshMediaItemSidecars(button);
         return;
@@ -669,6 +833,8 @@ function handleActionClick(event) {
         deleteItem(itemNode);
     } else if (action === "add-to-queue") {
         addToQueue(itemNode);
+    } else if (action === "make-karaoke") {
+        startKaraokeTask(itemNode);
     }
 }
 
@@ -741,5 +907,14 @@ document.addEventListener("keydown", (event) => {
         closeEditModal();
     }
 });
+taskList?.addEventListener("click", (event) => {
+    const taskCard = event.target.closest("[data-task-id]");
+    if (!taskCard) {
+        return;
+    }
+    openTaskLog(taskCard.dataset.taskId);
+});
 syncFilterButtonStyles();
 updateEmptyState();
+refreshTaskList();
+connectTaskStream();

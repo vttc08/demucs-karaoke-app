@@ -334,6 +334,40 @@ The stage page uses a websocket-first model:
   - runtime queue state (`requested_karaoke`, `status`, `error`)
   - rows are removed when songs are skipped/completed (active queue persists across crashes)
 
+## Durable processing tasks
+
+- `processing_tasks` is the durable processing/restart model:
+  - `task_type` (`queue_prepare`, `media_karaoke`)
+  - `source_kind` (`youtube`, `library_media`, `uploaded_media`)
+  - target linkage to queue and/or media rows
+  - coarse durable `status` (`pending`, `downloading`, `processing`, `done`, `failed`)
+  - coarse `stage` (`download`, `extract_audio`, `demucs`, `finalize`, etc.)
+  - retry metadata (`attempt_count`)
+  - terminal failure summaries (`last_error_summary`, `last_error_detail`)
+- `queue_items.status` remains the playback-facing queue state for compatibility with stage/queue logic and is mirrored from queue-backed processing tasks.
+- Existing media karaoke processing also uses `processing_tasks`, but it does not create queue rows unless the item is separately added to queue.
+
+## Live task progress architecture
+
+- Live task percentages and verbose logs are intentionally in-memory only:
+  - `services/task_stream_service.py` retains the latest progress snapshot per active task
+  - each task also keeps a rolling log/event buffer for SSE reconnect replay
+- This allows:
+  - compact progress on `/queue`
+  - admin monitoring/log inspection on `/media`
+  - reconnectable SSE streams during the current app process lifetime
+- This state is not persisted across app restarts by design.
+
+## Processing restart flow
+
+- On app startup, interrupted tasks with durable status `pending`, `downloading`, or `processing` are reset to restartable `pending`.
+- The startup flow then re-enqueues them through the task execution coordinator.
+- Restart behavior is coarse:
+  - yt-dlp downloads restart from the beginning
+  - local ffmpeg extraction/remux restart from the beginning
+  - Demucs work restarts from the beginning of that stage
+- The app does not currently attempt byte-range or partial-percentage resume.
+
 ## Runtime outbound proxy flow
 
 - Runtime settings expose `ytdlp_proxy_url` through:

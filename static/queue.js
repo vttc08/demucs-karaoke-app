@@ -1350,7 +1350,20 @@ async function refreshQueue(force = false) {
             let statusChanged = false;
             serverQueue.forEach(item => {
                 const element = document.querySelector(`[data-id="${item.id}"]`);
-                if (element && element.dataset.status !== item.status) {
+                if (!element) {
+                    return;
+                }
+                const currentProgress = element.dataset.processingProgress || '';
+                const nextProgress = item.processing_progress === null || item.processing_progress === undefined
+                    ? ''
+                    : String(item.processing_progress);
+                const currentLabel = element.dataset.processingLabel || '';
+                const nextLabel = item.processing_label || '';
+                if (
+                    element.dataset.status !== item.status ||
+                    currentProgress !== nextProgress ||
+                    currentLabel !== nextLabel
+                ) {
                     statusChanged = true;
                 }
             });
@@ -1427,8 +1440,16 @@ function updateQueueDisplay(queue) {
                     ${leftActionHtml}
                 </div>
                 ` : '';
+        const progressHtml = (item.processing_progress !== null && item.processing_progress !== undefined && ['downloading', 'processing'].includes(item.status)) ? `
+                    <div class="mt-2 max-w-xs">
+                        <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
+                            <div class="h-full rounded-full bg-tertiary transition-all" style="width: ${Math.max(0, Math.min(100, Number(item.processing_progress) || 0))}%"></div>
+                        </div>
+                        <p class="mt-1 text-[10px] text-on-surface-variant">${escapeHtml(item.processing_label || item.processing_stage || t('queue.processing_ai'))} • ${escapeHtml(String(item.processing_progress))}%</p>
+                    </div>
+                    ` : '';
         return `
-            <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-status="${item.status}">
+            <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
                 ${leftColumnHtml}
                 <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 ${item.status !== 'playing' ? 'grayscale-[50%]' : ''}">
                     <img src="${thumbnail}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'">
@@ -1441,6 +1462,7 @@ function updateQueueDisplay(queue) {
                         ${statusInfo.icon}
                         <span class="text-[10px] font-black uppercase tracking-tighter ${statusInfo.textClass}">${statusInfo.label}</span>
                     </div>
+                    ${progressHtml}
                     ${item.is_karaoke ? `
                     <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
                         <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>
@@ -2284,8 +2306,7 @@ window.addEventListener('stage_time_update', (event) => {
     updateStageRemoteSeekForwardUi();
 });
 
-// Much gentler auto-refresh - only when user is not actively using search
-// Note: This is primarily for fallback mode when WebSocket is unavailable
+// Keep a light refresh loop so task progress can advance even when queue order/status is stable.
 let refreshInterval;
 function startQueueRefresh() {
     if (refreshInterval) clearInterval(refreshInterval);
@@ -2293,14 +2314,10 @@ function startQueueRefresh() {
         if (document.visibilityState === 'visible') {
             refreshQueue();
         }
-    }, 8000); // 8 seconds for initial load, 15 seconds in fallback mode
+    }, 3000);
 }
 
-// Don't start polling automatically - let WebSocket handle it
-// Only start if WebSocket initialization fails
-if (!queueWebSocket) {
-    startQueueRefresh();
-}
+startQueueRefresh();
 refreshDemucsHealth();
 updateStageRemotePlayPauseUi();
 updateStageRemoteVocalsUi();
