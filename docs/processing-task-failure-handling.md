@@ -21,6 +21,13 @@ Live progress percentages and verbose stdout/stderr logs are not persisted acros
 
 This means a browser reconnect can recover recent logs while the app stays up, but an app restart clears live log history.
 
+The in-memory replay window is intentionally bounded:
+
+- successful tasks expire from live memory after about 60 seconds
+- failed tasks expire from live memory after about 15 minutes
+
+After expiry, the durable task row still exists in SQLite, but recent SSE log replay is no longer available for that task.
+
 ## Restart Behavior
 
 If the app exits during:
@@ -54,4 +61,3 @@ Current Demucs integration is still coarse:
 - optional persistence for a compact failure log tail per task
 - retry/backoff policy for repeated startup failures
 - explicit cancel endpoint and cancellation propagation into yt-dlp / remote Demucs
-- retention cleanup for old successful tasks

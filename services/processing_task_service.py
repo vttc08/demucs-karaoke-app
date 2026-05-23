@@ -218,6 +218,8 @@ class ProcessingTaskService:
             message=error_summary,
             stream="system",
         )
+        if status in (ProcessingTaskStatus.DONE, ProcessingTaskStatus.FAILED):
+            await task_stream_manager.mark_task_terminal(task.id, status=task.status)
         await self._sync_queue_side_effects(db, task)
         return task
 

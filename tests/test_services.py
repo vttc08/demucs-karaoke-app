@@ -1,9 +1,10 @@
 """Tests for service layer."""
 import asyncio
 import logging
-import pytest
 import httpx
+import pytest
 import zipfile
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from pathlib import Path
@@ -22,7 +23,7 @@ from services.media_library_maintenance_service import (
 )
 from services.processing_task_service import processing_task_service
 from services.runtime_settings_service import RuntimeSettingsService
-from services.task_stream_service import task_stream_manager
+from services.task_stream_service import TaskStreamManager, task_stream_manager
 from services.websocket_manager import ConnectionManager
 from services.media_library_sync_service import MediaLibrarySyncService
 from services.media_library_service import MediaLibraryService
@@ -1477,6 +1478,79 @@ async def test_processing_task_emit_log_does_not_broadcast_queue_item_update(db_
 
     assert not any(msg["type"] == "queue_item_updated" for msg in socket.messages)
     await task_stream_manager.clear_task(task.id)
+
+
+@pytest.mark.asyncio
+async def test_task_stream_manager_expires_done_tasks_after_ttl(monkeypatch):
+    """Completed task live state should drop after the short retention window."""
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    current_time = {"value": base_time}
+
+    monkeypatch.setattr(
+        "services.task_stream_service.utc_now",
+        lambda: current_time["value"],
+    )
+
+    manager = TaskStreamManager(done_ttl_seconds=60, failed_ttl_seconds=900)
+    await manager.ensure_task(101, status="downloading", stage="download")
+    await manager.publish(
+        101,
+        event_type="done",
+        status="done",
+        stage="ready",
+        progress_percent=100,
+        progress_label="Ready",
+    )
+    await manager.mark_task_terminal(101, status="done")
+
+    assert manager.snapshot_now(101) is not None
+    assert len(await manager.recent_events(101)) == 1
+
+    current_time["value"] = base_time + timedelta(seconds=61)
+
+    assert manager.snapshot_now(101) is None
+    assert await manager.recent_events(101) == []
+    assert manager.active_summaries_now() == []
+
+
+@pytest.mark.asyncio
+async def test_task_stream_manager_retains_failed_tasks_longer_than_done(monkeypatch):
+    """Failed task logs should remain replayable until the longer failure TTL expires."""
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    current_time = {"value": base_time}
+
+    monkeypatch.setattr(
+        "services.task_stream_service.utc_now",
+        lambda: current_time["value"],
+    )
+
+    manager = TaskStreamManager(done_ttl_seconds=60, failed_ttl_seconds=900)
+    await manager.ensure_task(202, status="processing", stage="demucs")
+    await manager.publish(
+        202,
+        event_type="log",
+        status="processing",
+        stage="demucs",
+        message="separating vocals",
+        stream="remote",
+    )
+    await manager.publish(
+        202,
+        event_type="error",
+        status="failed",
+        stage="demucs",
+        message="Demucs failed",
+        stream="system",
+    )
+    await manager.mark_task_terminal(202, status="failed")
+
+    current_time["value"] = base_time + timedelta(minutes=10)
+    assert manager.snapshot_now(202) is not None
+    assert len(await manager.recent_events(202)) == 2
+
+    current_time["value"] = base_time + timedelta(minutes=16)
+    assert manager.snapshot_now(202) is None
+    assert await manager.recent_events(202) == []
 
 
 @pytest.mark.asyncio

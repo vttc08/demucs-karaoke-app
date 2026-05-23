@@ -1,8 +1,11 @@
 """yt-dlp adapter for YouTube downloads and search."""
-import subprocess
 import json
 import logging
+import queue
 import re
+import subprocess
+import threading
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Iterable, Tuple, Optional, Callable
 from config import settings
@@ -10,6 +13,7 @@ from config import settings
 logger = logging.getLogger(__name__)
 _DOWNLOAD_PROGRESS_RE = re.compile(r"\[download\]\s+(\d+(?:\.\d+)?)%")
 _STRUCTURED_PROGRESS_RE = re.compile(r"\[download\]\[karaoke-progress\]\s+(\d+(?:\.\d+)?)")
+_STREAM_DONE = object()
 
 
 class YtDlpAdapter:
@@ -480,6 +484,7 @@ class YtDlpAdapter:
         *,
         progress_callback: Callable[[int, str], None] | None = None,
         log_callback: Callable[[str, str], None] | None = None,
+        timeout_seconds: float = 300,
     ) -> None:
         """Run a yt-dlp download command and stream stdout/stderr lines."""
         process = subprocess.Popen(
@@ -490,29 +495,84 @@ class YtDlpAdapter:
             bufsize=1,
         )
         stdout_lines: list[str] = []
+        line_queue: queue.Queue[object] = queue.Queue()
+        reader_thread: threading.Thread | None = None
+        deadline = time.monotonic() + timeout_seconds
+
+        def enqueue_stdout(stream) -> None:
+            try:
+                while True:
+                    line = stream.readline()
+                    if line == "":
+                        break
+                    line_queue.put(line)
+            finally:
+                line_queue.put(_STREAM_DONE)
 
         if process.stdout is not None:
-            for line in process.stdout:
-                line = line.rstrip()
-                if not line:
-                    continue
-                stdout_lines.append(line)
-                if log_callback:
-                    stream_name = "stderr" if line.startswith(("ERROR:", "WARNING:")) else "stdout"
-                    log_callback(stream_name, line)
-                match = self._parse_progress_line(line)
-                if match and progress_callback:
-                    progress_callback(match, line)
-
-        return_code = process.wait(timeout=300)
-        if return_code != 0:
-            stderr = "\n".join(stdout_lines)
-            raise subprocess.CalledProcessError(
-                returncode=return_code,
-                cmd=cmd,
-                stderr=stderr,
-                output="\n".join(stdout_lines),
+            reader_thread = threading.Thread(
+                target=enqueue_stdout,
+                args=(process.stdout,),
+                daemon=True,
+                name="yt-dlp-stream-reader",
             )
+            reader_thread.start()
+
+        try:
+            if reader_thread is not None:
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(cmd, timeout_seconds, output="\n".join(stdout_lines))
+                    try:
+                        item = line_queue.get(timeout=remaining)
+                    except queue.Empty as exc:
+                        raise subprocess.TimeoutExpired(cmd, timeout_seconds, output="\n".join(stdout_lines)) from exc
+                    if item is _STREAM_DONE:
+                        break
+                    line = str(item).rstrip()
+                    if not line:
+                        continue
+                    stdout_lines.append(line)
+                    if log_callback:
+                        stream_name = "stderr" if line.startswith(("ERROR:", "WARNING:")) else "stdout"
+                        log_callback(stream_name, line)
+                    match = self._parse_progress_line(line)
+                    if match is not None and progress_callback:
+                        progress_callback(match, line)
+
+            remaining = max(0.0, deadline - time.monotonic())
+            return_code = process.wait(timeout=remaining)
+            if return_code != 0:
+                stderr = "\n".join(stdout_lines)
+                raise subprocess.CalledProcessError(
+                    returncode=return_code,
+                    cmd=cmd,
+                    stderr=stderr,
+                    output="\n".join(stdout_lines),
+                )
+        except Exception:
+            self._terminate_process(process)
+            raise
+        finally:
+            if process.stdout is not None:
+                process.stdout.close()
+            if reader_thread is not None:
+                reader_thread.join(timeout=1)
+
+    @staticmethod
+    def _terminate_process(process: subprocess.Popen) -> None:
+        """Terminate a child process and escalate to kill if it ignores SIGTERM."""
+        if process.poll() is not None:
+            return
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+        except ProcessLookupError:
+            return
 
     def _find_downloaded_file(self, output_dir: Path, output_stem: str, extensions: List[str]) -> Path:
         """

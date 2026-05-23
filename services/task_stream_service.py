@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 
@@ -16,8 +16,18 @@ def utc_now() -> datetime:
 class TaskStreamManager:
     """Retain live task snapshots and recent events in memory."""
 
-    def __init__(self, *, per_task_buffer: int = 200):
+    TERMINAL_STATUSES = {"done", "failed"}
+
+    def __init__(
+        self,
+        *,
+        per_task_buffer: int = 200,
+        done_ttl_seconds: int = 60,
+        failed_ttl_seconds: int = 900,
+    ):
         self._per_task_buffer = per_task_buffer
+        self._done_ttl = timedelta(seconds=done_ttl_seconds)
+        self._failed_ttl = timedelta(seconds=failed_ttl_seconds)
         self._state: dict[int, dict[str, Any]] = {}
         self._events: dict[int, deque[dict[str, Any]]] = {}
         self._summary_subscribers: set[asyncio.Queue] = set()
@@ -27,6 +37,7 @@ class TaskStreamManager:
     async def ensure_task(self, task_id: int, *, status: str | None = None, stage: str | None = None):
         """Ensure a task exists in in-memory state."""
         async with self._lock:
+            self._prune_expired_locked()
             state = self._state.setdefault(
                 task_id,
                 {
@@ -38,14 +49,17 @@ class TaskStreamManager:
                     "event_sequence": 0,
                     "event_count": 0,
                     "updated_at": utc_now(),
+                    "expires_at": None,
                 },
             )
             if status is not None:
                 state["status"] = status
             if stage is not None:
                 state["stage"] = stage
+            if status not in self.TERMINAL_STATUSES:
+                state["expires_at"] = None
             self._events.setdefault(task_id, deque(maxlen=self._per_task_buffer))
-            return deepcopy(state)
+            return self._public_state_copy(state)
 
     async def clear_task(self, task_id: int):
         """Drop completed task live state from memory."""
@@ -57,33 +71,43 @@ class TaskStreamManager:
     async def snapshot(self, task_id: int) -> dict[str, Any] | None:
         """Return the latest live snapshot for one task."""
         async with self._lock:
+            self._prune_expired_locked()
             state = self._state.get(task_id)
-            return deepcopy(state) if state else None
+            return self._public_state_copy(state) if state else None
 
     def snapshot_now(self, task_id: int) -> dict[str, Any] | None:
         """Return the latest snapshot without awaiting, for sync response mappers."""
         state = self._state.get(task_id)
-        return deepcopy(state) if state else None
+        if state is None or self._is_expired_state(state):
+            return None
+        return self._public_state_copy(state) if state else None
 
     async def recent_events(self, task_id: int) -> list[dict[str, Any]]:
         """Return buffered events for one task."""
         async with self._lock:
+            self._prune_expired_locked()
             events = self._events.get(task_id, deque())
             return [deepcopy(event) for event in events]
 
     async def active_summaries(self) -> list[dict[str, Any]]:
         """Return all active task snapshots."""
         async with self._lock:
-            return [deepcopy(state) for state in self._state.values()]
+            self._prune_expired_locked()
+            return [self._public_state_copy(state) for state in self._state.values()]
 
     def active_summaries_now(self) -> list[dict[str, Any]]:
         """Return active summaries without awaiting, for sync callers."""
-        return [deepcopy(state) for state in self._state.values()]
+        return [
+            self._public_state_copy(state)
+            for state in self._state.values()
+            if not self._is_expired_state(state)
+        ]
 
     async def register_summary_subscriber(self) -> asyncio.Queue:
         """Register a queue for summary events."""
         queue: asyncio.Queue = asyncio.Queue()
         async with self._lock:
+            self._prune_expired_locked()
             self._summary_subscribers.add(queue)
         return queue
 
@@ -96,6 +120,7 @@ class TaskStreamManager:
         """Register a queue for per-task events."""
         queue: asyncio.Queue = asyncio.Queue()
         async with self._lock:
+            self._prune_expired_locked()
             subscribers = self._task_subscribers.setdefault(task_id, set())
             subscribers.add(queue)
         return queue
@@ -135,6 +160,7 @@ class TaskStreamManager:
                     "event_sequence": 0,
                     "event_count": 0,
                     "updated_at": utc_now(),
+                    "expires_at": None,
                 },
             )
             if status is not None:
@@ -145,6 +171,8 @@ class TaskStreamManager:
                 state["progress_percent"] = progress_percent
             if progress_label is not None:
                 state["progress_label"] = progress_label
+            if status not in self.TERMINAL_STATUSES:
+                state["expires_at"] = None
 
             state["event_sequence"] += 1
             state["event_count"] += 1
@@ -173,6 +201,45 @@ class TaskStreamManager:
         for queue in task_subscribers:
             await queue.put(deepcopy(payload))
         return payload
+
+    async def mark_task_terminal(self, task_id: int, *, status: str):
+        """Set an expiry time for terminal task live state."""
+        async with self._lock:
+            self._prune_expired_locked()
+            state = self._state.get(task_id)
+            if state is None:
+                return
+            state["expires_at"] = self._expiry_for_status(status, state.get("updated_at") or utc_now())
+
+    def _expiry_for_status(self, status: str, base_time: datetime) -> datetime | None:
+        if status == "done":
+            return base_time + self._done_ttl
+        if status == "failed":
+            return base_time + self._failed_ttl
+        return None
+
+    @staticmethod
+    def _public_state_copy(state: dict[str, Any]) -> dict[str, Any]:
+        return deepcopy({key: value for key, value in state.items() if key != "expires_at"})
+
+    def _is_expired_state(self, state: dict[str, Any], now: datetime | None = None) -> bool:
+        expires_at = state.get("expires_at")
+        if expires_at is None:
+            return False
+        current = now or utc_now()
+        return expires_at <= current
+
+    def _prune_expired_locked(self):
+        now = utc_now()
+        expired_task_ids = [
+            task_id
+            for task_id, state in self._state.items()
+            if self._is_expired_state(state, now)
+        ]
+        for task_id in expired_task_ids:
+            self._state.pop(task_id, None)
+            self._events.pop(task_id, None)
+            self._task_subscribers.pop(task_id, None)
 
 
 task_stream_manager = TaskStreamManager()

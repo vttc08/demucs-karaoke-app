@@ -38,6 +38,13 @@ This avoids using SQLite as a high-frequency event bus while still allowing inte
 
 This state is intentionally not durable. It survives browser reconnects but not app restarts.
 
+Terminal live state is retained only briefly:
+
+- `done` tasks stay replayable for about 60 seconds
+- `failed` tasks stay replayable for about 15 minutes
+
+This keeps short reconnect windows for the admin SSE UI without allowing live task memory to grow without bound.
+
 ## Restart Semantics
 
 On startup:
@@ -64,5 +71,6 @@ The summary stream is for task list refreshes. The per-task stream is for admin 
 - progress lines are parsed in-process
 - raw output lines are emitted into the live task stream
 - queue/media UIs receive task progress without additional database writes
+- callback failure or timeout tears down the child `yt-dlp` process before the error is surfaced
 
 When mocks or legacy callers are used in tests, the orchestration falls back to the non-streaming youtube service methods.
