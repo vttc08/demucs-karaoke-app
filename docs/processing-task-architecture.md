@@ -64,6 +64,9 @@ The restart model is coarse on purpose. yt-dlp and local ffmpeg/demucs work rest
 
 The summary stream is for task list refreshes. The per-task stream is for admin log inspection on `/media`.
 
+The admin task-log client de-duplicates replayed per-task SSE events by the stream `sequence`
+value so automatic reconnects do not append the same buffered log lines twice.
+
 ## yt-dlp Progress
 
 `adapters/ytdlp.py` now supports streamed download execution:

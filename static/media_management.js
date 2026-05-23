@@ -70,6 +70,7 @@ let toastTimer = null;
 let activeEditItemId = null;
 let activeEditMediaPath = "";
 let activeTaskId = null;
+let activeTaskLogSequence = 0;
 let taskSummarySource = null;
 let taskDetailSource = null;
 let currentTasks = [];
@@ -458,6 +459,11 @@ function appendTaskLogLine(text) {
     taskLogOutput.scrollTop = taskLogOutput.scrollHeight;
 }
 
+function taskLogSequence(payload) {
+    const sequence = Number(payload?.sequence);
+    return Number.isFinite(sequence) && sequence > 0 ? sequence : null;
+}
+
 function openTaskLog(taskId, { scrollIntoView = false } = {}) {
     if (!isAdmin || !taskLogShell || !taskLogOutput || !taskLogTitle) {
         return;
@@ -467,6 +473,7 @@ function openTaskLog(taskId, { scrollIntoView = false } = {}) {
         return;
     }
     activeTaskId = normalizedTaskId;
+    activeTaskLogSequence = 0;
     taskLogShell.classList.remove("hidden");
     taskLogOutput.textContent = "";
     taskLogTitle.textContent = t("media.live_task_log_for", { id: String(normalizedTaskId) });
@@ -477,6 +484,13 @@ function openTaskLog(taskId, { scrollIntoView = false } = {}) {
     taskDetailSource.onmessage = (event) => {
         try {
             const payload = JSON.parse(event.data);
+            const sequence = taskLogSequence(payload);
+            if (sequence !== null) {
+                if (sequence <= activeTaskLogSequence) {
+                    return;
+                }
+                activeTaskLogSequence = sequence;
+            }
             if (payload.message) {
                 appendTaskLogLine(payload.message);
             } else if (payload.event_type === "snapshot") {

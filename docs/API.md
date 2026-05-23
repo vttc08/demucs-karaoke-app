@@ -673,7 +673,8 @@ POST /api/queue/{item_id}/process
 ```
 
 Triggers background processing of a queue item.
-The endpoint now creates or reuses a durable processing task and starts it in the background.
+The endpoint creates or reuses a durable processing task and always hands it to the in-process
+execution coordinator, so a stuck active task can be restarted without waiting for an app restart.
 
 **Response:**
 ```json

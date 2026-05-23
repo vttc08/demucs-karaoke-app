@@ -285,6 +285,44 @@ def test_process_queue_item_returns_task_id(client):
     mock_start.assert_called_once_with(payload["task_id"])
 
 
+def test_process_queue_item_restarts_existing_active_task(client):
+    """Queue processing trigger should still hand active durable tasks to the coordinator."""
+    queue_response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "active-task123",
+            "title": "Active Task Song",
+            "is_karaoke": False,
+        },
+    )
+    item_id = queue_response.json()["id"]
+
+    with TestingSessionLocal() as db:
+        queue_item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
+        assert queue_item is not None
+        queue_item.status = QueueStatus.DOWNLOADING.value
+        db.add(
+            ProcessingTask(
+                task_type="queue_prepare",
+                source_kind="youtube",
+                target_queue_item_id=item_id,
+                target_media_item_id=queue_item.media_id,
+                status=ProcessingTaskStatus.DOWNLOADING.value,
+                stage="download",
+            )
+        )
+        db.commit()
+
+    with patch("routes.queue.task_execution_coordinator.start") as mock_start:
+        response = client.post(f"/api/queue/{item_id}/process")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "processing"
+    assert isinstance(payload["task_id"], int)
+    mock_start.assert_called_once_with(payload["task_id"])
+
+
 def test_media_karaoke_route_creates_task(client):
     """Admin media karaoke trigger should create a durable media task."""
     authenticate_admin_client(client)

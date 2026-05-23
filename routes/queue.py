@@ -363,10 +363,6 @@ def process_item(
     if not item:
         raise HTTPException(status_code=404, detail="Queue item not found")
 
-    if item.status in [QueueStatus.DOWNLOADING, QueueStatus.PROCESSING]:
-        task = processing_task_service.get_or_create_queue_task(db, item_id)
-        return {"status": "processing", "item_id": item_id, "task_id": task.id}
-
     task = processing_task_service.get_or_create_queue_task(db, item_id)
     task_execution_coordinator.start(task.id)
     return {"status": "processing", "item_id": item_id, "task_id": task.id}
