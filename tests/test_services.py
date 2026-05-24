@@ -1,9 +1,10 @@
 """Tests for service layer."""
 import asyncio
 import logging
-import pytest
 import httpx
+import pytest
 import zipfile
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from pathlib import Path
@@ -20,7 +21,9 @@ from services.media_library_maintenance_service import (
     MediaItemRenameConflictError,
     MediaLibraryMaintenanceService,
 )
+from services.processing_task_service import processing_task_service
 from services.runtime_settings_service import RuntimeSettingsService
+from services.task_stream_service import TaskStreamManager, task_stream_manager
 from services.websocket_manager import ConnectionManager
 from services.media_library_sync_service import MediaLibrarySyncService
 from services.media_library_service import MediaLibraryService
@@ -34,6 +37,8 @@ from models import (
     DemucsHealthResponse,
     DemucsResponse,
     MediaItem,
+    ProcessingTask,
+    ProcessingTaskStatus,
     QueueItem,
     QueueItemCreate,
     RuntimeSetting,
@@ -190,6 +195,53 @@ def test_queue_service_get_queue_sets_can_remove_for_owner_and_admin(db_session)
     items_for_admin = service.get_queue(db_session, is_admin=True)
     assert all(item.can_remove is True for item in items_for_admin)
     assert all(item.can_control_stage is True for item in items_for_admin)
+
+
+def test_queue_service_response_includes_step_progress_metadata(db_session):
+    """Queue responses should expose the current step metadata for active task progress."""
+    service = QueueService()
+    created = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="step-progress",
+            title="Step Progress",
+            is_karaoke=True,
+        ),
+    )
+    task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="youtube",
+        target_queue_item_id=created.id,
+        target_media_item_id=created.media_id,
+        status=ProcessingTaskStatus.DOWNLOADING.value,
+        stage="download",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    asyncio.run(
+        processing_task_service.emit_progress(
+            task.id,
+            queue_item_id=created.id,
+            progress_percent=32,
+            progress_label="Downloading video",
+            progress_label_key="task.downloading_video",
+            progress_step_index=1,
+            progress_step_total=4,
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+    )
+
+    queue_items = service.get_queue(db_session)
+    item = next(entry for entry in queue_items if entry.id == created.id)
+    assert item.processing_progress == 32
+    assert item.processing_label == "Downloading video"
+    assert item.processing_label_key == "task.downloading_video"
+    assert item.processing_step_index == 1
+    assert item.processing_step_total == 4
+    asyncio.run(task_stream_manager.clear_task(task.id))
 
 
 def test_queue_service_add_to_queue_can_delegate_owner_guest_id(db_session):
@@ -1322,6 +1374,290 @@ async def test_queue_service_update_status_async_promotes_ready_item_when_idle(d
         msg["type"] == "current_item_changed" and msg["data"]["id"] == created.id
         for msg in socket.messages
     )
+
+
+@pytest.mark.asyncio
+async def test_processing_task_emit_progress_broadcasts_queue_item_progress_for_queue_clients(db_session):
+    """Queue-backed live task progress should push lightweight queue progress updates."""
+    service = QueueService()
+    created = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="progress-live", title="Live Progress", is_karaoke=False),
+    )
+    task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="youtube",
+        target_queue_item_id=created.id,
+        target_media_item_id=created.media_id,
+        status=ProcessingTaskStatus.DOWNLOADING.value,
+        stage="download",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self):
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    queue_socket = DummySocket()
+    stage_socket = DummySocket()
+    manager.active_connections.extend([queue_socket, stage_socket])
+    manager._connection_context[queue_socket] = {"role": "queue"}
+    manager._connection_context[stage_socket] = {"role": "stage"}
+
+    with (
+        patch("services.websocket_manager.manager", manager),
+    ):
+        await processing_task_service.emit_progress(
+            task.id,
+            queue_item_id=created.id,
+            progress_percent=42,
+            progress_label="Downloading media",
+            progress_label_key="task.downloading_media",
+            progress_step_index=1,
+            progress_step_total=2,
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+
+    progress_events = [msg for msg in queue_socket.messages if msg["type"] == "queue_item_progress"]
+    assert len(progress_events) == 1
+    assert progress_events[0]["data"]["id"] == created.id
+    assert progress_events[0]["data"]["task_id"] == task.id
+    assert progress_events[0]["data"]["processing_progress"] == 42
+    assert progress_events[0]["data"]["processing_label"] == "Downloading media"
+    assert progress_events[0]["data"]["processing_label_key"] == "task.downloading_media"
+    assert progress_events[0]["data"]["processing_step_index"] == 1
+    assert progress_events[0]["data"]["processing_step_total"] == 2
+    assert progress_events[0]["data"]["processing_stage"] == "download"
+    assert progress_events[0]["data"]["status"] == ProcessingTaskStatus.DOWNLOADING.value
+    assert not any(msg["type"] == "queue_item_progress" for msg in stage_socket.messages)
+    assert not any(msg["type"] == "queue_item_updated" for msg in queue_socket.messages)
+
+    await task_stream_manager.clear_task(task.id)
+
+
+@pytest.mark.asyncio
+async def test_processing_task_emit_progress_without_queue_item_id_does_not_broadcast_queue_update(db_session):
+    """Media-only progress should stay in the task stream and avoid queue websocket fan-out."""
+    service = QueueService()
+    created = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="progress-media", title="Media Progress", is_karaoke=False),
+    )
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="uploaded_media",
+        target_media_item_id=created.media_id,
+        status=ProcessingTaskStatus.DOWNLOADING.value,
+        stage="download",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self):
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    socket = DummySocket()
+    manager.active_connections.append(socket)
+    manager._connection_context[socket] = {"role": "queue"}
+
+    with patch("services.websocket_manager.manager", manager):
+        await processing_task_service.emit_progress(
+            task.id,
+            progress_percent=12,
+            progress_label="Downloading media",
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+
+    assert not any(msg["type"] == "queue_item_progress" for msg in socket.messages)
+    assert not any(msg["type"] == "queue_item_updated" for msg in socket.messages)
+    await task_stream_manager.clear_task(task.id)
+
+
+def test_karaoke_progress_callback_throttles_to_about_once_per_second():
+    """yt-dlp progress callbacks should not emit queue updates every tick."""
+    service = KaraokeService()
+    emitted = []
+    fake_future = Mock()
+    fake_future.result.return_value = None
+
+    class FakeLoop:
+        def __init__(self):
+            self.current_time = 0.0
+
+        def time(self):
+            return self.current_time
+
+    loop = FakeLoop()
+
+    with patch("services.karaoke_service.asyncio.run_coroutine_threadsafe") as mock_run:
+        def capture(coro, target_loop):
+            emitted.append(coro)
+            coro.close()
+            return fake_future
+
+        mock_run.side_effect = capture
+        callback = service._progress_callback(
+            loop,
+            task_id=123,
+            label="Downloading media",
+            label_key="task.downloading_media",
+            step_index=1,
+            step_total=2,
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+
+        callback(1, "[download][karaoke-progress] 1.0")
+        callback(2, "[download][karaoke-progress] 2.0")
+        loop.current_time = 0.5
+        callback(3, "[download][karaoke-progress] 3.0")
+        loop.current_time = 1.1
+        callback(4, "[download][karaoke-progress] 4.0")
+        loop.current_time = 1.2
+        callback(4, "[download][karaoke-progress] 4.0")
+        loop.current_time = 1.3
+        callback(100, "[download][karaoke-progress] 100.0")
+
+    assert mock_run.call_count == 3
+    assert len(emitted) == 3
+
+
+@pytest.mark.asyncio
+async def test_processing_task_emit_log_does_not_broadcast_queue_item_update(db_session):
+    """Log lines should stay in the task stream and not spam queue websocket updates."""
+    service = QueueService()
+    created = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="log-only", title="Log Only", is_karaoke=False),
+    )
+    task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="youtube",
+        target_queue_item_id=created.id,
+        target_media_item_id=created.media_id,
+        status=ProcessingTaskStatus.DOWNLOADING.value,
+        stage="download",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self):
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    socket = DummySocket()
+    manager.active_connections.append(socket)
+    manager._connection_context[socket] = {"role": "queue"}
+
+    with (
+        patch("services.websocket_manager.manager", manager),
+        patch("services.processing_task_service.SessionLocal", TestingSessionLocal),
+    ):
+        await processing_task_service.emit_log(
+            task.id,
+            message="[download][karaoke-progress] 12.0",
+            stream="stdout",
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+
+    assert not any(msg["type"] == "queue_item_updated" for msg in socket.messages)
+    await task_stream_manager.clear_task(task.id)
+
+
+@pytest.mark.asyncio
+async def test_task_stream_manager_expires_done_tasks_after_ttl(monkeypatch):
+    """Completed task live state should drop after the short retention window."""
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    current_time = {"value": base_time}
+
+    monkeypatch.setattr(
+        "services.task_stream_service.utc_now",
+        lambda: current_time["value"],
+    )
+
+    manager = TaskStreamManager(done_ttl_seconds=60, failed_ttl_seconds=900)
+    await manager.ensure_task(101, status="downloading", stage="download")
+    await manager.publish(
+        101,
+        event_type="done",
+        status="done",
+        stage="ready",
+        progress_percent=100,
+        progress_label="Ready",
+    )
+    await manager.mark_task_terminal(101, status="done")
+
+    assert manager.snapshot_now(101) is not None
+    assert len(await manager.recent_events(101)) == 1
+
+    current_time["value"] = base_time + timedelta(seconds=61)
+
+    assert manager.snapshot_now(101) is None
+    assert await manager.recent_events(101) == []
+    assert manager.active_summaries_now() == []
+
+
+@pytest.mark.asyncio
+async def test_task_stream_manager_retains_failed_tasks_longer_than_done(monkeypatch):
+    """Failed task logs should remain replayable until the longer failure TTL expires."""
+    base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    current_time = {"value": base_time}
+
+    monkeypatch.setattr(
+        "services.task_stream_service.utc_now",
+        lambda: current_time["value"],
+    )
+
+    manager = TaskStreamManager(done_ttl_seconds=60, failed_ttl_seconds=900)
+    await manager.ensure_task(202, status="processing", stage="demucs")
+    await manager.publish(
+        202,
+        event_type="log",
+        status="processing",
+        stage="demucs",
+        message="separating vocals",
+        stream="remote",
+    )
+    await manager.publish(
+        202,
+        event_type="error",
+        status="failed",
+        stage="demucs",
+        message="Demucs failed",
+        stream="system",
+    )
+    await manager.mark_task_terminal(202, status="failed")
+
+    current_time["value"] = base_time + timedelta(minutes=10)
+    assert manager.snapshot_now(202) is not None
+    assert len(await manager.recent_events(202)) == 2
+
+    current_time["value"] = base_time + timedelta(minutes=16)
+    assert manager.snapshot_now(202) is None
+    assert await manager.recent_events(202) == []
 
 
 @pytest.mark.asyncio

@@ -71,7 +71,8 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] show users in queue
 - [x] users can change only their own added songs
 - [x] queue as feature (user can queue as song as someone else only on admin interface)
-- [ ] show progress for ytdlp and demucs
+- [x] show progress for ytdlp and demucs
+- [x] step-scoped compact progress labels for queue and task panels
 - [x] customize lyric tracks behavior
 - [x] lyrics-assisted add-to-queue flow with manual lyrics override
 - [x] lyrics display page/modal for current song (synced and unsynced) (lyrics viewer screen)
@@ -79,7 +80,8 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] regression: yt-dlp bug (karaoke mode), downloads .mp4 first likely no sound, then download a .audio.webm, then .karaoke.mp4 after demucs, receives .vocals.mp3; work in db initially, but after scan, no longer works, db create 2 new entries, one for .audio.webm and the other likely for karaoke
 - [x] bug, admin requested as the guest still cannot control
 - [x] standardize yt-dlp input, demucs output and import into karaoke_media folder 
-- [ ] implement lyrics and karaoke demucs behavior for upload and media management 
+- [x] implement lyrics and karaoke demucs behavior for upload and media management
+- [ ] extend demucs backend with native async job + SSE progress contract
 - [ ] i frame only video previewer and editor (vibestudio editor)
 - [ ] add vocals to existing karaoke video (audio synchronization)
 - [ ] oidc authelia support

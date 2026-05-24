@@ -19,6 +19,7 @@ from services.media_library_maintenance_service import (
 from services.media_library_sync_service import MediaLibrarySyncService
 from services.media_naming import build_media_stem
 from services.media_thumbnail_service import MediaThumbnailService
+from services.processing_task_service import processing_task_service, task_execution_coordinator
 from services.queue_service import QueueService
 from services.websocket_manager import manager
 
@@ -132,6 +133,24 @@ async def upload_media(
         "queue_item_id": queued_item.id if queued_item else None,
         "lyrics_path": media_item.lyrics_path,
     }
+
+
+@router.post("/{item_id}/karaoke")
+def process_media_item_karaoke(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Create or reuse a durable karaoke task for an existing media item."""
+    media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
+    if media_item is None:
+        raise HTTPException(status_code=404, detail="Media item not found")
+    if media_item.missing:
+        raise HTTPException(status_code=409, detail="Media item file is missing")
+
+    task = processing_task_service.get_or_create_media_task(db, item_id)
+    task_execution_coordinator.start(task.id)
+    return {"status": "processing", "media_id": item_id, "task_id": task.id}
 
 
 @router.post("/scan")

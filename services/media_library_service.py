@@ -4,9 +4,10 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import MediaItem
+from models import MediaItem, ProcessingTask
 from services.media_thumbnail_service import MediaThumbnailService
 from services.queue_service import QueueService
+from services.task_stream_service import task_stream_manager
 
 
 class MediaLibraryService:
@@ -18,7 +19,7 @@ class MediaLibraryService:
             .order_by(MediaItem.updated_at.desc(), MediaItem.id.desc())
             .all()
         )
-        return [self._to_page_item(row) for row in rows]
+        return [self._to_page_item(db, row) for row in rows]
 
     def get_media_stats(self, db: Session) -> dict[str, int]:
         total = int(db.query(func.count(MediaItem.id)).scalar() or 0)
@@ -46,7 +47,18 @@ class MediaLibraryService:
         }
 
     @staticmethod
-    def _to_page_item(item: MediaItem) -> dict[str, Any]:
+    def _to_page_item(db: Session, item: MediaItem) -> dict[str, Any]:
+        task = (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_media_item_id == item.id,
+                ProcessingTask.task_type == "media_karaoke",
+                ProcessingTask.status.in_(["pending", "downloading", "processing", "failed"]),
+            )
+            .order_by(ProcessingTask.id.desc())
+            .first()
+        )
+        task_snapshot = task_stream_manager.snapshot_now(task.id) if task else None
         return {
             "id": item.id,
             "title": item.title,
@@ -56,6 +68,15 @@ class MediaLibraryService:
             "thumbnail": MediaLibraryService._thumbnail_for(item),
             "has_multi_track": bool(item.vocals_path and item.vocals_path.strip()),
             "has_lyrics": bool(item.lyrics_path and item.lyrics_path.strip()),
+            "task_id": task.id if task else None,
+            "task_status": task.status if task else None,
+            "task_stage": task.stage if task else None,
+            "task_progress": task_snapshot.get("progress_percent") if task_snapshot else None,
+            "task_label": task_snapshot.get("progress_label") if task_snapshot else None,
+            "task_label_key": task_snapshot.get("progress_label_key") if task_snapshot else None,
+            "task_label_args": task_snapshot.get("progress_label_args") if task_snapshot else None,
+            "task_step_index": task_snapshot.get("progress_step_index") if task_snapshot else None,
+            "task_step_total": task_snapshot.get("progress_step_total") if task_snapshot else None,
         }
 
     @staticmethod

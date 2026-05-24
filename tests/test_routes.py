@@ -1,4 +1,5 @@
 """Tests for API routes."""
+import asyncio
 import json
 import re
 import pytest
@@ -13,6 +14,8 @@ from models import (
     Base,
     DemucsHealthResponse,
     MediaItem,
+    ProcessingTask,
+    ProcessingTaskStatus,
     QueueItem,
     QueueStatus,
     RuntimeSetting,
@@ -22,6 +25,8 @@ from services.auth_service import ADMIN_SESSION_COOKIE, AuthService
 from services.i18n_service import LOCALE_COOKIE
 from services.media_naming import build_media_stem
 from services.media_thumbnail_service import MediaThumbnailService
+from services.processing_task_service import processing_task_service
+from services.task_stream_service import task_stream_manager
 from config import settings
 
 # Test database
@@ -257,6 +262,151 @@ def test_add_to_queue(client):
     assert data["title"] == "Test Song"
     assert data["is_karaoke"] is True
     assert data["status"] == "pending"
+
+
+def test_process_queue_item_returns_task_id(client):
+    """Queue processing trigger should create or reuse a durable task id."""
+    queue_response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "task123",
+            "title": "Task Song",
+            "is_karaoke": False,
+        },
+    )
+    item_id = queue_response.json()["id"]
+
+    with patch("routes.queue.task_execution_coordinator.start") as mock_start:
+        response = client.post(f"/api/queue/{item_id}/process")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "processing"
+    assert isinstance(payload["task_id"], int)
+    mock_start.assert_called_once_with(payload["task_id"])
+
+
+def test_process_queue_item_restarts_existing_active_task(client):
+    """Queue processing trigger should still hand active durable tasks to the coordinator."""
+    queue_response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "active-task123",
+            "title": "Active Task Song",
+            "is_karaoke": False,
+        },
+    )
+    item_id = queue_response.json()["id"]
+
+    with TestingSessionLocal() as db:
+        queue_item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
+        assert queue_item is not None
+        queue_item.status = QueueStatus.DOWNLOADING.value
+        db.add(
+            ProcessingTask(
+                task_type="queue_prepare",
+                source_kind="youtube",
+                target_queue_item_id=item_id,
+                target_media_item_id=queue_item.media_id,
+                status=ProcessingTaskStatus.DOWNLOADING.value,
+                stage="download",
+            )
+        )
+        db.commit()
+
+    with patch("routes.queue.task_execution_coordinator.start") as mock_start:
+        response = client.post(f"/api/queue/{item_id}/process")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "processing"
+    assert isinstance(payload["task_id"], int)
+    mock_start.assert_called_once_with(payload["task_id"])
+
+
+def test_media_karaoke_route_creates_task(client):
+    """Admin media karaoke trigger should create a durable media task."""
+    authenticate_admin_client(client)
+    with TestingSessionLocal() as db:
+        media_item = MediaItem(
+            title="Local Track",
+            artist="Singer",
+            file_stem="local-track",
+            media_path="/media/local-track.mp4",
+            missing=False,
+        )
+        db.add(media_item)
+        db.commit()
+        db.refresh(media_item)
+        media_id = media_item.id
+
+    with patch("routes.media_library.task_execution_coordinator.start") as mock_start:
+        response = client.post(f"/api/media/{media_id}/karaoke")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["media_id"] == media_id
+    assert isinstance(payload["task_id"], int)
+    mock_start.assert_called_once_with(payload["task_id"])
+
+
+def test_tasks_api_lists_active_tasks(client):
+    """Admin tasks API should include durable task rows."""
+    authenticate_admin_client(client)
+    with TestingSessionLocal() as db:
+        media_item = MediaItem(
+            title="Task Media",
+            artist="Artist",
+            file_stem="task-media",
+            media_path="/media/task-media.mp4",
+            missing=False,
+        )
+        db.add(media_item)
+        db.flush()
+        task = ProcessingTask(
+            task_type="media_karaoke",
+            source_kind="library_media",
+            target_media_item_id=media_item.id,
+            status=ProcessingTaskStatus.PENDING.value,
+            stage="queued",
+        )
+        db.add(task)
+        db.commit()
+        task_id = task.id
+
+    asyncio.run(
+        processing_task_service.emit_progress(
+            task_id,
+            progress_percent=57,
+            progress_label="Downloading video",
+            progress_label_key="task.downloading_video",
+            progress_step_index=1,
+            progress_step_total=4,
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+    )
+
+    response = client.get("/api/tasks/")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["task_type"] == "media_karaoke"
+    assert payload[0]["status"] == "pending"
+    assert payload[0]["live"]["progress_percent"] == 57
+    assert payload[0]["live"]["progress_label_key"] == "task.downloading_video"
+    assert payload[0]["live"]["progress_step_index"] == 1
+    assert payload[0]["live"]["progress_step_total"] == 4
+    asyncio.run(task_stream_manager.clear_task(task_id))
+
+
+def test_tasks_stream_route_returns_sse_snapshot(client):
+    """Task summary stream should resolve to the SSE route, not the task-id route."""
+    response = client.get("/api/tasks/stream")
+
+    assert response.status_code in {401, 403}
+    assert response.status_code != 422
 
 
 def test_add_to_queue_uses_guest_cookies_for_requester(client):
@@ -539,6 +689,50 @@ def test_queue_page_renders_thumbnail_for_local_media(client, tmp_path, monkeypa
 
     assert response.status_code == 200
     assert MediaThumbnailService.thumbnail_url_for_media_file(media_file) in response.text
+
+
+def test_queue_page_renders_clickable_processing_items_with_task_ids(client):
+    """Processing queue items should expose task metadata for media drill-down."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="queue-task-link",
+            title="Queue Task Link",
+            artist="Artist",
+            media_path="/media/queue-task-link.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1000,
+            requested_karaoke=False,
+            status=QueueStatus.PENDING,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+
+        task = processing_task_service.get_or_create_queue_task(db, queue_item.id)
+        asyncio.run(
+            processing_task_service.set_stage(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.DOWNLOADING,
+                stage="download",
+                progress_label="Downloading media",
+                progress_percent=42,
+            )
+        )
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert f'data-task-id="{task.id}"' in response.text
+    assert 'data-status="downloading"' in response.text
+    assert 'cursor-pointer hover:border-primary/30' in response.text
 
 
 def test_get_empty_queue(client):

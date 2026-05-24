@@ -16,6 +16,7 @@ def init_db():
     _migrate_legacy_queue_items_if_needed()
     Base.metadata.create_all(bind=engine)
     _ensure_queue_items_columns()
+    _ensure_processing_tasks_columns()
     _migrate_media_items_file_stems_if_needed()
     ensure_auxiliary_schema()
 
@@ -178,6 +179,38 @@ def _ensure_queue_items_columns(bind_engine=None):
             conn.execute(text(statement))
 
 
+def _ensure_processing_tasks_columns(bind_engine=None):
+    """Ensure incremental processing-task columns exist on older SQLite databases."""
+    target_engine = bind_engine or engine
+    inspector = inspect(target_engine)
+    if "processing_tasks" not in inspector.get_table_names():
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("processing_tasks")}
+    statements = []
+    if "stage" not in columns:
+        statements.append("ALTER TABLE processing_tasks ADD COLUMN stage TEXT")
+    if "attempt_count" not in columns:
+        statements.append(
+            "ALTER TABLE processing_tasks ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0"
+        )
+    if "last_error_summary" not in columns:
+        statements.append("ALTER TABLE processing_tasks ADD COLUMN last_error_summary TEXT")
+    if "last_error_detail" not in columns:
+        statements.append("ALTER TABLE processing_tasks ADD COLUMN last_error_detail TEXT")
+    if "started_at" not in columns:
+        statements.append("ALTER TABLE processing_tasks ADD COLUMN started_at DATETIME")
+    if "finished_at" not in columns:
+        statements.append("ALTER TABLE processing_tasks ADD COLUMN finished_at DATETIME")
+
+    if not statements:
+        return
+
+    with target_engine.begin() as conn:
+        for statement in statements:
+            conn.execute(text(statement))
+
+
 def ensure_auxiliary_schema(bind_engine=None):
     """Ensure non-ORM schema objects (indexes/FTS/triggers) exist."""
     target_engine = bind_engine or engine
@@ -211,6 +244,21 @@ def _ensure_indexes(bind_engine):
         conn.execute(
             text(
                 "CREATE INDEX IF NOT EXISTS idx_queue_items_media_id ON queue_items(media_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_processing_tasks_queue_item ON processing_tasks(target_queue_item_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_processing_tasks_media_item ON processing_tasks(target_media_item_id)"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_processing_tasks_status ON processing_tasks(status)"
             )
         )
 

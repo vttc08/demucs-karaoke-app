@@ -100,6 +100,10 @@ let queuePresenceUsers = [];
 let queueAsEnabled = false;
 let queueAsModalResolver = null;
 let queueConfigSelectedQueueAsGuestId = null;
+let currentQueueState = [];
+let refreshInterval = null;
+let queueRefreshPromise = null;
+let queueRefreshPending = false;
 
 function getCookieValue(name) {
     const match = document.cookie
@@ -1187,9 +1191,7 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
         button.classList.remove('bg-primary', 'text-on-primary');
         button.classList.add('bg-secondary', 'text-white');
 
-        // Refresh queue
         setTimeout(() => {
-            refreshQueue();
             // Clear search results after successful add
             searchInput.value = '';
             searchResults.innerHTML = '';
@@ -1309,6 +1311,8 @@ if (queueConfigModalBackdrop) {
     queueConfigModalBackdrop.addEventListener('click', closeQueueConfigModal);
 }
 
+queueList?.addEventListener('click', handleQueueItemCardClick);
+
 window.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && queueConfigModal && !queueConfigModal.classList.contains('hidden')) {
         closeQueueConfigModal();
@@ -1325,43 +1329,34 @@ async function refreshQueue(force = false) {
         searchResults.children.length > 0)) {
         return;
     }
-    
-    try {
-        const response = await fetch(`${API_BASE}/api/queue/`);
-        const serverQueue = await response.json();
-        syncStageControlAvailability(serverQueue);
-        syncStageVocalsAvailability(serverQueue);
-        syncStageLyricsAvailability(serverQueue);
-        
-        // Get current queue from DOM
-        const currentQueueElements = document.querySelectorAll('#queue-list .queue-item');
-        const currentQueueIds = Array.from(currentQueueElements).map(el => el.dataset.id);
-        const serverQueueIds = serverQueue.map(item => item.id.toString());
-        
-        // Only reload if queue actually changed (items added, removed, or status changed)
-        const queueChanged = currentQueueIds.length !== serverQueueIds.length ||
-                            !currentQueueIds.every((id, index) => id === serverQueueIds[index]);
-        
-        if (queueChanged) {
-            // Gentle refresh - just update queue section instead of full page reload
-            updateQueueDisplay(serverQueue);
-        } else {
-            // Check for status changes
-            let statusChanged = false;
-            serverQueue.forEach(item => {
-                const element = document.querySelector(`[data-id="${item.id}"]`);
-                if (element && element.dataset.status !== item.status) {
-                    statusChanged = true;
-                }
-            });
-            
-            if (statusChanged) {
-                updateQueueDisplay(serverQueue);
+
+    if (queueRefreshPromise) {
+        queueRefreshPending = queueRefreshPending || force;
+        return queueRefreshPromise;
+    }
+
+    queueRefreshPromise = (async () => {
+        try {
+            const response = await fetch(`${API_BASE}/api/queue/`);
+            if (!response.ok) {
+                throw new Error(`Queue refresh failed: ${response.status}`);
+            }
+            const serverQueue = await response.json();
+            applyQueueState(serverQueue);
+        } catch (error) {
+            console.error('Refresh queue error:', error);
+        } finally {
+            queueRefreshPromise = null;
+            if (queueRefreshPending) {
+                queueRefreshPending = false;
+                window.setTimeout(() => {
+                    refreshQueue(true);
+                }, 0);
             }
         }
-    } catch (error) {
-        console.error('Refresh queue error:', error);
-    }
+    })();
+
+    return queueRefreshPromise;
 }
 
 function updateQueueDisplay(queue) {
@@ -1388,6 +1383,7 @@ function updateQueueDisplay(queue) {
     queueList.innerHTML = queue.map(item => {
         const statusInfo = getStatusInfo(item.status);
         const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/placeholder.png'));
+        const canOpenTaskDetails = ['downloading', 'processing'].includes(item.status) && Number.isFinite(Number(item.task_id));
         const leftActionHtml = item.status === 'playing' ? `
                     <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="${t('queue.playing')}">
                         <span class="material-symbols-outlined">equalizer</span>
@@ -1427,8 +1423,15 @@ function updateQueueDisplay(queue) {
                     ${leftActionHtml}
                 </div>
                 ` : '';
+        const progressHtml = renderQueueProgressBlock(item);
+        const statusBadgeHtml = progressHtml ? '' : `
+                    <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${statusInfo.bgClass}">
+                        ${statusInfo.icon}
+                        <span class="text-[10px] font-black uppercase tracking-tighter ${statusInfo.textClass}">${statusInfo.label}</span>
+                    </div>
+                    `;
         return `
-            <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-status="${item.status}">
+            <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} ${canOpenTaskDetails ? 'cursor-pointer hover:border-primary/30' : ''} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
                 ${leftColumnHtml}
                 <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 ${item.status !== 'playing' ? 'grayscale-[50%]' : ''}">
                     <img src="${thumbnail}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'">
@@ -1437,10 +1440,8 @@ function updateQueueDisplay(queue) {
                     <h3 class="font-bold ${item.status === 'playing' ? 'text-on-surface' : 'text-on-surface/80'} truncate">${escapeHtml(item.title)}</h3>
                     ${item.artist ? `<p class="text-xs text-on-surface-variant truncate">${escapeHtml(item.artist)}</p>` : ''}
                     ${item.requested_by_name ? `<p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">${escapeHtml(t('queue.requested_by', { name: item.requested_by_name }))}</p>` : ''}
-                    <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${statusInfo.bgClass}">
-                        ${statusInfo.icon}
-                        <span class="text-[10px] font-black uppercase tracking-tighter ${statusInfo.textClass}">${statusInfo.label}</span>
-                    </div>
+                    ${statusBadgeHtml}
+                    ${progressHtml}
                     ${item.is_karaoke ? `
                     <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
                         <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>
@@ -1454,6 +1455,36 @@ function updateQueueDisplay(queue) {
             </div>
         `;
     }).join('');
+}
+
+function openQueueTaskInMedia(taskId) {
+    const numericTaskId = Number(taskId);
+    if (!Number.isFinite(numericTaskId) || numericTaskId <= 0) {
+        return;
+    }
+    const targetUrl = new URL(appUrl('/media'), window.location.origin);
+    targetUrl.searchParams.set('task_id', String(numericTaskId));
+    targetUrl.hash = 'media-task-panel';
+    window.location.assign(targetUrl.toString());
+}
+
+function handleQueueItemCardClick(event) {
+    if (!queueList) {
+        return;
+    }
+    const queueItem = event.target.closest('.queue-item');
+    if (!queueItem || !queueList.contains(queueItem)) {
+        return;
+    }
+    if (event.target.closest('button, a, input, select, textarea, label, [role="button"]')) {
+        return;
+    }
+    const status = queueItem.dataset.status;
+    const taskId = Number(queueItem.dataset.taskId);
+    if (!['downloading', 'processing'].includes(status) || !Number.isFinite(taskId) || taskId <= 0) {
+        return;
+    }
+    openQueueTaskInMedia(taskId);
 }
 
 function getStatusInfo(status) {
@@ -1509,6 +1540,157 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function getQueueProgressLabel(item) {
+    const label = item?.processing_label_key
+        ? t(item.processing_label_key, item.processing_label_args || {})
+        : (item?.processing_label || item?.processing_stage || t('queue.processing_ai'));
+    const stepIndex = Number(item?.processing_step_index);
+    const stepTotal = Number(item?.processing_step_total);
+    if (Number.isFinite(stepIndex) && Number.isFinite(stepTotal) && stepIndex > 0 && stepTotal > 0) {
+        return t('task.progress_step', {
+            label,
+            current: stepIndex,
+            total: stepTotal,
+        });
+    }
+    return label;
+}
+
+function renderQueueProgressBlock(item) {
+    const isActive = ['downloading', 'processing'].includes(item.status);
+    if (!isActive) {
+        return '';
+    }
+    const progressValue = item.processing_progress;
+    const percent = Number.isFinite(Number(progressValue)) ? Number(progressValue) : 0;
+    const label = getQueueProgressLabel(item);
+    return `
+        <div class="mt-2 max-w-xs">
+            <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
+                <div class="h-full rounded-full bg-tertiary transition-all" style="width: ${Math.max(0, Math.min(100, percent))}%"></div>
+            </div>
+            <p class="mt-1 text-[10px] text-on-surface-variant">${escapeHtml(label)} • ${escapeHtml(String(percent))}%</p>
+        </div>
+    `;
+}
+
+function normalizeQueueItem(item) {
+    if (!item || typeof item !== 'object') {
+        return null;
+    }
+    return {
+        ...item,
+        id: Number(item.id),
+        position: Number.isFinite(Number(item.position)) ? Number(item.position) : 0,
+    };
+}
+
+function sortQueueItems(queue) {
+    return [...queue].sort((a, b) => {
+        const positionDelta = Number(a?.position || 0) - Number(b?.position || 0);
+        if (positionDelta !== 0) {
+            return positionDelta;
+        }
+        return Number(a?.id || 0) - Number(b?.id || 0);
+    });
+}
+
+function applyQueueState(queue, { render = true } = {}) {
+    const normalized = Array.isArray(queue)
+        ? sortQueueItems(queue.map(normalizeQueueItem).filter(Boolean))
+        : [];
+    currentQueueState = normalized;
+    syncStageControlAvailability(currentQueueState);
+    syncStageVocalsAvailability(currentQueueState);
+    syncStageLyricsAvailability(currentQueueState);
+    if (render) {
+        updateQueueDisplay(currentQueueState);
+    }
+}
+
+function updateQueueState(mutator, options = {}) {
+    const snapshot = sortQueueItems(currentQueueState.map((item) => ({ ...item })));
+    const nextQueue = mutator(snapshot);
+    applyQueueState(Array.isArray(nextQueue) ? nextQueue : snapshot, options);
+}
+
+function upsertQueueItemState(item) {
+    const normalized = normalizeQueueItem(item);
+    if (!normalized) {
+        return false;
+    }
+    updateQueueState((queue) => {
+        const index = queue.findIndex((entry) => entry.id === normalized.id);
+        if (index >= 0) {
+            queue[index] = { ...queue[index], ...normalized };
+        } else {
+            queue.push(normalized);
+        }
+        return queue;
+    });
+    return true;
+}
+
+function patchQueueItemProgressState(item) {
+    if (!item || typeof item !== 'object') {
+        return false;
+    }
+    const normalizedId = Number(item.id);
+    if (!Number.isFinite(normalizedId)) {
+        return false;
+    }
+    const index = currentQueueState.findIndex((entry) => entry.id === normalizedId);
+    if (index < 0) {
+        return false;
+    }
+    updateQueueState((queue) => {
+        const targetIndex = queue.findIndex((entry) => entry.id === normalizedId);
+        if (targetIndex < 0) {
+            return queue;
+        }
+        queue[targetIndex] = {
+            ...queue[targetIndex],
+            ...item,
+            id: normalizedId,
+        };
+        return queue;
+    });
+    return true;
+}
+
+function removeQueueItemState(itemId) {
+    const normalizedId = Number(itemId);
+    if (!Number.isFinite(normalizedId)) {
+        return false;
+    }
+    updateQueueState((queue) => queue.filter((item) => item.id !== normalizedId));
+    return true;
+}
+
+function handleCurrentItemChanged(eventDetail) {
+    const currentId = Number(eventDetail?.id);
+    const previousId = Number(eventDetail?.previous_id);
+    const hasCurrentId = Number.isFinite(currentId) && currentId > 0;
+    const hasPreviousId = Number.isFinite(previousId) && previousId > 0;
+
+    if (hasCurrentId && !currentQueueState.some((item) => item.id === currentId)) {
+        refreshQueue(true);
+        return;
+    }
+
+    updateQueueState((queue) => queue
+        .filter((item) => !(hasPreviousId && item.id === previousId && item.id !== currentId))
+        .map((item) => {
+            if (hasCurrentId && item.id === currentId) {
+                return { ...item, status: 'playing' };
+            }
+            if (item.status === 'playing' && item.id !== currentId) {
+                return { ...item, status: 'ready' };
+            }
+            return item;
+        }));
+}
+
 async function moveSong(songId, direction) {
     try {
         const response = await fetch(window.KaraokeURLs.appUrl(`/api/queue/${songId}/move`), {
@@ -1520,7 +1702,6 @@ async function moveSong(songId, direction) {
         });
 
         if (response.ok) {
-            await refreshQueue(true);
             return;
         }
 
@@ -1647,6 +1828,7 @@ class QueueWebSocket {
                     timestamp: Date.now(),
                 });
                 this.sendPresenceHello();
+                refreshQueue(true);
             };
             
             this.ws.onmessage = (event) => {
@@ -1706,15 +1888,7 @@ class QueueWebSocket {
     fallbackToPolling() {
         logger.warn('[WebSocket] Falling back to polling mode');
         refreshPresenceFallback();
-        // Start the traditional polling interval
-        if (!refreshInterval) {
-            refreshInterval = setInterval(() => {
-                if (document.visibilityState === 'visible') {
-                    refreshQueue();
-                    refreshPresenceFallback();
-                }
-            }, 15000); // 15 seconds in fallback mode
-        }
+        startQueueRefresh();
     }
 
     buildPresencePayload() {
@@ -1777,6 +1951,9 @@ class QueueWebSocket {
                 break;
             case 'queue_item_updated':
                 window.dispatchEvent(new CustomEvent('queue_item_updated', { detail: message.data }));
+                break;
+            case 'queue_item_progress':
+                window.dispatchEvent(new CustomEvent('queue_item_progress', { detail: message.data }));
                 break;
             case 'queue_item_removed':
                 window.dispatchEvent(new CustomEvent('queue_item_removed', { detail: message.data }));
@@ -2160,57 +2337,35 @@ if (stageRemoteVocalsVolumeSlider) {
 
 // WebSocket event handlers
 window.addEventListener('queue_item_added', (event) => {
-    // Refresh the entire queue to maintain order
-    refreshQueue(true);
-});
-
-window.addEventListener('queue_item_updated', (event) => {
-    refreshQueue(true);
-});
-
-window.addEventListener('queue_item_removed', (event) => {
-    refreshQueue(true);
-});
-
-window.addEventListener('queue_cleared', (event) => {
-    const queueList = document.getElementById('queue-list');
-    
-    if (queueList) {
-        // Remove all non-playing items with animation
-        const items = queueList.querySelectorAll('.queue-item');
-        items.forEach((item, index) => {
-            if (item.dataset.status !== 'playing') {
-                setTimeout(() => {
-                    item.style.transition = 'all 0.3s ease-out';
-                    item.style.opacity = '0';
-                    item.style.transform = 'translateX(100%)';
-                    
-                    setTimeout(() => {
-                        item.remove();
-                        
-                        // Check if only playing item or empty
-                        const remainingItems = queueList.querySelectorAll('.queue-item');
-                        if (remainingItems.length === 0) {
-                            queueList.innerHTML = `
-                                <div class="text-center py-12">
-                                    <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">
-                                        <span class="material-symbols-outlined text-4xl text-on-surface-variant">queue_music</span>
-                                    </div>
-                                    <p class="text-on-surface-variant text-lg font-medium">${t('queue.empty')}</p>
-                                    <p class="text-on-surface-variant/60 text-sm">${t('queue.add_started')}</p>
-                                </div>
-                            `;
-                        }
-                    }, 300);
-                }, index * 50); // Stagger the animations
-            }
-        });
+    if (!upsertQueueItemState(event.detail)) {
+        refreshQueue(true);
     }
 });
 
+window.addEventListener('queue_item_updated', (event) => {
+    if (!upsertQueueItemState(event.detail)) {
+        refreshQueue(true);
+    }
+});
+
+window.addEventListener('queue_item_progress', (event) => {
+    if (!patchQueueItemProgressState(event.detail)) {
+        refreshQueue(true);
+    }
+});
+
+window.addEventListener('queue_item_removed', (event) => {
+    if (!removeQueueItemState(event.detail?.id)) {
+        refreshQueue(true);
+    }
+});
+
+window.addEventListener('queue_cleared', () => {
+    updateQueueState((queue) => queue.filter((item) => item.status === 'playing'));
+});
+
 window.addEventListener('current_item_changed', (event) => {
-    // Refresh to update playing state visuals
-    refreshQueue(true);
+    handleCurrentItemChanged(event.detail);
 });
 
 window.addEventListener('queue_item_failed', (event) => {
@@ -2237,8 +2392,18 @@ window.addEventListener('queue_item_failed', (event) => {
         setTimeout(() => notification.remove(), 300);
     }, 5000);
     
-    // Refresh queue to show failed status
-    refreshQueue(true);
+    updateQueueState((queue) => queue.map((item) => {
+        if (item.id !== Number(id)) {
+            return item;
+        }
+        return {
+            ...item,
+            status: 'failed',
+            error,
+            processing_progress: null,
+            processing_label: null,
+        };
+    }));
 });
 
 window.addEventListener('stage_state_update', (event) => {
@@ -2284,23 +2449,16 @@ window.addEventListener('stage_time_update', (event) => {
     updateStageRemoteSeekForwardUi();
 });
 
-// Much gentler auto-refresh - only when user is not actively using search
-// Note: This is primarily for fallback mode when WebSocket is unavailable
-let refreshInterval;
 function startQueueRefresh() {
     if (refreshInterval) clearInterval(refreshInterval);
     refreshInterval = setInterval(() => {
         if (document.visibilityState === 'visible') {
             refreshQueue();
+            refreshPresenceFallback();
         }
-    }, 8000); // 8 seconds for initial load, 15 seconds in fallback mode
+    }, 15000);
 }
 
-// Don't start polling automatically - let WebSocket handle it
-// Only start if WebSocket initialization fails
-if (!queueWebSocket) {
-    startQueueRefresh();
-}
 refreshDemucsHealth();
 updateStageRemotePlayPauseUi();
 updateStageRemoteVocalsUi();

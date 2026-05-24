@@ -18,6 +18,11 @@ const editLyricsToggle = document.getElementById("media-edit-lyrics-toggle");
 const editFilenamePreview = document.getElementById("media-edit-filename-preview");
 const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
 const isAdmin = document.querySelector('main[data-is-admin]')?.dataset.isAdmin === "true";
+const taskPanel = document.getElementById("media-task-panel");
+const taskList = document.getElementById("media-task-list");
+const taskLogShell = document.getElementById("media-task-log-shell");
+const taskLogTitle = document.getElementById("media-task-log-title");
+const taskLogOutput = document.getElementById("media-task-log-output");
 const AUTO_RENAME_DEFAULT_HTML = `<span class="material-symbols-outlined text-[16px]">auto_fix_high</span><span>${t('common.auto')}</span>`;
 const AUTO_RENAME_LOADING_HTML = `<span class="material-symbols-outlined animate-spin text-[16px]">sync</span><span>${t('media.inferring')}</span>`;
 
@@ -64,6 +69,21 @@ const activeCapabilityFilters = new Set();
 let toastTimer = null;
 let activeEditItemId = null;
 let activeEditMediaPath = "";
+let activeTaskId = null;
+let activeTaskLogSequence = 0;
+let taskSummarySource = null;
+let taskDetailSource = null;
+let currentTasks = [];
+let taskRefreshTimer = null;
+let taskRefreshPromise = null;
+let taskRefreshPending = false;
+let lastTaskRefreshAt = 0;
+let shouldScrollToTaskPanel = false;
+const initialTaskId = (() => {
+    const rawTaskId = new URLSearchParams(window.location.search).get("task_id");
+    const parsedTaskId = Number(rawTaskId);
+    return Number.isFinite(parsedTaskId) && parsedTaskId > 0 ? parsedTaskId : null;
+})();
 
 function isMobile() {
     return window.innerWidth < 640;
@@ -130,6 +150,53 @@ function updateEmptyState() {
     }
     const visibleItems = [...mediaRows].filter((item) => !item.classList.contains("hidden")).length;
     emptyState.classList.toggle("hidden", visibleItems > 0);
+}
+
+function escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = String(text ?? "");
+    return div.innerHTML;
+}
+
+function getTaskProgressLabel(task) {
+    const live = task?.live || {};
+    const label = live.progress_label_key
+        ? t(live.progress_label_key, live.progress_label_args || {})
+        : (live.progress_label || task?.stage || task?.status || "");
+    const stepIndex = Number(live.progress_step_index);
+    const stepTotal = Number(live.progress_step_total);
+    if (Number.isFinite(stepIndex) && Number.isFinite(stepTotal) && stepIndex > 0 && stepTotal > 0) {
+        return t("task.progress_step", {
+            label,
+            current: stepIndex,
+            total: stepTotal,
+        });
+    }
+    return label;
+}
+
+function renderTaskProgressBlock(task) {
+    if (!['downloading', 'processing'].includes(task?.status)) {
+        return "";
+    }
+    const progress = task?.live?.progress_percent;
+    const label = getTaskProgressLabel(task);
+    const percent = Number.isFinite(Number(progress)) ? Number(progress) : 0;
+    return `
+        <div class="mt-3 max-w-xs">
+            <div class="h-2 overflow-hidden rounded-full bg-surface-container-highest">
+                <div class="h-full rounded-full bg-primary transition-all" style="width: ${Math.max(0, Math.min(100, percent))}%"></div>
+            </div>
+            <p class="mt-1 text-[11px] text-on-surface-variant">${escapeHtml(label)} • ${escapeHtml(String(percent))}%</p>
+        </div>
+    `;
+}
+
+function scrollTaskPanelIntoView() {
+    if (!taskPanel) {
+        return;
+    }
+    taskPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function getMediaItemNodes(itemId) {
@@ -226,6 +293,302 @@ function applyFilters() {
         row.classList.toggle("hidden", !visible);
     });
     updateEmptyState();
+}
+
+function renderTaskList(tasks) {
+    if (!taskPanel || !taskList) {
+        return;
+    }
+    currentTasks = Array.isArray(tasks) ? tasks : [];
+    taskPanel.classList.toggle("hidden", currentTasks.length === 0);
+    if (!currentTasks.length) {
+        taskList.innerHTML = "";
+        if (taskLogShell) {
+            taskLogShell.classList.add("hidden");
+        }
+        return;
+    }
+    taskList.innerHTML = currentTasks.map((task) => {
+        const isSelectedTask = Number(activeTaskId) === Number(task.id);
+        const targetId = task.target_media_item_id || task.target_queue_item_id || task.id;
+        const summary = task.last_error_summary
+            ? `<p class="mt-3 line-clamp-3 text-[11px] text-error">${escapeHtml(task.last_error_summary)}</p>`
+            : "";
+        const progressHtml = renderTaskProgressBlock(task) || summary;
+        const statusChip = ['downloading', 'processing'].includes(task.status)
+            ? ""
+            : `<span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">${escapeHtml(task.status)}</span>`;
+        return `
+            <article class="rounded-xl border ${isSelectedTask ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20' : 'border-white/10 bg-surface-container-low'} p-3 cursor-pointer transition-colors" data-task-id="${task.id}" aria-current="${isSelectedTask ? 'true' : 'false'}">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-bold text-on-surface">${escapeHtml(task.target_media_item_id ? t("media.media_task_target", { id: targetId }) : t("media.queue_task_target", { id: targetId }))}</p>
+                        <p class="mt-0.5 text-[11px] uppercase tracking-wider text-on-surface-variant">${escapeHtml(task.stage || task.status)}</p>
+                    </div>
+                    ${statusChip}
+                </div>
+                ${progressHtml}
+        </article>
+        `;
+    }).join("");
+    if (shouldScrollToTaskPanel && currentTasks.length > 0) {
+        shouldScrollToTaskPanel = false;
+        scrollTaskPanelIntoView();
+    }
+}
+
+async function refreshTaskList() {
+    if (!isAdmin || !taskList) {
+        return;
+    }
+    if (taskRefreshPromise) {
+        taskRefreshPending = true;
+        return taskRefreshPromise;
+    }
+
+    taskRefreshPromise = (async () => {
+        try {
+            const response = await fetch(appUrl("/api/tasks/"));
+            if (!response.ok) {
+                throw new Error(`task list ${response.status}`);
+            }
+            const tasks = await response.json();
+            renderTaskList(tasks);
+            lastTaskRefreshAt = Date.now();
+        } catch (error) {
+            console.warn("Task list refresh failed:", error);
+        } finally {
+            taskRefreshPromise = null;
+            if (taskRefreshPending) {
+                taskRefreshPending = false;
+                const elapsed = Date.now() - lastTaskRefreshAt;
+                const delayMs = elapsed >= 1000 ? 0 : 1000 - elapsed;
+                scheduleTaskListRefresh(delayMs);
+            }
+        }
+    })();
+
+    return taskRefreshPromise;
+}
+
+function updateTaskLiveSnapshot(task, snapshot) {
+    if (!task || !snapshot) {
+        return false;
+    }
+    const nextProgress = snapshot.progress_percent;
+    const nextLabel = snapshot.progress_label;
+    const nextLabelKey = snapshot.progress_label_key;
+    const nextLabelArgs = snapshot.progress_label_args;
+    const nextStepIndex = snapshot.progress_step_index;
+    const nextStepTotal = snapshot.progress_step_total;
+    const nextSequence = snapshot.sequence ?? snapshot.event_sequence ?? task.live?.event_sequence ?? 0;
+    const currentProgress = task.live?.progress_percent;
+    const currentLabel = task.live?.progress_label;
+    const currentLabelKey = task.live?.progress_label_key;
+    const currentLabelArgs = task.live?.progress_label_args;
+    const currentStepIndex = task.live?.progress_step_index;
+    const currentStepTotal = task.live?.progress_step_total;
+    const currentSequence = task.live?.event_sequence ?? 0;
+    const statusChanged = snapshot.status !== undefined && snapshot.status !== null && task.status !== snapshot.status;
+    const stageChanged = snapshot.stage !== undefined && snapshot.stage !== null && task.stage !== snapshot.stage;
+    const liveChanged = currentProgress !== nextProgress ||
+        currentLabel !== nextLabel ||
+        currentLabelKey !== nextLabelKey ||
+        JSON.stringify(currentLabelArgs || null) !== JSON.stringify(nextLabelArgs || null) ||
+        currentStepIndex !== nextStepIndex ||
+        currentStepTotal !== nextStepTotal ||
+        currentSequence !== nextSequence;
+
+    if (!statusChanged && !stageChanged && !liveChanged) {
+        return false;
+    }
+
+    task.live = {
+        ...(task.live || {}),
+        progress_percent: nextProgress ?? null,
+        progress_label: nextLabel ?? null,
+        progress_label_key: nextLabelKey ?? null,
+        progress_label_args: nextLabelArgs ?? null,
+        progress_step_index: nextStepIndex ?? null,
+        progress_step_total: nextStepTotal ?? null,
+        event_sequence: nextSequence,
+        event_count: task.live?.event_count ?? 0,
+    };
+    if (statusChanged) {
+        task.status = snapshot.status;
+    }
+    if (stageChanged) {
+        task.stage = snapshot.stage;
+    }
+    return true;
+}
+
+function scheduleTaskListRefresh(delayMs = 1000) {
+    if (!isAdmin || !taskList) {
+        return;
+    }
+    if (taskRefreshPromise) {
+        taskRefreshPending = true;
+        return;
+    }
+    const elapsed = Date.now() - lastTaskRefreshAt;
+    const effectiveDelay = Math.max(delayMs, elapsed >= 1000 ? 0 : 1000 - elapsed);
+    if (taskRefreshTimer) {
+        window.clearTimeout(taskRefreshTimer);
+    }
+    taskRefreshTimer = window.setTimeout(() => {
+        taskRefreshTimer = null;
+        refreshTaskList();
+    }, effectiveDelay);
+}
+
+function applyTaskSummarySnapshot(snapshots) {
+    if (!Array.isArray(snapshots) || !currentTasks.length) {
+        if (Array.isArray(snapshots) && snapshots.length) {
+            scheduleTaskListRefresh();
+        }
+        return;
+    }
+    const snapshotById = new Map(
+        snapshots
+            .filter((snapshot) => snapshot && snapshot.task_id !== undefined && snapshot.task_id !== null)
+            .map((snapshot) => [Number(snapshot.task_id), snapshot])
+    );
+    let changed = false;
+    currentTasks.forEach((task) => {
+        const snapshot = snapshotById.get(Number(task.id));
+        if (snapshot && updateTaskLiveSnapshot(task, snapshot)) {
+            changed = true;
+        }
+    });
+    if (changed) {
+        renderTaskList(currentTasks);
+    }
+    if (snapshots.some((snapshot) => !currentTasks.some((task) => Number(task.id) === Number(snapshot.task_id)))) {
+        scheduleTaskListRefresh();
+    }
+}
+
+function applyTaskStreamEvent(payload) {
+    if (!payload || typeof payload !== "object") {
+        return;
+    }
+    if (payload.event_type === "snapshot" && Array.isArray(payload.tasks)) {
+        applyTaskSummarySnapshot(payload.tasks);
+        return;
+    }
+
+    const taskId = Number(payload.task_id);
+    if (!Number.isFinite(taskId)) {
+        return;
+    }
+    const task = currentTasks.find((entry) => Number(entry.id) === taskId);
+    if (!task) {
+        scheduleTaskListRefresh();
+        return;
+    }
+    if (updateTaskLiveSnapshot(task, payload)) {
+        renderTaskList(currentTasks);
+    }
+    if (["done", "error"].includes(payload.event_type)) {
+        scheduleTaskListRefresh();
+    }
+}
+
+function appendTaskLogLine(text) {
+    if (!taskLogOutput) {
+        return;
+    }
+    taskLogOutput.textContent += `${text}\n`;
+    taskLogOutput.scrollTop = taskLogOutput.scrollHeight;
+}
+
+function taskLogSequence(payload) {
+    const sequence = Number(payload?.sequence);
+    return Number.isFinite(sequence) && sequence > 0 ? sequence : null;
+}
+
+function openTaskLog(taskId, { scrollIntoView = false } = {}) {
+    if (!isAdmin || !taskLogShell || !taskLogOutput || !taskLogTitle) {
+        return;
+    }
+    const normalizedTaskId = Number(taskId);
+    if (!Number.isFinite(normalizedTaskId) || normalizedTaskId <= 0) {
+        return;
+    }
+    activeTaskId = normalizedTaskId;
+    activeTaskLogSequence = 0;
+    taskLogShell.classList.remove("hidden");
+    taskLogOutput.textContent = "";
+    taskLogTitle.textContent = t("media.live_task_log_for", { id: String(normalizedTaskId) });
+    if (taskDetailSource) {
+        taskDetailSource.close();
+    }
+    taskDetailSource = new EventSource(appUrl(`/api/tasks/${normalizedTaskId}/stream`));
+    taskDetailSource.onmessage = (event) => {
+        try {
+            const payload = JSON.parse(event.data);
+            const sequence = taskLogSequence(payload);
+            if (sequence !== null) {
+                if (sequence <= activeTaskLogSequence) {
+                    return;
+                }
+                activeTaskLogSequence = sequence;
+            }
+            if (payload.message) {
+                appendTaskLogLine(payload.message);
+            } else if (payload.event_type === "snapshot") {
+                appendTaskLogLine(`${payload.progress_label || payload.stage || payload.status || "snapshot"}`);
+            }
+        } catch (error) {
+            console.warn("Task log parse failed:", error);
+        }
+    };
+    taskDetailSource.onerror = () => {
+        appendTaskLogLine(t("media.task_stream_reconnecting"));
+    };
+    renderTaskList(currentTasks);
+    if (scrollIntoView) {
+        scrollTaskPanelIntoView();
+    }
+}
+
+function openDeepLinkedTaskFromUrl() {
+    if (!initialTaskId) {
+        return;
+    }
+    shouldScrollToTaskPanel = true;
+    openTaskLog(initialTaskId);
+    if (!currentTasks.some((task) => Number(task.id) === initialTaskId)) {
+        scheduleTaskListRefresh();
+    }
+}
+
+function connectTaskStream() {
+    if (!isAdmin || !taskPanel || typeof EventSource === "undefined") {
+        return;
+    }
+    if (taskSummarySource) {
+        taskSummarySource.close();
+    }
+    taskSummarySource = new EventSource(appUrl("/api/tasks/stream"));
+    taskSummarySource.onmessage = (event) => {
+        try {
+            applyTaskStreamEvent(JSON.parse(event.data));
+        } catch (error) {
+            console.warn("Task summary parse failed:", error);
+            scheduleTaskListRefresh();
+        }
+    };
+    taskSummarySource.onerror = () => {
+        window.setTimeout(() => {
+            if (taskSummarySource) {
+                taskSummarySource.close();
+                taskSummarySource = null;
+            }
+            connectTaskStream();
+        }, 2000);
+    };
 }
 
 function syncFilterButtonStyles() {
@@ -653,6 +1016,13 @@ function handleActionClick(event) {
         return;
     }
 
+    if (action === "clear-task-log") {
+        if (taskLogOutput) {
+            taskLogOutput.textContent = "";
+        }
+        return;
+    }
+
     if (action === "scan-item-sidecars") {
         refreshMediaItemSidecars(button);
         return;
@@ -741,5 +1111,15 @@ document.addEventListener("keydown", (event) => {
         closeEditModal();
     }
 });
+taskList?.addEventListener("click", (event) => {
+    const taskCard = event.target.closest("[data-task-id]");
+    if (!taskCard) {
+        return;
+    }
+    openTaskLog(taskCard.dataset.taskId);
+});
 syncFilterButtonStyles();
 updateEmptyState();
+refreshTaskList();
+connectTaskStream();
+openDeepLinkedTaskFromUrl();

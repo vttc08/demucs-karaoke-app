@@ -22,8 +22,10 @@ from routes import (
     qr as qr_routes,
     search,
     settings as settings_routes,
+    tasks as task_routes,
 )
 from services.media_library_sync_service import MediaLibrarySyncService
+from services.processing_task_service import processing_task_service, task_execution_coordinator
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -59,6 +61,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("No persisted runtime settings found")
 
+    recovered_task_ids: list[int] = []
     db = SessionLocal()
     try:
         scan_summary = media_library_sync_service.scan_library(db)
@@ -70,8 +73,13 @@ async def lifespan(app: FastAPI):
             scan_summary["sidecars_updated"],
             scan_summary["scanned_files"],
         )
+        recovered_task_ids = processing_task_service.recover_interrupted_tasks(db)
     finally:
         db.close()
+
+    for task_id in recovered_task_ids:
+        logger.info("Restarting interrupted processing task task_id=%s", task_id)
+        task_execution_coordinator.start(task_id)
 
     yield
     # Shutdown (cleanup if needed)
@@ -103,6 +111,7 @@ def create_app() -> FastAPI:
     created_app.include_router(qr_routes.router, prefix=base_path)
     created_app.include_router(search.router, prefix=base_path)
     created_app.include_router(settings_routes.router, prefix=base_path)
+    created_app.include_router(task_routes.router, prefix=base_path)
 
     @created_app.get(f"{base_path}/health")
     def health_check():

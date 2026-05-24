@@ -123,6 +123,8 @@ The stage page uses a websocket-first model:
   - `queue_item_removed`
   - `queue_cleared`
   - `current_item_changed`
+- Live processing progress broadcasts:
+  - `queue_item_progress` for lightweight live progress ticks on queue clients only
 - Queue presence broadcasts are queue-page only:
   - `presence_snapshot`
   - `user_joined`
@@ -152,6 +154,7 @@ The stage page uses a websocket-first model:
   mix commands and mirror live `stage_state_update` broadcasts.
 - Queue page includes a lyrics overlay toggle that mirrors the stage lyrics visibility state.
 - Queue page also renders a live "Here Now" roster from presence events and shows requester labels on queue items.
+- Queue page updates live download/processing progress from `queue_item_progress` without waiting for a full queue refresh.
 - The queue lyrics viewer subscribes as `lyrics_viewer` and follows the authoritative playback clock
   from websocket `stage_time_update` events.
 - Stage page subscribes as `stage`, consumes websocket queue events and stage-control events, and
@@ -333,6 +336,40 @@ The stage page uses a websocket-first model:
   - sparse `position` ordering (`1000` step)
   - runtime queue state (`requested_karaoke`, `status`, `error`)
   - rows are removed when songs are skipped/completed (active queue persists across crashes)
+
+## Durable processing tasks
+
+- `processing_tasks` is the durable processing/restart model:
+  - `task_type` (`queue_prepare`, `media_karaoke`)
+  - `source_kind` (`youtube`, `library_media`, `uploaded_media`)
+  - target linkage to queue and/or media rows
+  - coarse durable `status` (`pending`, `downloading`, `processing`, `done`, `failed`)
+  - coarse `stage` (`download`, `extract_audio`, `demucs`, `finalize`, etc.)
+  - retry metadata (`attempt_count`)
+  - terminal failure summaries (`last_error_summary`, `last_error_detail`)
+- `queue_items.status` remains the playback-facing queue state for compatibility with stage/queue logic and is mirrored from queue-backed processing tasks.
+- Existing media karaoke processing also uses `processing_tasks`, but it does not create queue rows unless the item is separately added to queue.
+
+## Live task progress architecture
+
+- Live task percentages and verbose logs are intentionally in-memory only:
+  - `services/task_stream_service.py` retains the latest progress snapshot per active task
+  - each task also keeps a rolling log/event buffer for SSE reconnect replay
+- This allows:
+  - compact progress on `/queue`
+  - admin monitoring/log inspection on `/media`
+  - reconnectable SSE streams during the current app process lifetime
+- This state is not persisted across app restarts by design.
+
+## Processing restart flow
+
+- On app startup, interrupted tasks with durable status `pending`, `downloading`, or `processing` are reset to restartable `pending`.
+- The startup flow then re-enqueues them through the task execution coordinator.
+- Restart behavior is coarse:
+  - yt-dlp downloads restart from the beginning
+  - local ffmpeg extraction/remux restart from the beginning
+  - Demucs work restarts from the beginning of that stage
+- The app does not currently attempt byte-range or partial-percentage resume.
 
 ## Runtime outbound proxy flow
 

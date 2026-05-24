@@ -1,6 +1,7 @@
 """Tests for yt-dlp adapter command construction and output selection."""
 from pathlib import Path
 import subprocess
+import threading
 
 import pytest
 
@@ -101,6 +102,198 @@ def test_download_video_with_audio_falls_back_to_best(monkeypatch, tmp_path):
     attempted_formats = [cmd[cmd.index("-f") + 1] for cmd in calls if "-f" in cmd]
     assert "best[ext=mp4]/best" in attempted_formats
     assert "-f" not in calls[-1]
+
+
+def test_streaming_download_adds_newline_for_live_progress(monkeypatch, tmp_path):
+    """Streaming downloads should force line-delimited yt-dlp progress output."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "stream123"
+    expected_output = tmp_path / f"{youtube_id}.mp4"
+    captured_cmd = {}
+
+    def fake_streaming_download(cmd, *, progress_callback=None, log_callback=None):
+        captured_cmd["cmd"] = cmd
+        expected_output.write_bytes(b"video")
+        if progress_callback:
+            progress_callback(42, "[download] 42.0%")
+
+    monkeypatch.setattr(adapter, "_run_streaming_download", fake_streaming_download)
+
+    progress_events = []
+    result = adapter.download_video_with_progress(
+        youtube_id,
+        tmp_path,
+        progress_callback=lambda percent, line: progress_events.append((percent, line)),
+    )
+
+    assert result == expected_output
+    assert "--newline" in captured_cmd["cmd"]
+    assert "--progress" in captured_cmd["cmd"]
+    assert "--no-colors" in captured_cmd["cmd"]
+    assert "--progress-template" in captured_cmd["cmd"]
+    assert "[download][karaoke-progress]" in captured_cmd["cmd"][captured_cmd["cmd"].index("--progress-template") + 1]
+    assert progress_events == [(42, "[download] 42.0%")]
+
+
+def test_streaming_download_filters_structured_progress_from_log_callback(monkeypatch, tmp_path):
+    """Structured progress lines should not also be forwarded as plain log lines."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    progress_events = []
+    log_events = []
+    progress_callback = lambda percent, line: progress_events.append((percent, line))
+    log_callback = lambda stream, line: log_events.append((stream, line))
+
+    class FakeStdout:
+        def __init__(self):
+            self.closed = False
+            self._lines = [
+                "[download] starting\n",
+                "[download][karaoke-progress] 13.0\n",
+                "finished\n",
+                "",
+            ]
+
+        def readline(self):
+            return self._lines.pop(0)
+
+        def close(self):
+            self.closed = True
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdout = FakeStdout()
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = 0
+            return 0
+
+    fake_process = FakeProcess()
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: fake_process)
+
+    adapter._run_streaming_download(
+        ["/bin/yt-dlp", "https://example.test/video"],
+        progress_callback=progress_callback,
+        log_callback=log_callback,
+        timeout_seconds=1,
+    )
+
+    assert progress_events == [(13, "[download][karaoke-progress] 13.0")]
+    assert log_events == [("stdout", "[download] starting"), ("stdout", "finished")]
+
+
+def test_parse_progress_line_prefers_structured_marker():
+    """Structured yt-dlp progress lines should parse into bounded integer percentages."""
+    assert YtDlpAdapter._parse_progress_line("[download][karaoke-progress] 42.500000") == 42
+    assert YtDlpAdapter._parse_progress_line("[download] 87.1% of 12.3MiB") == 87
+    assert YtDlpAdapter._parse_progress_line("some unrelated output") is None
+
+
+def test_run_streaming_download_terminates_child_when_callback_raises(monkeypatch):
+    """Callback failures should not leak the yt-dlp child process."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+
+    class FakeStdout:
+        def __init__(self):
+            self.closed = False
+            self._lines = ["[download] 5.0%\n", ""]
+
+        def readline(self):
+            return self._lines.pop(0)
+
+        def close(self):
+            self.closed = True
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdout = FakeStdout()
+            self.returncode = None
+            self.terminated = False
+            self.killed = False
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            self.terminated = True
+            self.returncode = -15
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+        def wait(self, timeout=None):
+            return 0 if self.returncode is None else self.returncode
+
+    fake_process = FakeProcess()
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: fake_process)
+
+    with pytest.raises(RuntimeError, match="callback failed"):
+        adapter._run_streaming_download(
+            ["/bin/yt-dlp", "https://example.test/video"],
+            progress_callback=lambda percent, line: (_ for _ in ()).throw(RuntimeError("callback failed")),
+            timeout_seconds=1,
+        )
+
+    assert fake_process.terminated is True
+    assert fake_process.killed is False
+    assert fake_process.stdout.closed is True
+
+
+def test_run_streaming_download_terminates_child_on_timeout(monkeypatch):
+    """Streaming timeout should terminate the child before surfacing the timeout."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    release_event = threading.Event()
+
+    class FakeStdout:
+        def __init__(self):
+            self.closed = False
+
+        def readline(self):
+            release_event.wait(timeout=1)
+            return ""
+
+        def close(self):
+            self.closed = True
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdout = FakeStdout()
+            self.returncode = None
+            self.terminated = False
+            self.killed = False
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            self.terminated = True
+            self.returncode = -15
+            release_event.set()
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+            release_event.set()
+
+        def wait(self, timeout=None):
+            return 0 if self.returncode is None else self.returncode
+
+    fake_process = FakeProcess()
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: fake_process)
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        adapter._run_streaming_download(
+            ["/bin/yt-dlp", "https://example.test/video"],
+            timeout_seconds=0.01,
+        )
+
+    assert fake_process.terminated is True
+    assert fake_process.killed is False
+    assert fake_process.stdout.closed is True
 
 
 def test_download_audio_default_fallback_can_return_mp4(monkeypatch, tmp_path):

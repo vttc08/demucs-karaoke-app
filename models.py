@@ -1,7 +1,7 @@
 """Data models and database schemas."""
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, model_validator
 from sqlalchemy import (
     Column,
@@ -32,6 +32,16 @@ class QueueStatus(str, Enum):
     READY = "ready"
     PLAYING = "playing"
     COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class ProcessingTaskStatus(str, Enum):
+    """Durable processing task status."""
+
+    PENDING = "pending"
+    DOWNLOADING = "downloading"
+    PROCESSING = "processing"
+    DONE = "done"
     FAILED = "failed"
 
 
@@ -83,6 +93,7 @@ class MediaItem(Base):
     )
     last_scanned_at = Column(DateTime, nullable=True)
     queue_items = relationship("QueueItem", back_populates="media")
+    processing_tasks = relationship("ProcessingTask", back_populates="media")
 
 
 class RuntimeSetting(Base):
@@ -93,6 +104,42 @@ class RuntimeSetting(Base):
     key = Column(String, primary_key=True, index=True)
     value = Column(String, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ProcessingTask(Base):
+    """Durable processing task metadata."""
+
+    __tablename__ = "processing_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_type = Column(String, nullable=False, index=True)
+    source_kind = Column(String, nullable=False, index=True)
+    target_queue_item_id = Column(
+        Integer,
+        ForeignKey("queue_items.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    target_media_item_id = Column(
+        Integer,
+        ForeignKey("media_items.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    status = Column(String, nullable=False, default=ProcessingTaskStatus.PENDING.value, index=True)
+    stage = Column(String, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    last_error_summary = Column(String, nullable=True)
+    last_error_detail = Column(String, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(
+        DateTime, default=utc_now, onupdate=utc_now, nullable=False
+    )
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+
+    queue_item = relationship("QueueItem")
+    media = relationship("MediaItem", back_populates="processing_tasks")
 
 
 class AdminUser(Base):
@@ -247,7 +294,75 @@ class QueueItemResponse(BaseModel):
     lyrics_path: Optional[str] = None
     vocals_path: Optional[str] = None
     error: Optional[str] = None
+    task_id: Optional[int] = None
+    processing_stage: Optional[str] = None
+    processing_progress: Optional[int] = None
+    processing_label: Optional[str] = None
+    processing_label_key: Optional[str] = None
+    processing_label_args: Optional[dict[str, Any]] = None
+    processing_step_index: Optional[int] = None
+    processing_step_total: Optional[int] = None
     created_at: datetime
+
+
+class ProcessingTaskSnapshotResponse(BaseModel):
+    """Live in-memory task state."""
+
+    progress_percent: Optional[int] = None
+    progress_label: Optional[str] = None
+    progress_label_key: Optional[str] = None
+    progress_label_args: Optional[dict[str, Any]] = None
+    progress_step_index: Optional[int] = None
+    progress_step_total: Optional[int] = None
+    event_sequence: int = 0
+    event_count: int = 0
+
+
+class ProcessingTaskResponse(BaseModel):
+    """Durable task response enriched with live snapshot when available."""
+
+    id: int
+    task_type: str
+    source_kind: str
+    target_queue_item_id: Optional[int] = None
+    target_media_item_id: Optional[int] = None
+    status: ProcessingTaskStatus
+    stage: Optional[str] = None
+    attempt_count: int
+    last_error_summary: Optional[str] = None
+    last_error_detail: Optional[str] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    live: Optional[ProcessingTaskSnapshotResponse] = None
+
+
+class ProcessingTaskEventResponse(BaseModel):
+    """Live task stream event payload."""
+
+    task_id: int
+    event_type: Literal[
+        "snapshot",
+        "progress",
+        "log",
+        "stage_changed",
+        "status_changed",
+        "error",
+        "done",
+    ]
+    status: Optional[ProcessingTaskStatus] = None
+    stage: Optional[str] = None
+    progress_percent: Optional[int] = None
+    progress_label: Optional[str] = None
+    progress_label_key: Optional[str] = None
+    progress_label_args: Optional[dict[str, Any]] = None
+    progress_step_index: Optional[int] = None
+    progress_step_total: Optional[int] = None
+    message: Optional[str] = None
+    stream: Optional[Literal["system", "stdout", "stderr", "remote"]] = None
+    sequence: int
+    timestamp: datetime
 
 
 class RuntimeSettingsResponse(BaseModel):
