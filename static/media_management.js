@@ -158,6 +158,40 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function getTaskProgressLabel(task) {
+    const live = task?.live || {};
+    const label = live.progress_label_key
+        ? t(live.progress_label_key, live.progress_label_args || {})
+        : (live.progress_label || task?.stage || task?.status || "");
+    const stepIndex = Number(live.progress_step_index);
+    const stepTotal = Number(live.progress_step_total);
+    if (Number.isFinite(stepIndex) && Number.isFinite(stepTotal) && stepIndex > 0 && stepTotal > 0) {
+        return t("task.progress_step", {
+            label,
+            current: stepIndex,
+            total: stepTotal,
+        });
+    }
+    return label;
+}
+
+function renderTaskProgressBlock(task) {
+    if (!['downloading', 'processing'].includes(task?.status)) {
+        return "";
+    }
+    const progress = task?.live?.progress_percent;
+    const label = getTaskProgressLabel(task);
+    const percent = Number.isFinite(Number(progress)) ? Number(progress) : 0;
+    return `
+        <div class="mt-3 max-w-xs">
+            <div class="h-2 overflow-hidden rounded-full bg-surface-container-highest">
+                <div class="h-full rounded-full bg-primary transition-all" style="width: ${Math.max(0, Math.min(100, percent))}%"></div>
+            </div>
+            <p class="mt-1 text-[11px] text-on-surface-variant">${escapeHtml(label)} • ${escapeHtml(String(percent))}%</p>
+        </div>
+    `;
+}
+
 function scrollTaskPanelIntoView() {
     if (!taskPanel) {
         return;
@@ -276,22 +310,14 @@ function renderTaskList(tasks) {
     }
     taskList.innerHTML = currentTasks.map((task) => {
         const isSelectedTask = Number(activeTaskId) === Number(task.id);
-        const progress = task.live?.progress_percent;
-        const label = task.live?.progress_label || task.stage || task.status;
         const targetId = task.target_media_item_id || task.target_queue_item_id || task.id;
         const summary = task.last_error_summary
             ? `<p class="mt-3 line-clamp-3 text-[11px] text-error">${escapeHtml(task.last_error_summary)}</p>`
             : "";
-        const progressHtml = progress === null || progress === undefined
-            ? summary
-            : `
-                <div class="mt-3">
-                    <div class="h-2 overflow-hidden rounded-full bg-surface-container-highest">
-                        <div class="h-full rounded-full bg-primary transition-all" style="width: ${Math.max(0, Math.min(100, Number(progress) || 0))}%"></div>
-                    </div>
-                    <p class="mt-1 text-[11px] text-on-surface-variant">${escapeHtml(label)} • ${escapeHtml(String(progress))}%</p>
-                </div>
-            `;
+        const progressHtml = renderTaskProgressBlock(task) || summary;
+        const statusChip = ['downloading', 'processing'].includes(task.status)
+            ? ""
+            : `<span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">${escapeHtml(task.status)}</span>`;
         return `
             <article class="rounded-xl border ${isSelectedTask ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20' : 'border-white/10 bg-surface-container-low'} p-3 cursor-pointer transition-colors" data-task-id="${task.id}" aria-current="${isSelectedTask ? 'true' : 'false'}">
                 <div class="flex items-start justify-between gap-3">
@@ -299,7 +325,7 @@ function renderTaskList(tasks) {
                         <p class="truncate text-sm font-bold text-on-surface">${escapeHtml(task.target_media_item_id ? t("media.media_task_target", { id: targetId }) : t("media.queue_task_target", { id: targetId }))}</p>
                         <p class="mt-0.5 text-[11px] uppercase tracking-wider text-on-surface-variant">${escapeHtml(task.stage || task.status)}</p>
                     </div>
-                    <span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">${escapeHtml(task.status)}</span>
+                    ${statusChip}
                 </div>
                 ${progressHtml}
         </article>
@@ -351,13 +377,27 @@ function updateTaskLiveSnapshot(task, snapshot) {
     }
     const nextProgress = snapshot.progress_percent;
     const nextLabel = snapshot.progress_label;
+    const nextLabelKey = snapshot.progress_label_key;
+    const nextLabelArgs = snapshot.progress_label_args;
+    const nextStepIndex = snapshot.progress_step_index;
+    const nextStepTotal = snapshot.progress_step_total;
     const nextSequence = snapshot.sequence ?? snapshot.event_sequence ?? task.live?.event_sequence ?? 0;
     const currentProgress = task.live?.progress_percent;
     const currentLabel = task.live?.progress_label;
+    const currentLabelKey = task.live?.progress_label_key;
+    const currentLabelArgs = task.live?.progress_label_args;
+    const currentStepIndex = task.live?.progress_step_index;
+    const currentStepTotal = task.live?.progress_step_total;
     const currentSequence = task.live?.event_sequence ?? 0;
     const statusChanged = snapshot.status !== undefined && snapshot.status !== null && task.status !== snapshot.status;
     const stageChanged = snapshot.stage !== undefined && snapshot.stage !== null && task.stage !== snapshot.stage;
-    const liveChanged = currentProgress !== nextProgress || currentLabel !== nextLabel || currentSequence !== nextSequence;
+    const liveChanged = currentProgress !== nextProgress ||
+        currentLabel !== nextLabel ||
+        currentLabelKey !== nextLabelKey ||
+        JSON.stringify(currentLabelArgs || null) !== JSON.stringify(nextLabelArgs || null) ||
+        currentStepIndex !== nextStepIndex ||
+        currentStepTotal !== nextStepTotal ||
+        currentSequence !== nextSequence;
 
     if (!statusChanged && !stageChanged && !liveChanged) {
         return false;
@@ -367,6 +407,10 @@ function updateTaskLiveSnapshot(task, snapshot) {
         ...(task.live || {}),
         progress_percent: nextProgress ?? null,
         progress_label: nextLabel ?? null,
+        progress_label_key: nextLabelKey ?? null,
+        progress_label_args: nextLabelArgs ?? null,
+        progress_step_index: nextStepIndex ?? null,
+        progress_step_total: nextStepTotal ?? null,
         event_sequence: nextSequence,
         event_count: task.live?.event_count ?? 0,
     };

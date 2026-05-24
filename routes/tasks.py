@@ -94,6 +94,10 @@ async def stream_task(
                         "stage": current_snapshot.get("stage"),
                         "progress_percent": current_snapshot.get("progress_percent"),
                         "progress_label": current_snapshot.get("progress_label"),
+                        "progress_label_key": current_snapshot.get("progress_label_key"),
+                        "progress_label_args": current_snapshot.get("progress_label_args"),
+                        "progress_step_index": current_snapshot.get("progress_step_index"),
+                        "progress_step_total": current_snapshot.get("progress_step_total"),
                         "sequence": current_snapshot.get("event_sequence", 0),
                     }
                 )

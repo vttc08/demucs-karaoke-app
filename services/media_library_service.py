@@ -73,6 +73,10 @@ class MediaLibraryService:
             "task_stage": task.stage if task else None,
             "task_progress": task_snapshot.get("progress_percent") if task_snapshot else None,
             "task_label": task_snapshot.get("progress_label") if task_snapshot else None,
+            "task_label_key": task_snapshot.get("progress_label_key") if task_snapshot else None,
+            "task_label_args": task_snapshot.get("progress_label_args") if task_snapshot else None,
+            "task_step_index": task_snapshot.get("progress_step_index") if task_snapshot else None,
+            "task_step_total": task_snapshot.get("progress_step_total") if task_snapshot else None,
         }
 
     @staticmethod

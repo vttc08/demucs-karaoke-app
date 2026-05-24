@@ -46,6 +46,10 @@ class TaskStreamManager:
                     "stage": stage,
                     "progress_percent": None,
                     "progress_label": None,
+                    "progress_label_key": None,
+                    "progress_label_args": None,
+                    "progress_step_index": None,
+                    "progress_step_total": None,
                     "event_sequence": 0,
                     "event_count": 0,
                     "updated_at": utc_now(),
@@ -144,6 +148,10 @@ class TaskStreamManager:
         stage: str | None = None,
         progress_percent: int | None = None,
         progress_label: str | None = None,
+        progress_label_key: str | None = None,
+        progress_label_args: dict[str, Any] | None = None,
+        progress_step_index: int | None = None,
+        progress_step_total: int | None = None,
         message: str | None = None,
         stream: str | None = None,
     ) -> dict[str, Any]:
@@ -157,6 +165,10 @@ class TaskStreamManager:
                     "stage": stage,
                     "progress_percent": None,
                     "progress_label": None,
+                    "progress_label_key": None,
+                    "progress_label_args": None,
+                    "progress_step_index": None,
+                    "progress_step_total": None,
                     "event_sequence": 0,
                     "event_count": 0,
                     "updated_at": utc_now(),
@@ -171,6 +183,14 @@ class TaskStreamManager:
                 state["progress_percent"] = progress_percent
             if progress_label is not None:
                 state["progress_label"] = progress_label
+            if progress_label_key is not None:
+                state["progress_label_key"] = progress_label_key
+            if progress_label_args is not None:
+                state["progress_label_args"] = deepcopy(progress_label_args)
+            if progress_step_index is not None:
+                state["progress_step_index"] = progress_step_index
+            if progress_step_total is not None:
+                state["progress_step_total"] = progress_step_total
             if status not in self.TERMINAL_STATUSES:
                 state["expires_at"] = None
 
@@ -185,6 +205,10 @@ class TaskStreamManager:
                 "stage": state.get("stage"),
                 "progress_percent": state.get("progress_percent"),
                 "progress_label": state.get("progress_label"),
+                "progress_label_key": state.get("progress_label_key"),
+                "progress_label_args": deepcopy(state.get("progress_label_args")),
+                "progress_step_index": state.get("progress_step_index"),
+                "progress_step_total": state.get("progress_step_total"),
                 "message": message,
                 "stream": stream,
                 "sequence": state["event_sequence"],

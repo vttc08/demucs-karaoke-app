@@ -51,7 +51,7 @@ The main app exposes the task abstraction and live task SSE today.
 
 Current Demucs integration is still coarse:
 
-- the main app can show Demucs stage progress
+- the main app can show step-scoped Demucs progress in the queue and admin task views
 - terminal Demucs failures are persisted
 - richer remote Demucs SSE/job orchestration is still a follow-up task
 

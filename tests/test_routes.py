@@ -26,6 +26,7 @@ from services.i18n_service import LOCALE_COOKIE
 from services.media_naming import build_media_stem
 from services.media_thumbnail_service import MediaThumbnailService
 from services.processing_task_service import processing_task_service
+from services.task_stream_service import task_stream_manager
 from config import settings
 
 # Test database
@@ -371,6 +372,20 @@ def test_tasks_api_lists_active_tasks(client):
         )
         db.add(task)
         db.commit()
+        task_id = task.id
+
+    asyncio.run(
+        processing_task_service.emit_progress(
+            task_id,
+            progress_percent=57,
+            progress_label="Downloading video",
+            progress_label_key="task.downloading_video",
+            progress_step_index=1,
+            progress_step_total=4,
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+    )
 
     response = client.get("/api/tasks/")
 
@@ -379,6 +394,11 @@ def test_tasks_api_lists_active_tasks(client):
     assert len(payload) == 1
     assert payload[0]["task_type"] == "media_karaoke"
     assert payload[0]["status"] == "pending"
+    assert payload[0]["live"]["progress_percent"] == 57
+    assert payload[0]["live"]["progress_label_key"] == "task.downloading_video"
+    assert payload[0]["live"]["progress_step_index"] == 1
+    assert payload[0]["live"]["progress_step_total"] == 4
+    asyncio.run(task_stream_manager.clear_task(task_id))
 
 
 def test_tasks_stream_route_returns_sse_snapshot(client):

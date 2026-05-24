@@ -268,17 +268,28 @@
                         {% if item.requested_by_name %}
                         <p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">{{ t('queue.requested_by', name=item.requested_by_name) }}</p>
                         {% endif %}
+                        {% if item.status.value in ('downloading', 'processing') %}
+                        {% set step_label = item.processing_label or item.processing_stage or t('queue.processing_ai') %}
+                        {% set step_percent = item.processing_progress if item.processing_progress is not none else 0 %}
+                        <div class="mt-2 max-w-xs">
+                            <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
+                                <div class="h-full rounded-full bg-tertiary transition-all" style="width: {{ step_percent }}%"></div>
+                            </div>
+                            <p class="mt-1 text-[10px] text-on-surface-variant">
+                                {% if item.processing_step_index and item.processing_step_total %}
+                                {{ t('task.progress_step', label=step_label, current=item.processing_step_index, total=item.processing_step_total) }}
+                                {% else %}
+                                {{ step_label }}
+                                {% endif %}
+                                • {{ step_percent }}%
+                            </p>
+                        </div>
+                        {% else %}
                         <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full 
-                            {% if item.status.value == 'playing' %}bg-primary/10 border border-primary/20{% elif item.status.value == 'processing' %}bg-tertiary/10 border border-tertiary/20{% elif item.status.value == 'downloading' %}bg-tertiary/10 border border-tertiary/20{% elif item.status.value == 'failed' %}bg-error/10 border border-error/20{% else %}bg-on-surface/5 border border-on-surface/10{% endif %}">
+                            {% if item.status.value == 'playing' %}bg-primary/10 border border-primary/20{% elif item.status.value == 'failed' %}bg-error/10 border border-error/20{% elif item.status.value == 'ready' %}bg-secondary/10 border border-secondary/20{% else %}bg-on-surface/5 border border-on-surface/10{% endif %}">
                             {% if item.status.value == 'playing' %}
                                 <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
                                 <span class="text-[10px] font-black uppercase tracking-tighter text-primary">{{ t('queue.playing') }}</span>
-                            {% elif item.status.value == 'processing' %}
-                                <span class="material-symbols-outlined text-[12px] text-tertiary animate-spin">auto_fix_high</span>
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-tertiary">{{ t('queue.processing_ai') }}</span>
-                            {% elif item.status.value == 'downloading' %}
-                                <span class="material-symbols-outlined text-[12px] text-tertiary animate-pulse">download</span>
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-tertiary">{{ t('queue.downloading') }}</span>
                             {% elif item.status.value == 'failed' %}
                                 <span class="material-symbols-outlined text-[12px] text-error">error</span>
                                 <span class="text-[10px] font-black uppercase tracking-tighter text-error">{{ t('common.failed') }}</span>
@@ -289,14 +300,7 @@
                                 <span class="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant">{{ t('queue.in_queue') }}</span>
                             {% endif %}
                         </div>
-                    {% if item.processing_progress is not none and item.status.value in ('downloading', 'processing') %}
-                        <div class="mt-2 max-w-xs">
-                            <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
-                                <div class="h-full rounded-full bg-tertiary transition-all" style="width: {{ item.processing_progress }}%"></div>
-                            </div>
-                            <p class="mt-1 text-[10px] text-on-surface-variant">{{ item.processing_label or item.processing_stage or t('queue.processing_ai') }} • {{ item.processing_progress }}%</p>
-                        </div>
-                    {% endif %}
+                        {% endif %}
                     {% if item.is_karaoke %}
                         <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
                             <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>

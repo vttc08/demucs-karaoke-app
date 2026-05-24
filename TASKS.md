@@ -72,6 +72,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] users can change only their own added songs
 - [x] queue as feature (user can queue as song as someone else only on admin interface)
 - [x] show progress for ytdlp and demucs
+- [x] step-scoped compact progress labels for queue and task panels
 - [x] customize lyric tracks behavior
 - [x] lyrics-assisted add-to-queue flow with manual lyrics override
 - [x] lyrics display page/modal for current song (synced and unsynced) (lyrics viewer screen)

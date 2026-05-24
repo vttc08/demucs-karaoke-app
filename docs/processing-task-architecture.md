@@ -33,6 +33,8 @@ This avoids using SQLite as a high-frequency event bus while still allowing inte
 - latest status/stage
 - latest progress percent
 - latest progress label
+- latest progress label key and arguments
+- latest step index/total for compact step-aware progress rendering
 - rolling event buffer
 - monotonic event sequence
 
@@ -74,6 +76,7 @@ value so automatic reconnects do not append the same buffered log lines twice.
 - progress lines are parsed in-process
 - raw output lines are emitted into the live task stream
 - queue progress is pushed to queue clients as `queue_item_progress` without additional database writes
+- queue and admin task views render a compact active-progress block with current step numbering instead of a separate status chip plus bar
 - admin task views still receive the task stream snapshot/log replay directly
 - callback failure or timeout tears down the child `yt-dlp` process before the error is surfaced
 

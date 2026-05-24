@@ -135,6 +135,56 @@ def test_streaming_download_adds_newline_for_live_progress(monkeypatch, tmp_path
     assert progress_events == [(42, "[download] 42.0%")]
 
 
+def test_streaming_download_filters_structured_progress_from_log_callback(monkeypatch, tmp_path):
+    """Structured progress lines should not also be forwarded as plain log lines."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    progress_events = []
+    log_events = []
+    progress_callback = lambda percent, line: progress_events.append((percent, line))
+    log_callback = lambda stream, line: log_events.append((stream, line))
+
+    class FakeStdout:
+        def __init__(self):
+            self.closed = False
+            self._lines = [
+                "[download] starting\n",
+                "[download][karaoke-progress] 13.0\n",
+                "finished\n",
+                "",
+            ]
+
+        def readline(self):
+            return self._lines.pop(0)
+
+        def close(self):
+            self.closed = True
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdout = FakeStdout()
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout=None):
+            self.returncode = 0
+            return 0
+
+    fake_process = FakeProcess()
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: fake_process)
+
+    adapter._run_streaming_download(
+        ["/bin/yt-dlp", "https://example.test/video"],
+        progress_callback=progress_callback,
+        log_callback=log_callback,
+        timeout_seconds=1,
+    )
+
+    assert progress_events == [(13, "[download][karaoke-progress] 13.0")]
+    assert log_events == [("stdout", "[download] starting"), ("stdout", "finished")]
+
+
 def test_parse_progress_line_prefers_structured_marker():
     """Structured yt-dlp progress lines should parse into bounded integer percentages."""
     assert YtDlpAdapter._parse_progress_line("[download][karaoke-progress] 42.500000") == 42

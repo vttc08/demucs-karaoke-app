@@ -197,6 +197,53 @@ def test_queue_service_get_queue_sets_can_remove_for_owner_and_admin(db_session)
     assert all(item.can_control_stage is True for item in items_for_admin)
 
 
+def test_queue_service_response_includes_step_progress_metadata(db_session):
+    """Queue responses should expose the current step metadata for active task progress."""
+    service = QueueService()
+    created = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="step-progress",
+            title="Step Progress",
+            is_karaoke=True,
+        ),
+    )
+    task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="youtube",
+        target_queue_item_id=created.id,
+        target_media_item_id=created.media_id,
+        status=ProcessingTaskStatus.DOWNLOADING.value,
+        stage="download",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    asyncio.run(
+        processing_task_service.emit_progress(
+            task.id,
+            queue_item_id=created.id,
+            progress_percent=32,
+            progress_label="Downloading video",
+            progress_label_key="task.downloading_video",
+            progress_step_index=1,
+            progress_step_total=4,
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+    )
+
+    queue_items = service.get_queue(db_session)
+    item = next(entry for entry in queue_items if entry.id == created.id)
+    assert item.processing_progress == 32
+    assert item.processing_label == "Downloading video"
+    assert item.processing_label_key == "task.downloading_video"
+    assert item.processing_step_index == 1
+    assert item.processing_step_total == 4
+    asyncio.run(task_stream_manager.clear_task(task.id))
+
+
 def test_queue_service_add_to_queue_can_delegate_owner_guest_id(db_session):
     """Queue items may be owned by a delegated guest while showing a delegated label."""
     service = QueueService()
@@ -1372,6 +1419,9 @@ async def test_processing_task_emit_progress_broadcasts_queue_item_progress_for_
             queue_item_id=created.id,
             progress_percent=42,
             progress_label="Downloading media",
+            progress_label_key="task.downloading_media",
+            progress_step_index=1,
+            progress_step_total=2,
             status=ProcessingTaskStatus.DOWNLOADING.value,
             stage="download",
         )
@@ -1382,6 +1432,9 @@ async def test_processing_task_emit_progress_broadcasts_queue_item_progress_for_
     assert progress_events[0]["data"]["task_id"] == task.id
     assert progress_events[0]["data"]["processing_progress"] == 42
     assert progress_events[0]["data"]["processing_label"] == "Downloading media"
+    assert progress_events[0]["data"]["processing_label_key"] == "task.downloading_media"
+    assert progress_events[0]["data"]["processing_step_index"] == 1
+    assert progress_events[0]["data"]["processing_step_total"] == 2
     assert progress_events[0]["data"]["processing_stage"] == "download"
     assert progress_events[0]["data"]["status"] == ProcessingTaskStatus.DOWNLOADING.value
     assert not any(msg["type"] == "queue_item_progress" for msg in stage_socket.messages)
@@ -1462,9 +1515,10 @@ def test_karaoke_progress_callback_throttles_to_about_once_per_second():
         callback = service._progress_callback(
             loop,
             task_id=123,
-            start_percent=0,
-            end_percent=100,
             label="Downloading media",
+            label_key="task.downloading_media",
+            step_index=1,
+            step_total=2,
             status=ProcessingTaskStatus.DOWNLOADING.value,
             stage="download",
         )

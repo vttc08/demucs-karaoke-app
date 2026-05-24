@@ -55,6 +55,7 @@ class KaraokeService:
             queue_item_id=task.target_queue_item_id,
             progress_percent=0,
             progress_label="Starting task",
+            progress_label_key="task.starting",
             status=task.status,
             stage=task.stage,
         )
@@ -108,6 +109,7 @@ class KaraokeService:
                     status=ProcessingTaskStatus.DONE,
                     stage="ready",
                     progress_label="Reused existing karaoke media",
+                    progress_label_key="task.reused_existing_karaoke_media",
                     progress_percent=100,
                 )
                 return
@@ -134,6 +136,7 @@ class KaraokeService:
                 status=ProcessingTaskStatus.DONE,
                 stage="ready",
                 progress_label="Reused existing media",
+                progress_label_key="task.reused_existing_media",
                 progress_percent=100,
             )
             return
@@ -147,7 +150,10 @@ class KaraokeService:
             status=ProcessingTaskStatus.DOWNLOADING,
             stage="download",
             progress_label="Downloading media",
+            progress_label_key="task.downloading_media",
             progress_percent=0,
+            progress_step_index=1,
+            progress_step_total=2,
         )
         loop = asyncio.get_running_loop()
         media_stem = self._media_stem_for_media(item.media, fallback=f"queue-{item.id}")
@@ -159,6 +165,8 @@ class KaraokeService:
             loop,
             task.id,
             item.id,
+            step_index=1,
+            step_total=2,
         )
         video_path = await asyncio.to_thread(
             self._rename_downloaded_file,
@@ -172,7 +180,10 @@ class KaraokeService:
             status=ProcessingTaskStatus.PROCESSING,
             stage="finalize",
             progress_label="Finalizing media",
-            progress_percent=95,
+            progress_label_key="task.finalizing_media",
+            progress_percent=0,
+            progress_step_index=2,
+            progress_step_total=2,
         )
         final_media_path = await asyncio.to_thread(
             self._persist_primary_media,
@@ -186,6 +197,7 @@ class KaraokeService:
             status=ProcessingTaskStatus.DONE,
             stage="ready",
             progress_label="Ready",
+            progress_label_key="task.ready",
             progress_percent=100,
         )
 
@@ -202,6 +214,7 @@ class KaraokeService:
                 status=ProcessingTaskStatus.DONE,
                 stage="ready",
                 progress_label="Existing karaoke vocals already available",
+                progress_label_key="task.reused_existing_karaoke_media",
                 progress_percent=100,
             )
             return
@@ -250,7 +263,10 @@ class KaraokeService:
                 status=ProcessingTaskStatus.PROCESSING,
                 stage="extract_audio",
                 progress_label="Extracting audio",
-                progress_percent=10,
+                progress_label_key="task.extracting_audio",
+                progress_percent=0,
+                progress_step_index=1,
+                progress_step_total=3,
             )
             extracted_audio_path = settings.cache_path / "audio" / f"{media_stem}.audio.m4a"
             audio_path = await asyncio.to_thread(
@@ -258,14 +274,27 @@ class KaraokeService:
                 existing_media_path,
                 extracted_audio_path,
             )
+            await processing_task_service.emit_progress(
+                task.id,
+                progress_percent=100,
+                progress_label="Extracting audio",
+                progress_label_key="task.extracting_audio",
+                status=ProcessingTaskStatus.PROCESSING.value,
+                stage="extract_audio",
+                progress_step_index=1,
+                progress_step_total=3,
+            )
             await processing_task_service.emit_log(
                 task.id,
                 message=f"Extracted audio to {audio_path.name}",
                 stream="system",
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="extract_audio",
-                progress_percent=10,
+                progress_percent=100,
                 progress_label="Extracting audio",
+                progress_label_key="task.extracting_audio",
+                progress_step_index=1,
+                progress_step_total=3,
             )
             return existing_media_path, audio_path
 
@@ -279,7 +308,10 @@ class KaraokeService:
             status=ProcessingTaskStatus.DOWNLOADING,
             stage="download",
             progress_label="Downloading video",
+            progress_label_key="task.downloading_video",
             progress_percent=0,
+            progress_step_index=1,
+            progress_step_total=4,
         )
         video_path = await asyncio.to_thread(
             self._download_video_for_task,
@@ -288,6 +320,8 @@ class KaraokeService:
             loop,
             task.id,
             queue_item_id,
+            step_index=1,
+            step_total=4,
         )
         video_path = await asyncio.to_thread(
             self._rename_downloaded_file,
@@ -301,7 +335,10 @@ class KaraokeService:
             status=ProcessingTaskStatus.DOWNLOADING,
             stage="download",
             progress_label="Downloading audio",
-            progress_percent=25,
+            progress_label_key="task.downloading_audio",
+            progress_percent=0,
+            progress_step_index=2,
+            progress_step_total=4,
         )
         audio_path = await asyncio.to_thread(
             self._download_audio_for_task,
@@ -310,6 +347,8 @@ class KaraokeService:
             loop,
             task.id,
             queue_item_id,
+            step_index=2,
+            step_total=4,
         )
         audio_path = await asyncio.to_thread(
             self._rename_downloaded_file,
@@ -335,12 +374,17 @@ class KaraokeService:
             status=ProcessingTaskStatus.PROCESSING,
             stage="demucs",
             progress_label="Separating vocals",
-            progress_percent=45,
+            progress_label_key="task.separating_vocals",
+            progress_percent=0,
+            progress_step_index=3,
+            progress_step_total=4,
         )
         demucs_response = await self._separate_vocals_with_retry(
             queue_item or QueueItem(id=task.id, media=media_item),
             audio_path,
             task_id=task.id,
+            progress_step_index=3,
+            progress_step_total=4,
         )
         no_vocals_path = Path(demucs_response.no_vocals_path)
         vocals_raw_path = Path(demucs_response.vocals_path) if demucs_response.vocals_path else None
@@ -355,10 +399,13 @@ class KaraokeService:
         await processing_task_service.emit_progress(
             task.id,
             queue_item_id=queue_item.id if queue_item is not None else None,
-            progress_percent=85,
-            progress_label="Remuxing karaoke media",
+            progress_percent=100,
+            progress_label="Separating vocals",
+            progress_label_key="task.separating_vocals",
             status=ProcessingTaskStatus.PROCESSING.value,
-            stage="finalize",
+            stage="demucs",
+            progress_step_index=3,
+            progress_step_total=4,
         )
         await processing_task_service.set_stage(
             db,
@@ -366,7 +413,10 @@ class KaraokeService:
             status=ProcessingTaskStatus.PROCESSING,
             stage="finalize",
             progress_label="Remuxing karaoke media",
-            progress_percent=85,
+            progress_label_key="task.finalizing_karaoke",
+            progress_percent=0,
+            progress_step_index=4,
+            progress_step_total=4,
         )
         media_stem = self._media_stem_for_media(
             media_item,
@@ -392,6 +442,7 @@ class KaraokeService:
             status=ProcessingTaskStatus.DONE,
             stage="ready",
             progress_label="Ready",
+            progress_label_key="task.ready",
             progress_percent=100,
         )
 
@@ -479,6 +530,8 @@ class KaraokeService:
         audio_path: Path,
         *,
         task_id: int,
+        progress_step_index: int,
+        progress_step_total: int,
     ):
         """Run Demucs separation with one fallback retry for extracted local audio."""
         try:
@@ -503,6 +556,9 @@ class KaraokeService:
                 stage="demucs",
                 progress_percent=50,
                 progress_label="Retrying Demucs preparation",
+                progress_label_key="task.retrying_demucs_preparation",
+                progress_step_index=progress_step_index,
+                progress_step_total=progress_step_total,
             )
             processing_dir = self._processing_cache_dir()
             fallback_audio_path = await asyncio.to_thread(
@@ -527,10 +583,11 @@ class KaraokeService:
     def _progress_callback(
         loop: asyncio.AbstractEventLoop,
         task_id: int,
-        start_percent: int,
-        end_percent: int,
         label: str,
         *,
+        label_key: str,
+        step_index: int,
+        step_total: int,
         status: str,
         stage: str,
         queue_item_id: int | None = None,
@@ -540,10 +597,7 @@ class KaraokeService:
 
         def callback(percent: int, raw_line: str):
             nonlocal last_emit_time, last_emit_percent
-            mapped = start_percent
-            if end_percent > start_percent:
-                mapped = start_percent + int((percent / 100.0) * (end_percent - start_percent))
-            mapped = max(0, min(100, mapped))
+            mapped = max(0, min(100, int(percent)))
             now = loop.time()
             if (
                 last_emit_percent is not None
@@ -561,8 +615,11 @@ class KaraokeService:
                     queue_item_id=queue_item_id,
                     progress_percent=mapped,
                     progress_label=label,
+                    progress_label_key=label_key,
                     status=status,
                     stage=stage,
+                    progress_step_index=step_index,
+                    progress_step_total=step_total,
                 ),
                 loop,
             )
@@ -598,12 +655,15 @@ class KaraokeService:
         loop: asyncio.AbstractEventLoop,
         task_id: int,
         queue_item_id: int | None = None,
+        *,
+        step_index: int,
+        step_total: int,
     ) -> Path:
         if isinstance(self.youtube_service, YouTubeService):
             return self.youtube_service.download_video_with_progress(
                 youtube_id,
                 output_dir,
-                progress_callback=self._progress_callback(loop, task_id, 0, 25, "Downloading video", status=ProcessingTaskStatus.DOWNLOADING.value, stage="download", queue_item_id=queue_item_id),
+                progress_callback=self._progress_callback(loop, task_id, "Downloading video", label_key="task.downloading_video", step_index=step_index, step_total=step_total, status=ProcessingTaskStatus.DOWNLOADING.value, stage="download", queue_item_id=queue_item_id),
                 log_callback=self._log_callback(loop, task_id, status=ProcessingTaskStatus.DOWNLOADING.value, stage="download"),
             )
         return self.youtube_service.download_video(youtube_id, output_dir)
@@ -615,12 +675,15 @@ class KaraokeService:
         loop: asyncio.AbstractEventLoop,
         task_id: int,
         queue_item_id: int | None = None,
+        *,
+        step_index: int,
+        step_total: int,
     ) -> Path:
         if isinstance(self.youtube_service, YouTubeService):
             return self.youtube_service.download_audio_with_progress(
                 youtube_id,
                 output_dir,
-                progress_callback=self._progress_callback(loop, task_id, 25, 45, "Downloading audio", status=ProcessingTaskStatus.DOWNLOADING.value, stage="download", queue_item_id=queue_item_id),
+                progress_callback=self._progress_callback(loop, task_id, "Downloading audio", label_key="task.downloading_audio", step_index=step_index, step_total=step_total, status=ProcessingTaskStatus.DOWNLOADING.value, stage="download", queue_item_id=queue_item_id),
                 log_callback=self._log_callback(loop, task_id, status=ProcessingTaskStatus.DOWNLOADING.value, stage="download"),
             )
         return self.youtube_service.download_audio(youtube_id, output_dir)
@@ -632,12 +695,15 @@ class KaraokeService:
         loop: asyncio.AbstractEventLoop,
         task_id: int,
         queue_item_id: int | None = None,
+        *,
+        step_index: int,
+        step_total: int,
     ) -> Path:
         if isinstance(self.youtube_service, YouTubeService):
             return self.youtube_service.download_video_with_audio_progress(
                 youtube_id,
                 output_dir,
-                progress_callback=self._progress_callback(loop, task_id, 0, 90, "Downloading media", status=ProcessingTaskStatus.DOWNLOADING.value, stage="download", queue_item_id=queue_item_id),
+                progress_callback=self._progress_callback(loop, task_id, "Downloading media", label_key="task.downloading_media", step_index=step_index, step_total=step_total, status=ProcessingTaskStatus.DOWNLOADING.value, stage="download", queue_item_id=queue_item_id),
                 log_callback=self._log_callback(loop, task_id, status=ProcessingTaskStatus.DOWNLOADING.value, stage="download"),
             )
         return self.youtube_service.download_video_with_audio(youtube_id, output_dir)

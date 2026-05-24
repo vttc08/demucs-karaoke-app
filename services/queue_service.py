@@ -752,6 +752,18 @@ class QueueService:
             processing_label=(
                 task_snapshot.get("progress_label") if task_snapshot is not None else None
             ),
+            processing_label_key=(
+                task_snapshot.get("progress_label_key") if task_snapshot is not None else None
+            ),
+            processing_label_args=(
+                task_snapshot.get("progress_label_args") if task_snapshot is not None else None
+            ),
+            processing_step_index=(
+                task_snapshot.get("progress_step_index") if task_snapshot is not None else None
+            ),
+            processing_step_total=(
+                task_snapshot.get("progress_step_total") if task_snapshot is not None else None
+            ),
             created_at=item.created_at,
         )
 

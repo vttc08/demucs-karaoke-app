@@ -534,12 +534,14 @@ class YtDlpAdapter:
                     if not line:
                         continue
                     stdout_lines.append(line)
+                    match = self._parse_progress_line(line)
+                    if match is not None:
+                        if progress_callback:
+                            progress_callback(match, line)
+                        continue
                     if log_callback:
                         stream_name = "stderr" if line.startswith(("ERROR:", "WARNING:")) else "stdout"
                         log_callback(stream_name, line)
-                    match = self._parse_progress_line(line)
-                    if match is not None and progress_callback:
-                        progress_callback(match, line)
 
             remaining = max(0.0, deadline - time.monotonic())
             return_code = process.wait(timeout=remaining)

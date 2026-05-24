@@ -1423,14 +1423,13 @@ function updateQueueDisplay(queue) {
                     ${leftActionHtml}
                 </div>
                 ` : '';
-        const progressHtml = (item.processing_progress !== null && item.processing_progress !== undefined && ['downloading', 'processing'].includes(item.status)) ? `
-                    <div class="mt-2 max-w-xs">
-                        <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
-                            <div class="h-full rounded-full bg-tertiary transition-all" style="width: ${Math.max(0, Math.min(100, Number(item.processing_progress) || 0))}%"></div>
-                        </div>
-                        <p class="mt-1 text-[10px] text-on-surface-variant">${escapeHtml(item.processing_label || item.processing_stage || t('queue.processing_ai'))} • ${escapeHtml(String(item.processing_progress))}%</p>
+        const progressHtml = renderQueueProgressBlock(item);
+        const statusBadgeHtml = progressHtml ? '' : `
+                    <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${statusInfo.bgClass}">
+                        ${statusInfo.icon}
+                        <span class="text-[10px] font-black uppercase tracking-tighter ${statusInfo.textClass}">${statusInfo.label}</span>
                     </div>
-                    ` : '';
+                    `;
         return `
             <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} ${canOpenTaskDetails ? 'cursor-pointer hover:border-primary/30' : ''} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
                 ${leftColumnHtml}
@@ -1441,10 +1440,7 @@ function updateQueueDisplay(queue) {
                     <h3 class="font-bold ${item.status === 'playing' ? 'text-on-surface' : 'text-on-surface/80'} truncate">${escapeHtml(item.title)}</h3>
                     ${item.artist ? `<p class="text-xs text-on-surface-variant truncate">${escapeHtml(item.artist)}</p>` : ''}
                     ${item.requested_by_name ? `<p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">${escapeHtml(t('queue.requested_by', { name: item.requested_by_name }))}</p>` : ''}
-                    <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${statusInfo.bgClass}">
-                        ${statusInfo.icon}
-                        <span class="text-[10px] font-black uppercase tracking-tighter ${statusInfo.textClass}">${statusInfo.label}</span>
-                    </div>
+                    ${statusBadgeHtml}
                     ${progressHtml}
                     ${item.is_karaoke ? `
                     <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
@@ -1542,6 +1538,40 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function getQueueProgressLabel(item) {
+    const label = item?.processing_label_key
+        ? t(item.processing_label_key, item.processing_label_args || {})
+        : (item?.processing_label || item?.processing_stage || t('queue.processing_ai'));
+    const stepIndex = Number(item?.processing_step_index);
+    const stepTotal = Number(item?.processing_step_total);
+    if (Number.isFinite(stepIndex) && Number.isFinite(stepTotal) && stepIndex > 0 && stepTotal > 0) {
+        return t('task.progress_step', {
+            label,
+            current: stepIndex,
+            total: stepTotal,
+        });
+    }
+    return label;
+}
+
+function renderQueueProgressBlock(item) {
+    const isActive = ['downloading', 'processing'].includes(item.status);
+    if (!isActive) {
+        return '';
+    }
+    const progressValue = item.processing_progress;
+    const percent = Number.isFinite(Number(progressValue)) ? Number(progressValue) : 0;
+    const label = getQueueProgressLabel(item);
+    return `
+        <div class="mt-2 max-w-xs">
+            <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest">
+                <div class="h-full rounded-full bg-tertiary transition-all" style="width: ${Math.max(0, Math.min(100, percent))}%"></div>
+            </div>
+            <p class="mt-1 text-[10px] text-on-surface-variant">${escapeHtml(label)} • ${escapeHtml(String(percent))}%</p>
+        </div>
+    `;
 }
 
 function normalizeQueueItem(item) {

@@ -143,6 +143,10 @@ class ProcessingTaskService:
             live = ProcessingTaskSnapshotResponse(
                 progress_percent=snapshot.get("progress_percent"),
                 progress_label=snapshot.get("progress_label"),
+                progress_label_key=snapshot.get("progress_label_key"),
+                progress_label_args=snapshot.get("progress_label_args"),
+                progress_step_index=snapshot.get("progress_step_index"),
+                progress_step_total=snapshot.get("progress_step_total"),
                 event_sequence=snapshot.get("event_sequence", 0),
                 event_count=snapshot.get("event_count", 0),
             )
@@ -182,7 +186,11 @@ class ProcessingTaskService:
         error_summary: str | None = None,
         error_detail: str | None = None,
         progress_label: str | None = None,
+        progress_label_key: str | None = None,
+        progress_label_args: dict[str, Any] | None = None,
         progress_percent: int | None = None,
+        progress_step_index: int | None = None,
+        progress_step_total: int | None = None,
     ) -> ProcessingTask:
         """Persist a durable task state change and publish it live."""
         task = self.get_task(db, task_id)
@@ -215,6 +223,10 @@ class ProcessingTaskService:
             stage=task.stage,
             progress_percent=progress_percent,
             progress_label=progress_label,
+            progress_label_key=progress_label_key,
+            progress_label_args=progress_label_args,
+            progress_step_index=progress_step_index,
+            progress_step_total=progress_step_total,
             message=error_summary,
             stream="system",
         )
@@ -231,7 +243,11 @@ class ProcessingTaskService:
         status: ProcessingTaskStatus | None = None,
         stage: str,
         progress_label: str | None = None,
+        progress_label_key: str | None = None,
+        progress_label_args: dict[str, Any] | None = None,
         progress_percent: int | None = None,
+        progress_step_index: int | None = None,
+        progress_step_total: int | None = None,
     ) -> ProcessingTask:
         """Persist a stage change and publish it live."""
         task = self.get_task(db, task_id)
@@ -253,6 +269,10 @@ class ProcessingTaskService:
             stage=stage,
             progress_percent=progress_percent,
             progress_label=progress_label,
+            progress_label_key=progress_label_key,
+            progress_label_args=progress_label_args,
+            progress_step_index=progress_step_index,
+            progress_step_total=progress_step_total,
             stream="system",
         )
         await self._sync_queue_side_effects(db, task)
@@ -265,8 +285,12 @@ class ProcessingTaskService:
         queue_item_id: int | None = None,
         progress_percent: int | None = None,
         progress_label: str | None = None,
+        progress_label_key: str | None = None,
+        progress_label_args: dict[str, Any] | None = None,
         status: str | None = None,
         stage: str | None = None,
+        progress_step_index: int | None = None,
+        progress_step_total: int | None = None,
     ):
         """Publish live progress without writing SQLite."""
         await task_stream_manager.publish(
@@ -276,6 +300,10 @@ class ProcessingTaskService:
             stage=stage,
             progress_percent=progress_percent,
             progress_label=progress_label,
+            progress_label_key=progress_label_key,
+            progress_label_args=progress_label_args,
+            progress_step_index=progress_step_index,
+            progress_step_total=progress_step_total,
             stream="system",
         )
         if queue_item_id is None:
@@ -291,6 +319,10 @@ class ProcessingTaskService:
                 "processing_stage": stage,
                 "processing_progress": progress_percent,
                 "processing_label": progress_label,
+                "processing_label_key": progress_label_key,
+                "processing_label_args": progress_label_args,
+                "processing_step_index": progress_step_index,
+                "processing_step_total": progress_step_total,
             }
         )
 
@@ -304,6 +336,10 @@ class ProcessingTaskService:
         stage: str | None = None,
         progress_percent: int | None = None,
         progress_label: str | None = None,
+        progress_label_key: str | None = None,
+        progress_label_args: dict[str, Any] | None = None,
+        progress_step_index: int | None = None,
+        progress_step_total: int | None = None,
     ):
         """Publish a live task log line without writing SQLite."""
         await task_stream_manager.publish(
@@ -313,6 +349,10 @@ class ProcessingTaskService:
             stage=stage,
             progress_percent=progress_percent,
             progress_label=progress_label,
+            progress_label_key=progress_label_key,
+            progress_label_args=progress_label_args,
+            progress_step_index=progress_step_index,
+            progress_step_total=progress_step_total,
             message=message,
             stream=stream,
         )

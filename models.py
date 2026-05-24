@@ -1,7 +1,7 @@
 """Data models and database schemas."""
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, model_validator
 from sqlalchemy import (
     Column,
@@ -298,6 +298,10 @@ class QueueItemResponse(BaseModel):
     processing_stage: Optional[str] = None
     processing_progress: Optional[int] = None
     processing_label: Optional[str] = None
+    processing_label_key: Optional[str] = None
+    processing_label_args: Optional[dict[str, Any]] = None
+    processing_step_index: Optional[int] = None
+    processing_step_total: Optional[int] = None
     created_at: datetime
 
 
@@ -306,6 +310,10 @@ class ProcessingTaskSnapshotResponse(BaseModel):
 
     progress_percent: Optional[int] = None
     progress_label: Optional[str] = None
+    progress_label_key: Optional[str] = None
+    progress_label_args: Optional[dict[str, Any]] = None
+    progress_step_index: Optional[int] = None
+    progress_step_total: Optional[int] = None
     event_sequence: int = 0
     event_count: int = 0
 
@@ -347,6 +355,10 @@ class ProcessingTaskEventResponse(BaseModel):
     stage: Optional[str] = None
     progress_percent: Optional[int] = None
     progress_label: Optional[str] = None
+    progress_label_key: Optional[str] = None
+    progress_label_args: Optional[dict[str, Any]] = None
+    progress_step_index: Optional[int] = None
+    progress_step_total: Optional[int] = None
     message: Optional[str] = None
     stream: Optional[Literal["system", "stdout", "stderr", "remote"]] = None
     sequence: int
