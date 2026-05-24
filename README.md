@@ -258,7 +258,7 @@ See [docs/API.md](docs/API.md) for full API documentation.
 - WebSocket: `/api/queue/ws`
   - Server heartbeat: `ping`
   - Client response: `pong`
-  - Queue events: `queue_item_added`, `queue_item_updated`, `queue_item_removed`, `queue_cleared`, `current_item_changed`, `queue_item_failed`
+  - Queue events: `queue_item_added`, `queue_item_updated`, `queue_item_progress`, `queue_item_removed`, `queue_cleared`, `current_item_changed`, `queue_item_failed`
   - Stage control events: `stage_control_command`, `stage_state_update`
   - Client command message: `stage_command` (`play`, `pause`, `skip`, `seek`, `resync`, vocals, lyrics)
   - Stage commands require an admin session unless the current queue item belongs to the guest sending the command

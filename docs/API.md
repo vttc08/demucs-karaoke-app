@@ -71,6 +71,7 @@ Unauthorized commands return a websocket `error` event and are not broadcast.
 - Queue lifecycle:
   - `queue_item_added`
   - `queue_item_updated`
+  - `queue_item_progress`
   - `queue_item_removed`
   - `queue_cleared`
   - `current_item_changed`
@@ -86,8 +87,8 @@ Unauthorized commands return a websocket `error` event and are not broadcast.
   - `stage_time_update` with `{current_time, is_paused, source}`
 
 Event delivery is role-based:
-- `queue` clients receive queue lifecycle, presence, and low-frequency stage state/control events.
-- `stage` clients receive queue lifecycle plus stage state/control/clock events.
+- `queue` clients receive queue lifecycle, lightweight progress, presence, and low-frequency stage state/control events.
+- `stage` clients receive queue lifecycle plus stage state/control/clock events, but not per-tick queue progress.
 - `lyrics_viewer` clients receive current-item changes plus stage state/clock events.
 
 **Client → server playback clock update:**

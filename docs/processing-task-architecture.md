@@ -73,7 +73,8 @@ value so automatic reconnects do not append the same buffered log lines twice.
 
 - progress lines are parsed in-process
 - raw output lines are emitted into the live task stream
-- queue/media UIs receive task progress without additional database writes
+- queue progress is pushed to queue clients as `queue_item_progress` without additional database writes
+- admin task views still receive the task stream snapshot/log replay directly
 - callback failure or timeout tears down the child `yt-dlp` process before the error is surfaced
 
 When mocks or legacy callers are used in tests, the orchestration falls back to the non-streaming youtube service methods.

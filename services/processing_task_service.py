@@ -262,6 +262,7 @@ class ProcessingTaskService:
         self,
         task_id: int,
         *,
+        queue_item_id: int | None = None,
         progress_percent: int | None = None,
         progress_label: str | None = None,
         status: str | None = None,
@@ -277,7 +278,21 @@ class ProcessingTaskService:
             progress_label=progress_label,
             stream="system",
         )
-        await self._broadcast_live_queue_progress(task_id)
+        if queue_item_id is None:
+            return
+
+        from services.websocket_manager import manager
+
+        await manager.broadcast_queue_item_progress(
+            {
+                "id": queue_item_id,
+                "task_id": task_id,
+                "status": status,
+                "processing_stage": stage,
+                "processing_progress": progress_percent,
+                "processing_label": progress_label,
+            }
+        )
 
     async def emit_log(
         self,
@@ -389,31 +404,6 @@ class ProcessingTaskService:
             promoted = queue_service.promote_next_ready_if_idle(db)
             if promoted:
                 await manager.broadcast_current_item_changed(promoted.id, None)
-
-    async def _broadcast_live_queue_progress(self, task_id: int):
-        """Push queue item progress updates without waiting for the polling loop."""
-        db = SessionLocal()
-        try:
-            task = self.get_task(db, task_id)
-            if task is None or task.target_queue_item_id is None:
-                return
-
-            queue_item = (
-                db.query(QueueItem)
-                .filter(QueueItem.id == task.target_queue_item_id)
-                .first()
-            )
-            if queue_item is None:
-                return
-
-            from services.queue_service import QueueService
-            from services.websocket_manager import manager
-
-            response = QueueService()._to_response(queue_item)
-            await manager.broadcast_queue_item_updated(response.model_dump(mode="json"))
-        finally:
-            db.close()
-
 
 class TaskExecutionCoordinator:
     """Start processing tasks in background threads without duplicate runners."""

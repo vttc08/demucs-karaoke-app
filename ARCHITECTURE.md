@@ -123,6 +123,8 @@ The stage page uses a websocket-first model:
   - `queue_item_removed`
   - `queue_cleared`
   - `current_item_changed`
+- Live processing progress broadcasts:
+  - `queue_item_progress` for lightweight live progress ticks on queue clients only
 - Queue presence broadcasts are queue-page only:
   - `presence_snapshot`
   - `user_joined`
@@ -152,6 +154,7 @@ The stage page uses a websocket-first model:
   mix commands and mirror live `stage_state_update` broadcasts.
 - Queue page includes a lyrics overlay toggle that mirrors the stage lyrics visibility state.
 - Queue page also renders a live "Here Now" roster from presence events and shows requester labels on queue items.
+- Queue page updates live download/processing progress from `queue_item_progress` without waiting for a full queue refresh.
 - The queue lyrics viewer subscribes as `lyrics_viewer` and follows the authoritative playback clock
   from websocket `stage_time_update` events.
 - Stage page subscribes as `stage`, consumes websocket queue events and stage-control events, and

@@ -301,6 +301,18 @@ class ConnectionManager:
             targets,
         )
 
+    async def broadcast_queue_item_progress(self, item_data: dict):
+        """Broadcast lightweight live progress for queue items."""
+        targets = await self._get_connections_by_roles({"queue"})
+        await self._broadcast_to_connections(
+            {
+                "type": "queue_item_progress",
+                "data": item_data,
+                "timestamp": self._timestamp(),
+            },
+            targets,
+        )
+
     async def broadcast_queue_item_removed(self, item_id: int):
         """Broadcast when a queue item is removed."""
         targets = await self._get_connections_by_roles(self.QUEUE_EVENT_ROLES)

@@ -1601,6 +1601,33 @@ function upsertQueueItemState(item) {
     return true;
 }
 
+function patchQueueItemProgressState(item) {
+    if (!item || typeof item !== 'object') {
+        return false;
+    }
+    const normalizedId = Number(item.id);
+    if (!Number.isFinite(normalizedId)) {
+        return false;
+    }
+    const index = currentQueueState.findIndex((entry) => entry.id === normalizedId);
+    if (index < 0) {
+        return false;
+    }
+    updateQueueState((queue) => {
+        const targetIndex = queue.findIndex((entry) => entry.id === normalizedId);
+        if (targetIndex < 0) {
+            return queue;
+        }
+        queue[targetIndex] = {
+            ...queue[targetIndex],
+            ...item,
+            id: normalizedId,
+        };
+        return queue;
+    });
+    return true;
+}
+
 function removeQueueItemState(itemId) {
     const normalizedId = Number(itemId);
     if (!Number.isFinite(normalizedId)) {
@@ -1894,6 +1921,9 @@ class QueueWebSocket {
                 break;
             case 'queue_item_updated':
                 window.dispatchEvent(new CustomEvent('queue_item_updated', { detail: message.data }));
+                break;
+            case 'queue_item_progress':
+                window.dispatchEvent(new CustomEvent('queue_item_progress', { detail: message.data }));
                 break;
             case 'queue_item_removed':
                 window.dispatchEvent(new CustomEvent('queue_item_removed', { detail: message.data }));
@@ -2284,6 +2314,12 @@ window.addEventListener('queue_item_added', (event) => {
 
 window.addEventListener('queue_item_updated', (event) => {
     if (!upsertQueueItemState(event.detail)) {
+        refreshQueue(true);
+    }
+});
+
+window.addEventListener('queue_item_progress', (event) => {
+    if (!patchQueueItemProgressState(event.detail)) {
         refreshQueue(true);
     }
 });

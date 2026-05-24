@@ -1330,8 +1330,8 @@ async def test_queue_service_update_status_async_promotes_ready_item_when_idle(d
 
 
 @pytest.mark.asyncio
-async def test_processing_task_emit_progress_broadcasts_queue_item_update(db_session):
-    """Live task progress should push queue updates without waiting for polling."""
+async def test_processing_task_emit_progress_broadcasts_queue_item_progress_for_queue_clients(db_session):
+    """Queue-backed live task progress should push lightweight queue progress updates."""
     service = QueueService()
     created = service.add_to_queue(
         db_session,
@@ -1358,28 +1358,81 @@ async def test_processing_task_emit_progress_broadcasts_queue_item_update(db_ses
         async def send_json(self, message):
             self.messages.append(message)
 
-    socket = DummySocket()
-    manager.active_connections.append(socket)
-    manager._connection_context[socket] = {"role": "queue"}
+    queue_socket = DummySocket()
+    stage_socket = DummySocket()
+    manager.active_connections.extend([queue_socket, stage_socket])
+    manager._connection_context[queue_socket] = {"role": "queue"}
+    manager._connection_context[stage_socket] = {"role": "stage"}
 
     with (
         patch("services.websocket_manager.manager", manager),
-        patch("services.processing_task_service.SessionLocal", TestingSessionLocal),
     ):
         await processing_task_service.emit_progress(
             task.id,
+            queue_item_id=created.id,
             progress_percent=42,
             progress_label="Downloading media",
             status=ProcessingTaskStatus.DOWNLOADING.value,
             stage="download",
         )
 
-    updated_events = [msg for msg in socket.messages if msg["type"] == "queue_item_updated"]
-    assert len(updated_events) == 1
-    assert updated_events[0]["data"]["id"] == created.id
-    assert updated_events[0]["data"]["processing_progress"] == 42
-    assert updated_events[0]["data"]["processing_label"] == "Downloading media"
+    progress_events = [msg for msg in queue_socket.messages if msg["type"] == "queue_item_progress"]
+    assert len(progress_events) == 1
+    assert progress_events[0]["data"]["id"] == created.id
+    assert progress_events[0]["data"]["task_id"] == task.id
+    assert progress_events[0]["data"]["processing_progress"] == 42
+    assert progress_events[0]["data"]["processing_label"] == "Downloading media"
+    assert progress_events[0]["data"]["processing_stage"] == "download"
+    assert progress_events[0]["data"]["status"] == ProcessingTaskStatus.DOWNLOADING.value
+    assert not any(msg["type"] == "queue_item_progress" for msg in stage_socket.messages)
+    assert not any(msg["type"] == "queue_item_updated" for msg in queue_socket.messages)
 
+    await task_stream_manager.clear_task(task.id)
+
+
+@pytest.mark.asyncio
+async def test_processing_task_emit_progress_without_queue_item_id_does_not_broadcast_queue_update(db_session):
+    """Media-only progress should stay in the task stream and avoid queue websocket fan-out."""
+    service = QueueService()
+    created = service.add_to_queue(
+        db_session,
+        QueueItemCreate(youtube_id="progress-media", title="Media Progress", is_karaoke=False),
+    )
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="uploaded_media",
+        target_media_item_id=created.media_id,
+        status=ProcessingTaskStatus.DOWNLOADING.value,
+        stage="download",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    manager = ConnectionManager()
+
+    class DummySocket:
+        def __init__(self):
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    socket = DummySocket()
+    manager.active_connections.append(socket)
+    manager._connection_context[socket] = {"role": "queue"}
+
+    with patch("services.websocket_manager.manager", manager):
+        await processing_task_service.emit_progress(
+            task.id,
+            progress_percent=12,
+            progress_label="Downloading media",
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+
+    assert not any(msg["type"] == "queue_item_progress" for msg in socket.messages)
+    assert not any(msg["type"] == "queue_item_updated" for msg in socket.messages)
     await task_stream_manager.clear_task(task.id)
 
 
