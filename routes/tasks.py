@@ -122,6 +122,32 @@ async def cancel_task(
     return processing_task_service.to_response(result)
 
 
+@router.delete("/{task_id}")
+async def delete_task(
+    task_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Delete a canceled task and remove any orphaned rows it leaves behind."""
+    task = processing_task_service.get_task(db, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    is_admin = get_admin_user(request, db) is not None
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Not allowed to delete this task")
+    if task.status != "canceled":
+        raise HTTPException(status_code=409, detail="Only canceled tasks can be deleted")
+
+    deleted = await processing_task_service.delete_canceled_task(db, task_id)
+    await task_stream_manager.clear_task(task_id)
+    if deleted.get("deleted_queue_item_id") is not None:
+        from services.websocket_manager import manager
+
+        await manager.broadcast_queue_item_removed(int(deleted["deleted_queue_item_id"]))
+    return deleted
+
+
 @router.get("/{task_id}/stream")
 async def stream_task(
     task_id: int,

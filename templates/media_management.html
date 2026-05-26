@@ -215,7 +215,21 @@
                             {% elif task.last_error_summary %}
                             <p class="mt-3 line-clamp-3 text-[11px] text-error">{{ task.last_error_summary }}</p>
                             {% endif %}
-                            {% if task.status.value != 'canceled' %}
+                            {% if task.status.value == 'canceled' %}
+                            <div class="mt-3 flex justify-end">
+                                <button
+                                    type="button"
+                                    data-action="delete-task"
+                                    data-task-id="{{ task.id }}"
+                                    class="inline-flex items-center gap-2 rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-60"
+                                    title="{{ t('media.delete_task') }}"
+                                    aria-label="{{ t('media.delete_task') }}"
+                                >
+                                    <span class="material-symbols-outlined text-[16px]">delete</span>
+                                    <span>{{ t('media.delete_task') }}</span>
+                                </button>
+                            </div>
+                            {% else %}
                             <div class="mt-3 flex justify-end">
                                 <button
                                     type="button"

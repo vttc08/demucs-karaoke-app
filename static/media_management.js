@@ -325,17 +325,23 @@ function renderTaskList(tasks) {
         const statusChip = ['downloading', 'processing'].includes(task.status)
             ? ""
             : `<span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${task.status === 'canceled' ? 'border-error/30 bg-error/10 text-error' : 'text-on-surface-variant'}">${escapeHtml(getTaskStatusLabel(task.status))}</span>`;
-        return `
-            <article class="rounded-xl border ${isSelectedTask ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20' : 'border-white/10 bg-surface-container-low'} p-3 cursor-pointer transition-colors" data-task-id="${task.id}" aria-current="${isSelectedTask ? 'true' : 'false'}">
-                <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                        <p class="truncate text-sm font-bold text-on-surface">${escapeHtml(task.target_media_item_id ? t("media.media_task_target", { id: targetId }) : t("media.queue_task_target", { id: targetId }))}</p>
-                        <p class="mt-0.5 text-[11px] uppercase tracking-wider text-on-surface-variant">${escapeHtml(task.stage || task.status)}</p>
-                    </div>
-                    ${statusChip}
+        const actionHtml = task.status === "canceled"
+            ? `
+                <div class="mt-3 flex justify-end">
+                    <button
+                        type="button"
+                        data-action="delete-task"
+                        class="inline-flex items-center gap-2 rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-task-id="${task.id}"
+                        title="${escapeHtml(t("media.delete_task"))}"
+                        aria-label="${escapeHtml(t("media.delete_task"))}"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">delete</span>
+                        <span>${escapeHtml(t("media.delete_task"))}</span>
+                    </button>
                 </div>
-                ${progressHtml}
-                ${task.status !== "canceled" ? `
+                `
+            : `
                 <div class="mt-3 flex justify-end">
                     <button
                         type="button"
@@ -349,7 +355,18 @@ function renderTaskList(tasks) {
                         <span>${escapeHtml(t("media.cancel_task"))}</span>
                     </button>
                 </div>
-                ` : ""}
+                `;
+        return `
+            <article class="rounded-xl border ${isSelectedTask ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20' : 'border-white/10 bg-surface-container-low'} p-3 cursor-pointer transition-colors" data-task-id="${task.id}" aria-current="${isSelectedTask ? 'true' : 'false'}">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-bold text-on-surface">${escapeHtml(task.target_media_item_id ? t("media.media_task_target", { id: targetId }) : t("media.queue_task_target", { id: targetId }))}</p>
+                        <p class="mt-0.5 text-[11px] uppercase tracking-wider text-on-surface-variant">${escapeHtml(task.stage || task.status)}</p>
+                    </div>
+                    ${statusChip}
+                </div>
+                ${progressHtml}
+                ${actionHtml}
         </article>
         `;
     }).join("");
@@ -436,6 +453,58 @@ async function cancelProcessingTask(button) {
         button.title = t("media.cancel_task");
         button.setAttribute("aria-label", t("media.cancel_task"));
         button.innerHTML = originalHtml || `<span class="material-symbols-outlined text-[16px]">close</span><span>${escapeHtml(t("media.cancel_task"))}</span>`;
+    }
+}
+
+async function deleteProcessingTask(button) {
+    if (!button || !isAdmin) {
+        return;
+    }
+    const taskCard = button.closest("[data-task-id]");
+    const taskId = Number(taskCard?.dataset.taskId || button.dataset.taskId);
+    if (!Number.isFinite(taskId) || taskId <= 0) {
+        return;
+    }
+    if (!window.confirm(t("media.confirm_delete_task"))) {
+        return;
+    }
+
+    const originalHtml = button.innerHTML;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.title = t("media.deleting_task");
+    button.setAttribute("aria-label", t("media.deleting_task"));
+    button.innerHTML = '<span class="material-symbols-outlined animate-spin text-[16px]">sync</span>';
+
+    try {
+        const response = await fetch(appUrl(`/api/tasks/${taskId}`), {
+            method: "DELETE",
+        });
+        if (!response.ok) {
+            let detail = t("media.delete_task_failed");
+            try {
+                const payload = await response.json();
+                if (payload?.detail) {
+                    detail = payload.detail;
+                }
+            } catch (_error) {
+                // Keep fallback text.
+            }
+            throw new Error(detail);
+        }
+
+        showToast(t("media.task_deleted"));
+        window.setTimeout(() => {
+            window.location.reload();
+        }, 350);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : t("media.delete_task_failed");
+        showToast(message);
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        button.title = t("media.delete_task");
+        button.setAttribute("aria-label", t("media.delete_task"));
+        button.innerHTML = originalHtml || `<span class="material-symbols-outlined text-[16px]">delete</span><span>${escapeHtml(t("media.delete_task"))}</span>`;
     }
 }
 
@@ -1096,6 +1165,11 @@ function handleActionClick(event) {
 
     if (action === "cancel-task") {
         cancelProcessingTask(button);
+        return;
+    }
+
+    if (action === "delete-task") {
+        deleteProcessingTask(button);
         return;
     }
 

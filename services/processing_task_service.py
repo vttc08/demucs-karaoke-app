@@ -19,6 +19,7 @@ from models import (
     QueueItem,
     QueueStatus,
 )
+from services.media_library_maintenance_service import MediaLibraryMaintenanceService
 from services.task_stream_service import task_stream_manager
 
 logger = logging.getLogger(__name__)
@@ -444,6 +445,65 @@ class ProcessingTaskService:
         await task_stream_manager.mark_task_terminal(task.id, status=task.status)
         await self._cancel_queue_and_media_side_effects(db, task)
         return task
+
+    async def delete_canceled_task(self, db: Session, task_id: int) -> dict[str, int | None]:
+        """Delete a canceled task and any orphaned rows it leaves behind."""
+        task = self.get_task(db, task_id)
+        if task is None:
+            raise ValueError(f"Task not found: {task_id}")
+        if task.status != ProcessingTaskStatus.CANCELED.value:
+            raise ValueError("Only canceled tasks can be deleted")
+
+        queue_item_id = task.target_queue_item_id
+        media_item_id = self._task_media_id(db, task)
+        deleted_media_item_id: int | None = None
+
+        if queue_item_id is not None:
+            queue_item = (
+                db.query(QueueItem)
+                .filter(QueueItem.id == queue_item_id)
+                .first()
+            )
+            if queue_item is not None:
+                db.delete(queue_item)
+                db.flush()
+
+        if media_item_id is not None:
+            media_item = (
+                db.query(MediaItem)
+                .filter(MediaItem.id == media_item_id)
+                .first()
+            )
+            if media_item is not None:
+                remaining_queue_items = (
+                    db.query(QueueItem.id)
+                    .filter(QueueItem.media_id == media_item_id)
+                    .count()
+                )
+                remaining_active_tasks = (
+                    db.query(ProcessingTask.id)
+                    .filter(
+                        ProcessingTask.target_media_item_id == media_item_id,
+                        ProcessingTask.status != ProcessingTaskStatus.CANCELED.value,
+                        ProcessingTask.id != task_id,
+                    )
+                    .count()
+                )
+                if media_item.missing and remaining_queue_items == 0 and remaining_active_tasks == 0:
+                    MediaLibraryMaintenanceService().delete_media_item(db, media_item_id)
+                    deleted_media_item_id = media_item_id
+
+        if db.query(ProcessingTask).filter(ProcessingTask.id == task_id).first() is not None:
+            db.delete(task)
+            db.commit()
+        else:
+            db.commit()
+
+        return {
+            "deleted_task_id": task_id,
+            "deleted_queue_item_id": queue_item_id,
+            "deleted_media_item_id": deleted_media_item_id,
+        }
 
     def recover_interrupted_tasks(self, db: Session) -> list[int]:
         """Reset interrupted tasks to pending and return ids for restart."""

@@ -561,6 +561,70 @@ def test_cancel_task_route_guest_requires_own_queue_item(client):
     asyncio.run(task_stream_manager.clear_task(other_task_id))
 
 
+def test_delete_canceled_task_route_removes_orphaned_media_and_task(client, tmp_path):
+    """Admins should be able to delete a canceled task and its orphaned media row."""
+    authenticate_admin_client(client)
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "delete-canceled.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                youtube_id="delete-canceled",
+                file_stem="delete-canceled",
+                title="Delete Canceled",
+                media_path="/media/delete-canceled.mp4",
+                missing=True,
+            )
+            db.add(media)
+            db.commit()
+            db.refresh(media)
+
+            queue_item = QueueItem(
+                media_id=media.id,
+                position=1,
+                requested_karaoke=False,
+                status=QueueStatus.PENDING.value,
+            )
+            db.add(queue_item)
+            db.commit()
+            db.refresh(queue_item)
+
+            task = ProcessingTask(
+                task_type="queue_prepare",
+                source_kind="youtube",
+                target_queue_item_id=queue_item.id,
+                target_media_item_id=media.id,
+                status=ProcessingTaskStatus.CANCELED.value,
+                stage="canceled",
+            )
+            db.add(task)
+            db.commit()
+            task_id = task.id
+            media_id = media.id
+            queue_item_id = queue_item.id
+
+        response = client.delete(f"/api/tasks/{task_id}")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["deleted_task_id"] == task_id
+        assert payload["deleted_queue_item_id"] == queue_item_id
+        assert payload["deleted_media_item_id"] == media_id
+
+        with TestingSessionLocal() as db:
+            assert db.query(ProcessingTask).filter(ProcessingTask.id == task_id).first() is None
+            assert db.query(QueueItem).filter(QueueItem.id == queue_item_id).first() is None
+            assert db.query(MediaItem).filter(MediaItem.id == media_id).first() is None
+        assert not media_file.exists()
+    finally:
+        settings.media_path = original_media
+
+
 def test_add_to_queue_uses_guest_cookies_for_requester(client):
     """Queue add should expose requester label from guest cookies."""
     client.cookies.set("karaoke_guest_id", "guest-123")
