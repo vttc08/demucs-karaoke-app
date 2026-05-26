@@ -38,6 +38,8 @@ If the app exits during:
 
 the task is reset to `pending` on next startup and re-enqueued.
 
+If a task is canceled explicitly, the worker is stopped, the durable row is marked `canceled`, and queue/media cleanup resets the affected media so it can be queued again.
+
 The implementation does not attempt byte-range or partial-progress resume for:
 
 - yt-dlp downloads
@@ -60,4 +62,3 @@ Current Demucs integration is still coarse:
 - remote Demucs job API with native progress SSE
 - optional persistence for a compact failure log tail per task
 - retry/backoff policy for repeated startup failures
-- explicit cancel endpoint and cancellation propagation into yt-dlp / remote Demucs

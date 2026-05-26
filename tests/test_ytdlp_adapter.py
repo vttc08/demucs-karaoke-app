@@ -1,4 +1,5 @@
 """Tests for yt-dlp adapter command construction and output selection."""
+import asyncio
 from pathlib import Path
 import subprocess
 import threading
@@ -111,7 +112,7 @@ def test_streaming_download_adds_newline_for_live_progress(monkeypatch, tmp_path
     expected_output = tmp_path / f"{youtube_id}.mp4"
     captured_cmd = {}
 
-    def fake_streaming_download(cmd, *, progress_callback=None, log_callback=None):
+    def fake_streaming_download(cmd, *, progress_callback=None, log_callback=None, cancel_event=None):
         captured_cmd["cmd"] = cmd
         expected_output.write_bytes(b"video")
         if progress_callback:
@@ -236,6 +237,67 @@ def test_run_streaming_download_terminates_child_when_callback_raises(monkeypatc
             ["/bin/yt-dlp", "https://example.test/video"],
             progress_callback=lambda percent, line: (_ for _ in ()).throw(RuntimeError("callback failed")),
             timeout_seconds=1,
+        )
+
+    assert fake_process.terminated is True
+    assert fake_process.killed is False
+    assert fake_process.stdout.closed is True
+
+
+def test_run_streaming_download_terminates_child_when_cancelled(monkeypatch):
+    """Cancellation should terminate the yt-dlp child process promptly."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    cancel_event = threading.Event()
+
+    class FakeStdout:
+        def __init__(self):
+            self.closed = False
+            self._lines = [
+                "[download] 1.0%\n",
+                "",
+            ]
+
+        def readline(self):
+            line = self._lines.pop(0)
+            return line
+
+        def close(self):
+            self.closed = True
+
+    class FakeProcess:
+        def __init__(self):
+            self.stdout = FakeStdout()
+            self.returncode = None
+            self.terminated = False
+            self.killed = False
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            self.terminated = True
+            self.returncode = -15
+
+        def kill(self):
+            self.killed = True
+            self.returncode = -9
+
+        def wait(self, timeout=None):
+            return 0 if self.returncode is None else self.returncode
+
+    fake_process = FakeProcess()
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: fake_process)
+
+    def progress_callback(percent, line):
+        if percent >= 1:
+            cancel_event.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        adapter._run_streaming_download(
+            ["/bin/yt-dlp", "https://example.test/video"],
+            progress_callback=progress_callback,
+            timeout_seconds=1,
+            cancel_event=cancel_event,
         )
 
     assert fake_process.terminated is True

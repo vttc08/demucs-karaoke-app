@@ -16,7 +16,7 @@ def utc_now() -> datetime:
 class TaskStreamManager:
     """Retain live task snapshots and recent events in memory."""
 
-    TERMINAL_STATUSES = {"done", "failed"}
+    TERMINAL_STATUSES = {"done", "failed", "canceled"}
 
     def __init__(
         self,
@@ -238,7 +238,7 @@ class TaskStreamManager:
     def _expiry_for_status(self, status: str, base_time: datetime) -> datetime | None:
         if status == "done":
             return base_time + self._done_ttl
-        if status == "failed":
+        if status in {"failed", "canceled"}:
             return base_time + self._failed_ttl
         return None
 

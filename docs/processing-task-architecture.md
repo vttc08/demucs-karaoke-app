@@ -17,7 +17,7 @@ This avoids using SQLite as a high-frequency event bus while still allowing inte
 - `task_type`: `queue_prepare` or `media_karaoke`
 - `source_kind`: `youtube`, `library_media`, or `uploaded_media`
 - `target_queue_item_id` / `target_media_item_id`
-- `status`: `pending`, `downloading`, `processing`, `done`, `failed`
+- `status`: `pending`, `downloading`, `processing`, `done`, `failed`, `canceled`
 - `stage`: coarse workflow marker such as `download`, `extract_audio`, `demucs`, `finalize`
 - `attempt_count`
 - `last_error_summary`
@@ -25,6 +25,14 @@ This avoids using SQLite as a high-frequency event bus while still allowing inte
 - lifecycle timestamps
 
 `queue_items.status` is still the playback-facing queue state and is mirrored from the durable task status for compatibility with the existing queue and stage flow.
+
+Cancellation is a first-class terminal state:
+
+- `POST /api/tasks/{task_id}/cancel` stops the active worker when one exists
+- same-media active or pending tasks are canceled together
+- queue rows are reset back to `pending`
+- media rows are marked missing again so the item can be queued afresh
+- partially downloaded cache artifacts and generated outputs are removed during cleanup
 
 ## Live State
 
@@ -63,6 +71,7 @@ The restart model is coarse on purpose. yt-dlp and local ffmpeg/demucs work rest
 - `GET /api/tasks/{task_id}`
 - `GET /api/tasks/stream`
 - `GET /api/tasks/{task_id}/stream`
+- `POST /api/tasks/{task_id}/cancel`
 
 The summary stream is for task list refreshes. The per-task stream is for admin log inspection on `/media`.
 

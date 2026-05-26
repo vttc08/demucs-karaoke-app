@@ -1412,7 +1412,14 @@ function updateQueueDisplay(queue) {
                         </button>
                     </div>
                     ` : '<span class="w-10 h-10" aria-hidden="true"></span>';
-    const rightActionHtml = item.can_remove ? `
+    const rightActionHtml = item.can_cancel_task ? `
+                    <button class="w-10 h-10 rounded-full bg-error/10 text-error flex items-center justify-center hover:bg-error/15 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                            onclick="cancelTask('${item.task_id}', this)"
+                            title="${escapeHtml(t('queue.cancel_task'))}"
+                            aria-label="${escapeHtml(t('queue.cancel_task'))}">
+                        <span class="material-symbols-outlined">close</span>
+                    </button>
+                    ` : item.can_remove ? `
                     <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors"
                             onclick="removeSong('${item.id}')">
                         <span class="material-symbols-outlined">remove</span>
@@ -1721,7 +1728,55 @@ async function moveSong(songId, direction) {
     }
 }
 
+async function cancelTask(taskId, button) {
+    const numericTaskId = Number(taskId);
+    if (!Number.isFinite(numericTaskId) || numericTaskId <= 0) {
+        return;
+    }
+
+    const actionButton = button || null;
+    const originalHtml = actionButton?.innerHTML || "";
+    if (actionButton) {
+        actionButton.disabled = true;
+        actionButton.setAttribute("aria-busy", "true");
+        actionButton.title = t('queue.canceling');
+        actionButton.setAttribute("aria-label", t('queue.canceling'));
+        actionButton.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">sync</span>';
+    }
+
+    try {
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/tasks/${numericTaskId}/cancel`), {
+            method: "POST",
+        });
+        if (!response.ok) {
+            let detail = t('queue.cancel_task_failed');
+            try {
+                const payload = await response.json();
+                if (payload?.detail) {
+                    detail = payload.detail;
+                }
+            } catch (_) {
+                // Keep fallback text.
+            }
+            throw new Error(detail);
+        }
+
+        refreshQueue(true);
+    } catch (error) {
+        console.error('Error canceling task:', error);
+        alert(error instanceof Error ? error.message : t('queue.cancel_task_failed'));
+        if (actionButton) {
+            actionButton.disabled = false;
+            actionButton.removeAttribute("aria-busy");
+            actionButton.title = t('queue.cancel_task');
+            actionButton.setAttribute("aria-label", t('queue.cancel_task'));
+            actionButton.innerHTML = originalHtml || `<span class="material-symbols-outlined">close</span>`;
+        }
+    }
+}
+
 window.moveSong = moveSong;
+window.cancelTask = cancelTask;
 
 // WebSocket connection for real-time queue updates
 class QueueWebSocket {

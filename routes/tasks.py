@@ -4,17 +4,26 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import ProcessingTaskResponse
-from routes.auth import require_admin_user
+from routes.auth import get_admin_user, require_admin_user
 from services.processing_task_service import processing_task_service
 from services.task_stream_service import task_stream_manager
+from services.processing_task_service import task_execution_coordinator
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+
+def _current_guest_id(request: Request) -> str | None:
+    guest_id = request.cookies.get("karaoke_guest_id")
+    if guest_id is None:
+        return None
+    cleaned = " ".join(guest_id.split()).strip()
+    return cleaned or None
 
 
 def _serialize_sse(payload: dict) -> str:
@@ -68,6 +77,49 @@ def get_task(
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return processing_task_service.to_response(task)
+
+
+@router.post("/{task_id}/cancel", response_model=ProcessingTaskResponse)
+async def cancel_task(
+    task_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Cancel a durable task and reset its associated queue/media state."""
+    task = processing_task_service.get_task(db, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    is_admin = get_admin_user(request, db) is not None
+    requester_id = _current_guest_id(request)
+    if not processing_task_service.can_cancel_task(
+        db,
+        task,
+        is_admin=is_admin,
+        requester_id=requester_id,
+    ):
+        raise HTTPException(status_code=403, detail="Not allowed to cancel this task")
+
+    task_ids = processing_task_service.get_cancelable_task_ids(
+        db,
+        task,
+        is_admin=is_admin,
+        requester_id=requester_id,
+    )
+    if not task_ids:
+        raise HTTPException(status_code=403, detail="Not allowed to cancel this task")
+
+    task_execution_coordinator.cancel_many(task_ids)
+    for candidate_id in task_ids:
+        if processing_task_service.get_task(db, candidate_id) is None:
+            continue
+        await processing_task_service.cancel_task(db, candidate_id)
+
+    result = processing_task_service.get_task(db, task_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return processing_task_service.to_response(result)
 
 
 @router.get("/{task_id}/stream")

@@ -409,6 +409,158 @@ def test_tasks_stream_route_returns_sse_snapshot(client):
     assert response.status_code != 422
 
 
+def test_cancel_task_route_admin_cancels_same_media_tasks(client):
+    """Admins should be able to cancel a task and its same-media follow-on tasks."""
+    authenticate_admin_client(client)
+
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="route-cancel-media",
+            file_stem="route-cancel-media",
+            title="Route Cancel Song",
+            media_path="/media/route-cancel-media.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1,
+            requested_karaoke=False,
+            status=QueueStatus.DOWNLOADING.value,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+
+        queue_task = ProcessingTask(
+            task_type="queue_prepare",
+            source_kind="youtube",
+            target_queue_item_id=queue_item.id,
+            target_media_item_id=media.id,
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+        follow_on_task = ProcessingTask(
+            task_type="media_karaoke",
+            source_kind="library_media",
+            target_media_item_id=media.id,
+            status=ProcessingTaskStatus.PROCESSING.value,
+            stage="demucs",
+        )
+        db.add_all([queue_task, follow_on_task])
+        db.commit()
+        db.refresh(queue_task)
+        db.refresh(follow_on_task)
+        media_id = media.id
+        queue_item_id = queue_item.id
+        queue_task_id = queue_task.id
+        follow_on_task_id = follow_on_task.id
+
+    response = client.post(f"/api/tasks/{queue_task_id}/cancel")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "canceled"
+
+    with TestingSessionLocal() as db:
+        refreshed_queue_task = db.query(ProcessingTask).filter(ProcessingTask.id == queue_task_id).first()
+        refreshed_follow_on_task = db.query(ProcessingTask).filter(ProcessingTask.id == follow_on_task_id).first()
+        refreshed_queue_item = db.query(QueueItem).filter(QueueItem.id == queue_item_id).first()
+        refreshed_media = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+
+        assert refreshed_queue_task is not None
+        assert refreshed_follow_on_task is not None
+        assert refreshed_queue_item is not None
+        assert refreshed_media is not None
+        assert refreshed_queue_task.status == ProcessingTaskStatus.CANCELED.value
+        assert refreshed_follow_on_task.status == ProcessingTaskStatus.CANCELED.value
+        assert refreshed_queue_item.status == QueueStatus.PENDING.value
+        assert refreshed_queue_item.error is None
+        assert refreshed_media.missing is True
+
+    asyncio.run(task_stream_manager.clear_task(queue_task_id))
+    asyncio.run(task_stream_manager.clear_task(follow_on_task_id))
+
+
+def test_cancel_task_route_guest_requires_own_queue_item(client):
+    """Guests should only cancel tasks they created."""
+    with TestingSessionLocal() as db:
+        owned_media = MediaItem(
+            youtube_id="route-owned-media",
+            file_stem="route-owned-media",
+            title="Owned Route Song",
+            media_path="/media/route-owned-media.mp4",
+            missing=False,
+        )
+        other_media = MediaItem(
+            youtube_id="route-other-media",
+            file_stem="route-other-media",
+            title="Other Route Song",
+            media_path="/media/route-other-media.mp4",
+            missing=False,
+        )
+        db.add_all([owned_media, other_media])
+        db.commit()
+        db.refresh(owned_media)
+        db.refresh(other_media)
+
+        owned_queue = QueueItem(
+            media_id=owned_media.id,
+            position=1,
+            requested_karaoke=False,
+            user_id="guest-owner",
+            status=QueueStatus.DOWNLOADING.value,
+        )
+        other_queue = QueueItem(
+            media_id=other_media.id,
+            position=2,
+            requested_karaoke=False,
+            user_id="guest-other",
+            status=QueueStatus.DOWNLOADING.value,
+        )
+        db.add_all([owned_queue, other_queue])
+        db.commit()
+        db.refresh(owned_queue)
+        db.refresh(other_queue)
+
+        owned_task = ProcessingTask(
+            task_type="queue_prepare",
+            source_kind="youtube",
+            target_queue_item_id=owned_queue.id,
+            target_media_item_id=owned_media.id,
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+        other_task = ProcessingTask(
+            task_type="queue_prepare",
+            source_kind="youtube",
+            target_queue_item_id=other_queue.id,
+            target_media_item_id=other_media.id,
+            status=ProcessingTaskStatus.DOWNLOADING.value,
+            stage="download",
+        )
+        db.add_all([owned_task, other_task])
+        db.commit()
+        db.refresh(owned_task)
+        db.refresh(other_task)
+        owned_task_id = owned_task.id
+        other_task_id = other_task.id
+
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+
+    own_response = client.post(f"/api/tasks/{owned_task_id}/cancel")
+    assert own_response.status_code == 200
+    assert own_response.json()["status"] == "canceled"
+
+    forbidden_response = client.post(f"/api/tasks/{other_task_id}/cancel")
+    assert forbidden_response.status_code == 403
+
+    asyncio.run(task_stream_manager.clear_task(owned_task_id))
+    asyncio.run(task_stream_manager.clear_task(other_task_id))
+
+
 def test_add_to_queue_uses_guest_cookies_for_requester(client):
     """Queue add should expose requester label from guest cookies."""
     client.cookies.set("karaoke_guest_id", "guest-123")

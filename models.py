@@ -43,6 +43,7 @@ class ProcessingTaskStatus(str, Enum):
     PROCESSING = "processing"
     DONE = "done"
     FAILED = "failed"
+    CANCELED = "canceled"
 
 
 class QueueItem(Base):
@@ -287,6 +288,7 @@ class QueueItemResponse(BaseModel):
     requested_by_name: Optional[str] = None
     can_remove: bool = False
     can_control_stage: bool = False
+    can_cancel_task: bool = False
     is_karaoke: bool
     status: QueueStatus
     thumbnail: Optional[str] = None
@@ -350,6 +352,7 @@ class ProcessingTaskEventResponse(BaseModel):
         "status_changed",
         "error",
         "done",
+        "canceled",
     ]
     status: Optional[ProcessingTaskStatus] = None
     stage: Optional[str] = None

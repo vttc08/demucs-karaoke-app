@@ -1,5 +1,8 @@
 """FFmpeg adapter for video/audio processing."""
+import asyncio
 import subprocess
+import threading
+import time
 from pathlib import Path
 from config import settings
 
@@ -11,7 +14,12 @@ class FFmpegAdapter:
         self.ffmpeg_path = ffmpeg_path or settings.ffmpeg_path
 
     def combine_audio_video(
-        self, video_path: Path, audio_path: Path, output_path: Path
+        self,
+        video_path: Path,
+        audio_path: Path,
+        output_path: Path,
+        *,
+        cancel_event: threading.Event | None = None,
     ) -> Path:
         """
         Combine video and audio files.
@@ -37,10 +45,16 @@ class FFmpegAdapter:
             str(output_path),
         ]
 
-        subprocess.run(cmd, check=True, capture_output=True)
+        self._run_command(cmd, cancel_event=cancel_event)
         return output_path
 
-    def extract_audio(self, source_path: Path, output_path: Path) -> Path:
+    def extract_audio(
+        self,
+        source_path: Path,
+        output_path: Path,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> Path:
         """Extract source audio stream without re-encoding."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
         cmd = [
@@ -53,10 +67,16 @@ class FFmpegAdapter:
             "-y",
             str(output_path),
         ]
-        subprocess.run(cmd, check=True, capture_output=True)
+        self._run_command(cmd, cancel_event=cancel_event)
         return output_path
 
-    def extract_video_thumbnail(self, source_path: Path, output_path: Path) -> Path:
+    def extract_video_thumbnail(
+        self,
+        source_path: Path,
+        output_path: Path,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> Path:
         """Extract a single frame thumbnail from a video file."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
         cmd = [
@@ -74,10 +94,16 @@ class FFmpegAdapter:
             "-y",
             str(output_path),
         ]
-        subprocess.run(cmd, check=True, capture_output=True)
+        self._run_command(cmd, cancel_event=cancel_event)
         return output_path
 
-    def extract_embedded_thumbnail(self, source_path: Path, output_path: Path) -> Path:
+    def extract_embedded_thumbnail(
+        self,
+        source_path: Path,
+        output_path: Path,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> Path:
         """Extract embedded cover art from a media file when available."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
         cmd = [
@@ -95,5 +121,53 @@ class FFmpegAdapter:
             "-y",
             str(output_path),
         ]
-        subprocess.run(cmd, check=True, capture_output=True)
+        self._run_command(cmd, cancel_event=cancel_event)
         return output_path
+
+    def _run_command(self, cmd: list[str], *, cancel_event: threading.Event | None = None) -> None:
+        if cancel_event is None:
+            subprocess.run(cmd, check=True, capture_output=True)
+            return
+
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            while True:
+                if cancel_event.is_set():
+                    self._terminate_process(process)
+                    raise asyncio.CancelledError()
+                return_code = process.poll()
+                if return_code is not None:
+                    stdout, stderr = process.communicate()
+                    if return_code != 0:
+                        raise subprocess.CalledProcessError(
+                            returncode=return_code,
+                            cmd=cmd,
+                            output=stdout,
+                            stderr=stderr,
+                        )
+                    return
+                time.sleep(0.1)
+        except asyncio.CancelledError:
+            self._terminate_process(process)
+            raise
+        except Exception:
+            self._terminate_process(process)
+            raise
+
+    @staticmethod
+    def _terminate_process(process: subprocess.Popen) -> None:
+        if process.poll() is not None:
+            return
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+        except ProcessLookupError:
+            return

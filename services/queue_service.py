@@ -781,6 +781,11 @@ class QueueService:
             is_admin=is_admin,
             requester_id=requester_id,
         )
+        response.can_cancel_task = self.can_cancel_queue_item_task(
+            item,
+            is_admin=is_admin,
+            requester_id=requester_id,
+        )
         response.can_remove = self.can_remove_queue_item(
             item,
             is_admin=is_admin,
@@ -829,6 +834,27 @@ class QueueService:
         requester_id: str | None = None,
     ) -> bool:
         """Return whether the viewer may send stage controls for this item."""
+        return self.can_manage_queue_item(
+            item,
+            is_admin=is_admin,
+            requester_id=requester_id,
+        )
+
+    def can_cancel_queue_item_task(
+        self,
+        item: QueueItem,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+    ) -> bool:
+        """Return whether the viewer may cancel an active task for the queue item."""
+        if QueueStatus(item.status) not in {
+            QueueStatus.DOWNLOADING,
+            QueueStatus.PROCESSING,
+        }:
+            return False
+        if is_admin:
+            return True
         return self.can_manage_queue_item(
             item,
             is_admin=is_admin,

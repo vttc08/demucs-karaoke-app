@@ -37,6 +37,7 @@ class ProcessingTaskService:
         ProcessingTaskStatus.DOWNLOADING.value,
         ProcessingTaskStatus.PROCESSING.value,
     )
+    CANCELLABLE_STATUSES = ACTIVE_STATUSES
 
     def get_or_create_queue_task(self, db: Session, queue_item_id: int) -> ProcessingTask:
         """Return an existing active queue task or create one."""
@@ -218,7 +219,20 @@ class ProcessingTaskService:
 
         await task_stream_manager.publish(
             task.id,
-            event_type="status_changed" if status not in (ProcessingTaskStatus.DONE, ProcessingTaskStatus.FAILED) else ("done" if status == ProcessingTaskStatus.DONE else "error"),
+            event_type=(
+                "status_changed"
+                if status
+                not in (
+                    ProcessingTaskStatus.DONE,
+                    ProcessingTaskStatus.FAILED,
+                    ProcessingTaskStatus.CANCELED,
+                )
+                else (
+                    "done"
+                    if status == ProcessingTaskStatus.DONE
+                    else ("error" if status == ProcessingTaskStatus.FAILED else "canceled")
+                )
+            ),
             status=task.status,
             stage=task.stage,
             progress_percent=progress_percent,
@@ -230,7 +244,11 @@ class ProcessingTaskService:
             message=error_summary,
             stream="system",
         )
-        if status in (ProcessingTaskStatus.DONE, ProcessingTaskStatus.FAILED):
+        if status in (
+            ProcessingTaskStatus.DONE,
+            ProcessingTaskStatus.FAILED,
+            ProcessingTaskStatus.CANCELED,
+        ):
             await task_stream_manager.mark_task_terminal(task.id, status=task.status)
         await self._sync_queue_side_effects(db, task)
         return task
@@ -276,6 +294,43 @@ class ProcessingTaskService:
             stream="system",
         )
         await self._sync_queue_side_effects(db, task)
+        return task
+
+    async def set_canceled(
+        self,
+        db: Session,
+        task_id: int,
+        *,
+        stage: str | None = None,
+        progress_label: str | None = None,
+        progress_label_key: str | None = None,
+        progress_label_args: dict[str, Any] | None = None,
+    ) -> ProcessingTask:
+        """Persist a canceled task state and publish it live."""
+        task = self.get_task(db, task_id)
+        if task is None:
+            raise ValueError(f"Task not found: {task_id}")
+        task.status = ProcessingTaskStatus.CANCELED.value
+        if stage is not None:
+            task.stage = stage
+        task.last_error_summary = None
+        task.last_error_detail = None
+        task.updated_at = utc_now_naive()
+        task.finished_at = task.finished_at or utc_now_naive()
+        db.commit()
+        db.refresh(task)
+
+        await task_stream_manager.publish(
+            task.id,
+            event_type="canceled",
+            status=task.status,
+            stage=task.stage,
+            progress_label=progress_label,
+            progress_label_key=progress_label_key,
+            progress_label_args=progress_label_args,
+            stream="system",
+        )
+        await task_stream_manager.mark_task_terminal(task.id, status=task.status)
         return task
 
     async def emit_progress(
@@ -357,6 +412,39 @@ class ProcessingTaskService:
             stream=stream,
         )
 
+    async def cancel_task(
+        self,
+        db: Session,
+        task_id: int,
+    ) -> ProcessingTask:
+        """Cancel a task and reset its queue/media state for retry."""
+        task = self.get_task(db, task_id)
+        if task is None:
+            raise ValueError(f"Task not found: {task_id}")
+
+        if task.status == ProcessingTaskStatus.CANCELED.value:
+            await self._cancel_queue_and_media_side_effects(db, task)
+            return task
+
+        task.status = ProcessingTaskStatus.CANCELED.value
+        task.last_error_summary = None
+        task.last_error_detail = None
+        task.updated_at = utc_now_naive()
+        task.finished_at = task.finished_at or task.updated_at
+        db.commit()
+        db.refresh(task)
+
+        await task_stream_manager.publish(
+            task.id,
+            event_type="canceled",
+            status=task.status,
+            stage=task.stage,
+            stream="system",
+        )
+        await task_stream_manager.mark_task_terminal(task.id, status=task.status)
+        await self._cancel_queue_and_media_side_effects(db, task)
+        return task
+
     def recover_interrupted_tasks(self, db: Session) -> list[int]:
         """Reset interrupted tasks to pending and return ids for restart."""
         tasks = (
@@ -385,6 +473,85 @@ class ProcessingTaskService:
             task_ids.append(task.id)
         if task_ids:
             db.commit()
+        return task_ids
+
+    def can_cancel_task(
+        self,
+        db: Session,
+        task: ProcessingTask,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+    ) -> bool:
+        """Return whether the current viewer may cancel the task."""
+        if is_admin:
+            return True
+        if task.status not in self.CANCELLABLE_STATUSES:
+            return False
+        if task.target_queue_item_id is None:
+            return False
+        normalized_requester_id = self._normalize_optional_id(requester_id)
+        if normalized_requester_id is None:
+            return False
+        queue_item = (
+            db.query(QueueItem)
+            .filter(QueueItem.id == task.target_queue_item_id)
+            .first()
+        )
+        if queue_item is None:
+            return False
+        return self._normalize_optional_id(queue_item.user_id) == normalized_requester_id
+
+    def get_cancelable_task_ids(
+        self,
+        db: Session,
+        task: ProcessingTask,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+    ) -> list[int]:
+        """Return task ids that should be canceled together for this request."""
+        if not self.can_cancel_task(db, task, is_admin=is_admin, requester_id=requester_id):
+            return []
+
+        media_id = self._task_media_id(db, task)
+        task_ids = [task.id]
+        if media_id is None:
+            return task_ids
+
+        query = (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_media_item_id == media_id,
+                ProcessingTask.status.in_(self.CANCELLABLE_STATUSES),
+            )
+            .order_by(ProcessingTask.id.asc())
+        )
+        related_tasks = query.all()
+        if is_admin:
+            for related_task in related_tasks:
+                if related_task.id != task.id:
+                    task_ids.append(related_task.id)
+            return task_ids
+
+        normalized_requester_id = self._normalize_optional_id(requester_id)
+        if normalized_requester_id is None:
+            return []
+
+        for related_task in related_tasks:
+            if related_task.id == task.id:
+                continue
+            if related_task.target_queue_item_id is None:
+                continue
+            queue_item = (
+                db.query(QueueItem)
+                .filter(QueueItem.id == related_task.target_queue_item_id)
+                .first()
+            )
+            if queue_item is None:
+                continue
+            if self._normalize_optional_id(queue_item.user_id) == normalized_requester_id:
+                task_ids.append(related_task.id)
         return task_ids
 
     def restartable_task_ids(self, db: Session) -> list[int]:
@@ -420,9 +587,26 @@ class ProcessingTaskService:
         elif task.status == ProcessingTaskStatus.FAILED.value:
             queue_item.status = QueueStatus.FAILED.value
             queue_item.error = task.last_error_summary
+        elif task.status == ProcessingTaskStatus.CANCELED.value:
+            queue_item.status = QueueStatus.PENDING.value
+            queue_item.error = None
         db.commit()
         db.refresh(queue_item)
         return queue_item
+
+    def _task_media_id(self, db: Session, task: ProcessingTask) -> int | None:
+        if task.target_media_item_id is not None:
+            return task.target_media_item_id
+        if task.target_queue_item_id is None:
+            return None
+        queue_item = (
+            db.query(QueueItem)
+            .filter(QueueItem.id == task.target_queue_item_id)
+            .first()
+        )
+        if queue_item is None:
+            return None
+        return queue_item.media_id
 
     async def _sync_queue_side_effects(self, db: Session, task: ProcessingTask):
         """Broadcast queue changes after task persistence and mirroring."""
@@ -445,11 +629,44 @@ class ProcessingTaskService:
             if promoted:
                 await manager.broadcast_current_item_changed(promoted.id, None)
 
+    async def _cancel_queue_and_media_side_effects(
+        self,
+        db: Session,
+        task: ProcessingTask,
+    ) -> None:
+        """Reset queue/media rows and delete generated files for a canceled task."""
+        from services.karaoke_service import KaraokeService
+
+        karaoke_service = KaraokeService()
+        karaoke_service.cleanup_canceled_task(db, task)
+        await self._sync_cancel_side_effects(db, task)
+
+    async def _sync_cancel_side_effects(self, db: Session, task: ProcessingTask) -> None:
+        """Broadcast queue changes after a task cancel/reset."""
+        queue_item = self._mirror_queue_status(db, task)
+        if queue_item is None:
+            return
+
+        from services.queue_service import QueueService
+        from services.websocket_manager import manager
+
+        queue_service = QueueService()
+        response = queue_service._to_response(queue_item)
+        await manager.broadcast_queue_item_updated(response.model_dump(mode="json"))
+
+    @staticmethod
+    def _normalize_optional_id(value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = " ".join(value.split()).strip()
+        return cleaned or None
+
 class TaskExecutionCoordinator:
     """Start processing tasks in background threads without duplicate runners."""
 
     def __init__(self):
         self._active_task_ids: set[int] = set()
+        self._task_contexts: dict[int, dict[str, Any]] = {}
         self._lock = threading.Lock()
 
     def start(self, task_id: int):
@@ -458,6 +675,12 @@ class TaskExecutionCoordinator:
             if task_id in self._active_task_ids:
                 return
             self._active_task_ids.add(task_id)
+            cancel_event = threading.Event()
+            self._task_contexts[task_id] = {
+                "cancel_event": cancel_event,
+                "loop": None,
+                "task": None,
+            }
         thread = threading.Thread(
             target=self._run_task,
             args=(task_id,),
@@ -470,14 +693,73 @@ class TaskExecutionCoordinator:
         from services.karaoke_service import KaraokeService
 
         db = SessionLocal()
+        loop = asyncio.new_event_loop()
+        cancel_event = None
         try:
-            asyncio.run(KaraokeService().process_task(db, task_id))
+            asyncio.set_event_loop(loop)
+            with self._lock:
+                context = self._task_contexts.get(task_id)
+                if context is not None:
+                    context["loop"] = loop
+                    cancel_event = context["cancel_event"]
+            coroutine = KaraokeService().process_task(
+                db,
+                task_id,
+                cancel_event=cancel_event,
+            )
+            task = loop.create_task(coroutine)
+            with self._lock:
+                context = self._task_contexts.get(task_id)
+                if context is not None:
+                    context["task"] = task
+            loop.run_until_complete(task)
+        except asyncio.CancelledError:
+            logger.info("Background processing task canceled task_id=%s", task_id)
         except Exception:
             logger.exception("Background processing task crashed task_id=%s", task_id)
         finally:
+            try:
+                if not loop.is_closed():
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
             db.close()
             with self._lock:
                 self._active_task_ids.discard(task_id)
+                self._task_contexts.pop(task_id, None)
+
+    def cancel(self, task_id: int) -> bool:
+        """Request cancellation for a running or queued task."""
+        with self._lock:
+            context = self._task_contexts.get(task_id)
+            if context is None:
+                return False
+            cancel_event = context.get("cancel_event")
+            if isinstance(cancel_event, threading.Event):
+                cancel_event.set()
+            loop = context.get("loop")
+            task = context.get("task")
+            if loop is not None and task is not None and not task.done():
+                loop.call_soon_threadsafe(task.cancel)
+            return True
+
+    def cancel_many(self, task_ids: list[int]) -> list[int]:
+        """Request cancellation for multiple tasks."""
+        canceled_task_ids: list[int] = []
+        for task_id in task_ids:
+            if self.cancel(task_id):
+                canceled_task_ids.append(task_id)
+        return canceled_task_ids
+
+    def cancel_event_for(self, task_id: int) -> threading.Event | None:
+        """Return the cancellation event for an active task, if any."""
+        with self._lock:
+            context = self._task_contexts.get(task_id)
+            if context is None:
+                return None
+            cancel_event = context.get("cancel_event")
+            return cancel_event if isinstance(cancel_event, threading.Event) else None
 
 
 processing_task_service = ProcessingTaskService()

@@ -2,6 +2,8 @@
 from pathlib import Path
 from io import BytesIO
 import zipfile
+import asyncio
+import threading
 import httpx
 
 from config import settings
@@ -30,7 +32,12 @@ class DemucsClient:
             vocals_bytes = archive.read(vocals_name)
             return no_vocals_bytes, vocals_bytes, extension
 
-    async def separate_vocals(self, audio_path: Path) -> DemucsResponse:
+    async def separate_vocals(
+        self,
+        audio_path: Path,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> DemucsResponse:
         """
         Send audio to Demucs service for vocal separation.
 
@@ -42,6 +49,8 @@ class DemucsClient:
         """
         if not audio_path.exists():
             raise RuntimeError(f"Audio path does not exist: {audio_path}")
+        if cancel_event is not None and cancel_event.is_set():
+            raise asyncio.CancelledError()
 
         out_dir = settings.cache_path / "demucs_outputs"
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -61,6 +70,8 @@ class DemucsClient:
                     data=data,
                 )
             response.raise_for_status()
+            if cancel_event is not None and cancel_event.is_set():
+                raise asyncio.CancelledError()
 
             job_id = response.headers.get("X-Job-Id", "unknown")
             response_format = response.headers.get("X-Response-Format", "").lower()

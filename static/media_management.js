@@ -192,6 +192,13 @@ function renderTaskProgressBlock(task) {
     `;
 }
 
+function getTaskStatusLabel(status) {
+    if (status === "canceled") {
+        return t("task.canceled");
+    }
+    return status;
+}
+
 function scrollTaskPanelIntoView() {
     if (!taskPanel) {
         return;
@@ -317,7 +324,7 @@ function renderTaskList(tasks) {
         const progressHtml = renderTaskProgressBlock(task) || summary;
         const statusChip = ['downloading', 'processing'].includes(task.status)
             ? ""
-            : `<span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">${escapeHtml(task.status)}</span>`;
+            : `<span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${task.status === 'canceled' ? 'border-error/30 bg-error/10 text-error' : 'text-on-surface-variant'}">${escapeHtml(getTaskStatusLabel(task.status))}</span>`;
         return `
             <article class="rounded-xl border ${isSelectedTask ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20' : 'border-white/10 bg-surface-container-low'} p-3 cursor-pointer transition-colors" data-task-id="${task.id}" aria-current="${isSelectedTask ? 'true' : 'false'}">
                 <div class="flex items-start justify-between gap-3">
@@ -328,6 +335,21 @@ function renderTaskList(tasks) {
                     ${statusChip}
                 </div>
                 ${progressHtml}
+                ${task.status !== "canceled" ? `
+                <div class="mt-3 flex justify-end">
+                    <button
+                        type="button"
+                        data-action="cancel-task"
+                        class="inline-flex items-center gap-2 rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-task-id="${task.id}"
+                        title="${escapeHtml(t("media.cancel_task"))}"
+                        aria-label="${escapeHtml(t("media.cancel_task"))}"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">close</span>
+                        <span>${escapeHtml(t("media.cancel_task"))}</span>
+                    </button>
+                </div>
+                ` : ""}
         </article>
         `;
     }).join("");
@@ -369,6 +391,52 @@ async function refreshTaskList() {
     })();
 
     return taskRefreshPromise;
+}
+
+async function cancelProcessingTask(button) {
+    if (!button || !isAdmin) {
+        return;
+    }
+    const taskCard = button.closest("[data-task-id]");
+    const taskId = Number(taskCard?.dataset.taskId || button.dataset.taskId);
+    if (!Number.isFinite(taskId) || taskId <= 0) {
+        return;
+    }
+
+    const originalHtml = button.innerHTML;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.title = t("media.canceling_task");
+    button.setAttribute("aria-label", t("media.canceling_task"));
+    button.innerHTML = '<span class="material-symbols-outlined animate-spin text-[16px]">sync</span>';
+
+    try {
+        const response = await fetch(appUrl(`/api/tasks/${taskId}/cancel`), {
+            method: "POST",
+        });
+        if (!response.ok) {
+            let detail = t("media.cancel_task_failed");
+            try {
+                const payload = await response.json();
+                if (payload?.detail) {
+                    detail = payload.detail;
+                }
+            } catch (_error) {
+                // Keep fallback text.
+            }
+            throw new Error(detail);
+        }
+
+        await refreshTaskList();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : t("media.cancel_task_failed");
+        showToast(message);
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        button.title = t("media.cancel_task");
+        button.setAttribute("aria-label", t("media.cancel_task"));
+        button.innerHTML = originalHtml || `<span class="material-symbols-outlined text-[16px]">close</span><span>${escapeHtml(t("media.cancel_task"))}</span>`;
+    }
 }
 
 function updateTaskLiveSnapshot(task, snapshot) {
@@ -535,10 +603,13 @@ function openTaskLog(taskId, { scrollIntoView = false } = {}) {
                 }
                 activeTaskLogSequence = sequence;
             }
+            const label = payload.progress_label_key
+                ? t(payload.progress_label_key, payload.progress_label_args || {})
+                : (payload.progress_label || payload.stage || payload.status || "snapshot");
             if (payload.message) {
                 appendTaskLogLine(payload.message);
-            } else if (payload.event_type === "snapshot") {
-                appendTaskLogLine(`${payload.progress_label || payload.stage || payload.status || "snapshot"}`);
+            } else if (payload.event_type === "snapshot" || payload.event_type === "canceled") {
+                appendTaskLogLine(label);
             }
         } catch (error) {
             console.warn("Task log parse failed:", error);
@@ -1023,6 +1094,11 @@ function handleActionClick(event) {
         return;
     }
 
+    if (action === "cancel-task") {
+        cancelProcessingTask(button);
+        return;
+    }
+
     if (action === "scan-item-sidecars") {
         refreshMediaItemSidecars(button);
         return;
@@ -1112,6 +1188,9 @@ document.addEventListener("keydown", (event) => {
     }
 });
 taskList?.addEventListener("click", (event) => {
+    if (event.target.closest("button[data-action]")) {
+        return;
+    }
     const taskCard = event.target.closest("[data-task-id]");
     if (!taskCard) {
         return;

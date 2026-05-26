@@ -1,4 +1,5 @@
 """yt-dlp adapter for YouTube downloads and search."""
+import asyncio
 import json
 import logging
 import queue
@@ -191,7 +192,13 @@ class YtDlpAdapter:
             "thumbnail": video_data.get("thumbnail"),
         }
 
-    def download_audio(self, youtube_id: str, output_dir: Path) -> Path:
+    def download_audio(
+        self,
+        youtube_id: str,
+        output_dir: Path,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> Path:
         """
         Download audio from YouTube video.
 
@@ -220,6 +227,7 @@ class YtDlpAdapter:
             attempts=attempts,
             extensions=[".wav", ".m4a", ".webm", ".mp3", ".opus", ".mp4", ".mkv"],
             media_type="audio",
+            cancel_event=cancel_event,
         )
 
     def download_audio_with_progress(
@@ -229,6 +237,7 @@ class YtDlpAdapter:
         *,
         progress_callback: Callable[[int, str], None] | None = None,
         log_callback: Callable[[str, str], None] | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Path:
         """Download audio while streaming progress and log lines."""
         output_stem = f"{youtube_id}.audio"
@@ -248,9 +257,16 @@ class YtDlpAdapter:
             media_type="audio",
             progress_callback=progress_callback,
             log_callback=log_callback,
+            cancel_event=cancel_event,
         )
 
-    def download_video(self, youtube_id: str, output_dir: Path) -> Path:
+    def download_video(
+        self,
+        youtube_id: str,
+        output_dir: Path,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> Path:
         """
         Download video from YouTube.
 
@@ -280,6 +296,7 @@ class YtDlpAdapter:
             attempts=attempts,
             extensions=[".mp4", ".mkv", ".webm"],
             media_type="video",
+            cancel_event=cancel_event,
         )
 
     def download_video_with_progress(
@@ -289,6 +306,7 @@ class YtDlpAdapter:
         *,
         progress_callback: Callable[[int, str], None] | None = None,
         log_callback: Callable[[str, str], None] | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Path:
         """Download video while streaming progress and log lines."""
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
@@ -308,9 +326,16 @@ class YtDlpAdapter:
             media_type="video",
             progress_callback=progress_callback,
             log_callback=log_callback,
+            cancel_event=cancel_event,
         )
 
-    def download_video_with_audio(self, youtube_id: str, output_dir: Path) -> Path:
+    def download_video_with_audio(
+        self,
+        youtube_id: str,
+        output_dir: Path,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> Path:
         """
         Download a progressive video that already includes audio.
 
@@ -338,6 +363,7 @@ class YtDlpAdapter:
             attempts=attempts,
             extensions=[".mp4", ".mkv", ".webm"],
             media_type="progressive video+audio",
+            cancel_event=cancel_event,
         )
 
     def download_video_with_audio_progress(
@@ -347,6 +373,7 @@ class YtDlpAdapter:
         *,
         progress_callback: Callable[[int, str], None] | None = None,
         log_callback: Callable[[str, str], None] | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Path:
         """Download progressive video while streaming progress and log lines."""
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
@@ -365,6 +392,7 @@ class YtDlpAdapter:
             media_type="progressive video+audio",
             progress_callback=progress_callback,
             log_callback=log_callback,
+            cancel_event=cancel_event,
         )
 
     def _download_with_attempts(
@@ -378,6 +406,7 @@ class YtDlpAdapter:
         media_type: str,
         progress_callback: Callable[[int, str], None] | None = None,
         log_callback: Callable[[str, str], None] | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> Path:
         """Run yt-dlp download attempts with format/client fallbacks."""
         url = f"https://www.youtube.com/watch?v={youtube_id}"
@@ -399,7 +428,7 @@ class YtDlpAdapter:
                 cmd[2:2] = ["--extractor-args", f"youtube:player_client={client}"]
             if merge_mp4:
                 cmd.extend(["--merge-output-format", "mp4"])
-            if progress_callback or log_callback:
+            if progress_callback or log_callback or cancel_event is not None:
                 # yt-dlp writes progress updates with carriage returns by default,
                 # which line-based readers only see after the process exits.
                 cmd.extend(
@@ -414,11 +443,12 @@ class YtDlpAdapter:
             cmd.extend(self._proxy_args())
 
             try:
-                if progress_callback or log_callback:
+                if progress_callback or log_callback or cancel_event is not None:
                     self._run_streaming_download(
                         cmd,
                         progress_callback=progress_callback,
                         log_callback=log_callback,
+                        cancel_event=cancel_event,
                     )
                 else:
                     subprocess.run(cmd, check=True, capture_output=True, timeout=300)
@@ -485,6 +515,7 @@ class YtDlpAdapter:
         progress_callback: Callable[[int, str], None] | None = None,
         log_callback: Callable[[str, str], None] | None = None,
         timeout_seconds: float = 300,
+        cancel_event: threading.Event | None = None,
     ) -> None:
         """Run a yt-dlp download command and stream stdout/stderr lines."""
         process = subprocess.Popen(
@@ -521,13 +552,15 @@ class YtDlpAdapter:
         try:
             if reader_thread is not None:
                 while True:
+                    if cancel_event is not None and cancel_event.is_set():
+                        raise asyncio.CancelledError()
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise subprocess.TimeoutExpired(cmd, timeout_seconds, output="\n".join(stdout_lines))
                     try:
-                        item = line_queue.get(timeout=remaining)
+                        item = line_queue.get(timeout=min(0.1, max(remaining, 0.0)))
                     except queue.Empty as exc:
-                        raise subprocess.TimeoutExpired(cmd, timeout_seconds, output="\n".join(stdout_lines)) from exc
+                        continue
                     if item is _STREAM_DONE:
                         break
                     line = str(item).rstrip()
@@ -544,7 +577,21 @@ class YtDlpAdapter:
                         log_callback(stream_name, line)
 
             remaining = max(0.0, deadline - time.monotonic())
-            return_code = process.wait(timeout=remaining)
+            while True:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise asyncio.CancelledError()
+                return_code = process.poll()
+                if return_code is not None:
+                    break
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(cmd, timeout_seconds, output="\n".join(stdout_lines))
+                try:
+                    return_code = process.wait(timeout=min(0.1, remaining))
+                except subprocess.TimeoutExpired:
+                    return_code = None
+                if return_code is not None:
+                    break
+                remaining = max(0.0, deadline - time.monotonic())
             if return_code != 0:
                 stderr = "\n".join(stdout_lines)
                 raise subprocess.CalledProcessError(
@@ -553,6 +600,9 @@ class YtDlpAdapter:
                     stderr=stderr,
                     output="\n".join(stdout_lines),
                 )
+        except asyncio.CancelledError:
+            self._terminate_process(process)
+            raise
         except Exception:
             self._terminate_process(process)
             raise
@@ -568,10 +618,14 @@ class YtDlpAdapter:
         if process.poll() is not None:
             return
         try:
-            process.terminate()
+            terminate = getattr(process, "terminate", None)
+            if terminate is not None:
+                terminate()
             process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            process.kill()
+            kill = getattr(process, "kill", None)
+            if kill is not None:
+                kill()
             process.wait(timeout=5)
         except ProcessLookupError:
             return

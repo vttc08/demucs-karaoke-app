@@ -309,8 +309,15 @@
                         {% endif %}
                     </div>
                     <div class="flex shrink-0 items-center">
-                        {% if item.can_remove %}
-                        <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors" 
+                        {% if item.can_cancel_task %}
+                        <button class="w-10 h-10 rounded-full bg-error/10 text-error flex items-center justify-center hover:bg-error/15 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                                onclick="cancelTask('{{ item.task_id }}', this)"
+                                title="{{ t('queue.cancel_task') }}"
+                                aria-label="{{ t('queue.cancel_task') }}">
+                            <span class="material-symbols-outlined">close</span>
+                        </button>
+                        {% elif item.can_remove %}
+                        <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors"
                                 onclick="removeSong('{{ item.id }}')">
                             <span class="material-symbols-outlined">remove</span>
                         </button>
