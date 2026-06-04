@@ -1,24 +1,17 @@
 # AGENTS.md
 
 ## Project summary
-This is a lightweight AI-powered karaoke application for home use.
-
-Current sprint goal:
-- mobile-friendly queue page
-- TV playback webpage
-- YouTube search and queue
-- basic karaoke/non-karaoke branching
-- Demucs offload to external service
-- generate a simple burned-subtitle video
+This is a lightweight AI-powered karaoke app for home use.
 
 ## Priorities
 1. Keep the MVP simple and working end-to-end.
-2. Prefer server-rendered HTML with minimal JavaScript.
-3. Use FastAPI for backend APIs and page serving.
-4. Keep code modular and easy to continue from a mobile SSH workflow.
-5. Bind development servers to `0.0.0.0`.
-6. Add tests for routes and core service logic.
-7. Update docs in `/docs` when behavior or architecture changes.
+2. Use the `Karaoke` project board as the source of truth for active tasks.
+3. Prefer server-rendered HTML with minimal JavaScript.
+4. Use FastAPI for backend APIs and page serving.
+5. Keep code modular and easy to continue from a mobile SSH workflow.
+6. Bind development servers to `0.0.0.0`.
+7. Add tests for routes and core service logic.
+8. Update docs in `/docs` when behavior or architecture changes.
 
 ## Constraints
 - Do not implement future sprints unless explicitly requested.
@@ -44,7 +37,6 @@ Current sprint goal:
 ## Required behavior for agents
 Before making changes, read:
 - `README.md`
-- `TASKS.md`
 - `ARCHITECTURE.md`
 - relevant docs in `/docs`
 
@@ -55,7 +47,6 @@ For each non-trivial change:
 
 When finished:
 - update docs if needed
-- update tasks if scope changed
 - include commands to run and test
 - commit the changes with git if the change is major
   - check whether there are uncommitted changes or secrets
@@ -67,7 +58,7 @@ When making UI changes or adding new frontend features:
 - JavaScript strings: use `window.KaraokeI18n.t("key", {param: value})` in static JS files
 - Never hardcode UI text; add it to `locales/en.json` first, then translate to `locales/zh-CN.json`
 - Preserve placeholder syntax: `{key}`, `{count}`, etc. in translations; don't replace them
-- Run `uv run pytest` before committing—tests verify catalog key parity across all locales
+- Run `uv run pytest` before committing - tests verify catalog key parity across all locales
 - See [docs/internationalization.md](docs/internationalization.md) for details on adding a new language
 - The i18n helper is auto-exposed in `templates/base.html` via `window.KaraokeI18n` and via Jinja template context
 
@@ -80,5 +71,6 @@ When making UI changes or adding new frontend features:
 - Do not rely on Demucs being available in the dev workspace
 - For logging changes, add focused tests that validate configuration behavior (handlers, levels, rotation setup) without brittle string matching.
 
-## Documentation 
+## Documentation
 - If you need to create summary documents or instruction, please place it in the `/docs` and not in the root folder
+- Use the project  for task tracking instead of `TASKS.md`.
