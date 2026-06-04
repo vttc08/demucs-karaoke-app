@@ -1490,6 +1490,41 @@ async def test_processing_task_emit_progress_without_queue_item_id_does_not_broa
     await task_stream_manager.clear_task(task.id)
 
 
+@pytest.mark.asyncio
+async def test_demucs_progress_callback_does_not_deadlock_on_same_event_loop():
+    """Demucs polling callbacks should not block when already running on the target event loop."""
+    loop = asyncio.get_running_loop()
+    seen_progress = []
+    seen_logs = []
+
+    async def fake_emit_progress(*args, **kwargs):
+        seen_progress.append(kwargs)
+
+    async def fake_emit_log(*args, **kwargs):
+        seen_logs.append(kwargs)
+
+    with (
+        patch("services.karaoke_service.processing_task_service.emit_progress", side_effect=fake_emit_progress),
+        patch("services.karaoke_service.processing_task_service.emit_log", side_effect=fake_emit_log),
+    ):
+        callback = KaraokeService._demucs_progress_callback(
+            loop,
+            task_id=123,
+            step_index=3,
+            step_total=4,
+            status=ProcessingTaskStatus.PROCESSING.value,
+            stage="demucs",
+            queue_item_id=456,
+        )
+        callback(42, "Separating vocals", {"job_id": "job123", "status": "running"})
+        await asyncio.sleep(0)
+
+    assert len(seen_progress) == 1
+    assert seen_progress[0]["progress_percent"] == 42
+    assert len(seen_logs) == 1
+    assert seen_logs[0]["message"] == "Demucs job job123: Separating vocals"
+
+
 def test_processing_task_cancel_cleans_up_partial_artifacts_and_resets_rows(db_session, tmp_path, monkeypatch):
     """Cancel should remove partial files and reset queue/media rows for retry."""
     media_root = tmp_path / "media"

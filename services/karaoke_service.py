@@ -832,6 +832,20 @@ class KaraokeService:
         self.cleanup_canceled_task(db, task)
 
     @staticmethod
+    def _dispatch_loop_coroutine(loop: asyncio.AbstractEventLoop, coroutine) -> None:
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+
+        if running_loop is loop:
+            loop.create_task(coroutine)
+            return
+
+        future = asyncio.run_coroutine_threadsafe(coroutine, loop)
+        future.result(timeout=5)
+
+    @staticmethod
     def _progress_callback(
         loop: asyncio.AbstractEventLoop,
         task_id: int,
@@ -861,7 +875,8 @@ class KaraokeService:
                 return
             last_emit_time = now
             last_emit_percent = mapped
-            future = asyncio.run_coroutine_threadsafe(
+            KaraokeService._dispatch_loop_coroutine(
+                loop,
                 processing_task_service.emit_progress(
                     task_id,
                     queue_item_id=queue_item_id,
@@ -873,9 +888,7 @@ class KaraokeService:
                     progress_step_index=step_index,
                     progress_step_total=step_total,
                 ),
-                loop,
             )
-            future.result(timeout=5)
         return callback
 
     @staticmethod
@@ -887,7 +900,8 @@ class KaraokeService:
         stage: str,
     ):
         def callback(stream: str, message: str):
-            future = asyncio.run_coroutine_threadsafe(
+            KaraokeService._dispatch_loop_coroutine(
+                loop,
                 processing_task_service.emit_log(
                     task_id,
                     message=message,
@@ -895,9 +909,7 @@ class KaraokeService:
                     status=status,
                     stage=stage,
                 ),
-                loop,
             )
-            future.result(timeout=5)
         return callback
 
     @staticmethod
@@ -937,7 +949,8 @@ class KaraokeService:
             last_emit_time = now
             last_emit_percent = mapped
             last_emit_message = message
-            future = asyncio.run_coroutine_threadsafe(
+            KaraokeService._dispatch_loop_coroutine(
+                loop,
                 processing_task_service.emit_progress(
                     task_id,
                     queue_item_id=queue_item_id,
@@ -949,14 +962,13 @@ class KaraokeService:
                     progress_step_index=step_index,
                     progress_step_total=step_total,
                 ),
-                loop,
             )
-            future.result(timeout=5)
             job_id = metadata.get("job_id") if metadata else None
             log_message = f"Demucs job {job_id}: {message}" if job_id else None
             if log_message and log_message != last_logged_job_message:
                 last_logged_job_message = log_message
-                log_future = asyncio.run_coroutine_threadsafe(
+                KaraokeService._dispatch_loop_coroutine(
+                    loop,
                     processing_task_service.emit_log(
                         task_id,
                         message=log_message,
@@ -969,9 +981,7 @@ class KaraokeService:
                         progress_step_index=step_index,
                         progress_step_total=step_total,
                     ),
-                    loop,
                 )
-                log_future.result(timeout=5)
 
         return callback
 
