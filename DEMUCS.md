@@ -83,6 +83,38 @@ Response headers include:
 - `X-Response-Format` (`zip`)
 - `X-Vocals-Path` (Windows-side debug path)
 
+### Async job contract
+
+The remote service now also exposes a native async job API used by the main FastAPI app for progress polling:
+
+### `POST /jobs`
+Input: same multipart upload and form fields as `/separate`.
+
+Returns `202 Accepted` JSON:
+- `job_id`
+- `status`
+- `progress_percent`
+- `progress_message`
+- `status_url`
+- `result_url`
+- `cancel_url`
+
+### `GET /jobs/{job_id}`
+Returns JSON status for polling:
+- `status`: `queued | running | completed | failed | canceled`
+- `progress_percent`
+- `progress_message`
+- `error_detail`
+- effective config
+- timestamps
+- recent stdout tail for debugging
+
+### `GET /jobs/{job_id}/result`
+Returns the same ZIP payload as `/separate` after the job completes.
+
+### `DELETE /jobs/{job_id}`
+Requests remote cancellation. The service terminates the active Demucs subprocess when it is still running and cleans up temp directories.
+
 ### `POST /separate-meta` (optional debug)
 Runs the same process but returns JSON metadata with Windows output paths plus effective runtime config (`model`, `device`, `output_format`, `mp3_bitrate`).
 
@@ -112,6 +144,14 @@ curl -X POST http://<demucs-host>:8001/separate \
 cd C:\Users\hubcc\Documents\Projects\karaoke\demucs_svc
 C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 8001
 ```
+
+## Deploying `demucs_svc`
+
+When copying `demucs_svc` to the remote Demucs PC:
+
+- copy the `demucs_svc/` service code only
+- do not copy the repo `.venv/` folder
+- use the remote machine's own Python environment and Demucs installation
 
 ## Connectivity Notes
 - Linux backend should use `DEMUCS_API_URL=http://localhost:8002`.

@@ -1,6 +1,7 @@
 """Tests for service layer."""
 import asyncio
 import logging
+import threading
 import httpx
 import pytest
 import zipfile
@@ -3912,31 +3913,29 @@ def test_chinese_lyrics_service_simplifies_and_adds_pinyin():
 
 @pytest.mark.asyncio
 async def test_demucs_client_upload_and_save(tmp_path):
-    """Demucs client should upload source audio and save returned no_vocals wav."""
+    """Demucs client should submit, poll, download ZIP result, and save stems."""
     src = tmp_path / "input.wav"
     src.write_bytes(b"fake-audio-bytes")
+    progress_events = []
+    log_events = []
 
     class FakeResponse:
-        def __init__(self):
-            self.status_code = 200
-            buffer = BytesIO()
-            with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
-                archive.writestr("no_vocals.wav", b"no-vocals-wav")
-                archive.writestr("vocals.wav", b"vocals-wav")
-            self.content = buffer.getvalue()
-            self.headers = {
-                "X-Job-Id": "job123",
-                "X-Output-Format": "wav",
-                "X-Response-Format": "zip",
-                "content-type": "application/zip",
-            }
+        def __init__(self, *, json_payload=None, content=b"", headers=None, status_code=200):
+            self.status_code = status_code
+            self._json_payload = json_payload
+            self.content = content
+            self.headers = headers or {}
 
         def raise_for_status(self):
             return None
 
+        def json(self):
+            return self._json_payload
+
     class FakeAsyncClient:
         def __init__(self, timeout):
             self.timeout = timeout
+            self.status_calls = 0
 
         async def __aenter__(self):
             return self
@@ -3945,12 +3944,52 @@ async def test_demucs_client_upload_and_save(tmp_path):
             return False
 
         async def post(self, url, files, data):
-            assert url.endswith("/separate")
+            assert url.endswith("/jobs")
             assert "file" in files
             assert data["model"] == "htdemucs"
             assert data["device"] == "cuda"
             assert data["output_format"] == "wav"
-            return FakeResponse()
+            return FakeResponse(
+                json_payload={
+                    "job_id": "job123",
+                    "status": "queued",
+                    "progress_percent": 0,
+                    "progress_message": "Queued",
+                }
+            )
+
+        async def get(self, url):
+            if url.endswith("/jobs/job123"):
+                self.status_calls += 1
+                if self.status_calls == 1:
+                    return FakeResponse(
+                        json_payload={
+                            "job_id": "job123",
+                            "status": "running",
+                            "progress_percent": 41,
+                            "progress_message": "Separating vocals",
+                            "output_tail": ["Demucs boot", "41%|####"],
+                        }
+                    )
+                return FakeResponse(
+                    json_payload={
+                        "job_id": "job123",
+                        "status": "completed",
+                        "progress_percent": 100,
+                        "progress_message": "Completed",
+                        "output_tail": ["Demucs boot", "41%|####", "Completed"],
+                    }
+                )
+            if url.endswith("/jobs/job123/result"):
+                buffer = BytesIO()
+                with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr("no_vocals.wav", b"no-vocals-wav")
+                    archive.writestr("vocals.wav", b"vocals-wav")
+                return FakeResponse(content=buffer.getvalue())
+            raise AssertionError(f"Unexpected GET {url}")
+
+        async def delete(self, url):
+            raise AssertionError(f"Unexpected DELETE {url}")
 
     from services import demucs_client as dc_module
 
@@ -3960,6 +3999,7 @@ async def test_demucs_client_upload_and_save(tmp_path):
     original_demucs_device = dc_module.settings.demucs_device
     original_demucs_output_format = dc_module.settings.demucs_output_format
     original_demucs_mp3_bitrate = dc_module.settings.demucs_mp3_bitrate
+    original_poll_interval = dc_module.DemucsClient.POLL_INTERVAL_SECONDS
     try:
         dc_module.httpx.AsyncClient = FakeAsyncClient
         dc_module.settings.cache_path = tmp_path
@@ -3967,8 +4007,13 @@ async def test_demucs_client_upload_and_save(tmp_path):
         dc_module.settings.demucs_device = "cuda"
         dc_module.settings.demucs_output_format = "wav"
         dc_module.settings.demucs_mp3_bitrate = 320
+        dc_module.DemucsClient.POLL_INTERVAL_SECONDS = 0
         client = DemucsClient(api_url="http://127.0.0.1:8001")
-        result = await client.separate_vocals(src)
+        result = await client.separate_vocals(
+            src,
+            progress_callback=lambda percent, message, metadata=None: progress_events.append((percent, message, metadata)),
+            log_callback=lambda stream, message: log_events.append((stream, message)),
+        )
     finally:
         dc_module.httpx.AsyncClient = original_client
         dc_module.settings.cache_path = original_cache
@@ -3976,6 +4021,7 @@ async def test_demucs_client_upload_and_save(tmp_path):
         dc_module.settings.demucs_device = original_demucs_device
         dc_module.settings.demucs_output_format = original_demucs_output_format
         dc_module.settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
+        dc_module.DemucsClient.POLL_INTERVAL_SECONDS = original_poll_interval
 
     assert result.no_vocals_path.endswith("_job123_no_vocals.wav")
     assert result.vocals_path and result.vocals_path.endswith("_job123_vocals.wav")
@@ -3985,6 +4031,85 @@ async def test_demucs_client_upload_and_save(tmp_path):
     vocals_saved = Path(result.vocals_path)
     assert vocals_saved.exists()
     assert vocals_saved.read_bytes() == b"vocals-wav"
+    assert progress_events[0][0] == 0
+    assert any(event[0] == 41 for event in progress_events)
+    assert progress_events[-1][0] == 100
+    assert ("remote", "Demucs boot") in log_events
+
+
+@pytest.mark.asyncio
+async def test_demucs_client_cancel_requests_remote_job(tmp_path):
+    """Demucs client should cancel the remote job when local cancellation is set."""
+    src = tmp_path / "input.wav"
+    src.write_bytes(b"fake-audio-bytes")
+    cancel_event = threading.Event()
+
+    class FakeResponse:
+        def __init__(self, *, json_payload=None):
+            self.status_code = 200
+            self._json_payload = json_payload
+            self.content = b""
+            self.headers = {}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._json_payload
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+            self.deleted = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, files, data):
+            return FakeResponse(
+                json_payload={
+                    "job_id": "job-cancel",
+                    "status": "queued",
+                    "progress_percent": 0,
+                    "progress_message": "Queued",
+                }
+            )
+
+        async def get(self, url):
+            cancel_event.set()
+            return FakeResponse(
+                json_payload={
+                    "job_id": "job-cancel",
+                    "status": "running",
+                    "progress_percent": 12,
+                    "progress_message": "Separating vocals",
+                    "output_tail": [],
+                }
+            )
+
+        async def delete(self, url):
+            self.deleted.append(url)
+            return FakeResponse(json_payload={"job_id": "job-cancel", "status": "canceling"})
+
+    from services import demucs_client as dc_module
+
+    original_client = dc_module.httpx.AsyncClient
+    original_poll_interval = dc_module.DemucsClient.POLL_INTERVAL_SECONDS
+    try:
+        fake_client = FakeAsyncClient(timeout=0)
+        dc_module.httpx.AsyncClient = lambda timeout: fake_client
+        dc_module.DemucsClient.POLL_INTERVAL_SECONDS = 0
+        client = DemucsClient(api_url="http://127.0.0.1:8001")
+        with pytest.raises(asyncio.CancelledError):
+            await client.separate_vocals(src, cancel_event=cancel_event)
+    finally:
+        dc_module.httpx.AsyncClient = original_client
+        dc_module.DemucsClient.POLL_INTERVAL_SECONDS = original_poll_interval
+
+    assert fake_client.deleted == ["http://127.0.0.1:8001/jobs/job-cancel"]
 
 
 def test_demucs_client_health_check_reports_degraded_payload():

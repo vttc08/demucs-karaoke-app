@@ -41,3 +41,31 @@ class SeparateMetaResponse(BaseModel):
     mp3_bitrate: int | None = None
     duration_ms: int
     status: str
+
+
+class DemucsJobCreateResponse(BaseModel):
+    job_id: str
+    status: str
+    progress_percent: int
+    progress_message: str
+    status_url: str
+    result_url: str
+    cancel_url: str
+
+
+class DemucsJobStatusResponse(BaseModel):
+    job_id: str
+    status: Literal["queued", "running", "completed", "failed", "canceled"]
+    progress_percent: int
+    progress_message: str
+    error_detail: str | None = None
+    duration_ms: int | None = None
+    model: str
+    device: str
+    output_format: str
+    mp3_bitrate: int | None = None
+    original_filename: str
+    created_at: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    output_tail: list[str] = []

@@ -82,7 +82,7 @@ Build a working end-to-end MVP for mobile queueing, TV playback, YouTube downloa
 - [x] bug, admin requested as the guest still cannot control
 - [x] standardize yt-dlp input, demucs output and import into karaoke_media folder 
 - [x] implement lyrics and karaoke demucs behavior for upload and media management
-- [ ] extend demucs backend with native async job + SSE progress contract
+- [x] extend demucs backend with native async job + polling progress contract
 - [ ] i frame only video previewer and editor (vibestudio editor)
 - [ ] add vocals to existing karaoke video (audio synchronization)
 - [ ] oidc authelia support

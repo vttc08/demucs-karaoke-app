@@ -49,16 +49,14 @@ The implementation does not attempt byte-range or partial-progress resume for:
 
 ## Current Demucs Scope
 
-The main app exposes the task abstraction and live task SSE today.
+The main app now uses a remote Demucs job API:
 
-Current Demucs integration is still coarse:
-
-- the main app can show step-scoped Demucs progress in the queue and admin task views
-- terminal Demucs failures are persisted
-- richer remote Demucs SSE/job orchestration is still a follow-up task
+- the remote Demucs service owns subprocess execution and stdout parsing
+- the main app polls remote job state and republishes it into the local task stream and queue websocket progress updates
+- terminal Demucs failures are still persisted locally as coarse durable task failure state
+- remote job ids and remote stdout tails are live-only and are not persisted in SQLite
 
 ## Follow-up Work
 
-- remote Demucs job API with native progress SSE
 - optional persistence for a compact failure log tail per task
 - retry/backoff policy for repeated startup failures

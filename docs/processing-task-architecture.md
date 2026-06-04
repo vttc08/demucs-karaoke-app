@@ -90,3 +90,19 @@ value so automatic reconnects do not append the same buffered log lines twice.
 - callback failure or timeout tears down the child `yt-dlp` process before the error is surfaced
 
 When mocks or legacy callers are used in tests, the orchestration falls back to the non-streaming youtube service methods.
+
+## Remote Demucs Progress
+
+Remote Demucs execution now uses an async job contract on `demucs_svc`:
+
+- `POST /jobs` uploads audio and starts remote processing
+- `GET /jobs/{job_id}` returns job status, percent, message, and recent remote output tail
+- `GET /jobs/{job_id}/result` returns the final ZIP payload once the job completes
+- `DELETE /jobs/{job_id}` requests remote cancellation and subprocess termination
+
+The main app polls the remote job server-side and republishes the latest Demucs step progress through the existing local transports:
+
+- task SSE for admin task panels
+- `queue_item_progress` websocket events for queue clients
+
+Browsers do not connect directly to the Demucs host. Remote job ids are intentionally live-only and are not persisted in SQLite. On restart, any interrupted local task is restarted from the beginning with a fresh remote Demucs job.

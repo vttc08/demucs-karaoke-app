@@ -1,25 +1,35 @@
 """Demucs API client for vocal separation."""
-from pathlib import Path
-from io import BytesIO
-import zipfile
+from __future__ import annotations
+
 import asyncio
+from io import BytesIO
+from pathlib import Path
 import threading
+from typing import Callable
+import zipfile
+
 import httpx
 
 from config import settings
 from models import DemucsHealthResponse, DemucsResponse
 
 
+ProgressCallback = Callable[[int, str, dict | None], None]
+LogCallback = Callable[[str, str], None]
+
+
 class DemucsClient:
     """Client for Demucs vocal separation service."""
+
     HEALTH_TIMEOUT_SECONDS = 5.0
+    REQUEST_TIMEOUT_SECONDS = 600.0
+    POLL_INTERVAL_SECONDS = 0.75
 
     def __init__(self, api_url: str = None):
         self.api_url = api_url or settings.demucs_api_url
 
     @staticmethod
     def _extract_stems_zip(payload: bytes) -> tuple[bytes, bytes, str]:
-        """Extract no_vocals and vocals bytes + extension from service ZIP payload."""
         with zipfile.ZipFile(BytesIO(payload), mode="r") as archive:
             names = set(archive.namelist())
             no_vocals_name = next((name for name in names if name.startswith("no_vocals.")), None)
@@ -32,21 +42,48 @@ class DemucsClient:
             vocals_bytes = archive.read(vocals_name)
             return no_vocals_bytes, vocals_bytes, extension
 
+    def _build_request_data(self) -> dict[str, str]:
+        data = {
+            "model": settings.demucs_model,
+            "device": settings.demucs_device,
+            "output_format": settings.demucs_output_format,
+        }
+        if settings.demucs_output_format == "mp3":
+            data["mp3_bitrate"] = str(settings.demucs_mp3_bitrate)
+        return data
+
+    @staticmethod
+    def _emit_progress(
+        callback: ProgressCallback | None,
+        percent: int,
+        message: str,
+        metadata: dict | None = None,
+    ) -> None:
+        if callback is not None:
+            callback(max(0, min(100, int(percent))), message, metadata)
+
+    @staticmethod
+    def _emit_remote_log_lines(
+        callback: LogCallback | None,
+        output_tail: list[str],
+        seen_lines: set[str],
+    ) -> None:
+        if callback is None:
+            return
+        for line in output_tail:
+            if line in seen_lines:
+                continue
+            seen_lines.add(line)
+            callback("remote", line)
+
     async def separate_vocals(
         self,
         audio_path: Path,
         *,
         cancel_event: threading.Event | None = None,
+        progress_callback: ProgressCallback | None = None,
+        log_callback: LogCallback | None = None,
     ) -> DemucsResponse:
-        """
-        Send audio to Demucs service for vocal separation.
-
-        Args:
-            audio_path: Path to audio file
-
-        Returns:
-            Response with paths to separated audio files
-        """
         if not audio_path.exists():
             raise RuntimeError(f"Audio path does not exist: {audio_path}")
         if cancel_event is not None and cancel_event.is_set():
@@ -54,47 +91,85 @@ class DemucsClient:
 
         out_dir = settings.cache_path / "demucs_outputs"
         out_dir.mkdir(parents=True, exist_ok=True)
+        seen_output_lines: set[str] = set()
 
-        async with httpx.AsyncClient(timeout=600.0) as client:
+        async with httpx.AsyncClient(timeout=self.REQUEST_TIMEOUT_SECONDS) as client:
             with audio_path.open("rb") as fh:
-                data = {
-                    "model": settings.demucs_model,
-                    "device": settings.demucs_device,
-                    "output_format": settings.demucs_output_format,
-                }
-                if settings.demucs_output_format == "mp3":
-                    data["mp3_bitrate"] = str(settings.demucs_mp3_bitrate)
-                response = await client.post(
-                    f"{self.api_url}/separate",
+                create_response = await client.post(
+                    f"{self.api_url}/jobs",
                     files={"file": (audio_path.name, fh, "audio/wav")},
-                    data=data,
+                    data=self._build_request_data(),
                 )
-            response.raise_for_status()
-            if cancel_event is not None and cancel_event.is_set():
-                raise asyncio.CancelledError()
-
-            job_id = response.headers.get("X-Job-Id", "unknown")
-            response_format = response.headers.get("X-Response-Format", "").lower()
-            output_format = response.headers.get("X-Output-Format", "wav").lower()
-            extension = "mp3" if output_format == "mp3" else "wav"
-            output_path = out_dir / f"{audio_path.stem}_{job_id}_no_vocals.{extension}"
-            vocals_output_path = out_dir / f"{audio_path.stem}_{job_id}_vocals.{extension}"
-
-            if response_format == "zip" or response.headers.get("content-type", "").startswith("application/zip"):
-                no_vocals_bytes, vocals_bytes, extension = self._extract_stems_zip(response.content)
-                output_path = out_dir / f"{audio_path.stem}_{job_id}_no_vocals.{extension}"
-                vocals_output_path = out_dir / f"{audio_path.stem}_{job_id}_vocals.{extension}"
-                output_path.write_bytes(no_vocals_bytes)
-                vocals_output_path.write_bytes(vocals_bytes)
-            else:
-                output_path.write_bytes(response.content)
-                vocals_header_path = response.headers.get("X-Vocals-Path")
-                vocals_output_path = Path(vocals_header_path) if vocals_header_path else None
-
-            return DemucsResponse(
-                no_vocals_path=str(output_path),
-                vocals_path=(str(vocals_output_path) if vocals_output_path else None),
+            create_response.raise_for_status()
+            payload = create_response.json()
+            job_id = payload["job_id"]
+            self._emit_progress(
+                progress_callback,
+                int(payload.get("progress_percent", 0)),
+                str(payload.get("progress_message") or "Queued"),
+                {"job_id": job_id, "status": payload.get("status")},
             )
+
+            try:
+                while True:
+                    if cancel_event is not None and cancel_event.is_set():
+                        await client.delete(f"{self.api_url}/jobs/{job_id}")
+                        raise asyncio.CancelledError()
+
+                    status_response = await client.get(f"{self.api_url}/jobs/{job_id}")
+                    status_response.raise_for_status()
+                    status_payload = status_response.json()
+                    self._emit_remote_log_lines(
+                        log_callback,
+                        status_payload.get("output_tail") or [],
+                        seen_output_lines,
+                    )
+                    self._emit_progress(
+                        progress_callback,
+                        int(status_payload.get("progress_percent", 0)),
+                        str(status_payload.get("progress_message") or "Running Demucs"),
+                        {
+                            "job_id": job_id,
+                            "status": status_payload.get("status"),
+                            "error_detail": status_payload.get("error_detail"),
+                        },
+                    )
+
+                    status = str(status_payload.get("status"))
+                    if status == "completed":
+                        result_response = await client.get(f"{self.api_url}/jobs/{job_id}/result")
+                        result_response.raise_for_status()
+                        no_vocals_bytes, vocals_bytes, extension = self._extract_stems_zip(result_response.content)
+                        output_path = out_dir / f"{audio_path.stem}_{job_id}_no_vocals.{extension}"
+                        vocals_output_path = out_dir / f"{audio_path.stem}_{job_id}_vocals.{extension}"
+                        output_path.write_bytes(no_vocals_bytes)
+                        vocals_output_path.write_bytes(vocals_bytes)
+                        self._emit_progress(
+                            progress_callback,
+                            100,
+                            str(status_payload.get("progress_message") or "Completed"),
+                            {"job_id": job_id, "status": status},
+                        )
+                        return DemucsResponse(
+                            no_vocals_path=str(output_path),
+                            vocals_path=str(vocals_output_path),
+                        )
+
+                    if status == "failed":
+                        raise RuntimeError(
+                            status_payload.get("error_detail") or "Demucs job failed"
+                        )
+                    if status == "canceled":
+                        raise asyncio.CancelledError()
+
+                    await asyncio.sleep(self.POLL_INTERVAL_SECONDS)
+            except Exception:
+                if cancel_event is not None and cancel_event.is_set():
+                    try:
+                        await client.delete(f"{self.api_url}/jobs/{job_id}")
+                    except Exception:
+                        pass
+                raise
 
     def health_check(self) -> DemucsHealthResponse:
         """Check if Demucs service is available and ready."""

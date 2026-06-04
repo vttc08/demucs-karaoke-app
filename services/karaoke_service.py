@@ -617,9 +617,34 @@ class KaraokeService:
         """Run Demucs separation with one fallback retry for extracted local audio."""
         try:
             await KaraokeService._raise_if_canceled(cancel_event, task_id)
+            loop = asyncio.get_running_loop()
+            progress_callback = self._demucs_progress_callback(
+                loop,
+                task_id,
+                step_index=progress_step_index,
+                step_total=progress_step_total,
+                status=ProcessingTaskStatus.PROCESSING.value,
+                stage="demucs",
+                queue_item_id=item.id if item is not None else None,
+            )
+            log_callback = self._log_callback(
+                loop,
+                task_id,
+                status=ProcessingTaskStatus.PROCESSING.value,
+                stage="demucs",
+            )
             if cancel_event is None:
-                return await self.demucs_client.separate_vocals(audio_path)
-            return await self.demucs_client.separate_vocals(audio_path, cancel_event=cancel_event)
+                return await self.demucs_client.separate_vocals(
+                    audio_path,
+                    progress_callback=progress_callback,
+                    log_callback=log_callback,
+                )
+            return await self.demucs_client.separate_vocals(
+                audio_path,
+                cancel_event=cancel_event,
+                progress_callback=progress_callback,
+                log_callback=log_callback,
+            )
         except httpx.HTTPStatusError as error:
             status_code = error.response.status_code if error.response is not None else None
             can_retry = (
@@ -661,9 +686,34 @@ class KaraokeService:
                     )
                 )
             await KaraokeService._raise_if_canceled(cancel_event, task_id)
+            loop = asyncio.get_running_loop()
+            progress_callback = self._demucs_progress_callback(
+                loop,
+                task_id,
+                step_index=progress_step_index,
+                step_total=progress_step_total,
+                status=ProcessingTaskStatus.PROCESSING.value,
+                stage="demucs",
+                queue_item_id=item.id if item is not None else None,
+            )
+            log_callback = self._log_callback(
+                loop,
+                task_id,
+                status=ProcessingTaskStatus.PROCESSING.value,
+                stage="demucs",
+            )
             if cancel_event is None:
-                return await self.demucs_client.separate_vocals(fallback_audio_path)
-            return await self.demucs_client.separate_vocals(fallback_audio_path, cancel_event=cancel_event)
+                return await self.demucs_client.separate_vocals(
+                    fallback_audio_path,
+                    progress_callback=progress_callback,
+                    log_callback=log_callback,
+                )
+            return await self.demucs_client.separate_vocals(
+                fallback_audio_path,
+                cancel_event=cancel_event,
+                progress_callback=progress_callback,
+                log_callback=log_callback,
+            )
 
     @staticmethod
     def _set_media_item_media_path(db: Session, media_item: MediaItem, media_path: Path):
@@ -848,6 +898,81 @@ class KaraokeService:
                 loop,
             )
             future.result(timeout=5)
+        return callback
+
+    @staticmethod
+    def _demucs_progress_callback(
+        loop: asyncio.AbstractEventLoop,
+        task_id: int,
+        *,
+        step_index: int,
+        step_total: int,
+        status: str,
+        stage: str,
+        queue_item_id: int | None = None,
+    ):
+        last_emit_time = float("-inf")
+        last_emit_percent: int | None = None
+        last_emit_message: str | None = None
+        last_logged_job_message: str | None = None
+
+        def callback(percent: int, message: str, metadata: dict | None = None):
+            nonlocal last_emit_time, last_emit_percent, last_emit_message, last_logged_job_message
+            mapped = max(0, min(100, int(percent)))
+            now = loop.time()
+            if (
+                last_emit_percent is not None
+                and mapped != 100
+                and mapped == last_emit_percent
+                and message == last_emit_message
+            ):
+                return
+            if (
+                last_emit_percent is not None
+                and mapped != 100
+                and message == last_emit_message
+                and (now - last_emit_time) < 0.75
+            ):
+                return
+            last_emit_time = now
+            last_emit_percent = mapped
+            last_emit_message = message
+            future = asyncio.run_coroutine_threadsafe(
+                processing_task_service.emit_progress(
+                    task_id,
+                    queue_item_id=queue_item_id,
+                    progress_percent=mapped,
+                    progress_label=message or "Separating vocals",
+                    progress_label_key="task.separating_vocals",
+                    status=status,
+                    stage=stage,
+                    progress_step_index=step_index,
+                    progress_step_total=step_total,
+                ),
+                loop,
+            )
+            future.result(timeout=5)
+            job_id = metadata.get("job_id") if metadata else None
+            log_message = f"Demucs job {job_id}: {message}" if job_id else None
+            if log_message and log_message != last_logged_job_message:
+                last_logged_job_message = log_message
+                log_future = asyncio.run_coroutine_threadsafe(
+                    processing_task_service.emit_log(
+                        task_id,
+                        message=log_message,
+                        stream="remote",
+                        status=status,
+                        stage=stage,
+                        progress_percent=mapped,
+                        progress_label=message or "Separating vocals",
+                        progress_label_key="task.separating_vocals",
+                        progress_step_index=step_index,
+                        progress_step_total=step_total,
+                    ),
+                    loop,
+                )
+                log_future.result(timeout=5)
+
         return callback
 
     def _download_video_for_task(
