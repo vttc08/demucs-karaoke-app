@@ -88,6 +88,7 @@ value so automatic reconnects do not append the same buffered log lines twice.
 - queue and admin task views render a compact active-progress block with current step numbering instead of a separate status chip plus bar
 - admin task views still receive the task stream snapshot/log replay directly
 - callback failure or timeout tears down the child `yt-dlp` process before the error is surfaced
+- download attempts try yt-dlp's default selection first, then retry explicit audio/video/progressive selectors as fallbacks
 
 When mocks or legacy callers are used in tests, the orchestration falls back to the non-streaming youtube service methods.
 

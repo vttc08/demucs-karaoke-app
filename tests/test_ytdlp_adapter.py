@@ -10,8 +10,8 @@ from adapters.ytdlp import YtDlpAdapter
 from config import settings
 
 
-def test_download_audio_uses_direct_audio_format_without_extract(monkeypatch, tmp_path):
-    """Audio download should avoid yt-dlp postprocessing to not require local ffmpeg."""
+def test_download_audio_prefers_default_selection_first(monkeypatch, tmp_path):
+    """Audio download should try yt-dlp's default selection before format fallbacks."""
     adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
     youtube_id = "abc123"
     expected_output = tmp_path / f"{youtube_id}.audio.m4a"
@@ -28,12 +28,8 @@ def test_download_audio_uses_direct_audio_format_without_extract(monkeypatch, tm
     result = adapter.download_audio(youtube_id, tmp_path)
 
     cmd = captured_cmd["cmd"]
-    assert "-x" not in cmd
-    assert "--audio-format" not in cmd
-    assert "-f" in cmd
-    assert "bestaudio[ext=m4a]/bestaudio/best" in cmd
-    assert "--extractor-args" in cmd
-    assert "youtube:player_client=web" in cmd
+    assert "-f" not in cmd
+    assert "--extractor-args" not in cmd
     assert result == expected_output
 
 
@@ -72,15 +68,15 @@ def test_download_video_retries_without_ios_client(monkeypatch, tmp_path):
 
     assert result == expected_output
     assert len(calls) >= 2
-    assert "youtube:player_client=web" not in calls[0]
-    assert "-f" in calls[0]
-    assert "bestvideo/best" in calls[0]
-    assert any("youtube:player_client=web" in call for call in calls[1:])
+    assert "--extractor-args" not in calls[0]
+    assert "-f" not in calls[0]
+    assert any("-f" in call for call in calls[1:])
+    assert "bestvideo/best" in calls[1]
     assert all("youtube:player_client=ios" not in call for call in calls)
 
 
 def test_download_video_with_audio_falls_back_to_best(monkeypatch, tmp_path):
-    """Progressive download should fall back from strict format to yt-dlp default."""
+    """Progressive download should fall back from yt-dlp default to strict format selectors."""
     adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
     youtube_id = "prog123"
     expected_output = tmp_path / f"{youtube_id}.webm"
@@ -88,7 +84,7 @@ def test_download_video_with_audio_falls_back_to_best(monkeypatch, tmp_path):
 
     def fake_run(cmd, check, capture_output, timeout):
         calls.append(cmd)
-        if "-f" in cmd:
+        if "-f" not in cmd:
             raise subprocess.CalledProcessError(
                 returncode=1, cmd=cmd, stderr=b"Requested format is not available"
             )
@@ -102,7 +98,8 @@ def test_download_video_with_audio_falls_back_to_best(monkeypatch, tmp_path):
     assert result == expected_output
     attempted_formats = [cmd[cmd.index("-f") + 1] for cmd in calls if "-f" in cmd]
     assert "best[ext=mp4]/best" in attempted_formats
-    assert "-f" not in calls[-1]
+    assert "-f" not in calls[0]
+    assert "-f" in calls[-1]
 
 
 def test_streaming_download_adds_newline_for_live_progress(monkeypatch, tmp_path):
@@ -358,8 +355,8 @@ def test_run_streaming_download_terminates_child_on_timeout(monkeypatch):
     assert fake_process.stdout.closed is True
 
 
-def test_download_audio_default_fallback_can_return_mp4(monkeypatch, tmp_path):
-    """Audio fallback should accept container outputs when yt-dlp default picks mp4."""
+def test_download_audio_falls_back_to_explicit_audio_formats(monkeypatch, tmp_path):
+    """Audio download should retry explicit selectors after the default selection fails."""
     adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
     youtube_id = "aud123"
     expected_output = tmp_path / f"{youtube_id}.audio.mp4"
@@ -367,7 +364,7 @@ def test_download_audio_default_fallback_can_return_mp4(monkeypatch, tmp_path):
 
     def fake_run(cmd, check, capture_output, timeout):
         calls.append(cmd)
-        if "-f" in cmd:
+        if "-f" not in cmd:
             raise subprocess.CalledProcessError(
                 returncode=1, cmd=cmd, stderr=b"Requested format is not available"
             )
@@ -379,7 +376,9 @@ def test_download_audio_default_fallback_can_return_mp4(monkeypatch, tmp_path):
     result = adapter.download_audio(youtube_id, tmp_path)
 
     assert result == expected_output
-    assert "-f" not in calls[-1]
+    assert "-f" not in calls[0]
+    assert any("-f" in call for call in calls[1:])
+    assert "bestaudio[ext=m4a]/bestaudio/best" in calls[1]
 
 
 def test_search_includes_proxy_when_configured(monkeypatch):

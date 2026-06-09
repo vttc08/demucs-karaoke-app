@@ -215,9 +215,9 @@ class YtDlpAdapter:
         output_stem = f"{youtube_id}.audio"
         output_template = str(output_dir / f"{output_stem}.%(ext)s")
         attempts = [
+            (None, None, False, False),
             ("bestaudio[ext=m4a]/bestaudio/best", "web", False, True),
             ("bestaudio/best", "web", False, True),
-            (None, None, False, False),
         ]
         return self._download_with_attempts(
             youtube_id=youtube_id,
@@ -243,9 +243,9 @@ class YtDlpAdapter:
         output_stem = f"{youtube_id}.audio"
         output_template = str(output_dir / f"{output_stem}.%(ext)s")
         attempts = [
+            (None, None, False, False),
             ("bestaudio[ext=m4a]/bestaudio/best", "web", False, True),
             ("bestaudio/best", "web", False, True),
-            (None, None, False, False),
         ]
         return self._download_with_attempts(
             youtube_id=youtube_id,
@@ -283,10 +283,10 @@ class YtDlpAdapter:
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
         # Karaoke flow only needs a video track; avoid merge-heavy selectors.
         attempts = [
+            (None, None, False, False),
             ("bestvideo/best", None, False, False),
             ("bestvideo[ext=mp4]/best[ext=mp4]/bestvideo/best", "web", False, True),
             ("bestvideo/best", "web", False, True),
-            (None, None, False, False),
         ]
         return self._download_with_attempts(
             youtube_id=youtube_id,
@@ -311,10 +311,10 @@ class YtDlpAdapter:
         """Download video while streaming progress and log lines."""
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
         attempts = [
+            (None, None, False, False),
             ("bestvideo/best", None, False, False),
             ("bestvideo[ext=mp4]/best[ext=mp4]/bestvideo/best", "web", False, True),
             ("bestvideo/best", "web", False, True),
-            (None, None, False, False),
         ]
         return self._download_with_attempts(
             youtube_id=youtube_id,
@@ -351,9 +351,9 @@ class YtDlpAdapter:
         """
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
         attempts = [
+            (None, None, False, False),
             ("best[ext=mp4]/best", "web", False, True),
             ("best", "web", False, True),
-            (None, None, False, False),
         ]
         return self._download_with_attempts(
             youtube_id=youtube_id,
@@ -378,9 +378,9 @@ class YtDlpAdapter:
         """Download progressive video while streaming progress and log lines."""
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
         attempts = [
+            (None, None, False, False),
             ("best[ext=mp4]/best", "web", False, True),
             ("best", "web", False, True),
-            (None, None, False, False),
         ]
         return self._download_with_attempts(
             youtube_id=youtube_id,
