@@ -370,7 +370,7 @@ pip install --upgrade yt-dlp
 ```
 
 For karaoke mode, this app downloads source audio directly from yt-dlp formats (instead of yt-dlp ffmpeg postprocessing), which avoids `ffprobe/ffmpeg not found` during the audio-download step.
-The downloader uses progressive fallback for unavailable formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise.
+The downloader uses progressive fallback for unavailable formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise. When you set a video resolution cap in Settings, the app adds yt-dlp's resolution sort flag, for example `-S "res:720"`, so downloads stay at or below the chosen height. Leave the setting at `Default` to keep the current behavior unchanged.
 Runtime proxy is supported through settings (`yt-dlp Proxy URL`) and applied to:
 - yt-dlp search/download commands
 - lyrics provider requests (Musixmatch, NetEase, LRCLib, and Last.fm metadata lookup)
@@ -399,6 +399,7 @@ yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
 
 # Non-karaoke mode: single progressive file (video+audio)
 yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
+  -S "res:720" \
   -f "best[ext=mp4]/best" \
   --extractor-args "youtube:player_client=web" \
   --no-playlist \
@@ -409,6 +410,8 @@ yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
   --no-playlist \
   -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
 ```
+
+To cap downloads from the UI, set **yt-dlp Video Resolution** to `360p`, `480p`, `720p`, `1080p`, or `2160p`. `Default` keeps the old behavior.
 
 If you want to manually test via proxy, add:
 

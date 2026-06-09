@@ -29,6 +29,7 @@ def test_download_audio_prefers_default_selection_first(monkeypatch, tmp_path):
 
     cmd = captured_cmd["cmd"]
     assert "-f" not in cmd
+    assert "-S" not in cmd
     assert "--extractor-args" not in cmd
     assert result == expected_output
 
@@ -100,6 +101,55 @@ def test_download_video_with_audio_falls_back_to_best(monkeypatch, tmp_path):
     assert "best[ext=mp4]/best" in attempted_formats
     assert "-f" not in calls[0]
     assert "-f" in calls[-1]
+
+
+def test_download_video_applies_resolution_cap(monkeypatch, tmp_path):
+    """Video downloads should add a yt-dlp resolution sort cap when configured."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "cap123"
+    expected_output = tmp_path / f"{youtube_id}.mp4"
+    calls = []
+    original_resolution = settings.ytdlp_video_resolution
+    settings.ytdlp_video_resolution = "720"
+
+    def fake_run(cmd, check, capture_output, timeout):
+        calls.append(cmd)
+        expected_output.write_bytes(b"video")
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    try:
+        result = adapter.download_video_with_audio(youtube_id, tmp_path)
+    finally:
+        settings.ytdlp_video_resolution = original_resolution
+
+    assert result == expected_output
+    assert "-S" in calls[0]
+    assert "res:720" in calls[0]
+
+
+def test_download_audio_ignores_video_resolution_cap(monkeypatch, tmp_path):
+    """Audio downloads should not inherit the video resolution cap."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "audio-cap123"
+    expected_output = tmp_path / f"{youtube_id}.audio.m4a"
+    original_resolution = settings.ytdlp_video_resolution
+    settings.ytdlp_video_resolution = "1080"
+    captured_cmd = {}
+
+    def fake_run(cmd, check, capture_output, timeout):
+        captured_cmd["cmd"] = cmd
+        expected_output.write_bytes(b"audio")
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    try:
+        result = adapter.download_audio(youtube_id, tmp_path)
+    finally:
+        settings.ytdlp_video_resolution = original_resolution
+
+    assert result == expected_output
+    assert "-S" not in captured_cmd["cmd"]
 
 
 def test_streaming_download_adds_newline_for_live_progress(monkeypatch, tmp_path):

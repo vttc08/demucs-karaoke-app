@@ -34,6 +34,7 @@ class RuntimeSettingsService:
     ALLOWED_DEMUCS_DEVICES = {"cuda", "cpu"}
     ALLOWED_DEMUCS_OUTPUT_FORMATS = {"wav", "mp3"}
     ALLOWED_PROXY_SCHEMES = {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
+    ALLOWED_YTDLP_VIDEO_RESOLUTIONS = {"default", "360", "480", "720", "1080", "2160"}
     PERSISTED_SETTING_FIELDS = (
         "demucs_api_url",
         "demucs_model",
@@ -44,6 +45,7 @@ class RuntimeSettingsService:
         "ffmpeg_crf",
         "ytdlp_path",
         "ytdlp_proxy_url",
+        "ytdlp_video_resolution",
         "concurrent_ytdlp_search_enabled",
         "lyrics_provider_netease_enabled",
         "lyrics_provider_lrclib_enabled",
@@ -81,6 +83,7 @@ class RuntimeSettingsService:
             ffmpeg_crf=settings.ffmpeg_crf,
             ytdlp_path=settings.ytdlp_path,
             ytdlp_proxy_url=settings.ytdlp_proxy_url,
+            ytdlp_video_resolution=settings.ytdlp_video_resolution,
             concurrent_ytdlp_search_enabled=settings.concurrent_ytdlp_search_enabled,
             lyrics_provider_netease_enabled=settings.lyrics_provider_netease_enabled,
             lyrics_provider_lrclib_enabled=settings.lyrics_provider_lrclib_enabled,
@@ -212,6 +215,17 @@ class RuntimeSettingsService:
             settings.ytdlp_proxy_url = proxy
             updated_fields.append("ytdlp_proxy_url")
 
+        if payload.ytdlp_video_resolution is not None:
+            resolution = payload.ytdlp_video_resolution.strip().lower()
+            if resolution not in self.ALLOWED_YTDLP_VIDEO_RESOLUTIONS:
+                raise ValueError(
+                    "ytdlp_video_resolution must be one of: "
+                    + ", ".join(sorted(self.ALLOWED_YTDLP_VIDEO_RESOLUTIONS))
+                )
+            snapshot.setdefault("ytdlp_video_resolution", settings.ytdlp_video_resolution)
+            settings.ytdlp_video_resolution = resolution
+            updated_fields.append("ytdlp_video_resolution")
+
         if payload.concurrent_ytdlp_search_enabled is not None:
             snapshot.setdefault(
                 "concurrent_ytdlp_search_enabled", settings.concurrent_ytdlp_search_enabled
@@ -309,6 +323,11 @@ class RuntimeSettingsService:
             settings.ytdlp_path = self._resolve_executable_path(raw_value.strip())
         elif field_name == "ytdlp_proxy_url":
             settings.ytdlp_proxy_url = raw_value
+        elif field_name == "ytdlp_video_resolution":
+            resolution = raw_value.strip().lower()
+            if resolution not in self.ALLOWED_YTDLP_VIDEO_RESOLUTIONS:
+                raise ValueError(f"Invalid persisted ytdlp_video_resolution: {raw_value}")
+            settings.ytdlp_video_resolution = resolution
         elif field_name == "concurrent_ytdlp_search_enabled":
             settings.concurrent_ytdlp_search_enabled = raw_value.lower() in {"1", "true", "yes", "on"}
         elif field_name == "lyrics_provider_netease_enabled":

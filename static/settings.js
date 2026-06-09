@@ -34,6 +34,7 @@ const fields = {
     cache_path: document.getElementById("cache_path"),
     ytdlp_path: document.getElementById("ytdlp_path"),
     ytdlp_proxy_url: document.getElementById("ytdlp_proxy_url"),
+    ytdlp_video_resolution: document.getElementById("ytdlp_video_resolution"),
     concurrent_ytdlp_search_enabled: document.getElementById("concurrent_ytdlp_search_enabled"),
     lyrics_provider_netease_enabled: document.getElementById("lyrics_provider_netease_enabled"),
     lyrics_provider_lrclib_enabled: document.getElementById("lyrics_provider_lrclib_enabled"),
@@ -221,6 +222,7 @@ function applySettingsToForm(data) {
     fields.cache_path.value = data.cache_path || "";
     fields.ytdlp_path.value = data.ytdlp_path || "";
     fields.ytdlp_proxy_url.value = data.ytdlp_proxy_url || "";
+    fields.ytdlp_video_resolution.value = data.ytdlp_video_resolution || "default";
     fields.concurrent_ytdlp_search_enabled.checked = Boolean(data.concurrent_ytdlp_search_enabled);
     fields.lyrics_provider_netease_enabled.checked = Boolean(data.lyrics_provider_netease_enabled ?? true);
     fields.lyrics_provider_lrclib_enabled.checked = Boolean(data.lyrics_provider_lrclib_enabled ?? true);
@@ -284,6 +286,7 @@ async function saveSettings() {
         cache_path: fields.cache_path.value.trim(),
         ytdlp_path: fields.ytdlp_path.value.trim(),
         ytdlp_proxy_url: fields.ytdlp_proxy_url.value.trim(),
+        ytdlp_video_resolution: fields.ytdlp_video_resolution.value,
         concurrent_ytdlp_search_enabled: fields.concurrent_ytdlp_search_enabled.checked,
         lyrics_provider_netease_enabled: fields.lyrics_provider_netease_enabled.checked,
         lyrics_provider_lrclib_enabled: fields.lyrics_provider_lrclib_enabled.checked,

@@ -4330,6 +4330,28 @@ def test_runtime_settings_update_settings_accepts_proxy_url():
         settings.ytdlp_proxy_url = original_proxy
 
 
+def test_runtime_settings_update_settings_accepts_video_resolution():
+    """Runtime settings should accept yt-dlp video resolution caps."""
+    service = RuntimeSettingsService()
+    original_resolution = settings.ytdlp_video_resolution
+    try:
+        with patch.object(
+            RuntimeSettingsService,
+            "get_demucs_health",
+            return_value=DemucsHealthResponse(
+                api_url="http://127.0.0.1:8001",
+                healthy=True,
+                detail="Demucs service is healthy",
+            ),
+        ):
+            result = service.update_settings(
+                RuntimeSettingsUpdateRequest(ytdlp_video_resolution="720")
+            )
+        assert result.ytdlp_video_resolution == "720"
+    finally:
+        settings.ytdlp_video_resolution = original_resolution
+
+
 def test_runtime_settings_update_settings_accepts_empty_proxy_url():
     """Runtime settings should allow clearing yt-dlp proxy URL."""
     service = RuntimeSettingsService()
@@ -4360,6 +4382,13 @@ def test_runtime_settings_update_settings_rejects_invalid_proxy_url():
         service.update_settings(RuntimeSettingsUpdateRequest(ytdlp_proxy_url="proxy.local:8080"))
     with pytest.raises(ValueError, match="ytdlp_proxy_url"):
         service.update_settings(RuntimeSettingsUpdateRequest(ytdlp_proxy_url="ftp://proxy.local:21"))
+
+
+def test_runtime_settings_update_settings_rejects_invalid_video_resolution():
+    """Runtime settings should reject unsupported yt-dlp video resolutions."""
+    service = RuntimeSettingsService()
+    with pytest.raises(ValueError, match="ytdlp_video_resolution"):
+        service.update_settings(RuntimeSettingsUpdateRequest(ytdlp_video_resolution="999"))
 
 
 def test_runtime_settings_get_ytdlp_version():
@@ -4468,6 +4497,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
     original_concurrent = settings.concurrent_ytdlp_search_enabled
     original_netease = settings.lyrics_provider_netease_enabled
     original_lrclib = settings.lyrics_provider_lrclib_enabled
+    original_resolution = settings.ytdlp_video_resolution
     try:
         with patch.object(
             RuntimeSettingsService,
@@ -4483,6 +4513,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
                     concurrent_ytdlp_search_enabled=True,
                     lyrics_provider_netease_enabled=False,
                     lyrics_provider_lrclib_enabled=True,
+                    ytdlp_video_resolution="1080",
                     stage_qr_url="https://karaoke.test/stage",
                     stage_lobby_media_path="/media/stage-lobby.mp4",
                 ),
@@ -4492,6 +4523,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert result.concurrent_ytdlp_search_enabled is True
         assert result.lyrics_provider_netease_enabled is False
         assert result.lyrics_provider_lrclib_enabled is True
+        assert result.ytdlp_video_resolution == "1080"
         assert result.stage_qr_url == "https://karaoke.test/stage"
         assert result.stage_lobby_media_path == "/media/stage-lobby.mp4"
 
@@ -4502,6 +4534,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert stored["concurrent_ytdlp_search_enabled"] == "true"
         assert stored["lyrics_provider_netease_enabled"] == "false"
         assert stored["lyrics_provider_lrclib_enabled"] == "true"
+        assert stored["ytdlp_video_resolution"] == "1080"
         assert stored["stage_qr_url"] == "https://karaoke.test/stage"
         assert stored["stage_lobby_media_path"] == "/media/stage-lobby.mp4"
     finally:
@@ -4510,6 +4543,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         settings.concurrent_ytdlp_search_enabled = original_concurrent
         settings.lyrics_provider_netease_enabled = original_netease
         settings.lyrics_provider_lrclib_enabled = original_lrclib
+        settings.ytdlp_video_resolution = original_resolution
 
 
 def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
@@ -4526,6 +4560,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
                 RuntimeSetting(key="stage_qr_url", value="https://karaoke.test/stage"),
                 RuntimeSetting(key="stage_lobby_media_path", value="/media/stage-lobby.mp4"),
                 RuntimeSetting(key="ffmpeg_preset", value="veryslow"),
+                RuntimeSetting(key="ytdlp_video_resolution", value="720"),
             ]
         )
         db_session.commit()
@@ -4533,15 +4568,18 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         settings.demucs_model = "temporary-model"
         settings.stage_qr_url = ""
         settings.stage_lobby_media_path = ""
+        settings.ytdlp_video_resolution = "default"
 
         applied = service.load_persisted_settings(db_session)
 
         assert "demucs_model" in applied
         assert "stage_qr_url" in applied
         assert "stage_lobby_media_path" in applied
+        assert "ytdlp_video_resolution" in applied
         assert settings.demucs_model == "persisted-model"
         assert settings.stage_qr_url == "https://karaoke.test/stage"
         assert settings.stage_lobby_media_path == "/media/stage-lobby.mp4"
+        assert settings.ytdlp_video_resolution == "720"
 
         explicit_field = next(
             field

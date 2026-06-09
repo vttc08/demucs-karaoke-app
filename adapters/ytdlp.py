@@ -20,6 +20,8 @@ _STREAM_DONE = object()
 class YtDlpAdapter:
     """Wrapper for yt-dlp command-line tool."""
 
+    ALLOWED_VIDEO_RESOLUTIONS = {"default", "360", "480", "720", "1080", "2160"}
+
     def __init__(self, ytdlp_path: str = None):
         self.ytdlp_path = ytdlp_path or settings.ytdlp_path
         logger.info("YtDlpAdapter initialized ytdlp_path=%s", self.ytdlp_path)
@@ -30,6 +32,20 @@ class YtDlpAdapter:
         if settings.ytdlp_proxy_url:
             return ["--proxy", settings.ytdlp_proxy_url]
         return []
+
+    @classmethod
+    def _video_resolution_sort_args(cls) -> List[str]:
+        """Build yt-dlp sorting args for the configured maximum video resolution."""
+        resolution = (settings.ytdlp_video_resolution or "default").strip().lower()
+        if resolution == "default":
+            return []
+        if resolution not in cls.ALLOWED_VIDEO_RESOLUTIONS:
+            logger.warning(
+                "Ignoring invalid yt-dlp video resolution setting resolution=%s",
+                resolution,
+            )
+            return []
+        return ["-S", f"res:{resolution}"]
 
     def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
         """
@@ -414,6 +430,7 @@ class YtDlpAdapter:
         attempt_list = list(attempts)
 
         logger.info("Downloading media_type=%s youtube_id=%s", media_type, youtube_id)
+        resolution_args = self._video_resolution_sort_args() if media_type != "audio" else []
         for idx, (fmt, client, merge_mp4, use_extractor_args) in enumerate(attempt_list):
             cmd = [
                 self.ytdlp_path,
@@ -440,6 +457,7 @@ class YtDlpAdapter:
                         "download:[download][karaoke-progress] %(progress._percent)f",
                     ]
                 )
+            cmd.extend(resolution_args)
             cmd.extend(self._proxy_args())
 
             try:

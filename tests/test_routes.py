@@ -2082,6 +2082,7 @@ def test_get_runtime_settings(client):
     assert "ffmpeg_crf" in data
     assert "ytdlp_path" in data
     assert "ytdlp_proxy_url" in data
+    assert "ytdlp_video_resolution" in data
     assert "concurrent_ytdlp_search_enabled" in data
     assert "lyrics_provider_netease_enabled" in data
     assert "lyrics_provider_lrclib_enabled" in data
@@ -2118,6 +2119,7 @@ def test_update_runtime_settings(client):
             "cache_path": "/tmp/karaoke_cache_test",
             "ytdlp_path": "yt-dlp",
             "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
+            "ytdlp_video_resolution": "720",
             "concurrent_ytdlp_search_enabled": True,
             "lyrics_provider_netease_enabled": False,
             "lyrics_provider_lrclib_enabled": True,
@@ -2138,6 +2140,7 @@ def test_update_runtime_settings(client):
     assert data["media_path"] == "/tmp/karaoke_media_test"
     assert data["cache_path"] == "/tmp/karaoke_cache_test"
     assert data["ytdlp_proxy_url"] == "socks5://127.0.0.1:1080"
+    assert data["ytdlp_video_resolution"] == "720"
     assert data["concurrent_ytdlp_search_enabled"] is True
     assert data["lyrics_provider_netease_enabled"] is False
     assert data["lyrics_provider_lrclib_enabled"] is True
@@ -2163,6 +2166,7 @@ def test_update_runtime_settings_persists_to_database(client):
             json={
                 "stage_qr_url": "https://karaoke.test/queue",
                 "stage_lobby_media_path": "/media/stage-lobby.mp4",
+                "ytdlp_video_resolution": "1080",
                 "concurrent_ytdlp_search_enabled": True,
             },
         )
@@ -2174,6 +2178,9 @@ def test_update_runtime_settings_persists_to_database(client):
         stage_lobby = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "stage_lobby_media_path"
         ).first()
+        resolution = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "ytdlp_video_resolution"
+        ).first()
         concurrent = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "concurrent_ytdlp_search_enabled"
         ).first()
@@ -2181,6 +2188,8 @@ def test_update_runtime_settings_persists_to_database(client):
         assert stage_qr.value == "https://karaoke.test/queue"
         assert stage_lobby is not None
         assert stage_lobby.value == "/media/stage-lobby.mp4"
+        assert resolution is not None
+        assert resolution.value == "1080"
         assert concurrent is not None
         assert concurrent.value == "true"
     finally:
@@ -2272,6 +2281,14 @@ def test_update_runtime_settings_rejects_invalid_crf(client):
     response = client.patch("/api/settings/", json={"ffmpeg_crf": 60})
     assert response.status_code == 400
     assert "ffmpeg_crf" in response.json()["detail"]
+
+
+def test_update_runtime_settings_rejects_invalid_ytdlp_resolution(client):
+    """Runtime settings endpoint should validate yt-dlp video resolution caps."""
+    authenticate_admin_client(client)
+    response = client.patch("/api/settings/", json={"ytdlp_video_resolution": "999"})
+    assert response.status_code == 400
+    assert "ytdlp_video_resolution" in response.json()["detail"]
 
 
 def test_skip_current_promotes_next_ready(client):

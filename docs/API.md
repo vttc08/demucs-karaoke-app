@@ -802,6 +802,7 @@ endpoint reflects the latest saved UI configuration after the app has booted.
   "cache_path": "/mnt/karaoke_cache",
   "ytdlp_path": "/home/user/.venv/bin/yt-dlp",
   "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
+  "ytdlp_video_resolution": "default",
   "ffmpeg_path": "/usr/bin/ffmpeg"
 }
 ```
@@ -834,6 +835,7 @@ and restarts when no explicit `.env` override is present.
   "cache_path": "/mnt/karaoke_cache",
   "ytdlp_path": "yt-dlp",
   "ytdlp_proxy_url": "",
+  "ytdlp_video_resolution": "default",
   "ffmpeg_path": "ffmpeg"
 }
 ```
@@ -848,6 +850,7 @@ Validation:
 - `lyrics_provider_netease_enabled` toggles NetEase in concurrent lyrics fallback
 - `lyrics_provider_lrclib_enabled` toggles LRCLib in concurrent lyrics fallback
 - `ytdlp_proxy_url` must be empty or use one of: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`
+- `ytdlp_video_resolution` must be `default` or one of: `360`, `480`, `720`, `1080`, `2160`
 - executable paths cannot be empty
 - `media_path` and `cache_path` cannot be empty when provided
 
@@ -855,6 +858,7 @@ Notes:
 - Updating `media_path`/`cache_path` applies immediately for processing and new outputs.
 - Static file mounts are initialized at app startup; restart the app after path changes so serving mounts align with new paths.
 - `ytdlp_proxy_url` applies to yt-dlp operations and lyrics-provider outbound requests.
+- `ytdlp_video_resolution` applies to yt-dlp video and progressive video+audio downloads by adding a resolution sort cap such as `-S "res:720"` when a cap is selected.
 
 ---
 

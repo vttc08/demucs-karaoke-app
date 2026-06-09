@@ -81,6 +81,7 @@ class Settings(BaseSettings):
     # External tools (will be resolved to full paths)
     ytdlp_path: str = "yt-dlp"
     ytdlp_proxy_url: str = ""
+    ytdlp_video_resolution: str = "default"
     concurrent_ytdlp_search_enabled: bool = False
     lyrics_provider_netease_enabled: bool = True
     lyrics_provider_lrclib_enabled: bool = True
