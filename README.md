@@ -169,6 +169,8 @@ and `/static/...`.
           - Use **Add to Queue** to enqueue a local media row through the existing queue API
           - Guests can browse and queue items only; edit, scan, upload, and delete controls are admin-only
           - Admin users can use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
+          - The edit modal can enable **AI Karaoke** for single-track media when Demucs is online; saving creates a monitored media-processing task
+          - Existing multi-track items show AI Karaoke as enabled but locked, preventing duplicate separation work
           - Admin users can use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
           - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
           - Admin users can trigger **Scan Library** to reconcile DB with filesystem on demand
@@ -177,7 +179,9 @@ and `/static/...`.
 6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
         - Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files into the media library with title and artist metadata
         - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use
-        - If **Add to queue** and **AI Karaoke** are enabled, the uploaded item is queued with karaoke processing requested
+        - **AI Karaoke** is available only while Demucs is online and can process uploads whether or not **Add to queue** is enabled
+        - Queued AI uploads use the queue preparation task; non-queued AI uploads create a media-library karaoke task
+        - If Demucs becomes unavailable during submission, the upload is still saved and optionally queued without karaoke processing
         - Keep the default checked **Add to queue** toggle enabled to enqueue the new media item after upload
         - Uploaded audio files generate cached cover thumbnails immediately when embedded album art is present
         - Successful uploads redirect to the media management page

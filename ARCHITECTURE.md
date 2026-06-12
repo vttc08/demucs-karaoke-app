@@ -194,6 +194,11 @@ The stage page uses a websocket-first model:
   - yt-dlp source video/audio downloads stay in `cache/`
   - `no_vocals` is muxed into the final canonical `media_path` video as `/media/<stem>.mp4`
   - `vocals` is persisted separately to canonical `vocals_path` as `/media/<stem>.vocals.<ext>`
+- Local media karaoke finalization stages both outputs before updating the media row:
+  - video inputs remux the `no_vocals` stem with the original video stream
+  - audio-only inputs persist `no_vocals` directly as the new primary audio
+  - `media_path` and `vocals_path` are committed together only after both durable outputs exist
+  - cancellation removes scratch/temporary outputs but preserves the original uploaded or library file
 - Media-library scan treats transient files such as `*.audio.*` as scratch artifacts, skips duplicate
   legacy `*.karaoke.*` files when a canonical `/media/<stem>.<ext>` sibling exists, and reattaches
   canonical `*.vocals.*` sidecars when possible.
@@ -268,7 +273,9 @@ The stage page uses a websocket-first model:
   - creates a durable `media_items` row with `media_path` pointing at the saved file
   - persists submitted `lyrics_text` as a reusable media-adjacent lyrics sidecar on the media row
   - optionally creates a queue row for the new media item when "Add to queue" is enabled
-  - applies the upload page AI karaoke toggle only to that queued item request
+  - checks Demucs health before accepting AI karaoke processing
+  - starts one queue preparation task for queued uploads, or one `media_karaoke` task for non-queued AI uploads
+  - preserves the saved upload and returns a warning when Demucs becomes unavailable before task creation
   - broadcasts the new queue item so real-time clients stay in sync
 - Successful uploads redirect the browser to the media management page.
 

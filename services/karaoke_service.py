@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
+import os
 import shutil
 import threading
 from pathlib import Path
@@ -21,6 +21,8 @@ from services.queue_service import QueueService
 from services.youtube_service import YouTubeService
 
 logger = logging.getLogger(__name__)
+
+_AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus"}
 
 
 class KaraokeService:
@@ -150,7 +152,6 @@ class KaraokeService:
                 item.media,
                 existing_media_path=existing_media_path,
                 queue_item_id=item.id,
-                use_queue_item=item,
                 cancel_event=cancel_event,
             )
             await self._process_karaoke(
@@ -250,7 +251,6 @@ class KaraokeService:
         *,
         cancel_event: threading.Event | None = None,
     ):
-        queue_like_item = QueueItem(id=task.id, media=media_item)  # lightweight carrier for naming helpers
         existing_media_path = self._existing_local_file(media_item.media_path)
         existing_vocals_path = self._existing_local_file(media_item.vocals_path)
         if existing_media_path is None:
@@ -279,7 +279,6 @@ class KaraokeService:
             task,
             media_item,
             existing_media_path=existing_media_path,
-            use_queue_item=queue_like_item,
             cancel_event=cancel_event,
         )
         await self._process_karaoke(
@@ -300,7 +299,6 @@ class KaraokeService:
         *,
         existing_media_path: Path | None,
         queue_item_id: int | None = None,
-        use_queue_item: QueueItem,
         cancel_event: threading.Event | None = None,
     ) -> tuple[Path, Path]:
         media_stem = self._media_stem_for_media(
@@ -321,14 +319,17 @@ class KaraokeService:
                 progress_step_index=1,
                 progress_step_total=3,
             )
-            extracted_audio_path = settings.cache_path / "audio" / f"{media_stem}.audio.m4a"
-            audio_path = await asyncio.to_thread(
-                lambda: self.ffmpeg.extract_audio(
-                    existing_media_path,
-                    extracted_audio_path,
-                    cancel_event=cancel_event,
+            if existing_media_path.suffix.lower() in _AUDIO_EXTENSIONS:
+                audio_path = existing_media_path
+            else:
+                extracted_audio_path = settings.cache_path / "audio" / f"{media_stem}.audio.m4a"
+                audio_path = await asyncio.to_thread(
+                    lambda: self.ffmpeg.extract_audio(
+                        existing_media_path,
+                        extracted_audio_path,
+                        cancel_event=cancel_event,
+                    )
                 )
-            )
             await self._raise_if_canceled(cancel_event, task.id)
             await processing_task_service.emit_progress(
                 task.id,
@@ -445,7 +446,8 @@ class KaraokeService:
             progress_step_total=4,
         )
         demucs_response = await self._separate_vocals_with_retry(
-            queue_item or QueueItem(id=task.id, media=media_item),
+            queue_item,
+            media_item,
             audio_path,
             task_id=task.id,
             progress_step_index=3,
@@ -454,16 +456,11 @@ class KaraokeService:
         )
         no_vocals_path = Path(demucs_response.no_vocals_path)
         vocals_raw_path = Path(demucs_response.vocals_path) if demucs_response.vocals_path else None
+        if not no_vocals_path.exists():
+            raise RuntimeError("Demucs response missing no-vocals output path")
         if vocals_raw_path is None or not vocals_raw_path.exists():
             raise RuntimeError("Demucs response missing vocals output path")
         await self._raise_if_canceled(cancel_event, task.id)
-        vocals_sidecar_path = await asyncio.to_thread(
-            lambda: self._persist_vocals_sidecar(
-                queue_item or QueueItem(id=task.id, media=media_item),
-                vocals_raw_path,
-            )
-        )
-        self._set_media_item_vocals_path(db, media_item, vocals_sidecar_path)
         await processing_task_service.emit_progress(
             task.id,
             queue_item_id=queue_item.id if queue_item is not None else None,
@@ -490,32 +487,51 @@ class KaraokeService:
             media_item,
             fallback=media_item.youtube_id or f"media-{media_item.id}",
         )
-        output_path = settings.cache_path / "processed" / f"{media_stem}.mp4"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        if cancel_event is None:
-            await asyncio.to_thread(
-                lambda: self.ffmpeg.combine_audio_video(
-                    video_path=video_path,
-                    audio_path=no_vocals_path,
-                    output_path=output_path,
-                )
-            )
+        if video_path.suffix.lower() in _AUDIO_EXTENSIONS:
+            output_path = no_vocals_path
         else:
-            await asyncio.to_thread(
-                lambda: self.ffmpeg.combine_audio_video(
-                    video_path=video_path,
-                    audio_path=no_vocals_path,
-                    output_path=output_path,
-                    cancel_event=cancel_event,
+            output_path = settings.cache_path / "processed" / f"{media_stem}.mp4"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            if cancel_event is None:
+                await asyncio.to_thread(
+                    lambda: self.ffmpeg.combine_audio_video(
+                        video_path=video_path,
+                        audio_path=no_vocals_path,
+                        output_path=output_path,
+                    )
                 )
-            )
+            else:
+                await asyncio.to_thread(
+                    lambda: self.ffmpeg.combine_audio_video(
+                        video_path=video_path,
+                        audio_path=no_vocals_path,
+                        output_path=output_path,
+                        cancel_event=cancel_event,
+                    )
+                )
         await self._raise_if_canceled(cancel_event, task.id)
-        final_media_path = await asyncio.to_thread(
-            self._persist_primary_media,
-            media_stem,
-            output_path,
+        original_media_path = self._existing_local_file(media_item.media_path)
+        final_media_path, vocals_sidecar_path = await asyncio.to_thread(
+            self._install_karaoke_outputs,
+            media_stem=media_stem,
+            primary_source=output_path,
+            vocals_source=vocals_raw_path,
+            task_id=task.id,
         )
-        self._set_media_item_media_path(db, media_item, final_media_path)
+        self._set_media_item_output_paths(
+            db,
+            media_item,
+            media_path=final_media_path,
+            vocals_path=vocals_sidecar_path,
+        )
+        if original_media_path is not None and original_media_path != final_media_path:
+            from services.media_thumbnail_service import MediaThumbnailService
+
+            MediaThumbnailService().rename_thumbnail_for_media_file(
+                original_media_path,
+                final_media_path,
+            )
+            self._remove_path(original_media_path)
         await processing_task_service.set_status(
             db,
             task.id,
@@ -545,24 +561,33 @@ class KaraokeService:
         return media_file if media_file.exists() else None
 
     @staticmethod
-    def _canonical_vocals_stem(item: QueueItem) -> str:
-        """Build a stable basename for persisted vocals sidecars."""
-        if item.media:
-            return KaraokeService._media_stem_for_media(item.media, fallback=f"queue-{item.id}")
-        base = f"queue-{item.id}"
-        cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", base).strip("-")
-        return cleaned or f"queue-{item.id}"
+    def _install_karaoke_outputs(
+        *,
+        media_stem: str,
+        primary_source: Path,
+        vocals_source: Path,
+        task_id: int,
+    ) -> tuple[Path, Path]:
+        """Stage both karaoke outputs before replacing durable media files."""
+        primary_extension = primary_source.suffix.lower() or ".wav"
+        vocals_extension = vocals_source.suffix.lower() or ".wav"
+        primary_target = settings.media_path / f"{media_stem}{primary_extension}"
+        vocals_target = settings.media_path / f"{media_stem}.vocals{vocals_extension}"
+        primary_temp = settings.media_path / f".{media_stem}.{task_id}.primary.tmp{primary_extension}"
+        vocals_temp = settings.media_path / f".{media_stem}.{task_id}.vocals.tmp{vocals_extension}"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
 
-    def _persist_vocals_sidecar(self, item: QueueItem, source_path: Path) -> Path:
-        """Persist vocals guide track in media storage with canonical *.vocals.<ext> naming."""
-        extension = source_path.suffix.lower() or ".wav"
-        canonical_name = f"{self._canonical_vocals_stem(item)}.vocals{extension}"
-        target_path = settings.media_path / canonical_name
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        if source_path.resolve() == target_path.resolve():
-            return target_path
-        shutil.copy2(source_path, target_path)
-        return target_path
+        try:
+            shutil.copy2(primary_source, primary_temp)
+            shutil.copy2(vocals_source, vocals_temp)
+            os.replace(vocals_temp, vocals_target)
+            os.replace(primary_temp, primary_target)
+        finally:
+            for temp_path in (primary_temp, vocals_temp):
+                if temp_path.exists():
+                    temp_path.unlink()
+
+        return primary_target, vocals_target
 
     def _persist_primary_media(self, media_stem: str, source_path: Path) -> Path:
         """Move the finalized playable media file into durable media storage."""
@@ -606,7 +631,8 @@ class KaraokeService:
 
     async def _separate_vocals_with_retry(
         self,
-        item: QueueItem,
+        queue_item: QueueItem | None,
+        media_item: MediaItem,
         audio_path: Path,
         *,
         task_id: int,
@@ -625,7 +651,7 @@ class KaraokeService:
                 step_total=progress_step_total,
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
-                queue_item_id=item.id if item is not None else None,
+                queue_item_id=queue_item.id if queue_item is not None else None,
             )
             log_callback = self._log_callback(
                 loop,
@@ -651,8 +677,7 @@ class KaraokeService:
                 status_code is not None
                 and status_code >= 500
                 and audio_path.suffix.lower() == ".m4a"
-                and item.media is not None
-                and bool(item.media.youtube_id)
+                and bool(media_item.youtube_id)
             )
             if not can_retry:
                 raise
@@ -673,14 +698,14 @@ class KaraokeService:
             if cancel_event is None:
                 fallback_audio_path = await asyncio.to_thread(
                     lambda: self.youtube_service.download_audio(
-                        item.media.youtube_id,
+                        media_item.youtube_id,
                         processing_dir,
                     )
                 )
             else:
                 fallback_audio_path = await asyncio.to_thread(
                     lambda: self.youtube_service.download_audio(
-                        item.media.youtube_id,
+                        media_item.youtube_id,
                         processing_dir,
                         cancel_event=cancel_event,
                     )
@@ -694,7 +719,7 @@ class KaraokeService:
                 step_total=progress_step_total,
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
-                queue_item_id=item.id if item is not None else None,
+                queue_item_id=queue_item.id if queue_item is not None else None,
             )
             log_callback = self._log_callback(
                 loop,
@@ -722,8 +747,16 @@ class KaraokeService:
         db.commit()
 
     @staticmethod
-    def _set_media_item_vocals_path(db: Session, media_item: MediaItem, vocals_path: Path):
+    def _set_media_item_output_paths(
+        db: Session,
+        media_item: MediaItem,
+        *,
+        media_path: Path,
+        vocals_path: Path,
+    ):
+        media_item.media_path = QueueService.build_media_url(media_path)
         media_item.vocals_path = QueueService.build_media_url(vocals_path)
+        media_item.missing = False
         db.commit()
 
     def cleanup_canceled_task(self, db: Session, task: ProcessingTask):
@@ -737,22 +770,31 @@ class KaraokeService:
             fallback=media_item.youtube_id or f"media-{media_item.id}",
         )
 
-        paths_to_remove: list[Path] = []
-        for media_url in (media_item.media_path, media_item.vocals_path):
-            media_file = QueueService._media_url_to_file(media_url)
-            if media_file is not None:
-                paths_to_remove.append(media_file)
-        paths_to_remove.extend(
-            path for path in settings.media_path.glob(f"{media_stem}*") if path.is_file()
+        preserve_durable_media = (
+            task.task_type == "media_karaoke"
+            or task.source_kind == "library_media"
         )
-        paths_to_remove.extend(self._cached_task_paths(media_stem))
+        paths_to_remove = self._cached_task_paths(media_stem)
+        paths_to_remove.extend(
+            path
+            for path in settings.media_path.glob(f".{media_stem}.{task.id}.*.tmp*")
+            if path.is_file()
+        )
+        if not preserve_durable_media:
+            for media_url in (media_item.media_path, media_item.vocals_path):
+                media_file = QueueService._media_url_to_file(media_url)
+                if media_file is not None:
+                    paths_to_remove.append(media_file)
+            paths_to_remove.extend(
+                path for path in settings.media_path.glob(f"{media_stem}*") if path.is_file()
+            )
 
         for path in paths_to_remove:
             self._remove_path(path)
 
         from services.media_thumbnail_service import MediaThumbnailService
 
-        if media_item.media_path:
+        if not preserve_durable_media and media_item.media_path:
             media_file = QueueService._media_url_to_file(media_item.media_path)
             if media_file is not None:
                 MediaThumbnailService().remove_thumbnail_for_media_file(media_file)
@@ -772,7 +814,8 @@ class KaraokeService:
                 queue_item.status = "pending"
                 queue_item.error = None
 
-        media_item.missing = True
+        current_media_file = QueueService._media_url_to_file(media_item.media_path)
+        media_item.missing = current_media_file is None or not current_media_file.exists()
         db.commit()
 
     def _cached_task_paths(self, media_stem: str) -> list[Path]:

@@ -55,15 +55,20 @@ class FFmpegAdapter:
         *,
         cancel_event: threading.Event | None = None,
     ) -> Path:
-        """Extract source audio stream without re-encoding."""
+        """Extract source audio stream, copying when the codec is container-safe."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        source_codec = self._probe_audio_codec(source_path)
+        copy_safe_codecs = {"aac", "alac"}
+        if source_codec in copy_safe_codecs:
+            codec_args = ["-c:a", "copy"]
+        else:
+            codec_args = ["-c:a", "aac", "-b:a", "192k"]
         cmd = [
             self.ffmpeg_path,
             "-i",
             str(source_path),
             "-vn",
-            "-c:a",
-            "copy",
+            *codec_args,
             "-y",
             str(output_path),
         ]
@@ -158,6 +163,27 @@ class FFmpegAdapter:
         except Exception:
             self._terminate_process(process)
             raise
+
+    def _probe_audio_codec(self, source_path: Path) -> str | None:
+        """Return the first audio codec name for a local source file when available."""
+        probe_cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=codec_name",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(source_path),
+        ]
+        try:
+            result = subprocess.run(probe_cmd, check=True, capture_output=True, text=True)
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            return None
+        codec = (result.stdout or "").strip().lower()
+        return codec or None
 
     @staticmethod
     def _terminate_process(process: subprocess.Popen) -> None:

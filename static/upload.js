@@ -32,7 +32,44 @@ document.addEventListener('DOMContentLoaded', () => {
     let lyricsUIAdapter = null;
     const uploadLyricsSection = document.getElementById('upload-lyrics-section');
     const uploadAiToggle = document.getElementById('upload-ai-toggle');
+    const uploadAiStatus = document.getElementById('upload-ai-status');
     const uploadLyricsToggle = document.getElementById('upload-lyrics-toggle');
+    let demucsHealth = { healthy: false, detail: t('karaoke.checking_availability') };
+
+    function applyDemucsAvailability() {
+        if (!uploadAiToggle) return;
+        uploadAiToggle.disabled = !demucsHealth.healthy;
+        if (!demucsHealth.healthy) {
+            uploadAiToggle.checked = false;
+        }
+        if (uploadAiStatus) {
+            uploadAiStatus.textContent = demucsHealth.healthy
+                ? t('karaoke.available')
+                : t('karaoke.unavailable_detail', { detail: demucsHealth.detail });
+        }
+    }
+
+    async function refreshDemucsHealth() {
+        if (uploadAiToggle) {
+            uploadAiToggle.disabled = true;
+        }
+        if (uploadAiStatus) {
+            uploadAiStatus.textContent = t('karaoke.checking_availability');
+        }
+        try {
+            const response = await fetch(appUrl('/api/settings/demucs-health'));
+            if (!response.ok) {
+                throw new Error(t('queue.demucs_health_failed'));
+            }
+            demucsHealth = await response.json();
+        } catch (error) {
+            demucsHealth = {
+                healthy: false,
+                detail: error instanceof Error ? error.message : t('queue.demucs_unavailable'),
+            };
+        }
+        applyDemucsAvailability();
+    }
 
     function initializeUploadLyricsManager() {
         if (lyricsManager) return;
@@ -114,14 +151,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lyricsManager) {
                 syncUploadLyricsMetadata();
                 lyricsManager.setEnabled(uploadLyricsToggle.checked);
-            }
-        });
-    }
-
-    if (uploadAiToggle) {
-        uploadAiToggle.addEventListener('change', () => {
-            if (!addToQueueToggle?.checked && uploadAiToggle.checked) {
-                showToast(t('upload.ai_requires_queue'), true);
             }
         });
     }
@@ -224,7 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('title', title);
         formData.append('artist', artist);
         formData.append('add_to_queue', addToQueue);
-        formData.append('is_karaoke', Boolean(addToQueue && uploadAiToggle?.checked));
+        formData.append('is_karaoke', Boolean(uploadAiToggle?.checked));
 
         // Add lyrics if available
         if (lyricsManager && lyricsManager.state.lyricsEnabled) {
@@ -261,16 +290,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     const finalizeRedirect = () => {
-                        window.location.href = appUrl('/media');
+                        const taskId = Number(response.karaoke_task_id);
+                        const target = Number.isFinite(taskId) && taskId > 0
+                            ? `/media?task_id=${taskId}`
+                            : '/media';
+                        window.location.href = appUrl(target);
                     };
 
-                    if (response.queued && response.queue_item_id) {
-                        updateProgress(100, t('upload.queueing'));
-                        fetch(appUrl(`/api/queue/${response.queue_item_id}/process`), { method: 'POST' })
-                            .catch((processError) => {
-                                console.warn('Queue processing trigger failed:', processError);
-                            })
-                            .finally(finalizeRedirect);
+                    if (response.karaoke_warning) {
+                        const warningKey = response.karaoke_warning === 'demucs_offline'
+                            ? 'karaoke.saved_without_processing'
+                            : 'karaoke.saved_task_start_failed';
+                        showToast(t(warningKey, {
+                            detail: response.karaoke_warning_detail || t('queue.demucs_unavailable'),
+                        }), true);
+                        window.setTimeout(finalizeRedirect, 1800);
                     } else {
                         finalizeRedirect();
                     }
@@ -329,4 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
             toast.classList.add('opacity-0', 'translate-y-3');
         }, 3000);
     }
+
+    applyDemucsAvailability();
+    refreshDemucsHealth();
 });

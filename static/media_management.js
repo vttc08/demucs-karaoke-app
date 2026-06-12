@@ -14,6 +14,7 @@ const editTitleInput = document.getElementById("media-edit-title");
 const editArtistInput = document.getElementById("media-edit-artist");
 const editRenameDiskCheckbox = document.getElementById("media-edit-rename-disk");
 const editAiToggle = document.getElementById("media-edit-ai-toggle");
+const editAiStatus = document.getElementById("media-edit-ai-status");
 const editLyricsToggle = document.getElementById("media-edit-lyrics-toggle");
 const editFilenamePreview = document.getElementById("media-edit-filename-preview");
 const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
@@ -55,6 +56,54 @@ function syncMediaEditLyricsMetadata() {
     lyricsManager.setMetadata(editTitleInput?.value || "", editArtistInput?.value || "", editTitleInput?.value || "");
 }
 
+function applyEditAiAvailability() {
+    if (!editAiToggle) return;
+    if (activeEditHasMulti) {
+        editAiToggle.checked = true;
+        editAiToggle.disabled = true;
+        if (editAiStatus) {
+            editAiStatus.textContent = t("karaoke.already_multi_track");
+        }
+        return;
+    }
+
+    editAiToggle.disabled = !demucsHealth.healthy;
+    if (!demucsHealth.healthy) {
+        editAiToggle.checked = false;
+    }
+    if (editAiStatus) {
+        editAiStatus.textContent = demucsHealth.healthy
+            ? t("karaoke.available")
+            : t("karaoke.unavailable_detail", { detail: demucsHealth.detail });
+    }
+}
+
+async function refreshEditDemucsHealth() {
+    if (activeEditHasMulti) {
+        applyEditAiAvailability();
+        return;
+    }
+    if (editAiToggle) {
+        editAiToggle.disabled = true;
+    }
+    if (editAiStatus) {
+        editAiStatus.textContent = t("karaoke.checking_availability");
+    }
+    try {
+        const response = await fetch(appUrl("/api/settings/demucs-health"));
+        if (!response.ok) {
+            throw new Error(t("queue.demucs_health_failed"));
+        }
+        demucsHealth = await response.json();
+    } catch (error) {
+        demucsHealth = {
+            healthy: false,
+            detail: error instanceof Error ? error.message : t("queue.demucs_unavailable"),
+        };
+    }
+    applyEditAiAvailability();
+}
+
 // Preview elements
 const previewImg = document.getElementById("media-edit-preview-img");
 const previewPlaceholder = document.getElementById("media-edit-preview-placeholder");
@@ -69,6 +118,8 @@ const activeCapabilityFilters = new Set();
 let toastTimer = null;
 let activeEditItemId = null;
 let activeEditMediaPath = "";
+let activeEditHasMulti = false;
+let demucsHealth = { healthy: false, detail: t("karaoke.checking_availability") };
 let activeTaskId = null;
 let activeTaskLogSequence = 0;
 let taskSummarySource = null;
@@ -773,6 +824,7 @@ function openEditModal(itemNode) {
         return;
     }
     activeEditItemId = itemId;
+    activeEditHasMulti = hasMulti;
     if (editItemIdInput) {
         editItemIdInput.value = itemId;
     }
@@ -808,7 +860,9 @@ function openEditModal(itemNode) {
     if (previewArtistMobile) previewArtistMobile.textContent = currentArtist || t("common.unknown_artist");
 
     // Set Toggles
-    if (editAiToggle) editAiToggle.checked = hasMulti;
+    if (editAiToggle) editAiToggle.checked = false;
+    applyEditAiAvailability();
+    refreshEditDemucsHealth();
     if (editLyricsToggle) editLyricsToggle.checked = hasLyrics;
     if (editRenameDiskCheckbox) editRenameDiskCheckbox.checked = true;
     updateFilenamePreview();
@@ -836,6 +890,7 @@ function openEditModal(itemNode) {
 
 function closeEditModal() {
     activeEditItemId = null;
+    activeEditHasMulti = false;
     if (editModal) {
         editModal.classList.add("hidden");
         editModal.setAttribute("aria-hidden", "true");
@@ -867,6 +922,7 @@ async function saveEditModal(event) {
             title: nextTitle,
             artist: nextArtist || null,
             rename_on_disk: renameOnDisk,
+            is_karaoke: Boolean(editAiToggle?.checked && !activeEditHasMulti),
         };
 
         // Add lyrics if available
@@ -892,11 +948,27 @@ async function saveEditModal(event) {
             throw new Error(error.detail || t("media.rename_failed"));
         }
 
-        showToast(renameOnDisk ? t("media.renamed_disk", { title: nextTitle }) : t("media.updated_title", { title: nextTitle }));
+        const payload = await response.json();
+        const taskId = Number(payload.karaoke_task_id);
+        const redirectTarget = Number.isFinite(taskId) && taskId > 0
+            ? `/media?task_id=${taskId}`
+            : "/media";
+        if (payload.karaoke_warning) {
+            const warningKey = payload.karaoke_warning === "demucs_offline"
+                ? "karaoke.saved_without_processing"
+                : "karaoke.saved_task_start_failed";
+            showToast(t(warningKey, {
+                detail: payload.karaoke_warning_detail || t("queue.demucs_unavailable"),
+            }));
+        } else if (payload.karaoke_started) {
+            showToast(t("media.karaoke_task_started", { title: nextTitle }));
+        } else {
+            showToast(renameOnDisk ? t("media.renamed_disk", { title: nextTitle }) : t("media.updated_title", { title: nextTitle }));
+        }
         closeEditModal();
         window.setTimeout(() => {
-            window.location.reload();
-        }, 450);
+            window.location.href = appUrl(redirectTarget);
+        }, payload.karaoke_warning ? 1800 : 450);
     } catch (error) {
         const message = error instanceof Error ? error.message : t("media.rename_failed");
         showToast(message);
@@ -1238,14 +1310,6 @@ editModal?.addEventListener("click", (event) => {
 editForm?.addEventListener("submit", saveEditModal);
 
 // Lyrics toggle handlers
-if (editAiToggle) {
-    editAiToggle.addEventListener('change', () => {
-        if (editAiToggle.checked) {
-            showToast(t("media.ai_applies_on_queue"));
-        }
-    });
-}
-
 if (editLyricsToggle) {
     editLyricsToggle.addEventListener('change', () => {
         initializeMediaEditLyricsManager();
