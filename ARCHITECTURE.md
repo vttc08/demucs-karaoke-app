@@ -388,7 +388,7 @@ The stage page uses a websocket-first model:
   - Schemes: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`
 - `adapters/ytdlp.py` injects `--proxy <url>` into yt-dlp commands for:
   - YouTube search
-  - Audio download
+  - Audio download, which now stays on explicit audio-only selectors and never falls back to a video-only stream
   - Video-only download
   - Progressive video+audio download
 - `services/lyrics_service.py` exposes shared HTTP client kwargs that add the same proxy for:

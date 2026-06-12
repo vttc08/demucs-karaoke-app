@@ -231,9 +231,10 @@ class YtDlpAdapter:
         output_stem = f"{youtube_id}.audio"
         output_template = str(output_dir / f"{output_stem}.%(ext)s")
         attempts = [
-            (None, None, False, False),
-            ("bestaudio[ext=m4a]/bestaudio/best", "web", False, True),
-            ("bestaudio/best", "web", False, True),
+            ("bestaudio[ext=m4a]/bestaudio", None, False, False),
+            ("bestaudio", None, False, False),
+            ("bestaudio[ext=m4a]/bestaudio", "web", False, True),
+            ("bestaudio", "web", False, True),
         ]
         return self._download_with_attempts(
             youtube_id=youtube_id,
@@ -259,9 +260,10 @@ class YtDlpAdapter:
         output_stem = f"{youtube_id}.audio"
         output_template = str(output_dir / f"{output_stem}.%(ext)s")
         attempts = [
-            (None, None, False, False),
-            ("bestaudio[ext=m4a]/bestaudio/best", "web", False, True),
-            ("bestaudio/best", "web", False, True),
+            ("bestaudio[ext=m4a]/bestaudio", None, False, False),
+            ("bestaudio", None, False, False),
+            ("bestaudio[ext=m4a]/bestaudio", "web", False, True),
+            ("bestaudio", "web", False, True),
         ]
         return self._download_with_attempts(
             youtube_id=youtube_id,

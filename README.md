@@ -375,7 +375,7 @@ pip install --upgrade yt-dlp
 ```
 
 For karaoke mode, this app downloads source audio directly from yt-dlp formats (instead of yt-dlp ffmpeg postprocessing), which avoids `ffprobe/ffmpeg not found` during the audio-download step.
-The downloader uses progressive fallback for unavailable formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise. When you set a video resolution cap in Settings, the app adds yt-dlp's resolution sort flag, for example `-S "res:720"`, so downloads stay at or below the chosen height. Leave the setting at `Default` to keep the current behavior unchanged.
+The downloader uses explicit audio-only selectors first for karaoke audio downloads, so yt-dlp does not silently fall back to a video-only stream under the audio filename. It still uses progressive fallback for unavailable video formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise. When you set a video resolution cap in Settings, the app adds yt-dlp's resolution sort flag, for example `-S "res:720"`, so downloads stay at or below the chosen height. Leave the setting at `Default` to keep the current behavior unchanged.
 Runtime proxy is supported through settings (`yt-dlp Proxy URL`) and applied to:
 - yt-dlp search/download commands
 - lyrics provider requests (Musixmatch, NetEase, LRCLib, and Last.fm metadata lookup)
@@ -397,7 +397,7 @@ yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
 
 # Karaoke mode: separate audio-only file
 yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
-  -f "bestaudio[ext=m4a]/bestaudio/best" \
+  -f "bestaudio[ext=m4a]/bestaudio" \
   --extractor-args "youtube:player_client=web" \
   --no-playlist \
   -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
