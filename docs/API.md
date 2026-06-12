@@ -392,7 +392,7 @@ Uploads a local media file into the library. The request is multipart form data.
 - `title` (required): media title
 - `artist` (optional): media artist
 - `add_to_queue` (optional, default `true`): queue the uploaded media after saving
-- `is_karaoke` (optional, default `false`): request karaoke processing for the queued item when `add_to_queue` is true
+- `is_karaoke` (optional, default `false`): request karaoke processing for the uploaded media
 - `lyrics_text` (optional): lyrics text to persist as a reusable sidecar
 - `lyrics_format` (optional): `lrc` or `txt`; inferred from text when omitted by queue/service paths
 
@@ -404,11 +404,20 @@ Uploads a local media file into the library. The request is multipart form data.
   "filename": "artist-song.mp4",
   "queued": true,
   "queue_item_id": 10,
-  "lyrics_path": "/cache/lyrics/artist-song.lrc"
+  "lyrics_path": "/media/artist-song.lrc",
+  "karaoke_requested": true,
+  "karaoke_started": true,
+  "karaoke_task_id": 12,
+  "karaoke_warning": null,
+  "karaoke_warning_detail": null
 }
 ```
 
 When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued. Upload and media-edit lyrics are saved beside the media file as `<filename>.lrc` or `<filename>.txt` so library scans can rediscover them.
+
+Queued uploads use a single queue preparation task. Non-queued AI karaoke uploads use a
+`media_karaoke` task. If Demucs is unavailable at submission time, the file and metadata remain
+saved, `karaoke_started` is false, and the response includes a warning.
 
 ---
 
@@ -480,12 +489,15 @@ Updates the media row title and artist. When `rename_on_disk` is true, the serve
   "title": "New Title",
   "artist": "New Artist",
   "rename_on_disk": true,
+  "is_karaoke": true,
   "lyrics_text": "[00:01.00]Line 1",
   "lyrics_format": "lrc"
 }
 ```
 
-`lyrics_text` and `lyrics_format` are optional. When `lyrics_text` is supplied, the media row stores a reusable media-adjacent lyrics sidecar and returns its path in the summary.
+`lyrics_text`, `lyrics_format`, and `is_karaoke` are optional. When `is_karaoke` is true, the
+server starts a `media_karaoke` task only when the item is not already multi-track and Demucs is
+online. Rename and lyrics changes remain saved if the health check fails.
 
 **Response:**
 ```json
@@ -494,7 +506,12 @@ Updates the media row title and artist. When `rename_on_disk` is true, the serve
   "summary": {
     "renamed_files": 3,
     "target_stem": "new-title-new-artist"
-  }
+  },
+  "karaoke_requested": true,
+  "karaoke_started": true,
+  "karaoke_task_id": 17,
+  "karaoke_warning": null,
+  "karaoke_warning_detail": null
 }
 ```
 
@@ -694,6 +711,9 @@ POST /api/media/{item_id}/karaoke
 ```
 
 Admin-only endpoint for creating or reusing a durable karaoke-processing task for an existing media library item.
+
+Returns `409` when the media file is missing, Demucs is offline, or the item already has a vocals
+sidecar.
 
 **Response:**
 ```json

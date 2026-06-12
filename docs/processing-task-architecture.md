@@ -33,6 +33,7 @@ Cancellation is a first-class terminal state:
 - queue rows are reset back to `pending`
 - media rows are marked missing again so the item can be queued afresh
 - partially downloaded cache artifacts and generated outputs are removed during cleanup
+- local `media_karaoke` and uploaded/library queue tasks preserve their original durable media file; only scratch and task-owned temporary outputs are removed
 
 ## Live State
 

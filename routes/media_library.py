@@ -21,6 +21,7 @@ from services.media_naming import build_media_stem
 from services.media_thumbnail_service import MediaThumbnailService
 from services.processing_task_service import processing_task_service, task_execution_coordinator
 from services.queue_service import QueueService
+from services.runtime_settings_service import RuntimeSettingsService
 from services.websocket_manager import manager
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,17 @@ media_library_sync_service = MediaLibrarySyncService()
 media_library_maintenance_service = MediaLibraryMaintenanceService()
 media_thumbnail_service = MediaThumbnailService()
 queue_service = QueueService()
+runtime_settings_service = RuntimeSettingsService()
 _UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
+
+
+def _karaoke_availability(media_item: MediaItem) -> tuple[bool, str | None, str | None]:
+    if media_item.vocals_path and media_item.vocals_path.strip():
+        return False, "already_multi_track", None
+    health = runtime_settings_service.get_demucs_health()
+    if not health.healthy:
+        return False, "demucs_offline", health.detail
+    return True, None, None
 
 
 @router.post("/upload")
@@ -64,6 +75,11 @@ async def upload_media(
     filename = f"{final_stem}{ext}"
     target_path = settings.media_path / filename
     queued_item = None
+    karaoke_requested = bool(is_karaoke)
+    karaoke_started = False
+    karaoke_task_id = None
+    karaoke_warning = None
+    karaoke_warning_detail = None
 
     try:
         settings.media_path.mkdir(parents=True, exist_ok=True)
@@ -89,6 +105,12 @@ async def upload_media(
                 storage="media",
             )
 
+        karaoke_available = False
+        if karaoke_requested:
+            karaoke_available, karaoke_warning, karaoke_warning_detail = _karaoke_availability(
+                media_item
+            )
+
         if add_to_queue:
             queued_item = queue_service.add_to_queue(
                 db,
@@ -96,13 +118,30 @@ async def upload_media(
                     media_item_id=media_item.id,
                     title=media_item.title,
                     artist=media_item.artist,
-                    is_karaoke=is_karaoke,
+                    is_karaoke=karaoke_requested and karaoke_available,
                 ),
             )
             await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
         else:
             db.commit()
         db.refresh(media_item)
+
+        try:
+            if queued_item is not None:
+                task = processing_task_service.get_or_create_queue_task(db, queued_item.id)
+                task_execution_coordinator.start(task.id)
+                karaoke_task_id = task.id if karaoke_requested and karaoke_available else None
+                karaoke_started = bool(karaoke_task_id)
+            elif karaoke_requested and karaoke_available:
+                task = processing_task_service.get_or_create_media_task(db, media_item.id)
+                task_execution_coordinator.start(task.id)
+                karaoke_task_id = task.id
+                karaoke_started = True
+        except Exception as exc:
+            logger.exception("Failed to start upload processing media_id=%s", media_item.id)
+            if karaoke_requested:
+                karaoke_warning = "task_start_failed"
+                karaoke_warning_detail = str(exc)
     except HTTPException:
         db.rollback()
         if target_path.exists():
@@ -132,6 +171,11 @@ async def upload_media(
         "queued": bool(add_to_queue),
         "queue_item_id": queued_item.id if queued_item else None,
         "lyrics_path": media_item.lyrics_path,
+        "karaoke_requested": karaoke_requested,
+        "karaoke_started": karaoke_started,
+        "karaoke_task_id": karaoke_task_id,
+        "karaoke_warning": karaoke_warning,
+        "karaoke_warning_detail": karaoke_warning_detail,
     }
 
 
@@ -145,8 +189,17 @@ def process_media_item_karaoke(
     media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
     if media_item is None:
         raise HTTPException(status_code=404, detail="Media item not found")
-    if media_item.missing:
+    media_file = queue_service._media_url_to_file(media_item.media_path)
+    if media_item.missing or media_file is None or not media_file.exists():
         raise HTTPException(status_code=409, detail="Media item file is missing")
+    karaoke_available, warning, detail = _karaoke_availability(media_item)
+    if not karaoke_available:
+        if warning == "already_multi_track":
+            raise HTTPException(status_code=409, detail="Media item is already multi-track capable")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Demucs unavailable: {detail or 'health check failed'}",
+        )
 
     task = processing_task_service.get_or_create_media_task(db, item_id)
     task_execution_coordinator.start(task.id)
@@ -222,6 +275,14 @@ def rename_media_item(
     lyrics_format = payload.get("lyrics_format")
     if lyrics_format not in (None, "lrc", "txt"):
         raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc' or 'txt'")
+    is_karaoke = payload.get("is_karaoke", False)
+    if not isinstance(is_karaoke, bool):
+        raise HTTPException(status_code=400, detail="is_karaoke must be a boolean")
+
+    karaoke_started = False
+    karaoke_task_id = None
+    karaoke_warning = None
+    karaoke_warning_detail = None
 
     try:
         summary = media_library_maintenance_service.rename_media_item(
@@ -243,6 +304,24 @@ def rename_media_item(
             )
             db.commit()
             summary["lyrics_path"] = media_item.lyrics_path
+
+        media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
+        if media_item is None:
+            raise MediaItemNotFoundError(f"Media item not found: {item_id}")
+        if is_karaoke:
+            karaoke_available, karaoke_warning, karaoke_warning_detail = _karaoke_availability(
+                media_item
+            )
+            if karaoke_available:
+                try:
+                    task = processing_task_service.get_or_create_media_task(db, item_id)
+                    task_execution_coordinator.start(task.id)
+                    karaoke_started = True
+                    karaoke_task_id = task.id
+                except Exception as exc:
+                    logger.exception("Failed to start media karaoke task media_id=%s", item_id)
+                    karaoke_warning = "task_start_failed"
+                    karaoke_warning_detail = str(exc)
     except MediaItemNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except MediaItemRenameConflictError as exc:
@@ -251,4 +330,12 @@ def rename_media_item(
         logger.exception("Failed to rename media item media_id=%s", item_id)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    return {"status": "ok", "summary": summary}
+    return {
+        "status": "ok",
+        "summary": summary,
+        "karaoke_requested": is_karaoke,
+        "karaoke_started": karaoke_started,
+        "karaoke_task_id": karaoke_task_id,
+        "karaoke_warning": karaoke_warning,
+        "karaoke_warning_detail": karaoke_warning_detail,
+    }

@@ -1607,6 +1607,50 @@ def test_processing_task_cancel_cleans_up_partial_artifacts_and_resets_rows(db_s
     assert not any((cache_root / "demucs_outputs").glob("cancel-song*"))
 
 
+def test_media_karaoke_cancel_preserves_original_local_media(db_session, tmp_path, monkeypatch):
+    """Canceling a local media task should remove scratch files without deleting the upload."""
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media_file = media_root / "local-cancel.mp4"
+    media_file.write_bytes(b"original-video")
+    media = MediaItem(
+        file_stem="local-cancel",
+        title="Local Cancel",
+        media_path="/media/local-cancel.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="library_media",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PROCESSING.value,
+        stage="demucs",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+    scratch_root = cache_root / "audio"
+    scratch_root.mkdir(parents=True)
+    (scratch_root / "local-cancel.audio.m4a").write_bytes(b"scratch")
+
+    asyncio.run(processing_task_service.cancel_task(db_session, task.id))
+    asyncio.run(task_stream_manager.clear_task(task.id))
+
+    db_session.refresh(media)
+    assert media_file.read_bytes() == b"original-video"
+    assert media.missing is False
+    assert media.vocals_path is None
+    assert not any(scratch_root.glob("local-cancel*"))
+
+
 def test_processing_task_cancel_permissions_and_cascade_ids(db_session):
     """Guests should only cancel their own active queue tasks while admins get same-media cascades."""
     service = QueueService()
@@ -3548,6 +3592,70 @@ def test_netease_provider_prefers_cjk_candidate_and_rejects_low_confidence():
 
     low_conf_only = lp_module.NeteaseLyricsProvider._select_best_candidate([unrelated], inferred)
     assert low_conf_only is None
+
+
+@pytest.mark.asyncio
+async def test_media_karaoke_audio_only_uses_instrumental_as_primary(
+    db_session, tmp_path
+):
+    """Audio uploads should finalize without trying to map a video stream."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+        original_file = settings.media_path / "audio-karaoke.mp3"
+        original_file.write_bytes(b"original-audio")
+        media = MediaItem(
+            file_stem="audio-karaoke",
+            title="Audio Karaoke",
+            media_path="/media/audio-karaoke.mp3",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+        db_session.refresh(media)
+        task = processing_task_service.get_or_create_media_task(db_session, media.id)
+
+        no_vocals = settings.cache_path / "demucs_outputs" / "audio-karaoke.no_vocals.wav"
+        vocals = settings.cache_path / "demucs_outputs" / "audio-karaoke.vocals.wav"
+        no_vocals.parent.mkdir(parents=True, exist_ok=True)
+        no_vocals.write_bytes(b"instrumental")
+        vocals.write_bytes(b"guide-vocals")
+
+        service = KaraokeService()
+        service.ffmpeg = Mock()
+        service.demucs_client = Mock()
+        service.demucs_client.health_check.return_value = DemucsHealthResponse(
+            api_url="http://demucs",
+            healthy=True,
+            detail="ok",
+        )
+        service.demucs_client.separate_vocals = AsyncMock(
+            return_value=DemucsResponse(
+                no_vocals_path=str(no_vocals),
+                vocals_path=str(vocals),
+            )
+        )
+
+        await service.process_task(db_session, task.id)
+
+        db_session.refresh(media)
+        db_session.refresh(task)
+        assert task.status == ProcessingTaskStatus.DONE.value
+        assert media.media_path == "/media/audio-karaoke.wav"
+        assert media.vocals_path == "/media/audio-karaoke.vocals.wav"
+        assert (settings.media_path / "audio-karaoke.wav").read_bytes() == b"instrumental"
+        assert (settings.media_path / "audio-karaoke.vocals.wav").read_bytes() == b"guide-vocals"
+        assert not original_file.exists()
+        service.ffmpeg.extract_audio.assert_not_called()
+        service.ffmpeg.combine_audio_video.assert_not_called()
+        await task_stream_manager.clear_task(task.id)
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
 
 
 @pytest.mark.asyncio

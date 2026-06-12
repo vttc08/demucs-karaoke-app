@@ -71,7 +71,8 @@ def client():
 
     Base.metadata.create_all(bind=engine)
     ensure_auxiliary_schema(engine)
-    yield TestClient(app)
+    with patch("routes.media_library.task_execution_coordinator.start"):
+        yield TestClient(app)
     settings.demucs_api_url = original_demucs_api_url
     settings.demucs_model = original_demucs_model
     settings.demucs_device = original_demucs_device
@@ -324,30 +325,72 @@ def test_process_queue_item_restarts_existing_active_task(client):
     mock_start.assert_called_once_with(payload["task_id"])
 
 
-def test_media_karaoke_route_creates_task(client):
+def test_media_karaoke_route_creates_task(client, tmp_path):
     """Admin media karaoke trigger should create a durable media task."""
     authenticate_admin_client(client)
-    with TestingSessionLocal() as db:
-        media_item = MediaItem(
-            title="Local Track",
-            artist="Singer",
-            file_stem="local-track",
-            media_path="/media/local-track.mp4",
-            missing=False,
-        )
-        db.add(media_item)
-        db.commit()
-        db.refresh(media_item)
-        media_id = media_item.id
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.media_path / "local-track.mp4").write_bytes(b"video")
+        with TestingSessionLocal() as db:
+            media_item = MediaItem(
+                title="Local Track",
+                artist="Singer",
+                file_stem="local-track",
+                media_path="/media/local-track.mp4",
+                missing=False,
+            )
+            db.add(media_item)
+            db.commit()
+            db.refresh(media_item)
+            media_id = media_item.id
 
-    with patch("routes.media_library.task_execution_coordinator.start") as mock_start:
+        healthy = DemucsHealthResponse(api_url="http://demucs", healthy=True, detail="ok")
+        with (
+            patch(
+                "routes.media_library.runtime_settings_service.get_demucs_health",
+                return_value=healthy,
+            ),
+            patch("routes.media_library.task_execution_coordinator.start") as mock_start,
+        ):
+            response = client.post(f"/api/media/{media_id}/karaoke")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["media_id"] == media_id
+        assert isinstance(payload["task_id"], int)
+        mock_start.assert_called_once_with(payload["task_id"])
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_karaoke_route_rejects_existing_multitrack(client, tmp_path):
+    """Existing vocals sidecars should prevent duplicate karaoke tasks."""
+    authenticate_admin_client(client)
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.media_path / "ready.mp4").write_bytes(b"video")
+        (settings.media_path / "ready.vocals.wav").write_bytes(b"vocals")
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Ready",
+                media_path="/media/ready.mp4",
+                vocals_path="/media/ready.vocals.wav",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
         response = client.post(f"/api/media/{media_id}/karaoke")
 
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["media_id"] == media_id
-    assert isinstance(payload["task_id"], int)
-    mock_start.assert_called_once_with(payload["task_id"])
+        assert response.status_code == 409
+        assert "already multi-track" in response.json()["detail"]
+    finally:
+        settings.media_path = original_media
 
 
 def test_tasks_api_lists_active_tasks(client):
@@ -1402,7 +1445,14 @@ def test_upload_media_saves_file_and_queues_item(client, tmp_path):
         settings.media_path = tmp_path / "media"
         settings.media_path.mkdir(parents=True, exist_ok=True)
 
-        with patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()):
+        healthy = DemucsHealthResponse(api_url="http://demucs", healthy=True, detail="ok")
+        with (
+            patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()),
+            patch(
+                "routes.media_library.runtime_settings_service.get_demucs_health",
+                return_value=healthy,
+            ),
+        ):
             response = client.post(
                 "/api/media/upload",
                 data={
@@ -1447,7 +1497,14 @@ def test_upload_media_persists_lyrics_and_queue_karaoke_flag(client, tmp_path):
         settings.media_path.mkdir(parents=True, exist_ok=True)
         settings.cache_path.mkdir(parents=True, exist_ok=True)
 
-        with patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()):
+        healthy = DemucsHealthResponse(api_url="http://demucs", healthy=True, detail="ok")
+        with (
+            patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()),
+            patch(
+                "routes.media_library.runtime_settings_service.get_demucs_health",
+                return_value=healthy,
+            ),
+        ):
             response = client.post(
                 "/api/media/upload",
                 data={
@@ -1465,6 +1522,8 @@ def test_upload_media_persists_lyrics_and_queue_karaoke_flag(client, tmp_path):
         payload = response.json()
         expected_stem = build_media_stem("Upload Lyrics", "Upload Artist")
         assert payload["lyrics_path"] == f"/media/{expected_stem}.lrc"
+        assert payload["karaoke_started"] is True
+        assert isinstance(payload["karaoke_task_id"], int)
         assert (settings.media_path / f"{expected_stem}.lrc").read_text(
             encoding="utf-8"
         ) == "[00:01.00]Uploaded line"
@@ -1477,6 +1536,95 @@ def test_upload_media_persists_lyrics_and_queue_karaoke_flag(client, tmp_path):
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
+
+
+def test_upload_media_starts_media_karaoke_task_without_queue(client, tmp_path):
+    """AI uploads should create a media task when Add to queue is disabled."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        healthy = DemucsHealthResponse(api_url="http://demucs", healthy=True, detail="ok")
+
+        with (
+            patch(
+                "routes.media_library.runtime_settings_service.get_demucs_health",
+                return_value=healthy,
+            ),
+            patch("routes.media_library.task_execution_coordinator.start") as mock_start,
+        ):
+            response = client.post(
+                "/api/media/upload",
+                data={
+                    "title": "Standalone Karaoke",
+                    "add_to_queue": "false",
+                    "is_karaoke": "true",
+                },
+                files={"file": ("standalone.mp3", b"audio-bytes", "audio/mpeg")},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["queued"] is False
+        assert payload["karaoke_started"] is True
+        assert isinstance(payload["karaoke_task_id"], int)
+        mock_start.assert_called_once_with(payload["karaoke_task_id"])
+        with TestingSessionLocal() as db:
+            task = db.query(ProcessingTask).filter(
+                ProcessingTask.id == payload["karaoke_task_id"]
+            ).one()
+            assert task.task_type == "media_karaoke"
+            assert task.target_media_item_id == payload["media_id"]
+    finally:
+        settings.media_path = original_media
+
+
+def test_upload_media_offline_saves_and_queues_without_karaoke(client, tmp_path):
+    """A late Demucs outage should preserve the upload and queue the original media."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        offline = DemucsHealthResponse(
+            api_url="http://demucs",
+            healthy=False,
+            detail="connection refused",
+        )
+
+        with (
+            patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()),
+            patch(
+                "routes.media_library.runtime_settings_service.get_demucs_health",
+                return_value=offline,
+            ),
+            patch("routes.media_library.task_execution_coordinator.start") as mock_start,
+        ):
+            response = client.post(
+                "/api/media/upload",
+                data={
+                    "title": "Offline Upload",
+                    "add_to_queue": "true",
+                    "is_karaoke": "true",
+                },
+                files={"file": ("offline.mp4", b"video-bytes", "video/mp4")},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["karaoke_requested"] is True
+        assert payload["karaoke_started"] is False
+        assert payload["karaoke_task_id"] is None
+        assert payload["karaoke_warning"] == "demucs_offline"
+        assert (settings.media_path / payload["filename"]).exists()
+        mock_start.assert_called_once()
+
+        with TestingSessionLocal() as db:
+            queue_item = db.query(QueueItem).filter(
+                QueueItem.id == payload["queue_item_id"]
+            ).one()
+            assert queue_item.requested_karaoke is False
+    finally:
+        settings.media_path = original_media
 
 
 def test_upload_media_generates_thumbnail_for_mp3(client, tmp_path):
@@ -1911,6 +2059,55 @@ def test_media_rename_route_updates_database_and_files(client, tmp_path):
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
+
+
+def test_media_rename_route_can_start_karaoke_task(client, tmp_path):
+    """Saving media edits with AI karaoke should start a media task."""
+    authenticate_admin_client(client)
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        media_file = settings.media_path / "edit-karaoke.mp4"
+        media_file.write_bytes(b"video")
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Edit Karaoke",
+                artist="Artist",
+                file_stem="edit-karaoke",
+                media_path="/media/edit-karaoke.mp4",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        healthy = DemucsHealthResponse(api_url="http://demucs", healthy=True, detail="ok")
+        with (
+            patch(
+                "routes.media_library.runtime_settings_service.get_demucs_health",
+                return_value=healthy,
+            ),
+            patch("routes.media_library.task_execution_coordinator.start") as mock_start,
+        ):
+            response = client.patch(
+                f"/api/media/{media_id}",
+                json={
+                    "title": "Edit Karaoke",
+                    "artist": "Artist",
+                    "rename_on_disk": False,
+                    "is_karaoke": True,
+                },
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["karaoke_requested"] is True
+        assert payload["karaoke_started"] is True
+        assert isinstance(payload["karaoke_task_id"], int)
+        mock_start.assert_called_once_with(payload["karaoke_task_id"])
+    finally:
+        settings.media_path = original_media
 
 
 def test_media_rename_route_requires_admin(client):

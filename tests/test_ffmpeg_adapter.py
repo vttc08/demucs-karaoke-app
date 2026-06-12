@@ -45,6 +45,7 @@ def test_extract_audio_uses_stream_copy(monkeypatch, tmp_path):
         return subprocess.CompletedProcess(args=cmd, returncode=0)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(adapter, "_probe_audio_codec", lambda _path: "aac")
 
     source_path = tmp_path / "in.mp4"
     output_path = tmp_path / "audio.mka"
@@ -56,6 +57,30 @@ def test_extract_audio_uses_stream_copy(monkeypatch, tmp_path):
     assert "-vn" in cmd
     assert "-c:a" in cmd
     assert cmd[cmd.index("-c:a") + 1] == "copy"
+
+
+def test_extract_audio_transcodes_unsupported_streams(monkeypatch, tmp_path):
+    """WebM/Opus inputs should transcode to a Demucs-friendly m4a."""
+    adapter = FFmpegAdapter(ffmpeg_path="/bin/ffmpeg")
+    captured_cmd = {}
+
+    def fake_run(cmd, check, capture_output):
+        captured_cmd["cmd"] = cmd
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(adapter, "_probe_audio_codec", lambda _path: "opus")
+
+    source_path = tmp_path / "in.webm"
+    output_path = tmp_path / "audio.m4a"
+    source_path.write_bytes(b"v")
+
+    adapter.extract_audio(source_path=source_path, output_path=output_path)
+
+    cmd = captured_cmd["cmd"]
+    assert "-vn" in cmd
+    assert "-c:a" in cmd
+    assert cmd[cmd.index("-c:a") + 1] == "aac"
 
 
 def test_extract_audio_terminates_child_on_cancel(monkeypatch, tmp_path):
@@ -86,6 +111,7 @@ def test_extract_audio_terminates_child_on_cancel(monkeypatch, tmp_path):
 
     fake_process = FakeProcess()
     monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: fake_process)
+    monkeypatch.setattr(adapter, "_probe_audio_codec", lambda _path: "aac")
 
     source_path = tmp_path / "in.mp4"
     output_path = tmp_path / "audio.mka"
