@@ -80,6 +80,7 @@ a server-side admin session after successful authentication.
 ```bash
 uv run python main.py
 ```
+The dev entrypoint uses a finite graceful-shutdown timeout, so active SSE/WebSocket clients will not block Ctrl-C or hot reload forever.
 
 Or with uvicorn directly:
 ```bash

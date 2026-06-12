@@ -124,9 +124,8 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-if __name__ == "__main__":
-    import uvicorn
-
+def build_uvicorn_run_kwargs() -> dict[str, object]:
+    """Build the Uvicorn launch arguments used by the local dev entrypoint."""
     log_dir = Path(settings.log_dir)
     if log_dir.is_absolute():
         try:
@@ -134,12 +133,11 @@ if __name__ == "__main__":
         except ValueError:
             log_dir = Path("logs")
 
-    uvicorn.run(
-        "main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=True,
-        reload_excludes=[
+    return {
+        "host": settings.host,
+        "port": settings.port,
+        "reload": True,
+        "reload_excludes": [
             str(log_dir),
             f"{log_dir}/*",
             f"{log_dir}/**/*",
@@ -147,4 +145,12 @@ if __name__ == "__main__":
             "*.log",
             "*.log.*",
         ],
-    )
+        # Long-lived SSE and websocket clients should not block Ctrl-C or reload forever.
+        "timeout_graceful_shutdown": 3,
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("main:app", **build_uvicorn_run_kwargs())
