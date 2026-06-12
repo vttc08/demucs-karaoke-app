@@ -1202,8 +1202,6 @@ async function loadLyricsCues() {
         lyricsState.available = lyricCues.length > 0;
         if (!lyricsState.available) {
             lyricsState.enabled = false;
-        } else if (!lyricsState.enabled) {
-            lyricsState.enabled = true;
         }
         activeLyricCueIndex = null;
         updateLyricsUi();

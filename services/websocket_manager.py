@@ -472,11 +472,8 @@ class ConnectionManager:
         await self.broadcast_stage_state_update(source=source)
 
     async def reset_stage_state(self, source: str = "unknown"):
-        """Reset stage state defaults for a newly playing item."""
+        """Reset per-item playback state while preserving user mix preferences."""
         self._stage_state["is_paused"] = False
-        self._stage_state["vocals_enabled"] = True
-        self._stage_state["vocals_volume"] = 1.0
-        self._stage_state["lyrics_enabled"] = True
         self._stage_state["current_time"] = 0.0
         await self.broadcast_stage_state_update(source=source)
 

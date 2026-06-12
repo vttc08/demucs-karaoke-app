@@ -202,7 +202,7 @@ The stage page uses a websocket-first model:
 - Media-library scan treats transient files such as `*.audio.*` as scratch artifacts, skips duplicate
   legacy `*.karaoke.*` files when a canonical `/media/<stem>.<ext>` sibling exists, and reattaches
   canonical `*.vocals.*` sidecars when possible.
-- Vocal mix state is runtime-only and resets when the current queue item changes.
+- Vocal mix state and lyrics visibility persist across queue-item transitions until the user changes them again; only playback position and paused state reset on item changes.
 
 ## Local thumbnails and audio cover art
 

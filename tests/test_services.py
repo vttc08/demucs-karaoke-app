@@ -2053,6 +2053,41 @@ async def test_connection_manager_stage_time_update_targets_queue_stage_and_lyri
     assert any(message["type"] == "stage_time_update" for message in lyrics_socket.messages)
 
 
+@pytest.mark.asyncio
+async def test_connection_manager_reset_stage_state_preserves_mix_preferences():
+    """Item transitions should keep the user's vocal and lyrics mix choices."""
+    manager = ConnectionManager()
+    manager._stage_state["vocals_enabled"] = False
+    manager._stage_state["vocals_volume"] = 0.35
+    manager._stage_state["lyrics_enabled"] = False
+    manager._stage_state["is_paused"] = True
+    manager._stage_state["current_time"] = 91.5
+
+    class DummySocket:
+        def __init__(self):
+            self.messages = []
+
+        async def send_json(self, message):
+            self.messages.append(message)
+
+    socket = DummySocket()
+    manager.active_connections.append(socket)
+    manager._connection_context[socket] = {"role": "queue"}
+
+    await manager.reset_stage_state(source="queue")
+
+    state = manager.get_stage_state()
+    assert state["vocals_enabled"] is False
+    assert state["vocals_volume"] == 0.35
+    assert state["lyrics_enabled"] is False
+    assert state["is_paused"] is False
+    assert state["current_time"] == 0.0
+    assert socket.messages[-1]["type"] == "stage_state_update"
+    assert socket.messages[-1]["data"]["vocals_enabled"] is False
+    assert socket.messages[-1]["data"]["vocals_volume"] == 0.35
+    assert socket.messages[-1]["data"]["lyrics_enabled"] is False
+
+
 def test_queue_service_skip_current_item_promotes_next_ready(db_session):
     """Test skipping current item promotes next ready item."""
     service = QueueService()

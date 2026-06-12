@@ -143,7 +143,7 @@ and `/static/...`.
      - Audio-only items such as MP3s use embedded album art as the stage background when available, with a branded fallback background otherwise
      - When the queue is empty, stage loops lobby media; when a song becomes playable, stage switches to it automatically and returns to lobby when queue drains
      - Responsive controls overlay: desktop adds a dedicated playback seek bar row, while mobile stays icon-first and moves detailed vocals volume adjustment to `/queue`
-     - Toggle the lyrics overlay on or off while playback is running; the overlay only appears in fullscreen so it does not block stage controls on mobile
+     - Toggle the lyrics overlay on or off while playback is running; vocal mix and lyrics visibility persist across song changes, and the overlay only appears in fullscreen so it does not block stage controls on mobile
      - Desktop stage also includes keyboard shortcuts and a help icon: `←`/`→` seek 5 seconds, `R` resync, `V` vocals, `L` lyrics, `Q` QR, `?` help; the help panel stays open until you close it explicitly
     - Compact "up next" chips without queue-management actions
     - Auto-advances when song ends
