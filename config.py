@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     demucs_output_format: str = "wav"
     demucs_mp3_bitrate: int = 320
     demucs_direct_media_max_mb: int = 500
+    whisperx_transcription_model: str = "tiny"
+    whisperx_align_language: str = "en"
+    whisperx_detect_language: bool = False
+    whisperx_use_synced_lyrics: bool = False
+    whisperx_preload_models: str = "transcription=tiny,align=en"
     lrclib_api_url: str = "https://lrclib.net"
     musixmatch_token: str = ""
     lastfm_api_key: str = ""

@@ -603,6 +603,26 @@ class KaraokeService:
         return not self.ffmpeg.has_video_stream(media_path)
 
     @staticmethod
+    def _alignment_lyrics_for_media(media_item: MediaItem) -> tuple[str | None, str | None]:
+        """Return lyrics text and format suitable for WhisperX alignment."""
+        lyrics_path = KaraokeService._existing_local_file(media_item.lyrics_path)
+        if lyrics_path is None or lyrics_path.suffix.lower() not in {".lrc", ".txt"}:
+            return None, None
+        try:
+            lyrics_text = lyrics_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            logger.warning(
+                "Failed to read lyrics sidecar for alignment media_id=%s path=%s",
+                media_item.id,
+                lyrics_path,
+            )
+            return None, None
+        if not lyrics_text:
+            return None, None
+        lyrics_format = "lrc" if lyrics_path.suffix.lower() == ".lrc" else "txt"
+        return lyrics_text, lyrics_format
+
+    @staticmethod
     def _local_file_size_bytes(media_path: Path) -> int:
         """Return the current local file size in bytes."""
         return media_path.stat().st_size
@@ -703,6 +723,7 @@ class KaraokeService:
         cancel_event: threading.Event | None = None,
     ):
         """Run Demucs separation with one fallback retry for extracted local audio."""
+        lyrics_text, lyrics_format = self._alignment_lyrics_for_media(media_item)
         try:
             await KaraokeService._raise_if_canceled(cancel_event, task_id)
             loop = asyncio.get_running_loop()
@@ -724,11 +745,25 @@ class KaraokeService:
             if cancel_event is None:
                 return await self.demucs_client.separate_vocals(
                     audio_path,
+                    lyrics_text=lyrics_text,
+                    lyrics_format=lyrics_format,
+                    transcription_model=settings.whisperx_transcription_model,
+                    align_language=settings.whisperx_align_language,
+                    detect_language=settings.whisperx_detect_language,
+                    use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+                    whisperx_preload_models=settings.whisperx_preload_models,
                     progress_callback=progress_callback,
                     log_callback=log_callback,
                 )
             return await self.demucs_client.separate_vocals(
                 audio_path,
+                lyrics_text=lyrics_text,
+                lyrics_format=lyrics_format,
+                transcription_model=settings.whisperx_transcription_model,
+                align_language=settings.whisperx_align_language,
+                detect_language=settings.whisperx_detect_language,
+                use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+                whisperx_preload_models=settings.whisperx_preload_models,
                 cancel_event=cancel_event,
                 progress_callback=progress_callback,
                 log_callback=log_callback,
@@ -792,11 +827,25 @@ class KaraokeService:
             if cancel_event is None:
                 return await self.demucs_client.separate_vocals(
                     fallback_audio_path,
+                    lyrics_text=lyrics_text,
+                    lyrics_format=lyrics_format,
+                    transcription_model=settings.whisperx_transcription_model,
+                    align_language=settings.whisperx_align_language,
+                    detect_language=settings.whisperx_detect_language,
+                    use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+                    whisperx_preload_models=settings.whisperx_preload_models,
                     progress_callback=progress_callback,
                     log_callback=log_callback,
                 )
             return await self.demucs_client.separate_vocals(
                 fallback_audio_path,
+                lyrics_text=lyrics_text,
+                lyrics_format=lyrics_format,
+                transcription_model=settings.whisperx_transcription_model,
+                align_language=settings.whisperx_align_language,
+                detect_language=settings.whisperx_detect_language,
+                use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+                whisperx_preload_models=settings.whisperx_preload_models,
                 cancel_event=cancel_event,
                 progress_callback=progress_callback,
                 log_callback=log_callback,

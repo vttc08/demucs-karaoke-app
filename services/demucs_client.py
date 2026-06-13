@@ -29,7 +29,7 @@ class DemucsClient:
         self.api_url = api_url or settings.demucs_api_url
 
     @staticmethod
-    def _extract_stems_zip(payload: bytes) -> tuple[bytes, bytes, str]:
+    def _extract_stems_zip(payload: bytes) -> tuple[bytes, bytes, bytes | None, str]:
         with zipfile.ZipFile(BytesIO(payload), mode="r") as archive:
             names = set(archive.namelist())
             no_vocals_name = next((name for name in names if name.startswith("no_vocals.")), None)
@@ -40,16 +40,49 @@ class DemucsClient:
             extension = Path(no_vocals_name).suffix.lstrip(".").lower() or "wav"
             no_vocals_bytes = archive.read(no_vocals_name)
             vocals_bytes = archive.read(vocals_name)
-            return no_vocals_bytes, vocals_bytes, extension
+            aligned_bytes = None
+            aligned_name = next(
+                (name for name in names if name == "aligned_lyrics.json" or name.endswith("/aligned_lyrics.json")),
+                None,
+            )
+            if aligned_name:
+                aligned_bytes = archive.read(aligned_name)
+            return no_vocals_bytes, vocals_bytes, aligned_bytes, extension
 
-    def _build_request_data(self) -> dict[str, str]:
+    def _build_request_data(
+        self,
+        *,
+        lyrics_text: str | None = None,
+        lyrics_format: str | None = None,
+        transcription_model: str | None = None,
+        align_language: str | None = None,
+        detect_language: bool | None = None,
+        use_synced_lyrics: bool | None = None,
+        whisperx_preload_models: str | None = None,
+        compute_type: str | None = None,
+    ) -> dict[str, str]:
         data = {
             "model": settings.demucs_model,
             "device": settings.demucs_device,
             "output_format": settings.demucs_output_format,
+            "transcription_model": transcription_model or settings.whisperx_transcription_model,
+            "align_language": align_language if align_language is not None else settings.whisperx_align_language,
+            "detect_language": str(
+                settings.whisperx_detect_language if detect_language is None else detect_language
+            ).lower(),
+            "use_synced_lyrics": str(
+                settings.whisperx_use_synced_lyrics if use_synced_lyrics is None else use_synced_lyrics
+            ).lower(),
+            "whisperx_preload_models": whisperx_preload_models or settings.whisperx_preload_models,
         }
         if settings.demucs_output_format == "mp3":
             data["mp3_bitrate"] = str(settings.demucs_mp3_bitrate)
+        if lyrics_text:
+            data["lyrics_text"] = lyrics_text
+        if lyrics_format:
+            data["lyrics_format"] = lyrics_format
+        if compute_type:
+            data["compute_type"] = compute_type
         return data
 
     @staticmethod
@@ -80,6 +113,14 @@ class DemucsClient:
         self,
         audio_path: Path,
         *,
+        lyrics_text: str | None = None,
+        lyrics_format: str | None = None,
+        transcription_model: str | None = None,
+        align_language: str | None = None,
+        detect_language: bool | None = None,
+        use_synced_lyrics: bool | None = None,
+        whisperx_preload_models: str | None = None,
+        compute_type: str | None = None,
         cancel_event: threading.Event | None = None,
         progress_callback: ProgressCallback | None = None,
         log_callback: LogCallback | None = None,
@@ -98,7 +139,16 @@ class DemucsClient:
                 create_response = await client.post(
                     f"{self.api_url}/jobs",
                     files={"file": (audio_path.name, fh, "audio/wav")},
-                    data=self._build_request_data(),
+                    data=self._build_request_data(
+                        lyrics_text=lyrics_text,
+                        lyrics_format=lyrics_format,
+                        transcription_model=transcription_model,
+                        align_language=align_language,
+                        detect_language=detect_language,
+                        use_synced_lyrics=use_synced_lyrics,
+                        whisperx_preload_models=whisperx_preload_models,
+                        compute_type=compute_type,
+                    ),
                 )
             create_response.raise_for_status()
             payload = create_response.json()
@@ -139,11 +189,17 @@ class DemucsClient:
                     if status == "completed":
                         result_response = await client.get(f"{self.api_url}/jobs/{job_id}/result")
                         result_response.raise_for_status()
-                        no_vocals_bytes, vocals_bytes, extension = self._extract_stems_zip(result_response.content)
+                        no_vocals_bytes, vocals_bytes, aligned_bytes, extension = self._extract_stems_zip(
+                            result_response.content
+                        )
                         output_path = out_dir / f"{audio_path.stem}_{job_id}_no_vocals.{extension}"
                         vocals_output_path = out_dir / f"{audio_path.stem}_{job_id}_vocals.{extension}"
                         output_path.write_bytes(no_vocals_bytes)
                         vocals_output_path.write_bytes(vocals_bytes)
+                        aligned_output_path = None
+                        if aligned_bytes is not None:
+                            aligned_output_path = out_dir / f"{audio_path.stem}_{job_id}_aligned_lyrics.json"
+                            aligned_output_path.write_bytes(aligned_bytes)
                         self._emit_progress(
                             progress_callback,
                             100,
@@ -153,6 +209,7 @@ class DemucsClient:
                         return DemucsResponse(
                             no_vocals_path=str(output_path),
                             vocals_path=str(vocals_output_path),
+                            aligned_lyrics_path=str(aligned_output_path) if aligned_output_path else None,
                         )
 
                     if status == "failed":

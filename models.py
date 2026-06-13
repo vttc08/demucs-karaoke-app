@@ -379,6 +379,11 @@ class RuntimeSettingsResponse(BaseModel):
     demucs_output_format: str
     demucs_mp3_bitrate: int
     demucs_direct_media_max_mb: int
+    whisperx_transcription_model: str
+    whisperx_align_language: str | None
+    whisperx_detect_language: bool
+    whisperx_use_synced_lyrics: bool
+    whisperx_preload_models: str | None
     ffmpeg_preset: str
     ffmpeg_crf: int
     ytdlp_path: str
@@ -403,6 +408,11 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     demucs_output_format: Optional[str] = None
     demucs_mp3_bitrate: Optional[int] = None
     demucs_direct_media_max_mb: Optional[int] = None
+    whisperx_transcription_model: Optional[str] = None
+    whisperx_align_language: Optional[str] = None
+    whisperx_detect_language: Optional[bool] = None
+    whisperx_use_synced_lyrics: Optional[bool] = None
+    whisperx_preload_models: Optional[str] = None
     ffmpeg_preset: Optional[str] = None
     ffmpeg_crf: Optional[int] = None
     ytdlp_path: Optional[str] = None
@@ -438,6 +448,14 @@ class DemucsRequest(BaseModel):
     """Request to Demucs service."""
 
     audio_path: str
+    lyrics_text: Optional[str] = None
+    lyrics_format: Optional[Literal["lrc", "txt"]] = None
+    transcription_model: str = "tiny"
+    align_language: Optional[str] = None
+    detect_language: bool = False
+    use_synced_lyrics: bool = False
+    whisperx_preload_models: Optional[str] = None
+    compute_type: Optional[str] = None
 
 
 class DemucsResponse(BaseModel):
@@ -445,6 +463,7 @@ class DemucsResponse(BaseModel):
 
     no_vocals_path: str
     vocals_path: Optional[str] = None
+    aligned_lyrics_path: Optional[str] = None
 
 
 class DemucsHealthResponse(BaseModel):

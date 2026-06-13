@@ -814,6 +814,11 @@ endpoint reflects the latest saved UI configuration after the app has booted.
   "demucs_output_format": "wav",
   "demucs_mp3_bitrate": 320,
   "demucs_direct_media_max_mb": 500,
+  "whisperx_transcription_model": "tiny",
+  "whisperx_align_language": "en",
+  "whisperx_detect_language": false,
+  "whisperx_use_synced_lyrics": false,
+  "whisperx_preload_models": "transcription=tiny,align=en",
   "ffmpeg_preset": "superfast",
   "ffmpeg_crf": 23,
   "concurrent_ytdlp_search_enabled": false,
@@ -848,6 +853,11 @@ and restarts when no explicit `.env` override is present.
   "demucs_output_format": "wav",
   "demucs_mp3_bitrate": 320,
   "demucs_direct_media_max_mb": 500,
+  "whisperx_transcription_model": "tiny",
+  "whisperx_align_language": "en",
+  "whisperx_detect_language": false,
+  "whisperx_use_synced_lyrics": false,
+  "whisperx_preload_models": "transcription=tiny,align=en",
   "ffmpeg_preset": "veryfast",
   "ffmpeg_crf": 23,
   "concurrent_ytdlp_search_enabled": true,
@@ -869,6 +879,11 @@ Validation:
 - `demucs_output_format` must be `wav` or `mp3`
 - `demucs_mp3_bitrate` must be between `64` and `320`
 - `demucs_direct_media_max_mb` must be between `0` and `5000`
+- `whisperx_transcription_model` controls the model preloaded on Demucs startup and used for optional lyric alignment
+- `whisperx_align_language` defaults to `en`; blank values are stored as empty strings and treated as disabled by the client
+- `whisperx_detect_language` toggles WhisperX language detection for alignment jobs
+- `whisperx_use_synced_lyrics` keeps timestamped LRC lyrics in line-by-line mode instead of flattening them before alignment
+- `whisperx_preload_models` is a comma-separated preload list such as `transcription=tiny,align=en`
 - `concurrent_ytdlp_search_enabled` toggles optional parallel search mode
 - `lyrics_provider_netease_enabled` toggles NetEase in concurrent lyrics fallback
 - `lyrics_provider_lrclib_enabled` toggles LRCLib in concurrent lyrics fallback
@@ -882,6 +897,25 @@ Notes:
 - Static file mounts are initialized at app startup; restart the app after path changes so serving mounts align with new paths.
 - `ytdlp_proxy_url` applies to yt-dlp operations and lyrics-provider outbound requests.
 - `ytdlp_video_resolution` applies to yt-dlp video and progressive video+audio downloads by adding a resolution sort cap such as `-S "res:720"` when a cap is selected.
+
+---
+
+### Demucs Service Job API
+The main app's `DemucsClient` posts karaoke audio to the separate Demucs microservice with optional lyric-alignment fields:
+
+- `lyrics_text` and `lyrics_format` when the request includes lyrics
+- `transcription_model`
+- `align_language`
+- `detect_language`
+- `use_synced_lyrics`
+- `whisperx_preload_models`
+- `compute_type` when provided by the caller
+
+The Demucs service response ZIP still contains the standard `no_vocals` and `vocals` stems. When lyrics were supplied and alignment succeeded, it also includes:
+
+- `aligned_lyrics.json`
+
+`metadata.json` inside the ZIP records the same file list for downstream consumers.
 
 ---
 

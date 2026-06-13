@@ -31,11 +31,17 @@ try:
         DEFAULT_DEMUCS_DEVICE,
         DEFAULT_DEMUCS_MODEL,
         DEFAULT_OUTPUT_FORMAT,
+        DEFAULT_WHISPERX_ALIGN_LANGUAGE,
+        DEFAULT_WHISPERX_DETECT_LANGUAGE,
+        DEFAULT_WHISPERX_PRELOAD_MODELS,
+        DEFAULT_WHISPERX_TRANSCRIPTION_MODEL,
+        DEFAULT_WHISPERX_USE_SYNCED_LYRICS,
         INCOMING_ROOT,
         JOB_OUTPUT_TAIL_LINES,
         JOB_RETENTION_SECONDS,
         OUTPUT_ROOT,
     )
+    from .whisperx_pipeline import align_lyrics, dump_aligned_lyrics_json, preload_models
 except ImportError:
     from demucs_runner import (
         _build_command,
@@ -55,11 +61,17 @@ except ImportError:
         DEFAULT_DEMUCS_DEVICE,
         DEFAULT_DEMUCS_MODEL,
         DEFAULT_OUTPUT_FORMAT,
+        DEFAULT_WHISPERX_ALIGN_LANGUAGE,
+        DEFAULT_WHISPERX_DETECT_LANGUAGE,
+        DEFAULT_WHISPERX_PRELOAD_MODELS,
+        DEFAULT_WHISPERX_TRANSCRIPTION_MODEL,
+        DEFAULT_WHISPERX_USE_SYNCED_LYRICS,
         INCOMING_ROOT,
         JOB_OUTPUT_TAIL_LINES,
         JOB_RETENTION_SECONDS,
         OUTPUT_ROOT,
     )
+    from whisperx_pipeline import align_lyrics, dump_aligned_lyrics_json, preload_models
 
 app = FastAPI(title="Demucs Service", version="0.2.0")
 job_store = DemucsJobStore(tail_limit=JOB_OUTPUT_TAIL_LINES)
@@ -94,11 +106,15 @@ def _build_stems_zip(result) -> bytes:
             "vocals": f"vocals.{stem_ext}",
         },
     }
+    if getattr(result, "aligned_lyrics_path", None):
+        metadata["files"]["aligned_lyrics"] = "aligned_lyrics.json"
 
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.write(result.no_vocals_path, arcname=f"no_vocals.{stem_ext}")
         archive.write(result.vocals_path, arcname=f"vocals.{stem_ext}")
+        if getattr(result, "aligned_lyrics_path", None):
+            archive.write(result.aligned_lyrics_path, arcname="aligned_lyrics.json")
         archive.writestr("metadata.json", json.dumps(metadata, separators=(",", ":")))
     return buffer.getvalue()
 
@@ -144,9 +160,44 @@ def _update_job_progress(job_id: str, *, percent: int | None = None, message: st
         job_store.update(job_id, **changes)
 
 
+def _preload_whisperx_models(config: SeparateConfig) -> None:
+    preload_models(
+        config.whisperx_preload_models or DEFAULT_WHISPERX_PRELOAD_MODELS,
+        device=config.device,
+        compute_type=config.compute_type,
+    )
+
+
+def _align_lyrics(
+    *,
+    config: SeparateConfig,
+    vocals_path: Path,
+    output_dir: Path,
+) -> Path | None:
+    lyrics_text = config.lyrics_text
+    if not lyrics_text:
+        return None
+
+    aligned_segments = align_lyrics(
+        vocals_path,
+        lyrics_text,
+        lyrics_format=config.lyrics_format,
+        transcription_model=config.transcription_model,
+        align_language=config.align_language,
+        detect_language=config.detect_language,
+        use_synced_lyrics=config.use_synced_lyrics,
+        device=config.device,
+        compute_type=config.compute_type,
+    )
+    aligned_path = output_dir / "aligned_lyrics.json"
+    aligned_path.write_text(dump_aligned_lyrics_json(aligned_segments), encoding="utf-8")
+    return aligned_path
+
+
 def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
     start = time.time()
     output_dir = OUTPUT_ROOT / job_id
+    _preload_whisperx_models(config)
     cmd = _build_command(input_path, output_dir, config)
     process = subprocess.Popen(
         cmd,
@@ -201,6 +252,19 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
         if not no_vocals_path.exists() or not vocals_path.exists():
             raise RuntimeError("Demucs output files were not created")
 
+        aligned_lyrics_path = None
+        if config.lyrics_text:
+            job_store.update(
+                job_id,
+                progress_percent=95,
+                progress_message="Aligning lyrics",
+            )
+            aligned_lyrics_path = _align_lyrics(
+                config=config,
+                vocals_path=vocals_path,
+                output_dir=output_dir,
+            )
+
         job_store.update(
             job_id,
             status="completed",
@@ -210,6 +274,7 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
             progress_message="Completed",
             no_vocals_path=str(no_vocals_path),
             vocals_path=str(vocals_path),
+            aligned_lyrics_path=str(aligned_lyrics_path) if aligned_lyrics_path else None,
             process=None,
         )
     except Exception as error:
@@ -250,11 +315,28 @@ def _start_job(payload: bytes, original_filename: str, config: SeparateConfig) -
     return job
 
 
+@app.on_event("startup")
+def _startup_preload_whisperx_models() -> None:
+    try:
+        preload_models(DEFAULT_WHISPERX_PRELOAD_MODELS, device=DEFAULT_DEMUCS_DEVICE)
+    except Exception:
+        # Keep no-lyrics separation available if WhisperX warmup is unavailable.
+        pass
+
+
 def _validated_config(
     model: str,
     device: Literal["cuda", "cpu"],
     output_format: Literal["wav", "mp3"],
     mp3_bitrate: int | None,
+    lyrics_text: str | None = None,
+    lyrics_format: str | None = None,
+    transcription_model: str = DEFAULT_WHISPERX_TRANSCRIPTION_MODEL,
+    align_language: str | None = DEFAULT_WHISPERX_ALIGN_LANGUAGE,
+    detect_language: bool = DEFAULT_WHISPERX_DETECT_LANGUAGE,
+    use_synced_lyrics: bool = DEFAULT_WHISPERX_USE_SYNCED_LYRICS,
+    whisperx_preload_models: str | None = None,
+    compute_type: str | None = None,
 ) -> SeparateConfig:
     try:
         config = SeparateConfig(
@@ -262,6 +344,14 @@ def _validated_config(
             device=device,
             output_format=output_format,
             mp3_bitrate=mp3_bitrate,
+            lyrics_text=lyrics_text,
+            lyrics_format=lyrics_format,
+            transcription_model=transcription_model,
+            align_language=align_language,
+            detect_language=detect_language,
+            use_synced_lyrics=use_synced_lyrics,
+            whisperx_preload_models=whisperx_preload_models,
+            compute_type=compute_type,
         )
     except ValidationError as error:
         raise HTTPException(status_code=422, detail=error.errors()) from error
@@ -324,8 +414,29 @@ async def create_job(
     device: Literal["cuda", "cpu"] = Form(DEFAULT_DEMUCS_DEVICE),
     output_format: Literal["wav", "mp3"] = Form(DEFAULT_OUTPUT_FORMAT),
     mp3_bitrate: int | None = Form(None),
+    lyrics_text: str | None = Form(None),
+    lyrics_format: str | None = Form(None),
+    transcription_model: str = Form(DEFAULT_WHISPERX_TRANSCRIPTION_MODEL),
+    align_language: str | None = Form(DEFAULT_WHISPERX_ALIGN_LANGUAGE),
+    detect_language: bool = Form(DEFAULT_WHISPERX_DETECT_LANGUAGE),
+    use_synced_lyrics: bool = Form(DEFAULT_WHISPERX_USE_SYNCED_LYRICS),
+    whisperx_preload_models: str | None = Form(DEFAULT_WHISPERX_PRELOAD_MODELS),
+    compute_type: str | None = Form(None),
 ):
-    config = _validated_config(model, device, output_format, mp3_bitrate)
+    config = _validated_config(
+        model,
+        device,
+        output_format,
+        mp3_bitrate,
+        lyrics_text=lyrics_text,
+        lyrics_format=lyrics_format,
+        transcription_model=transcription_model,
+        align_language=align_language,
+        detect_language=detect_language,
+        use_synced_lyrics=use_synced_lyrics,
+        whisperx_preload_models=whisperx_preload_models,
+        compute_type=compute_type,
+    )
     payload = await file.read()
     job = _start_job(payload, file.filename or "input.wav", config)
     base = str(request.base_url).rstrip("/")
@@ -380,6 +491,7 @@ def get_job_result(job_id: str):
             "device": job.device,
             "output_format": job.output_format,
             "mp3_bitrate": job.mp3_bitrate,
+            "aligned_lyrics_path": Path(job.aligned_lyrics_path) if job.aligned_lyrics_path else None,
         },
     )()
     zip_payload = _build_stems_zip(result)
@@ -425,8 +537,29 @@ async def separate(
     device: Literal["cuda", "cpu"] = Form(DEFAULT_DEMUCS_DEVICE),
     output_format: Literal["wav", "mp3"] = Form(DEFAULT_OUTPUT_FORMAT),
     mp3_bitrate: int | None = Form(None),
+    lyrics_text: str | None = Form(None),
+    lyrics_format: str | None = Form(None),
+    transcription_model: str = Form(DEFAULT_WHISPERX_TRANSCRIPTION_MODEL),
+    align_language: str | None = Form(DEFAULT_WHISPERX_ALIGN_LANGUAGE),
+    detect_language: bool = Form(DEFAULT_WHISPERX_DETECT_LANGUAGE),
+    use_synced_lyrics: bool = Form(DEFAULT_WHISPERX_USE_SYNCED_LYRICS),
+    whisperx_preload_models: str | None = Form(DEFAULT_WHISPERX_PRELOAD_MODELS),
+    compute_type: str | None = Form(None),
 ):
-    config = _validated_config(model, device, output_format, mp3_bitrate)
+    config = _validated_config(
+        model,
+        device,
+        output_format,
+        mp3_bitrate,
+        lyrics_text=lyrics_text,
+        lyrics_format=lyrics_format,
+        transcription_model=transcription_model,
+        align_language=align_language,
+        detect_language=detect_language,
+        use_synced_lyrics=use_synced_lyrics,
+        whisperx_preload_models=whisperx_preload_models,
+        compute_type=compute_type,
+    )
     payload = await file.read()
     job = _start_job(payload, file.filename or "input.wav", config)
     terminal_job = _wait_for_terminal_job(job.job_id)
@@ -444,18 +577,48 @@ async def separate_meta(
     device: Literal["cuda", "cpu"] = Form(DEFAULT_DEMUCS_DEVICE),
     output_format: Literal["wav", "mp3"] = Form(DEFAULT_OUTPUT_FORMAT),
     mp3_bitrate: int | None = Form(None),
+    lyrics_text: str | None = Form(None),
+    lyrics_format: str | None = Form(None),
+    transcription_model: str = Form(DEFAULT_WHISPERX_TRANSCRIPTION_MODEL),
+    align_language: str | None = Form(DEFAULT_WHISPERX_ALIGN_LANGUAGE),
+    detect_language: bool = Form(DEFAULT_WHISPERX_DETECT_LANGUAGE),
+    use_synced_lyrics: bool = Form(DEFAULT_WHISPERX_USE_SYNCED_LYRICS),
+    whisperx_preload_models: str | None = Form(DEFAULT_WHISPERX_PRELOAD_MODELS),
+    compute_type: str | None = Form(None),
 ):
-    config = _validated_config(model, device, output_format, mp3_bitrate)
+    config = _validated_config(
+        model,
+        device,
+        output_format,
+        mp3_bitrate,
+        lyrics_text=lyrics_text,
+        lyrics_format=lyrics_format,
+        transcription_model=transcription_model,
+        align_language=align_language,
+        detect_language=detect_language,
+        use_synced_lyrics=use_synced_lyrics,
+        whisperx_preload_models=whisperx_preload_models,
+        compute_type=compute_type,
+    )
 
     try:
         payload = await file.read()
         result = run_demucs_on_file(payload, file.filename or "input.wav", config)
+        aligned_lyrics_path = None
+        if config.lyrics_text:
+            aligned_lyrics_path = _align_lyrics(
+                config=config,
+                vocals_path=Path(result.vocals_path),
+                output_dir=Path(result.vocals_path).parent,
+            )
     except subprocess.CalledProcessError as error:
         raise HTTPException(
             status_code=500,
             detail=f"Demucs failed: {error.stderr}",
         ) from error
     except RuntimeError as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error
+    except Exception as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
 
     return SeparateMetaResponse(
@@ -468,4 +631,5 @@ async def separate_meta(
         mp3_bitrate=result.mp3_bitrate,
         duration_ms=result.duration_ms,
         status="completed",
+        aligned_lyrics_path=str(aligned_lyrics_path) if aligned_lyrics_path else None,
     )

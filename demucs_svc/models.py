@@ -6,6 +6,11 @@ try:
         DEFAULT_DEMUCS_MODEL,
         DEFAULT_MP3_BITRATE,
         DEFAULT_OUTPUT_FORMAT,
+        DEFAULT_WHISPERX_ALIGN_LANGUAGE,
+        DEFAULT_WHISPERX_DETECT_LANGUAGE,
+        DEFAULT_WHISPERX_PRELOAD_MODELS,
+        DEFAULT_WHISPERX_TRANSCRIPTION_MODEL,
+        DEFAULT_WHISPERX_USE_SYNCED_LYRICS,
     )
 except ImportError:
     from settings import (
@@ -13,6 +18,11 @@ except ImportError:
         DEFAULT_DEMUCS_MODEL,
         DEFAULT_MP3_BITRATE,
         DEFAULT_OUTPUT_FORMAT,
+        DEFAULT_WHISPERX_ALIGN_LANGUAGE,
+        DEFAULT_WHISPERX_DETECT_LANGUAGE,
+        DEFAULT_WHISPERX_PRELOAD_MODELS,
+        DEFAULT_WHISPERX_TRANSCRIPTION_MODEL,
+        DEFAULT_WHISPERX_USE_SYNCED_LYRICS,
     )
 
 
@@ -21,6 +31,14 @@ class SeparateConfig(BaseModel):
     device: Literal["cuda", "cpu"] = DEFAULT_DEMUCS_DEVICE
     output_format: Literal["wav", "mp3"] = DEFAULT_OUTPUT_FORMAT
     mp3_bitrate: int | None = Field(default=None, ge=64, le=320)
+    lyrics_text: str | None = None
+    lyrics_format: Literal["lrc", "txt"] | None = None
+    transcription_model: str = DEFAULT_WHISPERX_TRANSCRIPTION_MODEL
+    align_language: str | None = DEFAULT_WHISPERX_ALIGN_LANGUAGE
+    detect_language: bool = DEFAULT_WHISPERX_DETECT_LANGUAGE
+    use_synced_lyrics: bool = DEFAULT_WHISPERX_USE_SYNCED_LYRICS
+    whisperx_preload_models: str | None = DEFAULT_WHISPERX_PRELOAD_MODELS
+    compute_type: str | None = None
 
     @model_validator(mode="after")
     def validate_mp3_config(self):
@@ -28,6 +46,19 @@ class SeparateConfig(BaseModel):
             self.mp3_bitrate = DEFAULT_MP3_BITRATE
         if self.output_format == "wav":
             self.mp3_bitrate = None
+        if isinstance(self.lyrics_text, str):
+            self.lyrics_text = self.lyrics_text.strip() or None
+        if isinstance(self.align_language, str):
+            normalized_align_language = self.align_language.strip().lower()
+            self.align_language = normalized_align_language or None
+        if isinstance(self.transcription_model, str):
+            self.transcription_model = self.transcription_model.strip() or DEFAULT_WHISPERX_TRANSCRIPTION_MODEL
+        if isinstance(self.whisperx_preload_models, str):
+            normalized_preload_models = self.whisperx_preload_models.strip()
+            self.whisperx_preload_models = normalized_preload_models or None
+        if isinstance(self.compute_type, str):
+            normalized_compute_type = self.compute_type.strip().lower()
+            self.compute_type = normalized_compute_type or None
         return self
 
 
@@ -41,6 +72,7 @@ class SeparateMetaResponse(BaseModel):
     mp3_bitrate: int | None = None
     duration_ms: int
     status: str
+    aligned_lyrics_path: str | None = None
 
 
 class DemucsJobCreateResponse(BaseModel):
@@ -69,3 +101,4 @@ class DemucsJobStatusResponse(BaseModel):
     started_at: str | None = None
     finished_at: str | None = None
     output_tail: list[str] = []
+    aligned_lyrics_path: str | None = None

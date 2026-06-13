@@ -20,7 +20,8 @@ This project currently uses two services:
 2. Demucs service
 - receives audio processing request
 - runs demucs two-stem vocals separation
-- returns a ZIP payload containing both `no_vocals` and `vocals` stems
+- optionally runs WhisperX forced alignment when lyrics are supplied
+- returns a ZIP payload containing both `no_vocals` and `vocals` stems, plus `aligned_lyrics.json` when alignment was performed
 
 ## Reverse proxy subpath support
 
@@ -417,6 +418,11 @@ This is applied at command build time, so new operations use updated proxy setti
   - `demucs_mp3_bitrate`
   - `ffmpeg_preset`
   - `ffmpeg_crf`
+  - `whisperx_transcription_model`
+  - `whisperx_align_language`
+  - `whisperx_detect_language`
+  - `whisperx_use_synced_lyrics`
+  - `whisperx_preload_models`
   - `ytdlp_path`
   - `ytdlp_proxy_url`
   - `concurrent_ytdlp_search_enabled`

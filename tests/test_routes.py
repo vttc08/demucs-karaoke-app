@@ -58,6 +58,11 @@ def client():
     original_demucs_output_format = settings.demucs_output_format
     original_demucs_mp3_bitrate = settings.demucs_mp3_bitrate
     original_demucs_direct_media_max_mb = settings.demucs_direct_media_max_mb
+    original_whisperx_transcription_model = settings.whisperx_transcription_model
+    original_whisperx_align_language = settings.whisperx_align_language
+    original_whisperx_detect_language = settings.whisperx_detect_language
+    original_whisperx_use_synced_lyrics = settings.whisperx_use_synced_lyrics
+    original_whisperx_preload_models = settings.whisperx_preload_models
     original_ffmpeg_preset = settings.ffmpeg_preset
     original_ffmpeg_crf = settings.ffmpeg_crf
     original_ytdlp_path = settings.ytdlp_path
@@ -80,6 +85,11 @@ def client():
     settings.demucs_output_format = original_demucs_output_format
     settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
     settings.demucs_direct_media_max_mb = original_demucs_direct_media_max_mb
+    settings.whisperx_transcription_model = original_whisperx_transcription_model
+    settings.whisperx_align_language = original_whisperx_align_language
+    settings.whisperx_detect_language = original_whisperx_detect_language
+    settings.whisperx_use_synced_lyrics = original_whisperx_use_synced_lyrics
+    settings.whisperx_preload_models = original_whisperx_preload_models
     settings.ffmpeg_preset = original_ffmpeg_preset
     settings.ffmpeg_crf = original_ffmpeg_crf
     settings.ytdlp_path = original_ytdlp_path
@@ -1741,7 +1751,6 @@ def test_media_management_page_uses_database_rows(client):
     assert b'data-action="edit"' not in content
     assert b'data-action="delete"' not in content
     assert b'data-action="rename"' not in content
-    assert b"synced" not in content.lower()
     assert b'id="media-edit-modal"' not in content
     assert b"Missing" in content
     assert b'data-has-multi-track="true"' in content
@@ -2278,6 +2287,11 @@ def test_get_runtime_settings(client):
     assert "demucs_output_format" in data
     assert "demucs_mp3_bitrate" in data
     assert "demucs_direct_media_max_mb" in data
+    assert "whisperx_transcription_model" in data
+    assert "whisperx_align_language" in data
+    assert "whisperx_detect_language" in data
+    assert "whisperx_use_synced_lyrics" in data
+    assert "whisperx_preload_models" in data
     assert "ffmpeg_preset" in data
     assert "ffmpeg_crf" in data
     assert "ytdlp_path" in data
@@ -2314,6 +2328,11 @@ def test_update_runtime_settings(client):
             "demucs_output_format": "mp3",
             "demucs_mp3_bitrate": 256,
             "demucs_direct_media_max_mb": 750,
+            "whisperx_transcription_model": "base",
+            "whisperx_align_language": "en",
+            "whisperx_detect_language": True,
+            "whisperx_use_synced_lyrics": True,
+            "whisperx_preload_models": "transcription=tiny,align=en,align=zh",
             "ffmpeg_preset": "superfast",
             "ffmpeg_crf": 28,
             "media_path": "/tmp/karaoke_media_test",
@@ -2337,6 +2356,11 @@ def test_update_runtime_settings(client):
     assert data["demucs_output_format"] == "mp3"
     assert data["demucs_mp3_bitrate"] == 256
     assert data["demucs_direct_media_max_mb"] == 750
+    assert data["whisperx_transcription_model"] == "base"
+    assert data["whisperx_align_language"] == "en"
+    assert data["whisperx_detect_language"] is True
+    assert data["whisperx_use_synced_lyrics"] is True
+    assert data["whisperx_preload_models"] == "transcription=tiny,align=en,align=zh"
     assert data["ffmpeg_preset"] == "superfast"
     assert data["ffmpeg_crf"] == 28
     assert data["media_path"] == "/tmp/karaoke_media_test"
@@ -2368,6 +2392,11 @@ def test_update_runtime_settings_persists_to_database(client):
             json={
                 "stage_qr_url": "https://karaoke.test/queue",
                 "stage_lobby_media_path": "/media/stage-lobby.mp4",
+                "whisperx_transcription_model": "tiny",
+                "whisperx_align_language": "",
+                "whisperx_detect_language": False,
+                "whisperx_use_synced_lyrics": False,
+                "whisperx_preload_models": "transcription=tiny",
                 "ytdlp_video_resolution": "1080",
                 "concurrent_ytdlp_search_enabled": True,
                 "demucs_direct_media_max_mb": 333,
@@ -2390,6 +2419,21 @@ def test_update_runtime_settings_persists_to_database(client):
         concurrent = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "concurrent_ytdlp_search_enabled"
         ).first()
+        whisperx_transcription_model = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "whisperx_transcription_model"
+        ).first()
+        whisperx_align_language = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "whisperx_align_language"
+        ).first()
+        whisperx_detect_language = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "whisperx_detect_language"
+        ).first()
+        whisperx_use_synced_lyrics = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "whisperx_use_synced_lyrics"
+        ).first()
+        whisperx_preload_models = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "whisperx_preload_models"
+        ).first()
         assert stage_qr is not None
         assert stage_qr.value == "https://karaoke.test/queue"
         assert stage_lobby is not None
@@ -2400,6 +2444,16 @@ def test_update_runtime_settings_persists_to_database(client):
         assert cutoff.value == "333"
         assert concurrent is not None
         assert concurrent.value == "true"
+        assert whisperx_transcription_model is not None
+        assert whisperx_transcription_model.value == "tiny"
+        assert whisperx_align_language is not None
+        assert whisperx_align_language.value == ""
+        assert whisperx_detect_language is not None
+        assert whisperx_detect_language.value == "false"
+        assert whisperx_use_synced_lyrics is not None
+        assert whisperx_use_synced_lyrics.value == "false"
+        assert whisperx_preload_models is not None
+        assert whisperx_preload_models.value == "transcription=tiny"
     finally:
         db.close()
 

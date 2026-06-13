@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import importlib
 import time
 import zipfile
@@ -27,6 +28,11 @@ def test_separate_config_defaults_and_mp3_bitrate():
     assert config.device == "cuda"
     assert config.output_format == "mp3"
     assert config.mp3_bitrate == 320
+    assert config.transcription_model == "tiny"
+    assert config.align_language == "en"
+    assert config.detect_language is False
+    assert config.use_synced_lyrics is False
+    assert config.whisperx_preload_models == "transcription=tiny,align=en"
 
 
 def test_separate_config_clears_mp3_bitrate_for_wav():
@@ -90,6 +96,145 @@ def test_run_demucs_on_file_mp3_builds_expected_command_and_paths(tmp_path, monk
     assert result.no_vocals_path.name.endswith(".mp3")
     assert result.vocals_path.name.endswith(".mp3")
     assert result.output_format == "mp3"
+
+
+def test_job_creation_passes_whisperx_request_fields(monkeypatch, tmp_path):
+    monkeypatch.setattr(demucs_app, "_cuda_available", lambda: True)
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    demucs_app.INCOMING_ROOT.mkdir(parents=True, exist_ok=True)
+    demucs_app.OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+
+    seen = {}
+
+    def fake_start_job(payload, original_filename, config):
+        seen["config"] = config
+        return demucs_app.job_store.create(
+            demucs_app.DemucsJobState(
+                job_id="job-whisperx",
+                model=config.model,
+                device=config.device,
+                output_format=config.output_format,
+                mp3_bitrate=config.mp3_bitrate,
+                original_filename=original_filename,
+                status="queued",
+            )
+        )
+
+    monkeypatch.setattr(demucs_app, "_start_job", fake_start_job)
+
+    client = TestClient(demucs_app.app)
+    response = client.post(
+        "/jobs",
+        data={
+            "lyrics_text": "[00:01.00]hello world",
+            "lyrics_format": "lrc",
+            "transcription_model": "base",
+            "align_language": "en",
+            "detect_language": "true",
+            "use_synced_lyrics": "true",
+            "whisperx_preload_models": "transcription=base,align=en",
+        },
+        files={"file": ("input.wav", b"audio", "audio/wav")},
+    )
+
+    assert response.status_code == 202
+    config = seen["config"]
+    assert config.lyrics_text == "[00:01.00]hello world"
+    assert config.lyrics_format == "lrc"
+    assert config.transcription_model == "base"
+    assert config.align_language == "en"
+    assert config.detect_language is True
+    assert config.use_synced_lyrics is True
+    assert config.whisperx_preload_models == "transcription=base,align=en"
+
+
+def test_job_result_includes_aligned_lyrics_zip_entry(monkeypatch, tmp_path):
+    monkeypatch.setattr(demucs_app, "_cuda_available", lambda: True)
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    demucs_app.INCOMING_ROOT.mkdir(parents=True, exist_ok=True)
+    demucs_app.OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+
+    def fake_align_lyrics(*args, **kwargs):
+        aligned_path = tmp_path / "aligned_lyrics.json"
+        aligned_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "start": 1.0,
+                        "end": 2.0,
+                        "text": "hello world",
+                        "words": [
+                            {"word": "hello", "start": 1.0, "end": 1.5, "score": 0.9},
+                            {"word": "world", "start": 1.5, "end": 2.0, "score": 0.8},
+                        ],
+                    }
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return aligned_path
+
+    def fake_start_job(payload, original_filename, config):
+        job_id = "job-aligned"
+        incoming_dir = demucs_app.INCOMING_ROOT / job_id
+        output_dir = demucs_app.OUTPUT_ROOT / job_id
+        input_path = incoming_dir / "input.wav"
+        incoming_dir.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        input_path.write_bytes(b"audio")
+        no_vocals_path = output_dir / config.model / input_path.stem / "no_vocals.wav"
+        vocals_path = output_dir / config.model / input_path.stem / "vocals.wav"
+        no_vocals_path.parent.mkdir(parents=True, exist_ok=True)
+        no_vocals_path.write_bytes(b"no-vocals")
+        vocals_path.write_bytes(b"vocals")
+        aligned_path = fake_align_lyrics()
+        return demucs_app.job_store.create(
+            demucs_app.DemucsJobState(
+                job_id=job_id,
+                model=config.model,
+                device=config.device,
+                output_format=config.output_format,
+                mp3_bitrate=config.mp3_bitrate,
+                original_filename=original_filename,
+                status="completed",
+                progress_percent=100,
+                progress_message="Completed",
+                created_at=demucs_app.utc_now(),
+                started_at=demucs_app.utc_now(),
+                finished_at=demucs_app.utc_now(),
+                duration_ms=25,
+                no_vocals_path=str(no_vocals_path),
+                vocals_path=str(vocals_path),
+                aligned_lyrics_path=str(aligned_path),
+            )
+        )
+
+    monkeypatch.setattr(demucs_app, "_start_job", fake_start_job)
+
+    client = TestClient(demucs_app.app)
+    response = client.post(
+        "/jobs",
+        data={
+            "lyrics_text": "[00:01.00]hello world",
+            "lyrics_format": "lrc",
+            "transcription_model": "base",
+        },
+        files={"file": ("input.wav", b"audio", "audio/wav")},
+    )
+    job_id = response.json()["job_id"]
+
+    result_response = client.get(f"/jobs/{job_id}/result")
+    assert result_response.status_code == 200
+    with zipfile.ZipFile(BytesIO(result_response.content)) as archive:
+        names = set(archive.namelist())
+        assert "aligned_lyrics.json" in names
+        aligned_payload = json.loads(archive.read("aligned_lyrics.json").decode("utf-8"))
+        metadata = json.loads(archive.read("metadata.json").decode("utf-8"))
+    assert aligned_payload[0]["text"] == "hello world"
+    assert "aligned_lyrics" in metadata["files"]
 
 
 def test_create_job_and_fetch_result(monkeypatch, tmp_path):
