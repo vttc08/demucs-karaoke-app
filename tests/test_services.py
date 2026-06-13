@@ -3694,15 +3694,341 @@ async def test_media_karaoke_audio_only_uses_instrumental_as_primary(
 
 
 @pytest.mark.asyncio
+async def test_karaoke_service_small_local_video_uses_direct_media_for_demucs(
+    db_session, tmp_path
+):
+    """Small local video files should go directly to Demucs."""
+    queue_service = QueueService()
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    original_cutoff = settings.demucs_direct_media_max_mb
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.demucs_direct_media_max_mb = 1
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        expected_stem = build_media_stem("Direct Local", "Singer", fallback="direct-local")
+        media_file = settings.media_path / f"{expected_stem}.mp4"
+        media_file.write_bytes(b"video")
+        db_session.add(
+            MediaItem(
+                file_stem=expected_stem,
+                title="Direct Local",
+                artist="Singer",
+                media_path=f"/media/{expected_stem}.mp4",
+                missing=False,
+            )
+        )
+        db_session.flush()
+
+        item = queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                media_item_id=db_session.query(MediaItem).filter(MediaItem.file_stem == expected_stem).first().id,
+                title="Direct Local",
+                artist="Singer",
+                is_karaoke=True,
+            ),
+        )
+
+        service = KaraokeService()
+        service.queue_service = queue_service
+        service.youtube_service = Mock()
+        service.ffmpeg = Mock()
+        service.demucs_client = Mock()
+        service.demucs_client.health_check.return_value = DemucsHealthResponse(
+            api_url="http://demucs",
+            healthy=True,
+            detail="ok",
+        )
+        no_vocals = settings.cache_path / "demucs_outputs" / f"{expected_stem}.no_vocals.wav"
+        vocals = settings.cache_path / "demucs_outputs" / f"{expected_stem}.vocals.wav"
+        no_vocals.parent.mkdir(parents=True, exist_ok=True)
+        no_vocals.write_bytes(b"instrumental")
+        vocals.write_bytes(b"vocals")
+        service.demucs_client.separate_vocals = AsyncMock(
+            return_value=DemucsResponse(
+                no_vocals_path=str(no_vocals),
+                vocals_path=str(vocals),
+            )
+        )
+
+        def fake_combine_audio_video(*, video_path, audio_path, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"karaoke-video")
+
+        service.ffmpeg.combine_audio_video.side_effect = fake_combine_audio_video
+
+        await service.process_queue_item(db_session, item.id)
+
+        service.ffmpeg.extract_audio.assert_not_called()
+        service.youtube_service.download_audio.assert_not_called()
+        assert service.demucs_client.separate_vocals.await_args.args[0] == media_file
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+        settings.demucs_direct_media_max_mb = original_cutoff
+
+
+@pytest.mark.asyncio
+async def test_karaoke_service_large_local_video_extracts_audio_for_demucs(
+    db_session, tmp_path
+):
+    """Large local video files should extract audio before Demucs."""
+    queue_service = QueueService()
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    original_cutoff = settings.demucs_direct_media_max_mb
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.demucs_direct_media_max_mb = 1
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        expected_stem = build_media_stem("Large Local", "Singer", fallback="large-local")
+        media_file = settings.media_path / f"{expected_stem}.mp4"
+        media_file.write_bytes(b"video" * 300000)
+        db_session.add(
+            MediaItem(
+                file_stem=expected_stem,
+                title="Large Local",
+                artist="Singer",
+                media_path=f"/media/{expected_stem}.mp4",
+                missing=False,
+            )
+        )
+        db_session.flush()
+
+        media_row = db_session.query(MediaItem).filter(MediaItem.file_stem == expected_stem).first()
+        assert media_row is not None
+        item = queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                media_item_id=media_row.id,
+                title="Large Local",
+                artist="Singer",
+                is_karaoke=True,
+            ),
+        )
+
+        service = KaraokeService()
+        service.queue_service = queue_service
+        service.youtube_service = Mock()
+        service.ffmpeg = Mock()
+        service.demucs_client = Mock()
+        service.demucs_client.health_check.return_value = DemucsHealthResponse(
+            api_url="http://demucs",
+            healthy=True,
+            detail="ok",
+        )
+        extracted_audio = settings.cache_path / "audio" / f"{expected_stem}.audio.m4a"
+        extracted_audio.parent.mkdir(parents=True, exist_ok=True)
+        extracted_audio.write_bytes(b"audio")
+        service.ffmpeg.extract_audio.return_value = extracted_audio
+        no_vocals = settings.cache_path / "demucs_outputs" / f"{expected_stem}.no_vocals.wav"
+        vocals = settings.cache_path / "demucs_outputs" / f"{expected_stem}.vocals.wav"
+        no_vocals.parent.mkdir(parents=True, exist_ok=True)
+        no_vocals.write_bytes(b"instrumental")
+        vocals.write_bytes(b"vocals")
+        service.demucs_client.separate_vocals = AsyncMock(
+            return_value=DemucsResponse(
+                no_vocals_path=str(no_vocals),
+                vocals_path=str(vocals),
+            )
+        )
+
+        def fake_combine_audio_video(*, video_path, audio_path, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"karaoke-video")
+
+        service.ffmpeg.combine_audio_video.side_effect = fake_combine_audio_video
+
+        await service.process_queue_item(db_session, item.id)
+
+        service.youtube_service.download_audio.assert_not_called()
+        service.ffmpeg.extract_audio.assert_called_once_with(
+            media_file,
+            extracted_audio,
+            cancel_event=None,
+        )
+        assert service.demucs_client.separate_vocals.await_args.args[0] == extracted_audio
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+        settings.demucs_direct_media_max_mb = original_cutoff
+
+
+@pytest.mark.asyncio
+async def test_karaoke_service_small_youtube_video_uses_direct_media_for_demucs(
+    db_session, tmp_path
+):
+    """Small YouTube downloads should go directly to Demucs without audio re-download."""
+    queue_service = QueueService()
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    original_cutoff = settings.demucs_direct_media_max_mb
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.demucs_direct_media_max_mb = 1
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        expected_stem = build_media_stem("Small Direct", "Singer", fallback="small-direct")
+        item = queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id="small-direct",
+                title="Small Direct",
+                artist="Singer",
+                is_karaoke=True,
+            ),
+        )
+
+        service = KaraokeService()
+        service.queue_service = queue_service
+        service.youtube_service = Mock()
+        service.ffmpeg = Mock()
+        service.demucs_client = Mock()
+        service.demucs_client.health_check.return_value = DemucsHealthResponse(
+            api_url="http://demucs",
+            healthy=True,
+            detail="ok",
+        )
+        downloaded_video = settings.cache_path / "small-direct.mp4"
+        downloaded_video.write_bytes(b"video")
+        service.youtube_service.download_video.return_value = downloaded_video
+        no_vocals = settings.cache_path / "demucs_outputs" / "small-direct.no_vocals.wav"
+        vocals = settings.cache_path / "demucs_outputs" / "small-direct.vocals.wav"
+        no_vocals.parent.mkdir(parents=True, exist_ok=True)
+        no_vocals.write_bytes(b"instrumental")
+        vocals.write_bytes(b"vocals")
+        service.demucs_client.separate_vocals = AsyncMock(
+            return_value=DemucsResponse(
+                no_vocals_path=str(no_vocals),
+                vocals_path=str(vocals),
+            )
+        )
+
+        def fake_combine_audio_video(*, video_path, audio_path, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"karaoke-video")
+
+        service.ffmpeg.combine_audio_video.side_effect = fake_combine_audio_video
+
+        await service.process_queue_item(db_session, item.id)
+
+        service.youtube_service.download_video.assert_called_once_with(
+            "small-direct",
+            settings.cache_path / "ytdlp",
+        )
+        service.youtube_service.download_audio.assert_not_called()
+        service.ffmpeg.extract_audio.assert_not_called()
+        assert service.demucs_client.separate_vocals.await_args.args[0] == (
+            settings.cache_path / f"{expected_stem}.mp4"
+        )
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+        settings.demucs_direct_media_max_mb = original_cutoff
+
+
+@pytest.mark.asyncio
+async def test_karaoke_service_large_youtube_video_uses_audio_only_for_demucs(
+    db_session, tmp_path
+):
+    """Large YouTube downloads should fall back to the audio-only path for Demucs."""
+    queue_service = QueueService()
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    original_cutoff = settings.demucs_direct_media_max_mb
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.demucs_direct_media_max_mb = 1
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        expected_stem = build_media_stem("Large Audio", "Singer", fallback="large-audio")
+        item = queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id="large-audio",
+                title="Large Audio",
+                artist="Singer",
+                is_karaoke=True,
+            ),
+        )
+
+        service = KaraokeService()
+        service.queue_service = queue_service
+        service.youtube_service = Mock()
+        service.ffmpeg = Mock()
+        service.demucs_client = Mock()
+        service.demucs_client.health_check.return_value = DemucsHealthResponse(
+            api_url="http://demucs",
+            healthy=True,
+            detail="ok",
+        )
+        downloaded_video = settings.cache_path / "large-audio.mp4"
+        downloaded_video.write_bytes(b"video" * 300000)
+        downloaded_audio = settings.cache_path / "large-audio.audio.m4a"
+        downloaded_audio.write_bytes(b"audio")
+        service.youtube_service.download_video.return_value = downloaded_video
+        service.youtube_service.download_audio.return_value = downloaded_audio
+        no_vocals = settings.cache_path / "demucs_outputs" / "large-audio.no_vocals.wav"
+        vocals = settings.cache_path / "demucs_outputs" / "large-audio.vocals.wav"
+        no_vocals.parent.mkdir(parents=True, exist_ok=True)
+        no_vocals.write_bytes(b"instrumental")
+        vocals.write_bytes(b"vocals")
+        service.demucs_client.separate_vocals = AsyncMock(
+            return_value=DemucsResponse(
+                no_vocals_path=str(no_vocals),
+                vocals_path=str(vocals),
+            )
+        )
+
+        def fake_combine_audio_video(*, video_path, audio_path, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"karaoke-video")
+
+        service.ffmpeg.combine_audio_video.side_effect = fake_combine_audio_video
+
+        await service.process_queue_item(db_session, item.id)
+
+        service.youtube_service.download_video.assert_called_once_with(
+            "large-audio",
+            settings.cache_path / "ytdlp",
+        )
+        service.youtube_service.download_audio.assert_called_once_with(
+            "large-audio",
+            settings.cache_path / "ytdlp",
+        )
+        service.ffmpeg.extract_audio.assert_not_called()
+        assert service.demucs_client.separate_vocals.await_args.args[0] == (
+            settings.cache_path / f"{expected_stem}.audio.m4a"
+        )
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+        settings.demucs_direct_media_max_mb = original_cutoff
+
+
+@pytest.mark.asyncio
 async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_path):
     """Karaoke processing should remux final output instead of burning subtitles."""
     queue_service = QueueService()
     original_media = settings.media_path
     original_cache = settings.cache_path
+    original_cutoff = settings.demucs_direct_media_max_mb
     settings.media_path = tmp_path / "media"
     settings.media_path.mkdir(parents=True, exist_ok=True)
     settings.cache_path = tmp_path / "cache"
     settings.cache_path.mkdir(parents=True, exist_ok=True)
+    settings.demucs_direct_media_max_mb = 0
     item = queue_service.add_to_queue(
         db_session,
         QueueItemCreate(
@@ -3753,6 +4079,7 @@ async def test_karaoke_service_karaoke_without_burn_uses_remux(db_session, tmp_p
     finally:
         settings.cache_path = original_cache
         settings.media_path = original_media
+        settings.demucs_direct_media_max_mb = original_cutoff
 
     service.ffmpeg.combine_audio_video.assert_called_once()
     updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
@@ -3863,9 +4190,11 @@ async def test_karaoke_service_retries_demucs_with_downloaded_audio_after_500(
     service = KaraokeService()
     original_media = settings.media_path
     original_cache = settings.cache_path
+    original_cutoff = settings.demucs_direct_media_max_mb
     try:
         settings.media_path = tmp_path / "media"
         settings.cache_path = tmp_path / "cache"
+        settings.demucs_direct_media_max_mb = 0
         settings.media_path.mkdir(parents=True, exist_ok=True)
         settings.cache_path.mkdir(parents=True, exist_ok=True)
         (settings.media_path / "retry001.mp4").write_text("video", encoding="utf-8")
@@ -3937,6 +4266,7 @@ async def test_karaoke_service_retries_demucs_with_downloaded_audio_after_500(
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
+        settings.demucs_direct_media_max_mb = original_cutoff
 
 
 @pytest.mark.asyncio
@@ -4341,6 +4671,7 @@ def test_runtime_settings_get_settings_is_non_blocking():
     assert result.demucs_device == settings.demucs_device
     assert result.demucs_output_format == settings.demucs_output_format
     assert result.demucs_mp3_bitrate == settings.demucs_mp3_bitrate
+    assert result.demucs_direct_media_max_mb == settings.demucs_direct_media_max_mb
 
 
 def test_runtime_settings_update_settings_includes_demucs_health():
@@ -4402,6 +4733,7 @@ def test_runtime_settings_update_settings_accepts_demucs_advanced_fields():
     original_device = settings.demucs_device
     original_output = settings.demucs_output_format
     original_bitrate = settings.demucs_mp3_bitrate
+    original_cutoff = settings.demucs_direct_media_max_mb
     try:
         with patch.object(
             RuntimeSettingsService,
@@ -4418,17 +4750,20 @@ def test_runtime_settings_update_settings_accepts_demucs_advanced_fields():
                     demucs_device="cpu",
                     demucs_output_format="mp3",
                     demucs_mp3_bitrate=256,
+                    demucs_direct_media_max_mb=750,
                 )
             )
         assert result.demucs_model == "htdemucs_ft"
         assert result.demucs_device == "cpu"
         assert result.demucs_output_format == "mp3"
         assert result.demucs_mp3_bitrate == 256
+        assert result.demucs_direct_media_max_mb == 750
     finally:
         settings.demucs_model = original_model
         settings.demucs_device = original_device
         settings.demucs_output_format = original_output
         settings.demucs_mp3_bitrate = original_bitrate
+        settings.demucs_direct_media_max_mb = original_cutoff
 
 
 def test_runtime_settings_update_settings_rejects_invalid_demucs_fields():
@@ -4440,6 +4775,10 @@ def test_runtime_settings_update_settings_rejects_invalid_demucs_fields():
         service.update_settings(RuntimeSettingsUpdateRequest(demucs_output_format="flac"))
     with pytest.raises(ValueError, match="demucs_mp3_bitrate"):
         service.update_settings(RuntimeSettingsUpdateRequest(demucs_mp3_bitrate=32))
+    with pytest.raises(ValueError, match="demucs_direct_media_max_mb"):
+        service.update_settings(RuntimeSettingsUpdateRequest(demucs_direct_media_max_mb=-1))
+    with pytest.raises(ValueError, match="demucs_direct_media_max_mb"):
+        service.update_settings(RuntimeSettingsUpdateRequest(demucs_direct_media_max_mb=5001))
 
 
 def test_runtime_settings_update_settings_rejects_empty_media_path():
@@ -4641,6 +4980,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
     original_netease = settings.lyrics_provider_netease_enabled
     original_lrclib = settings.lyrics_provider_lrclib_enabled
     original_resolution = settings.ytdlp_video_resolution
+    original_cutoff = settings.demucs_direct_media_max_mb
     try:
         with patch.object(
             RuntimeSettingsService,
@@ -4657,6 +4997,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
                     lyrics_provider_netease_enabled=False,
                     lyrics_provider_lrclib_enabled=True,
                     ytdlp_video_resolution="1080",
+                    demucs_direct_media_max_mb=1234,
                     stage_qr_url="https://karaoke.test/stage",
                     stage_lobby_media_path="/media/stage-lobby.mp4",
                 ),
@@ -4667,6 +5008,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert result.lyrics_provider_netease_enabled is False
         assert result.lyrics_provider_lrclib_enabled is True
         assert result.ytdlp_video_resolution == "1080"
+        assert result.demucs_direct_media_max_mb == 1234
         assert result.stage_qr_url == "https://karaoke.test/stage"
         assert result.stage_lobby_media_path == "/media/stage-lobby.mp4"
 
@@ -4678,6 +5020,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert stored["lyrics_provider_netease_enabled"] == "false"
         assert stored["lyrics_provider_lrclib_enabled"] == "true"
         assert stored["ytdlp_video_resolution"] == "1080"
+        assert stored["demucs_direct_media_max_mb"] == "1234"
         assert stored["stage_qr_url"] == "https://karaoke.test/stage"
         assert stored["stage_lobby_media_path"] == "/media/stage-lobby.mp4"
     finally:
@@ -4687,6 +5030,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         settings.lyrics_provider_netease_enabled = original_netease
         settings.lyrics_provider_lrclib_enabled = original_lrclib
         settings.ytdlp_video_resolution = original_resolution
+        settings.demucs_direct_media_max_mb = original_cutoff
 
 
 def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
@@ -4704,6 +5048,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
                 RuntimeSetting(key="stage_lobby_media_path", value="/media/stage-lobby.mp4"),
                 RuntimeSetting(key="ffmpeg_preset", value="veryslow"),
                 RuntimeSetting(key="ytdlp_video_resolution", value="720"),
+                RuntimeSetting(key="demucs_direct_media_max_mb", value="777"),
             ]
         )
         db_session.commit()
@@ -4712,6 +5057,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         settings.stage_qr_url = ""
         settings.stage_lobby_media_path = ""
         settings.ytdlp_video_resolution = "default"
+        settings.demucs_direct_media_max_mb = 500
 
         applied = service.load_persisted_settings(db_session)
 
@@ -4719,10 +5065,12 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         assert "stage_qr_url" in applied
         assert "stage_lobby_media_path" in applied
         assert "ytdlp_video_resolution" in applied
+        assert "demucs_direct_media_max_mb" in applied
         assert settings.demucs_model == "persisted-model"
         assert settings.stage_qr_url == "https://karaoke.test/stage"
         assert settings.stage_lobby_media_path == "/media/stage-lobby.mp4"
         assert settings.ytdlp_video_resolution == "720"
+        assert settings.demucs_direct_media_max_mb == 777
 
         explicit_field = next(
             field

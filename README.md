@@ -153,7 +153,7 @@ and `/static/...`.
        - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
        - View current runtime settings
        - Log out of the active admin session from the settings page
-        - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and outbound proxy URL
+        - Update Demucs URL, direct-media cutoff, FFmpeg preset/CRF, media/cache paths, tool paths, and outbound proxy URL
        - Enable/disable concurrent yt-dlp search mode
         - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
         - Configure **Stage Lobby Media URL** (`/media/...` or `/cache/...`) for empty-queue loop playback
@@ -244,6 +244,7 @@ When concurrent yt-dlp search is enabled:
 
 When karaoke mode is enabled:
 - App removes vocals with Demucs and remuxes the output media into the media library root (no subtitle burn path).
+- Karaoke prep uses the direct-media cutoff to decide whether small video files go straight to Demucs or get converted to audio first; set it to `0` to always extract/download audio for video files, or raise it on a fast LAN to send more media files directly.
 - Karaoke remuxes and vocals sidecars are served from `/media`, not `/cache`.
 - Lyrics workflow remains available from the queue modal (provider resolve/manual upload), and lyrics are stored as sidecars for stage overlay display.
 - If Demucs is offline/unhealthy, karaoke processing fails fast and queue UI disables karaoke toggles.
@@ -375,7 +376,7 @@ pip install --upgrade yt-dlp
 ```
 
 For karaoke mode, this app downloads source audio directly from yt-dlp formats (instead of yt-dlp ffmpeg postprocessing), which avoids `ffprobe/ffmpeg not found` during the audio-download step.
-The downloader uses progressive fallback for unavailable formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise. When you set a video resolution cap in Settings, the app adds yt-dlp's resolution sort flag, for example `-S "res:720"`, so downloads stay at or below the chosen height. Leave the setting at `Default` to keep the current behavior unchanged.
+The downloader uses explicit audio-only selectors first for karaoke audio downloads, so yt-dlp does not silently fall back to a video-only stream under the audio filename. It still uses progressive fallback for unavailable video formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise. When you set a video resolution cap in Settings, the app adds yt-dlp's resolution sort flag, for example `-S "res:720"`, so downloads stay at or below the chosen height. Leave the setting at `Default` to keep the current behavior unchanged.
 Runtime proxy is supported through settings (`yt-dlp Proxy URL`) and applied to:
 - yt-dlp search/download commands
 - lyrics provider requests (Musixmatch, NetEase, LRCLib, and Last.fm metadata lookup)
@@ -397,7 +398,7 @@ yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
 
 # Karaoke mode: separate audio-only file
 yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
-  -f "bestaudio[ext=m4a]/bestaudio/best" \
+  -f "bestaudio[ext=m4a]/bestaudio" \
   --extractor-args "youtube:player_client=web" \
   --no-playlist \
   -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"

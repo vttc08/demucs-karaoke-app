@@ -194,6 +194,10 @@ The stage page uses a websocket-first model:
   - yt-dlp source video/audio downloads stay in `cache/`
   - `no_vocals` is muxed into the final canonical `media_path` video as `/media/<stem>.mp4`
   - `vocals` is persisted separately to canonical `vocals_path` as `/media/<stem>.vocals.<ext>`
+- Karaoke input prep chooses the Demucs source after a local file exists:
+  - audio-only inputs always go directly to Demucs
+  - small video/media files can go directly to Demucs based on the persisted direct-media cutoff
+  - large YouTube or local video files fall back to the existing audio-only prep path
 - Local media karaoke finalization stages both outputs before updating the media row:
   - video inputs remux the `no_vocals` stem with the original video stream
   - audio-only inputs persist `no_vocals` directly as the new primary audio
@@ -388,7 +392,7 @@ The stage page uses a websocket-first model:
   - Schemes: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`
 - `adapters/ytdlp.py` injects `--proxy <url>` into yt-dlp commands for:
   - YouTube search
-  - Audio download
+  - Audio download, which now stays on explicit audio-only selectors and never falls back to a video-only stream
   - Video-only download
   - Progressive video+audio download
 - `services/lyrics_service.py` exposes shared HTTP client kwargs that add the same proxy for:

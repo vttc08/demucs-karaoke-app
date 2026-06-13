@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     demucs_device: str = "cuda"
     demucs_output_format: str = "wav"
     demucs_mp3_bitrate: int = 320
+    demucs_direct_media_max_mb: int = 500
     lrclib_api_url: str = "https://lrclib.net"
     musixmatch_token: str = ""
     lastfm_api_key: str = ""

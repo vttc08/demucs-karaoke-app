@@ -308,6 +308,26 @@ class KaraokeService:
         loop = asyncio.get_running_loop()
         if existing_media_path:
             await self._raise_if_canceled(cancel_event, task.id)
+            if self._should_use_direct_media_input(existing_media_path):
+                logger.info(
+                    "Using direct media for Demucs media_path=%s size_bytes=%s cutoff_mb=%s",
+                    existing_media_path,
+                    self._local_file_size_bytes(existing_media_path),
+                    settings.demucs_direct_media_max_mb,
+                )
+                await processing_task_service.set_stage(
+                    db,
+                    task.id,
+                    status=ProcessingTaskStatus.PROCESSING,
+                    stage="demucs",
+                    progress_label="Separating vocals",
+                    progress_label_key="task.separating_vocals",
+                    progress_percent=0,
+                    progress_step_index=1,
+                    progress_step_total=3,
+                )
+                return existing_media_path, existing_media_path
+
             await processing_task_service.set_stage(
                 db,
                 task.id,
@@ -319,17 +339,14 @@ class KaraokeService:
                 progress_step_index=1,
                 progress_step_total=3,
             )
-            if existing_media_path.suffix.lower() in _AUDIO_EXTENSIONS:
-                audio_path = existing_media_path
-            else:
-                extracted_audio_path = settings.cache_path / "audio" / f"{media_stem}.audio.m4a"
-                audio_path = await asyncio.to_thread(
-                    lambda: self.ffmpeg.extract_audio(
-                        existing_media_path,
-                        extracted_audio_path,
-                        cancel_event=cancel_event,
-                    )
+            extracted_audio_path = settings.cache_path / "audio" / f"{media_stem}.audio.m4a"
+            audio_path = await asyncio.to_thread(
+                lambda: self.ffmpeg.extract_audio(
+                    existing_media_path,
+                    extracted_audio_path,
+                    cancel_event=cancel_event,
                 )
+            )
             await self._raise_if_canceled(cancel_event, task.id)
             await processing_task_service.emit_progress(
                 task.id,
@@ -390,6 +407,25 @@ class KaraokeService:
             "media",
         )
         await self._raise_if_canceled(cancel_event, task.id)
+        if self._should_use_direct_media_input(video_path):
+            logger.info(
+                "Using direct media for Demucs media_path=%s size_bytes=%s cutoff_mb=%s",
+                video_path,
+                self._local_file_size_bytes(video_path),
+                settings.demucs_direct_media_max_mb,
+            )
+            await processing_task_service.set_stage(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.PROCESSING,
+                stage="demucs",
+                progress_label="Separating vocals",
+                progress_label_key="task.separating_vocals",
+                progress_percent=0,
+                progress_step_index=3,
+                progress_step_total=4,
+            )
+            return video_path, video_path
         await processing_task_service.set_stage(
             db,
             task.id,
@@ -487,7 +523,7 @@ class KaraokeService:
             media_item,
             fallback=media_item.youtube_id or f"media-{media_item.id}",
         )
-        if video_path.suffix.lower() in _AUDIO_EXTENSIONS:
+        if self._is_audio_only_media_path(video_path):
             output_path = no_vocals_path
         else:
             output_path = settings.cache_path / "processed" / f"{media_stem}.mp4"
@@ -559,6 +595,32 @@ class KaraokeService:
         if media_file is None:
             return None
         return media_file if media_file.exists() else None
+
+    def _is_audio_only_media_path(self, media_path: Path) -> bool:
+        """Return whether the file contains no video stream."""
+        if media_path.suffix.lower() in _AUDIO_EXTENSIONS:
+            return True
+        return not self.ffmpeg.has_video_stream(media_path)
+
+    @staticmethod
+    def _local_file_size_bytes(media_path: Path) -> int:
+        """Return the current local file size in bytes."""
+        return media_path.stat().st_size
+
+    def _should_use_direct_media_input(self, media_path: Path) -> bool:
+        """Return whether the file should be sent directly to Demucs."""
+        if self._is_audio_only_media_path(media_path):
+            return True
+        cutoff_mb = max(0, settings.demucs_direct_media_max_mb)
+        cutoff_bytes = cutoff_mb * 1024 * 1024
+        try:
+            return KaraokeService._local_file_size_bytes(media_path) <= cutoff_bytes
+        except OSError:
+            logger.warning(
+                "Failed to stat media file for direct-media cutoff media_path=%s",
+                media_path,
+            )
+            return False
 
     @staticmethod
     def _install_karaoke_outputs(

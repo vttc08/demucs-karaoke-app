@@ -306,6 +306,7 @@
   "settings.demucs_api_url": "Demucs API URL",
   "settings.demucs_device": "Demucs Device",
   "settings.demucs_model": "Demucs Model",
+  "settings.demucs_direct_media_cutoff": "Demucs direct media cutoff (MB)",
   "settings.already_current_version": "Already up to date ({version})",
   "settings.check_ytdlp_failed": "Failed to check yt-dlp version",
   "settings.checking_demucs": "Checking Demucs health...",

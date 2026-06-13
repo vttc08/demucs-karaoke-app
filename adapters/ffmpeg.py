@@ -129,6 +129,26 @@ class FFmpegAdapter:
         self._run_command(cmd, cancel_event=cancel_event)
         return output_path
 
+    def has_video_stream(self, source_path: Path) -> bool:
+        """Return whether the source file exposes at least one video stream."""
+        probe_cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=index",
+            "-of",
+            "csv=p=0",
+            str(source_path),
+        ]
+        try:
+            result = subprocess.run(probe_cmd, check=True, capture_output=True, text=True)
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            return False
+        return bool((result.stdout or "").strip())
+
     def _run_command(self, cmd: list[str], *, cancel_event: threading.Event | None = None) -> None:
         if cancel_event is None:
             subprocess.run(cmd, check=True, capture_output=True)

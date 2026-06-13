@@ -234,11 +234,11 @@ function renderTaskProgressBlock(task) {
     const label = getTaskProgressLabel(task);
     const percent = Number.isFinite(Number(progress)) ? Number(progress) : 0;
     return `
-        <div class="mt-3 max-w-xs">
-            <div class="h-2 overflow-hidden rounded-full bg-surface-container-highest">
-                <div class="h-full rounded-full bg-primary transition-all" style="width: ${Math.max(0, Math.min(100, percent))}%"></div>
+        <div class="mt-3 max-w-xs" data-task-progress-key="media-${task.id}" data-task-progress-status="${escapeHtml(task.status)}" data-task-progress-reported-percent="${Math.max(0, Math.min(100, percent))}" data-task-progress-label="${escapeHtml(label)}">
+            <div class="h-2 overflow-hidden rounded-full bg-surface-container-highest" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.max(0, Math.min(100, percent))}">
+                <div class="h-full rounded-full bg-primary transition-all duration-300 ease-out" data-task-progress-fill style="width: ${Math.max(0, Math.min(100, percent))}%"></div>
             </div>
-            <p class="mt-1 text-[11px] text-on-surface-variant">${escapeHtml(label)} • ${escapeHtml(String(percent))}%</p>
+            <p class="mt-1 text-[11px] text-on-surface-variant">${escapeHtml(label)} • <span data-task-progress-percent-text>${escapeHtml(String(percent))}%</span></p>
         </div>
     `;
 }
@@ -421,6 +421,7 @@ function renderTaskList(tasks) {
         </article>
         `;
     }).join("");
+    window.KaraokeTaskProgress?.sync(taskList);
     if (shouldScrollToTaskPanel && currentTasks.length > 0) {
         shouldScrollToTaskPanel = false;
         scrollTaskPanelIntoView();

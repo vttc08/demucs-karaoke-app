@@ -57,6 +57,7 @@ def client():
     original_demucs_device = settings.demucs_device
     original_demucs_output_format = settings.demucs_output_format
     original_demucs_mp3_bitrate = settings.demucs_mp3_bitrate
+    original_demucs_direct_media_max_mb = settings.demucs_direct_media_max_mb
     original_ffmpeg_preset = settings.ffmpeg_preset
     original_ffmpeg_crf = settings.ffmpeg_crf
     original_ytdlp_path = settings.ytdlp_path
@@ -78,6 +79,7 @@ def client():
     settings.demucs_device = original_demucs_device
     settings.demucs_output_format = original_demucs_output_format
     settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
+    settings.demucs_direct_media_max_mb = original_demucs_direct_media_max_mb
     settings.ffmpeg_preset = original_ffmpeg_preset
     settings.ffmpeg_crf = original_ffmpeg_crf
     settings.ytdlp_path = original_ytdlp_path
@@ -2275,6 +2277,7 @@ def test_get_runtime_settings(client):
     assert "demucs_device" in data
     assert "demucs_output_format" in data
     assert "demucs_mp3_bitrate" in data
+    assert "demucs_direct_media_max_mb" in data
     assert "ffmpeg_preset" in data
     assert "ffmpeg_crf" in data
     assert "ytdlp_path" in data
@@ -2310,6 +2313,7 @@ def test_update_runtime_settings(client):
             "demucs_device": "cpu",
             "demucs_output_format": "mp3",
             "demucs_mp3_bitrate": 256,
+            "demucs_direct_media_max_mb": 750,
             "ffmpeg_preset": "superfast",
             "ffmpeg_crf": 28,
             "media_path": "/tmp/karaoke_media_test",
@@ -2332,6 +2336,7 @@ def test_update_runtime_settings(client):
     assert data["demucs_device"] == "cpu"
     assert data["demucs_output_format"] == "mp3"
     assert data["demucs_mp3_bitrate"] == 256
+    assert data["demucs_direct_media_max_mb"] == 750
     assert data["ffmpeg_preset"] == "superfast"
     assert data["ffmpeg_crf"] == 28
     assert data["media_path"] == "/tmp/karaoke_media_test"
@@ -2365,6 +2370,7 @@ def test_update_runtime_settings_persists_to_database(client):
                 "stage_lobby_media_path": "/media/stage-lobby.mp4",
                 "ytdlp_video_resolution": "1080",
                 "concurrent_ytdlp_search_enabled": True,
+                "demucs_direct_media_max_mb": 333,
             },
         )
     assert response.status_code == 200
@@ -2378,6 +2384,9 @@ def test_update_runtime_settings_persists_to_database(client):
         resolution = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "ytdlp_video_resolution"
         ).first()
+        cutoff = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "demucs_direct_media_max_mb"
+        ).first()
         concurrent = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "concurrent_ytdlp_search_enabled"
         ).first()
@@ -2387,6 +2396,8 @@ def test_update_runtime_settings_persists_to_database(client):
         assert stage_lobby.value == "/media/stage-lobby.mp4"
         assert resolution is not None
         assert resolution.value == "1080"
+        assert cutoff is not None
+        assert cutoff.value == "333"
         assert concurrent is not None
         assert concurrent.value == "true"
     finally:
@@ -2486,6 +2497,14 @@ def test_update_runtime_settings_rejects_invalid_ytdlp_resolution(client):
     response = client.patch("/api/settings/", json={"ytdlp_video_resolution": "999"})
     assert response.status_code == 400
     assert "ytdlp_video_resolution" in response.json()["detail"]
+
+
+def test_update_runtime_settings_rejects_invalid_demucs_direct_media_cutoff(client):
+    """Runtime settings endpoint should validate the direct-media cutoff."""
+    authenticate_admin_client(client)
+    response = client.patch("/api/settings/", json={"demucs_direct_media_max_mb": 5001})
+    assert response.status_code == 400
+    assert "demucs_direct_media_max_mb" in response.json()["detail"]
 
 
 def test_skip_current_promotes_next_ready(client):

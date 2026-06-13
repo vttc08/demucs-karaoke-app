@@ -306,6 +306,7 @@
   "settings.demucs_api_url": "Demucs API URL",
   "settings.demucs_device": "Demucs 设备",
   "settings.demucs_model": "Demucs 模型",
+  "settings.demucs_direct_media_cutoff": "Demucs 直传媒体上限（MB）",
   "settings.already_current_version": "已是最新版本（{version}）",
   "settings.check_ytdlp_failed": "检查 yt-dlp 版本失败",
   "settings.checking_demucs": "正在检查 Demucs 健康状态...",
