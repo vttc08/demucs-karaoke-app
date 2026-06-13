@@ -157,6 +157,7 @@ and `/static/...`.
        - Enable/disable concurrent yt-dlp search mode
        - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
        - Configure WhisperX transcription model, alignment language, language detection, synced-lyrics mode, and preload list for Demucs-side lyric alignment
+       - Use the WhisperX preload button to ask the remote Demucs host to download/cache the listed models on demand
        - Configure **Stage Lobby Media URL** (`/media/...` or `/cache/...`) for empty-queue loop playback
        - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
       - Apply settings immediately without restarting the app (for processing/runtime behavior)

@@ -428,6 +428,22 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     stage_lobby_media_path: Optional[str] = None
 
 
+class WhisperXPreloadRequest(BaseModel):
+    """Request to preload WhisperX models on the remote Demucs host."""
+
+    whisperx_preload_models: Optional[str] = None
+
+
+class WhisperXPreloadResponse(BaseModel):
+    """Result of a WhisperX preload request."""
+
+    requested_models: Optional[str] = None
+    device: str
+    compute_type: Optional[str] = None
+    loaded_entries: list[str]
+    detail: str
+
+
 class YtDlpVersionResponse(BaseModel):
     """yt-dlp version details."""
 

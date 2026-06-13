@@ -75,6 +75,14 @@ class SeparateMetaResponse(BaseModel):
     aligned_lyrics_path: str | None = None
 
 
+class WhisperXPreloadResponse(BaseModel):
+    requested_models: str | None = None
+    device: str
+    compute_type: str | None = None
+    loaded_entries: list[str]
+    detail: str
+
+
 class DemucsJobCreateResponse(BaseModel):
     job_id: str
     status: str

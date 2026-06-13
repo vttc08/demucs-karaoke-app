@@ -10,6 +10,7 @@ from models import (
     RuntimeSetting,
     RuntimeSettingsResponse,
     RuntimeSettingsUpdateRequest,
+    WhisperXPreloadResponse,
     YtDlpUpdateResponse,
     YtDlpVersionResponse,
 )
@@ -67,6 +68,16 @@ class RuntimeSettingsService:
     def get_demucs_health(self) -> DemucsHealthResponse:
         """Return Demucs health for the current configured API URL."""
         return DemucsClient(api_url=settings.demucs_api_url).health_check()
+
+    def preload_whisperx_models(
+        self,
+        whisperx_preload_models: str | None = None,
+    ) -> WhisperXPreloadResponse:
+        """Trigger WhisperX model preload/download on the remote Demucs host."""
+        return DemucsClient(api_url=settings.demucs_api_url).preload_whisperx_models(
+            whisperx_preload_models=whisperx_preload_models,
+            device=settings.demucs_device,
+        )
 
     def _build_settings_response(
         self, demucs_health: DemucsHealthResponse | None

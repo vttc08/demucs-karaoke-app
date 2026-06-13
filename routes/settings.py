@@ -8,6 +8,8 @@ from models import (
     DemucsHealthResponse,
     RuntimeSettingsResponse,
     RuntimeSettingsUpdateRequest,
+    WhisperXPreloadRequest,
+    WhisperXPreloadResponse,
     YtDlpUpdateResponse,
     YtDlpVersionResponse,
 )
@@ -41,6 +43,20 @@ def update_runtime_settings(
 def get_demucs_health():
     """Get current Demucs service health for configured API URL."""
     return runtime_settings_service.get_demucs_health()
+
+
+@router.post("/whisperx/preload", response_model=WhisperXPreloadResponse)
+def preload_whisperx_models(
+    payload: WhisperXPreloadRequest,
+    _admin=Depends(require_admin_user),
+):
+    """Trigger remote WhisperX model preload/download."""
+    try:
+        return runtime_settings_service.preload_whisperx_models(
+            payload.whisperx_preload_models
+        )
+    except RuntimeError as error:
+        raise HTTPException(status_code=400, detail=str(error))
 
 
 @router.get("/ytdlp/version", response_model=YtDlpVersionResponse)

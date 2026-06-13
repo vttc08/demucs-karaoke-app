@@ -2537,6 +2537,44 @@ def test_update_ytdlp_error(client):
     assert "yt-dlp update failed" in response.json()["detail"]
 
 
+def test_preload_whisperx_models(client):
+    """WhisperX preload endpoint should proxy the remote preload request."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.settings.runtime_settings_service.preload_whisperx_models",
+        return_value={
+            "requested_models": "transcription=tiny,align=en,fr",
+            "device": "cuda",
+            "compute_type": None,
+            "loaded_entries": ["transcription=tiny", "align=en", "align=fr"],
+            "detail": "Preloaded 3 WhisperX model entries",
+        },
+    ):
+        response = client.post(
+            "/api/settings/whisperx/preload",
+            json={"whisperx_preload_models": "transcription=tiny,align=en,fr"},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["requested_models"] == "transcription=tiny,align=en,fr"
+    assert data["loaded_entries"] == ["transcription=tiny", "align=en", "align=fr"]
+
+
+def test_preload_whisperx_models_error(client):
+    """WhisperX preload endpoint should map runtime errors to 400."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.settings.runtime_settings_service.preload_whisperx_models",
+        side_effect=RuntimeError("WhisperX is not installed in this environment"),
+    ):
+        response = client.post(
+            "/api/settings/whisperx/preload",
+            json={"whisperx_preload_models": "transcription=tiny,align=en,fr"},
+        )
+    assert response.status_code == 400
+    assert "WhisperX is not installed" in response.json()["detail"]
+
+
 def test_update_runtime_settings_rejects_invalid_crf(client):
     """Runtime settings endpoint should validate ffmpeg_crf."""
     authenticate_admin_client(client)

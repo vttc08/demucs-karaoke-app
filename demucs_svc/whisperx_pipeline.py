@@ -36,6 +36,10 @@ def _normalize_compute_type(device: str, compute_type: str | None) -> str:
     return "float16" if device == "cuda" else "float32"
 
 
+def whisperx_available() -> bool:
+    return whisperx is not None
+
+
 def _normalize_language_code(language_code: str | None, *, default: str | None = None) -> str:
     value = (language_code or default or "").strip().lower()
     if not value:
@@ -185,16 +189,19 @@ def _parse_preload_entries(preload_models: str | None) -> list[tuple[str, str]]:
         return []
 
     entries: list[tuple[str, str]] = []
+    current_kind = "transcription"
     for raw_entry in re.split(r"[,\n]+", preload_models):
         entry = raw_entry.strip()
         if not entry:
             continue
         if "=" in entry:
             kind, value = entry.split("=", 1)
+            current_kind = kind.strip().lower()
         elif ":" in entry:
             kind, value = entry.split(":", 1)
+            current_kind = kind.strip().lower()
         else:
-            kind, value = "transcription", entry
+            kind, value = current_kind, entry
         normalized_kind = kind.strip().lower()
         normalized_value = value.strip()
         if not normalized_value:
@@ -211,14 +218,17 @@ def preload_models(
     *,
     device: str,
     compute_type: str | None = None,
-) -> None:
+) -> list[str]:
     if whisperx is None:
-        return
+        return []
+    loaded_entries: list[str] = []
     for kind, value in _parse_preload_entries(preload_models):
+        loaded_entries.append(f"{kind}={value}")
         if kind == "align":
             _get_align_model(value, device)
         else:
             _get_transcription_model(value, device, compute_type=compute_type)
+    return loaded_entries
 
 
 def _make_segment(start: int, end: int, words: list[dict[str, Any]]) -> dict[str, Any]:

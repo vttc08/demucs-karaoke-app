@@ -26,6 +26,7 @@ try:
         DemucsJobStatusResponse,
         SeparateConfig,
         SeparateMetaResponse,
+        WhisperXPreloadResponse,
     )
     from .settings import (
         DEFAULT_DEMUCS_DEVICE,
@@ -41,7 +42,12 @@ try:
         JOB_RETENTION_SECONDS,
         OUTPUT_ROOT,
     )
-    from .whisperx_pipeline import align_lyrics, dump_aligned_lyrics_json, preload_models
+    from .whisperx_pipeline import (
+        align_lyrics,
+        dump_aligned_lyrics_json,
+        preload_models,
+        whisperx_available,
+    )
 except ImportError:
     from demucs_runner import (
         _build_command,
@@ -56,6 +62,7 @@ except ImportError:
         DemucsJobStatusResponse,
         SeparateConfig,
         SeparateMetaResponse,
+        WhisperXPreloadResponse,
     )
     from settings import (
         DEFAULT_DEMUCS_DEVICE,
@@ -71,7 +78,12 @@ except ImportError:
         JOB_RETENTION_SECONDS,
         OUTPUT_ROOT,
     )
-    from whisperx_pipeline import align_lyrics, dump_aligned_lyrics_json, preload_models
+    from whisperx_pipeline import (
+        align_lyrics,
+        dump_aligned_lyrics_json,
+        preload_models,
+        whisperx_available,
+    )
 
 app = FastAPI(title="Demucs Service", version="0.2.0")
 job_store = DemucsJobStore(tail_limit=JOB_OUTPUT_TAIL_LINES)
@@ -404,6 +416,32 @@ def health():
         "checks": checks,
         "active_jobs": sum(1 for job in job_store.all() if job.status in {"queued", "running"}),
     }
+
+
+@app.post("/whisperx/preload", response_model=WhisperXPreloadResponse)
+def preload_whisperx(
+    whisperx_preload_models: str | None = Form(DEFAULT_WHISPERX_PRELOAD_MODELS),
+    device: Literal["cuda", "cpu"] = Form(DEFAULT_DEMUCS_DEVICE),
+    compute_type: str | None = Form(None),
+):
+    if not whisperx_preload_models or not whisperx_preload_models.strip():
+        raise HTTPException(status_code=400, detail="whisperx_preload_models cannot be empty")
+    if not whisperx_available():
+        raise HTTPException(status_code=503, detail="WhisperX is not installed in this environment")
+
+    loaded_entries = preload_models(
+        whisperx_preload_models,
+        device=device,
+        compute_type=compute_type,
+    )
+    detail = f"Preloaded {len(loaded_entries)} WhisperX model entr" + ("y" if len(loaded_entries) == 1 else "ies")
+    return WhisperXPreloadResponse(
+        requested_models=whisperx_preload_models.strip(),
+        device=device,
+        compute_type=compute_type,
+        loaded_entries=loaded_entries,
+        detail=detail,
+    )
 
 
 @app.post("/jobs", response_model=DemucsJobCreateResponse, status_code=202)

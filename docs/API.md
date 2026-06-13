@@ -883,7 +883,7 @@ Validation:
 - `whisperx_align_language` defaults to `en`; blank values are stored as empty strings and treated as disabled by the client
 - `whisperx_detect_language` toggles WhisperX language detection for alignment jobs
 - `whisperx_use_synced_lyrics` keeps timestamped LRC lyrics in line-by-line mode instead of flattening them before alignment
-- `whisperx_preload_models` is a comma-separated preload list such as `transcription=tiny,align=en`
+- `whisperx_preload_models` is a comma-separated preload list such as `transcription=tiny,align=en,fr`; bare values keep the previous item type, so `align=en,fr` preloads both `en` and `fr`
 - `concurrent_ytdlp_search_enabled` toggles optional parallel search mode
 - `lyrics_provider_netease_enabled` toggles NetEase in concurrent lyrics fallback
 - `lyrics_provider_lrclib_enabled` toggles LRCLib in concurrent lyrics fallback
@@ -934,6 +934,41 @@ Returns current Demucs health for configured API URL.
   "detail": "Demucs service is healthy"
 }
 ```
+
+---
+
+### Preload WhisperX Models
+```
+POST /api/settings/whisperx/preload
+```
+
+Admin-only endpoint that asks the remote Demucs host to ensure the requested WhisperX models are downloaded and cached in memory.
+
+**Request Body:**
+```json
+{
+  "whisperx_preload_models": "transcription=tiny,align=en,fr"
+}
+```
+
+If the payload is omitted or blank, the server uses the current runtime preload list.
+
+**Response:**
+```json
+{
+  "requested_models": "transcription=tiny,align=en,fr",
+  "device": "cuda",
+  "compute_type": null,
+  "loaded_entries": [
+    "transcription=tiny",
+    "align=en",
+    "align=fr"
+  ],
+  "detail": "Preloaded 3 WhisperX model entries"
+}
+```
+
+The separate Demucs service exposes the underlying worker endpoint at `POST /whisperx/preload` and uses the same preload-list grammar.
 
 ---
 

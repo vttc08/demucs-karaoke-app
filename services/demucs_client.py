@@ -11,7 +11,7 @@ import zipfile
 import httpx
 
 from config import settings
-from models import DemucsHealthResponse, DemucsResponse
+from models import DemucsHealthResponse, DemucsResponse, WhisperXPreloadResponse
 
 
 ProgressCallback = Callable[[int, str, dict | None], None]
@@ -22,6 +22,7 @@ class DemucsClient:
     """Client for Demucs vocal separation service."""
 
     HEALTH_TIMEOUT_SECONDS = 5.0
+    PRELOAD_TIMEOUT_SECONDS = 1800.0
     REQUEST_TIMEOUT_SECONDS = 600.0
     POLL_INTERVAL_SECONDS = 0.75
 
@@ -209,8 +210,8 @@ class DemucsClient:
                         return DemucsResponse(
                             no_vocals_path=str(output_path),
                             vocals_path=str(vocals_output_path),
-                            aligned_lyrics_path=str(aligned_output_path) if aligned_output_path else None,
-                        )
+                        aligned_lyrics_path=str(aligned_output_path) if aligned_output_path else None,
+                    )
 
                     if status == "failed":
                         raise RuntimeError(
@@ -227,6 +228,32 @@ class DemucsClient:
                     except Exception:
                         pass
                 raise
+
+    def preload_whisperx_models(
+        self,
+        *,
+        whisperx_preload_models: str | None = None,
+        device: str | None = None,
+        compute_type: str | None = None,
+    ) -> WhisperXPreloadResponse:
+        preload_value = whisperx_preload_models or settings.whisperx_preload_models
+        if not preload_value or not preload_value.strip():
+            raise RuntimeError("whisperx_preload_models cannot be empty")
+
+        data = {
+            "whisperx_preload_models": preload_value.strip(),
+            "device": device or settings.demucs_device,
+        }
+        if compute_type:
+            data["compute_type"] = compute_type
+
+        response = httpx.post(
+            f"{self.api_url}/whisperx/preload",
+            data=data,
+            timeout=self.PRELOAD_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return WhisperXPreloadResponse(**response.json())
 
     def health_check(self) -> DemucsHealthResponse:
         """Check if Demucs service is available and ready."""

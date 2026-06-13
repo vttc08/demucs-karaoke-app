@@ -35,6 +35,75 @@ def test_separate_config_defaults_and_mp3_bitrate():
     assert config.whisperx_preload_models == "transcription=tiny,align=en"
 
 
+def test_whisperx_preload_parser_keeps_bare_entries_on_previous_type(monkeypatch):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+
+    calls: list[tuple[str, str, dict[str, object] | str]] = []
+
+    class FakeWhisperX:
+        @staticmethod
+        def load_model(model_name, **kwargs):
+            calls.append(("transcription", model_name, kwargs))
+            return {"model_name": model_name, "kwargs": kwargs}
+
+        @staticmethod
+        def load_align_model(language_code, device):
+            calls.append(("align", language_code, device))
+            return {"language_code": language_code}, {"language_code": language_code}
+
+    monkeypatch.setattr(whisperx_pipeline, "whisperx", FakeWhisperX)
+    whisperx_pipeline._TRANSCRIPTION_MODEL_CACHE.clear()
+    whisperx_pipeline._ALIGN_MODEL_CACHE.clear()
+
+    entries = whisperx_pipeline._parse_preload_entries("transcription=tiny,align=en,fr,zh")
+    assert entries == [
+        ("transcription", "tiny"),
+        ("align", "en"),
+        ("align", "fr"),
+        ("align", "zh"),
+    ]
+
+    whisperx_pipeline.preload_models("transcription=tiny,align=en,fr", device="cpu")
+    assert calls == [
+        ("transcription", "tiny", {"device": "cpu", "compute_type": "float32"}),
+        ("align", "en", "cpu"),
+        ("align", "fr", "cpu"),
+    ]
+
+
+def test_whisperx_preload_endpoint_uses_remote_models(monkeypatch):
+    monkeypatch.setattr(demucs_app, "whisperx_available", lambda: True)
+    seen = {}
+
+    def fake_preload_models(preload_models, *, device, compute_type=None):
+        seen["preload_models"] = preload_models
+        seen["device"] = device
+        seen["compute_type"] = compute_type
+        return ["transcription=tiny", "align=en", "align=fr"]
+
+    monkeypatch.setattr(demucs_app, "preload_models", fake_preload_models)
+
+    client = TestClient(demucs_app.app)
+    response = client.post(
+        "/whisperx/preload",
+        data={
+            "whisperx_preload_models": "transcription=tiny,align=en,fr",
+            "device": "cpu",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["requested_models"] == "transcription=tiny,align=en,fr"
+    assert data["device"] == "cpu"
+    assert data["loaded_entries"] == ["transcription=tiny", "align=en", "align=fr"]
+    assert seen == {
+        "preload_models": "transcription=tiny,align=en,fr",
+        "device": "cpu",
+        "compute_type": None,
+    }
+
+
 def test_separate_config_clears_mp3_bitrate_for_wav():
     config = demucs_models.SeparateConfig(output_format="wav", mp3_bitrate=256)
     assert config.output_format == "wav"

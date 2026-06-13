@@ -113,9 +113,9 @@
                                     <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_transcription_model') }}</span>
                                     <input id="whisperx_transcription_model" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
                                 </label>
-                                <label class="flex flex-col gap-1.5">
+                                <label id="whisperx-align-language-group" class="flex flex-col gap-1.5">
                                     <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_align_language') }}</span>
-                                    <input id="whisperx_align_language" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" placeholder="en" />
+                                    <input id="whisperx_align_language" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50" type="text" placeholder="en" />
                                 </label>
                             </div>
                             <label class="flex items-center justify-between gap-3 rounded-lg bg-surface-container-highest/40 px-4 py-3">
@@ -137,6 +137,15 @@
                                 <input id="whisperx_preload_models" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" placeholder="transcription=tiny,align=en" />
                                 <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.whisperx_preload_models_detail') }}</span>
                             </label>
+                            <div class="flex flex-wrap items-center gap-3">
+                                <button id="preload-whisperx-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary px-3 py-2 text-[10px] font-black uppercase tracking-widest text-on-primary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
+                                    <span class="material-symbols-outlined text-sm">download</span>
+                                    {{ t('settings.preload_whisperx_models') }}
+                                </button>
+                                <p id="whisperx-preload-status" class="text-xs text-on-surface-variant">
+                                    {{ t('settings.preload_whisperx_models_detail_short') }}
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -423,6 +423,7 @@ This is applied at command build time, so new operations use updated proxy setti
   - `whisperx_detect_language`
   - `whisperx_use_synced_lyrics`
   - `whisperx_preload_models`
+  - WhisperX preload button calls the remote Demucs preload endpoint so missing models are downloaded on the remote host before alignment jobs run
   - `ytdlp_path`
   - `ytdlp_proxy_url`
   - `concurrent_ytdlp_search_enabled`

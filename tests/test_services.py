@@ -4809,6 +4809,50 @@ def test_demucs_client_health_check_uses_short_timeout():
     assert health.detail == "Health check timed out"
 
 
+def test_demucs_client_preload_whisperx_models_posts_request_and_parses_response(tmp_path):
+    """Demucs client should trigger remote WhisperX preload and parse the response."""
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {
+                "requested_models": "transcription=tiny,align=en,fr",
+                "device": "cpu",
+                "compute_type": None,
+                "loaded_entries": ["transcription=tiny", "align=en", "align=fr"],
+                "detail": "Preloaded 3 WhisperX model entries",
+            }
+
+    seen = {}
+
+    def fake_post(url, data, timeout):
+        seen["url"] = url
+        seen["data"] = data
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    with patch("services.demucs_client.httpx.post", side_effect=fake_post):
+        client = DemucsClient(api_url="http://127.0.0.1:8001")
+        result = client.preload_whisperx_models(
+            whisperx_preload_models="transcription=tiny,align=en,fr",
+            device="cpu",
+        )
+
+    assert seen["url"] == "http://127.0.0.1:8001/whisperx/preload"
+    assert seen["data"]["whisperx_preload_models"] == "transcription=tiny,align=en,fr"
+    assert seen["data"]["device"] == "cpu"
+    assert seen["timeout"] == DemucsClient.PRELOAD_TIMEOUT_SECONDS
+    assert result.requested_models == "transcription=tiny,align=en,fr"
+    assert result.loaded_entries == ["transcription=tiny", "align=en", "align=fr"]
+    assert result.detail == "Preloaded 3 WhisperX model entries"
+
+
 def test_runtime_settings_get_settings_is_non_blocking():
     """Settings snapshot should not call external health checks."""
     service = RuntimeSettingsService()
@@ -4849,6 +4893,37 @@ def test_runtime_settings_update_settings_includes_demucs_health():
 
     assert result.demucs_healthy is True
     assert result.demucs_health_detail == "Demucs service is healthy"
+
+
+def test_runtime_settings_preload_whisperx_models_uses_current_settings():
+    """Runtime settings service should forward the configured preload list to Demucs."""
+    service = RuntimeSettingsService()
+    original_demucs_device = settings.demucs_device
+    original_demucs_api_url = settings.demucs_api_url
+    try:
+        settings.demucs_device = "cpu"
+        settings.demucs_api_url = "http://127.0.0.1:8001"
+        with patch(
+            "services.runtime_settings_service.DemucsClient.preload_whisperx_models",
+            return_value={
+                "requested_models": "transcription=tiny,align=en,fr",
+                "device": "cpu",
+                "compute_type": None,
+                "loaded_entries": ["transcription=tiny", "align=en", "align=fr"],
+                "detail": "Preloaded 3 WhisperX model entries",
+            },
+        ) as mock_preload:
+            result = service.preload_whisperx_models("transcription=tiny,align=en,fr")
+
+        mock_preload.assert_called_once_with(
+            whisperx_preload_models="transcription=tiny,align=en,fr",
+            device="cpu",
+        )
+        assert result["requested_models"] == "transcription=tiny,align=en,fr"
+        assert result["loaded_entries"] == ["transcription=tiny", "align=en", "align=fr"]
+    finally:
+        settings.demucs_device = original_demucs_device
+        settings.demucs_api_url = original_demucs_api_url
 
 
 def test_runtime_settings_update_settings_accepts_media_and_cache_paths(tmp_path):
