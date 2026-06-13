@@ -28,6 +28,7 @@ const fields = {
     demucs_device: document.getElementById("demucs_device"),
     demucs_output_format: document.getElementById("demucs_output_format"),
     demucs_mp3_bitrate: document.getElementById("demucs_mp3_bitrate"),
+    demucs_direct_media_max_mb: document.getElementById("demucs_direct_media_max_mb"),
     ffmpeg_preset: document.getElementById("ffmpeg_preset"),
     ffmpeg_crf: document.getElementById("ffmpeg_crf"),
     media_path: document.getElementById("media_path"),
@@ -216,6 +217,7 @@ function applySettingsToForm(data) {
     fields.demucs_device.value = data.demucs_device || "cuda";
     fields.demucs_output_format.value = data.demucs_output_format || "wav";
     fields.demucs_mp3_bitrate.value = String(data.demucs_mp3_bitrate ?? 320);
+    fields.demucs_direct_media_max_mb.value = String(data.demucs_direct_media_max_mb ?? 500);
     fields.ffmpeg_preset.value = data.ffmpeg_preset || "veryfast";
     fields.ffmpeg_crf.value = String(data.ffmpeg_crf ?? 23);
     fields.media_path.value = data.media_path || "";
@@ -282,6 +284,7 @@ async function saveSettings() {
         demucs_output_format: fields.demucs_output_format.value,
         ffmpeg_preset: fields.ffmpeg_preset.value,
         ffmpeg_crf: Number(fields.ffmpeg_crf.value),
+        demucs_direct_media_max_mb: Number(fields.demucs_direct_media_max_mb.value),
         media_path: fields.media_path.value.trim(),
         cache_path: fields.cache_path.value.trim(),
         ytdlp_path: fields.ytdlp_path.value.trim(),

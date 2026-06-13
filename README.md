@@ -153,7 +153,7 @@ and `/static/...`.
        - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
        - View current runtime settings
        - Log out of the active admin session from the settings page
-        - Update Demucs URL, FFmpeg preset/CRF, media/cache paths, tool paths, and outbound proxy URL
+        - Update Demucs URL, direct-media cutoff, FFmpeg preset/CRF, media/cache paths, tool paths, and outbound proxy URL
        - Enable/disable concurrent yt-dlp search mode
         - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
         - Configure **Stage Lobby Media URL** (`/media/...` or `/cache/...`) for empty-queue loop playback
@@ -244,6 +244,7 @@ When concurrent yt-dlp search is enabled:
 
 When karaoke mode is enabled:
 - App removes vocals with Demucs and remuxes the output media into the media library root (no subtitle burn path).
+- Karaoke prep uses the direct-media cutoff to decide whether small video files go straight to Demucs or get converted to audio first; set it to `0` to always extract/download audio for video files, or raise it on a fast LAN to send more media files directly.
 - Karaoke remuxes and vocals sidecars are served from `/media`, not `/cache`.
 - Lyrics workflow remains available from the queue modal (provider resolve/manual upload), and lyrics are stored as sidecars for stage overlay display.
 - If Demucs is offline/unhealthy, karaoke processing fails fast and queue UI disables karaoke toggles.

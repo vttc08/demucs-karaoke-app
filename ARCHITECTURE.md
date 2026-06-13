@@ -194,6 +194,10 @@ The stage page uses a websocket-first model:
   - yt-dlp source video/audio downloads stay in `cache/`
   - `no_vocals` is muxed into the final canonical `media_path` video as `/media/<stem>.mp4`
   - `vocals` is persisted separately to canonical `vocals_path` as `/media/<stem>.vocals.<ext>`
+- Karaoke input prep chooses the Demucs source after a local file exists:
+  - audio-only inputs always go directly to Demucs
+  - small video/media files can go directly to Demucs based on the persisted direct-media cutoff
+  - large YouTube or local video files fall back to the existing audio-only prep path
 - Local media karaoke finalization stages both outputs before updating the media row:
   - video inputs remux the `no_vocals` stem with the original video stream
   - audio-only inputs persist `no_vocals` directly as the new primary audio

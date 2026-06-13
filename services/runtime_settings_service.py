@@ -35,12 +35,14 @@ class RuntimeSettingsService:
     ALLOWED_DEMUCS_OUTPUT_FORMATS = {"wav", "mp3"}
     ALLOWED_PROXY_SCHEMES = {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
     ALLOWED_YTDLP_VIDEO_RESOLUTIONS = {"default", "360", "480", "720", "1080", "2160"}
+    DEMUCS_DIRECT_MEDIA_MAX_MB_RANGE = (0, 5000)
     PERSISTED_SETTING_FIELDS = (
         "demucs_api_url",
         "demucs_model",
         "demucs_device",
         "demucs_output_format",
         "demucs_mp3_bitrate",
+        "demucs_direct_media_max_mb",
         "ffmpeg_preset",
         "ffmpeg_crf",
         "ytdlp_path",
@@ -79,6 +81,7 @@ class RuntimeSettingsService:
             demucs_device=settings.demucs_device,
             demucs_output_format=settings.demucs_output_format,
             demucs_mp3_bitrate=settings.demucs_mp3_bitrate,
+            demucs_direct_media_max_mb=settings.demucs_direct_media_max_mb,
             ffmpeg_preset=settings.ffmpeg_preset,
             ffmpeg_crf=settings.ffmpeg_crf,
             ytdlp_path=settings.ytdlp_path,
@@ -170,6 +173,20 @@ class RuntimeSettingsService:
             snapshot.setdefault("demucs_mp3_bitrate", settings.demucs_mp3_bitrate)
             settings.demucs_mp3_bitrate = bitrate
             updated_fields.append("demucs_mp3_bitrate")
+
+        if payload.demucs_direct_media_max_mb is not None:
+            max_mb = payload.demucs_direct_media_max_mb
+            if not self._is_valid_demucs_direct_media_max_mb(max_mb):
+                min_mb, max_mb_allowed = self.DEMUCS_DIRECT_MEDIA_MAX_MB_RANGE
+                raise ValueError(
+                    "demucs_direct_media_max_mb must be between "
+                    f"{min_mb} and {max_mb_allowed}"
+                )
+            snapshot.setdefault(
+                "demucs_direct_media_max_mb", settings.demucs_direct_media_max_mb
+            )
+            settings.demucs_direct_media_max_mb = max_mb
+            updated_fields.append("demucs_direct_media_max_mb")
 
         if payload.ffmpeg_preset is not None:
             preset = payload.ffmpeg_preset.strip().lower()
@@ -312,6 +329,11 @@ class RuntimeSettingsService:
             settings.demucs_output_format = output_format
         elif field_name == "demucs_mp3_bitrate":
             settings.demucs_mp3_bitrate = int(raw_value)
+        elif field_name == "demucs_direct_media_max_mb":
+            max_mb = int(raw_value)
+            if not self._is_valid_demucs_direct_media_max_mb(max_mb):
+                raise ValueError(f"Invalid persisted demucs_direct_media_max_mb: {raw_value}")
+            settings.demucs_direct_media_max_mb = max_mb
         elif field_name == "ffmpeg_preset":
             preset = raw_value.strip().lower()
             if preset not in self.ALLOWED_FFMPEG_PRESETS:
@@ -385,6 +407,11 @@ class RuntimeSettingsService:
         if candidate.exists():
             return str(candidate)
         return find_executable(value.split("/")[-1])
+
+    @classmethod
+    def _is_valid_demucs_direct_media_max_mb(cls, value: int) -> bool:
+        min_mb, max_mb = cls.DEMUCS_DIRECT_MEDIA_MAX_MB_RANGE
+        return min_mb <= value <= max_mb
 
     def get_ytdlp_version(self) -> YtDlpVersionResponse:
         """Return currently active yt-dlp version."""
