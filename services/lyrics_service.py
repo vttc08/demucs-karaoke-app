@@ -974,7 +974,14 @@ class LyricsService:
     def parse_json_to_cues(self, payload: str) -> list[dict[str, float | str]]:
         """Parse JSON lyrics cues and normalize their shape."""
         data = json.loads(payload)
-        rows = data.get("cues") if isinstance(data, dict) else data
+        rows: Any = None
+        if isinstance(data, dict):
+            for key in ("cues", "segments", "items", "lines"):
+                if key in data:
+                    rows = data.get(key)
+                    break
+        else:
+            rows = data
         if not isinstance(rows, list):
             raise ValueError('JSON lyrics payload must be a list or {"cues": [...]} object')
 
@@ -992,8 +999,16 @@ class LyricsService:
                 continue
 
             raw_text = row.get("text", row.get("line", row.get("lyric", "")))
-            if not isinstance(raw_text, str):
-                continue
+            if not isinstance(raw_text, str) or not raw_text.strip():
+                words = row.get("words")
+                if isinstance(words, list):
+                    raw_text = " ".join(
+                        str(word.get("word", "")).strip()
+                        for word in words
+                        if isinstance(word, dict) and str(word.get("word", "")).strip()
+                    )
+                if not isinstance(raw_text, str) or not raw_text.strip():
+                    continue
 
             text = raw_text.strip()
             if not text:

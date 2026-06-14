@@ -35,6 +35,11 @@ def test_separate_config_defaults_and_mp3_bitrate():
     assert config.whisperx_preload_models == "transcription=tiny,align=en"
 
 
+def test_separate_config_accepts_srt_lyrics_format():
+    config = demucs_models.SeparateConfig(lyrics_format="srt")
+    assert config.lyrics_format == "srt"
+
+
 def test_whisperx_preload_parser_keeps_bare_entries_on_previous_type(monkeypatch):
     whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
 
@@ -71,6 +76,68 @@ def test_whisperx_preload_parser_keeps_bare_entries_on_previous_type(monkeypatch
     ]
 
 
+def test_parse_srt_lyrics_uses_library_entries(monkeypatch):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+
+    class FakeDelta:
+        def __init__(self, seconds):
+            self._seconds = seconds
+
+        def total_seconds(self):
+            return self._seconds
+
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "srt",
+        SimpleNamespace(
+            parse=lambda text: [
+                SimpleNamespace(content="Hello\nworld", start=FakeDelta(1.25), end=FakeDelta(2.75)),
+                SimpleNamespace(content="Second line", start=FakeDelta(2.75), end=FakeDelta(4.0)),
+            ]
+        ),
+    )
+
+    segments, is_synced = whisperx_pipeline._parse_srt("ignored")
+
+    assert is_synced is True
+    assert [(segment.text, segment.start, segment.end) for segment in segments] == [
+        ("Hello world", 1.25, 2.75),
+        ("Second line", 2.75, 4.0),
+    ]
+
+
+def test_parse_lrc_lyrics_uses_library_entries_and_falls_back_to_text(monkeypatch):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "pylrc",
+        SimpleNamespace(
+            parse=lambda text: [
+                SimpleNamespace(text="Hello / 你好", time=1.0),
+                SimpleNamespace(text="World", time=3.0),
+            ]
+        ),
+    )
+
+    segments, is_synced = whisperx_pipeline._parse_lrc("ignored")
+
+    assert is_synced is True
+    assert [(segment.text, segment.start, segment.end) for segment in segments] == [
+        ("Hello", 1.0, 3.0),
+        ("World", 3.0, 8.0),
+    ]
+
+    monkeypatch.setattr(whisperx_pipeline, "pylrc", SimpleNamespace(parse=lambda text: []))
+    fallback_segments, fallback_is_synced = whisperx_pipeline._parse_lrc("line one\nline two")
+
+    assert fallback_is_synced is False
+    assert [(segment.text, segment.start, segment.end) for segment in fallback_segments] == [
+        ("line one", 0.0, 0.0),
+        ("line two", 0.0, 0.0),
+    ]
+
+
 def test_whisperx_preload_endpoint_uses_remote_models(monkeypatch):
     monkeypatch.setattr(demucs_app, "whisperx_available", lambda: True)
     seen = {}
@@ -102,6 +169,54 @@ def test_whisperx_preload_endpoint_uses_remote_models(monkeypatch):
         "device": "cpu",
         "compute_type": None,
     }
+
+
+def test_align_lyrics_supports_srt_format(monkeypatch):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+
+    class FakeDelta:
+        def __init__(self, seconds):
+            self._seconds = seconds
+
+        def total_seconds(self):
+            return self._seconds
+
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "srt",
+        SimpleNamespace(
+            parse=lambda text: [
+                SimpleNamespace(content="Hello\nworld", start=FakeDelta(1.0), end=FakeDelta(2.0)),
+                SimpleNamespace(content="Second line", start=FakeDelta(2.0), end=FakeDelta(3.0)),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "whisperx",
+        SimpleNamespace(
+            load_audio=lambda path: [0.0] * 16000,
+            load_align_model=lambda language_code, device: ({"language_code": language_code}, {"language_code": language_code}),
+            align=lambda transcript, *args, **kwargs: {"segments": transcript},
+        ),
+    )
+
+    aligned = whisperx_pipeline.align_lyrics(
+        Path("input.wav"),
+        "ignored",
+        lyrics_format="srt",
+        transcription_model="tiny",
+        align_language="en",
+        detect_language=False,
+        use_synced_lyrics=True,
+        device="cpu",
+        compute_type=None,
+    )
+
+    assert [(segment["text"], segment["start"], segment["end"]) for segment in aligned] == [
+        ("Hello world", 1.0, 2.0),
+        ("Second line", 2.0, 3.0),
+    ]
 
 
 def test_separate_config_clears_mp3_bitrate_for_wav():

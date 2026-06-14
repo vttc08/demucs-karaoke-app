@@ -10,6 +10,16 @@ from typing import Any, Iterable
 logger = logging.getLogger(__name__)
 
 try:
+    import pylrc  # type: ignore
+except Exception:  # pragma: no cover - optional dependency in test environments
+    pylrc = None
+
+try:
+    import srt  # type: ignore
+except Exception:  # pragma: no cover - optional dependency in test environments
+    srt = None
+
+try:
     import whisperx  # type: ignore
 except Exception:  # pragma: no cover - optional dependency in test environments
     whisperx = None
@@ -18,9 +28,7 @@ _TRANSCRIPTION_MODEL_CACHE: dict[tuple[str, str, str], Any] = {}
 _ALIGN_MODEL_CACHE: dict[tuple[str, str], tuple[Any, dict[str, Any]]] = {}
 
 _TOKEN_RE = re.compile(r"[\u4e00-\u9fff]|[A-Za-z0-9]+|[^\s]")
-_TIMESTAMP_RE = re.compile(r"\[(?P<minutes>\d{1,2}):(?P<seconds>\d{2}(?:\.\d{1,3})?)\]")
-_LRC_METADATA_RE = re.compile(r"^\[(?:ar|al|ti|by|offset|re|ve|length):", re.IGNORECASE)
-_SUPPORTED_LYRICS_FORMATS = {"lrc", "txt"}
+_SUPPORTED_LYRICS_FORMATS = {"lrc", "srt", "txt"}
 
 
 @dataclass
@@ -72,47 +80,74 @@ def _clean_token(token: str) -> str:
 
 def _preprocess_line(line: str) -> str | None:
     stripped = line.strip()
-    if not stripped or _LRC_METADATA_RE.match(stripped):
+    if not stripped:
         return None
     if "/" in stripped:
         stripped = stripped.split("/", 1)[0].strip()
     return stripped or None
 
 
-def _parse_lrc(text: str) -> tuple[list[ParsedLyricSegment], bool]:
-    segments: list[ParsedLyricSegment] = []
-    is_synced = False
-    lines = text.splitlines()
-    for raw_line in lines:
-        stripped = raw_line.strip()
-        if not stripped or _LRC_METADATA_RE.match(stripped):
-            continue
-        matches = list(_TIMESTAMP_RE.finditer(stripped))
-        lyric_text = _preprocess_line(_TIMESTAMP_RE.sub("", stripped).strip())
-        if not matches:
-            if lyric_text:
-                segments.append(ParsedLyricSegment(text=lyric_text, start=0.0, end=0.0))
-            continue
-        is_synced = True
-        if lyric_text is None:
-            continue
-        for match in matches:
-            minutes = float(match.group("minutes"))
-            seconds = float(match.group("seconds"))
-            start = (minutes * 60.0) + seconds
-            segments.append(ParsedLyricSegment(text=lyric_text, start=start, end=start))
-    segments.sort(key=lambda segment: segment.start)
-    for index, segment in enumerate(segments):
-        if index + 1 < len(segments):
-            segment.end = max(segment.start, segments[index + 1].start)
-        else:
-            segment.end = segment.start + 5.0
-    return segments, is_synced
-
-
-def _parse_text(text: str) -> list[ParsedLyricSegment]:
+def _parse_plain_text(text: str) -> list[ParsedLyricSegment]:
     lines = [_preprocess_line(line) for line in text.splitlines()]
     return [ParsedLyricSegment(text=line, start=0.0, end=0.0) for line in lines if line]
+
+
+def _parse_srt(text: str) -> tuple[list[ParsedLyricSegment], bool]:
+    if srt is None:
+        raise RuntimeError("srt is not installed in this environment")
+
+    segments: list[ParsedLyricSegment] = []
+    for subtitle in srt.parse(text):
+        lyric_text = _preprocess_line(str(subtitle.content).replace("\n", " "))
+        if not lyric_text:
+            continue
+        segments.append(
+            ParsedLyricSegment(
+                text=lyric_text,
+                start=float(subtitle.start.total_seconds()),
+                end=float(subtitle.end.total_seconds()),
+            )
+        )
+    return segments, bool(segments)
+
+
+def _parse_lrc(text: str) -> tuple[list[ParsedLyricSegment], bool]:
+    if pylrc is None:
+        raise RuntimeError("pylrc is not installed in this environment")
+
+    parsed_lines = list(pylrc.parse(text) or [])
+    if not parsed_lines:
+        return _parse_plain_text(text), False
+
+    segments: list[ParsedLyricSegment] = []
+    for index, line in enumerate(parsed_lines):
+        lyric_text = _preprocess_line(str(getattr(line, "text", "")))
+        if not lyric_text:
+            continue
+        start = float(getattr(line, "time", 0.0) or 0.0)
+        if index + 1 < len(parsed_lines):
+            next_start = float(getattr(parsed_lines[index + 1], "time", start + 5.0) or (start + 5.0))
+            end = max(start, next_start)
+        else:
+            end = start + 5.0
+        segments.append(ParsedLyricSegment(text=lyric_text, start=start, end=end))
+    return segments, bool(segments)
+
+
+def _parse_lyrics(text: str, lyrics_format: str | None) -> tuple[list[ParsedLyricSegment], bool]:
+    normalized_format = (lyrics_format or "").strip().lower() or None
+    if normalized_format == "txt":
+        return _parse_plain_text(text), False
+    if normalized_format == "srt":
+        return _parse_srt(text)
+    if normalized_format == "lrc":
+        return _parse_lrc(text)
+    if "-->" in text:
+        return _parse_srt(text)
+    parsed_segments, is_synced = _parse_lrc(text)
+    if parsed_segments:
+        return parsed_segments, is_synced
+    return _parse_plain_text(text), False
 
 
 def _flatten_segments(segments: list[ParsedLyricSegment], duration: float) -> list[dict[str, Any]]:
@@ -306,15 +341,7 @@ def align_lyrics(
     if lyrics_format and lyrics_format not in _SUPPORTED_LYRICS_FORMATS:
         raise ValueError(f"Unsupported lyrics format: {lyrics_format}")
 
-    parsed_segments: list[ParsedLyricSegment]
-    parsed_is_synced = False
-    normalized_format = (lyrics_format or "").lower() or None
-    if normalized_format == "txt" or (normalized_format is None and not _TIMESTAMP_RE.search(lyrics_text)):
-        parsed_segments = _parse_text(lyrics_text)
-    else:
-        parsed_segments, parsed_is_synced = _parse_lrc(lyrics_text)
-        if not parsed_is_synced:
-            parsed_segments = _parse_text(lyrics_text)
+    parsed_segments, parsed_is_synced = _parse_lyrics(lyrics_text, lyrics_format)
 
     if not parsed_segments:
         return []

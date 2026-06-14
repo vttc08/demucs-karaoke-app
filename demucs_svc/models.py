@@ -32,7 +32,7 @@ class SeparateConfig(BaseModel):
     output_format: Literal["wav", "mp3"] = DEFAULT_OUTPUT_FORMAT
     mp3_bitrate: int | None = Field(default=None, ge=64, le=320)
     lyrics_text: str | None = None
-    lyrics_format: Literal["lrc", "txt"] | None = None
+    lyrics_format: Literal["lrc", "srt", "txt"] | None = None
     transcription_model: str = DEFAULT_WHISPERX_TRANSCRIPTION_MODEL
     align_language: str | None = DEFAULT_WHISPERX_ALIGN_LANGUAGE
     detect_language: bool = DEFAULT_WHISPERX_DETECT_LANGUAGE

@@ -2943,6 +2943,67 @@ def test_get_queue_item_lyrics_cues_from_json(client):
             lyrics_file.unlink()
 
 
+def test_get_queue_item_lyrics_cues_from_aligned_json_segments(client):
+    """Lyrics cues endpoint should normalize aligned segment JSON into line cues."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "lyric-segments-1", "title": "Lyric Segments", "is_karaoke": False},
+    ).json()
+
+    lyrics_file = Path(settings.cache_path) / "route-aligned-lyrics.json"
+    lyrics_file.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 2.5,
+                        "end": 4.0,
+                        "text": "Hello world",
+                        "words": [
+                            {"word": "Hello", "start": 2.5, "end": 3.0},
+                            {"word": "world", "start": 3.0, "end": 4.0},
+                        ],
+                    },
+                    {
+                        "start": 5.25,
+                        "end": 6.25,
+                        "words": [
+                            {"word": "Second", "start": 5.25, "end": 5.75},
+                            {"word": "line", "start": 5.75, "end": 6.25},
+                        ],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    db = TestingSessionLocal()
+    try:
+        row = db.query(QueueItem).filter(QueueItem.id == created["id"]).first()
+        assert row is not None
+        assert row.media is not None
+        row.media.lyrics_path = "/cache/route-aligned-lyrics.json"
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        response = client.get(f"/api/queue/{created['id']}/lyrics-cues")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["source_format"] == "json"
+        assert payload["is_synced"] is True
+        assert payload["cues"] == [
+            {"time": 2.5, "text": "Hello world"},
+            {"time": 5.25, "text": "Second line"},
+        ]
+        assert payload["lines"] == ["Hello world", "Second line"]
+    finally:
+        if lyrics_file.exists():
+            lyrics_file.unlink()
+
+
 def test_get_queue_item_lyrics_cues_from_txt(client):
     """Lyrics cues endpoint should expose plain text lyrics as unsynced lines."""
     created = client.post(

@@ -227,7 +227,8 @@ The stage page uses a websocket-first model:
 - Lyrics cues are fetched from `GET /api/queue/{item_id}/lyrics-cues`.
 - Backend cue source is media sidecar `lyrics_path` and supports:
   - `.lrc` sidecars parsed into timestamped cues
-  - `.json` sidecars validated and normalized into cue objects
+  - `.json` sidecars validated and normalized into line-level cue objects, including
+    Demucs/WhisperX aligned segment JSON with nested word timing
   - `.txt` sidecars parsed into unsynced text lines for queue-side viewing
 - Overlay highlight logic is driven by the video timeline:
   - current line highlighted in red

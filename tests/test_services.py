@@ -4398,6 +4398,41 @@ def test_lyrics_service_parse_json_to_cues_normalizes_shape():
     ]
 
 
+def test_lyrics_service_parse_json_to_cues_accepts_aligned_segments():
+    """JSON parser should normalize WhisperX-style aligned segments into line cues."""
+    service = LyricsService()
+    payload = json.dumps(
+        {
+            "segments": [
+                {
+                    "start": 2.5,
+                    "end": 4.0,
+                    "text": "Hello world",
+                    "words": [
+                        {"word": "Hello", "start": 2.5, "end": 3.0},
+                        {"word": "world", "start": 3.0, "end": 4.0},
+                    ],
+                },
+                {
+                    "start": 5.25,
+                    "end": 6.25,
+                    "words": [
+                        {"word": "Second", "start": 5.25, "end": 5.75},
+                        {"word": "line", "start": 5.75, "end": 6.25},
+                    ],
+                },
+            ]
+        }
+    )
+
+    cues = service.parse_json_to_cues(payload)
+
+    assert cues == [
+        {"time": 2.5, "text": "Hello world"},
+        {"time": 5.25, "text": "Second line"},
+    ]
+
+
 def test_chinese_lyrics_service_simplifies_and_adds_pinyin():
     """Chinese lyrics transformer should simplify Traditional Chinese and preserve mixed text."""
     service = ChineseLyricsService()

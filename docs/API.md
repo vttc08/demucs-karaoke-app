@@ -602,7 +602,7 @@ Behavior:
 - Reads queue item media sidecar `lyrics_path` (after server-side normalization/repair).
 - Supports:
   - `.lrc` files (parsed to cues)
-  - `.json` files (validated/normalized cue payloads)
+  - `.json` files (validated/normalized cue payloads, including aligned segment JSON from Demucs/WhisperX)
   - `.txt` files (plain unsynced lines)
 - Uses configured media/cache roots for `/media/...` and `/cache/...` paths.
 
