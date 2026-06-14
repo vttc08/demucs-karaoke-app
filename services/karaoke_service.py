@@ -485,6 +485,7 @@ class KaraokeService:
             queue_item,
             media_item,
             audio_path,
+            has_whisperx=bool(self._alignment_lyrics_for_media(media_item)[0]),
             task_id=task.id,
             progress_step_index=3,
             progress_step_total=4,
@@ -739,6 +740,7 @@ class KaraokeService:
         media_item: MediaItem,
         audio_path: Path,
         *,
+        has_whisperx: bool,
         task_id: int,
         progress_step_index: int,
         progress_step_total: int,
@@ -757,6 +759,7 @@ class KaraokeService:
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
                 queue_item_id=queue_item.id if queue_item is not None else None,
+                has_whisperx=has_whisperx,
             )
             log_callback = self._log_callback(
                 loop,
@@ -839,6 +842,7 @@ class KaraokeService:
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
                 queue_item_id=queue_item.id if queue_item is not None else None,
+                has_whisperx=has_whisperx,
             )
             log_callback = self._log_callback(
                 loop,
@@ -1109,49 +1113,85 @@ class KaraokeService:
         status: str,
         stage: str,
         queue_item_id: int | None = None,
+        has_whisperx: bool = False,
     ):
         last_emit_time = float("-inf")
         last_emit_percent: int | None = None
         last_emit_message: str | None = None
         last_logged_job_message: str | None = None
+        current_stage = stage
+        whisperx_started = False
 
         def callback(percent: int, message: str, metadata: dict | None = None):
-            nonlocal last_emit_time, last_emit_percent, last_emit_message, last_logged_job_message
+            nonlocal current_stage, last_emit_time, last_emit_percent
+            nonlocal last_emit_message, last_logged_job_message, whisperx_started
             mapped = max(0, min(100, int(percent)))
+            current_message = message or "Separating vocals"
+            if (
+                has_whisperx
+                and not whisperx_started
+                and current_message == "Aligning lyrics"
+                and mapped >= 95
+            ):
+                whisperx_started = True
+                KaraokeService._dispatch_loop_coroutine(
+                    loop,
+                    processing_task_service.emit_progress(
+                        task_id,
+                        queue_item_id=queue_item_id,
+                        progress_percent=100,
+                        progress_label="Separating vocals",
+                        progress_label_key="task.separating_vocals",
+                        status=status,
+                        stage="demucs",
+                        progress_step_index=step_index,
+                        progress_step_total=step_total,
+                    ),
+                )
+                current_stage = "whisperx"
+                mapped = 0
+            elif whisperx_started and mapped < 100:
+                current_stage = "whisperx"
+                current_message = "Aligning lyrics"
+                mapped = 0
             now = loop.time()
             if (
                 last_emit_percent is not None
                 and mapped != 100
                 and mapped == last_emit_percent
-                and message == last_emit_message
+                and current_message == last_emit_message
             ):
                 return
             if (
                 last_emit_percent is not None
                 and mapped != 100
-                and message == last_emit_message
+                and current_message == last_emit_message
                 and (now - last_emit_time) < 0.75
             ):
                 return
             last_emit_time = now
             last_emit_percent = mapped
-            last_emit_message = message
+            last_emit_message = current_message
             KaraokeService._dispatch_loop_coroutine(
                 loop,
                 processing_task_service.emit_progress(
                     task_id,
                     queue_item_id=queue_item_id,
                     progress_percent=mapped,
-                    progress_label=message or "Separating vocals",
-                    progress_label_key="task.separating_vocals",
+                    progress_label=current_message,
+                    progress_label_key=(
+                        "task.aligning_lyrics"
+                        if current_stage == "whisperx"
+                        else "task.separating_vocals"
+                    ),
                     status=status,
-                    stage=stage,
+                    stage=current_stage,
                     progress_step_index=step_index,
                     progress_step_total=step_total,
                 ),
             )
             job_id = metadata.get("job_id") if metadata else None
-            log_message = f"Demucs job {job_id}: {message}" if job_id else None
+            log_message = f"Demucs job {job_id}: {current_message}" if job_id else None
             if log_message and log_message != last_logged_job_message:
                 last_logged_job_message = log_message
                 KaraokeService._dispatch_loop_coroutine(
@@ -1161,10 +1201,14 @@ class KaraokeService:
                         message=log_message,
                         stream="remote",
                         status=status,
-                        stage=stage,
+                        stage=current_stage,
                         progress_percent=mapped,
-                        progress_label=message or "Separating vocals",
-                        progress_label_key="task.separating_vocals",
+                        progress_label=current_message,
+                        progress_label_key=(
+                            "task.aligning_lyrics"
+                            if current_stage == "whisperx"
+                            else "task.separating_vocals"
+                        ),
                         progress_step_index=step_index,
                         progress_step_total=step_total,
                     ),

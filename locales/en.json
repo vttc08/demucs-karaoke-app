@@ -191,6 +191,7 @@
   "task.reused_existing_karaoke_media": "Reused existing karaoke media",
   "task.reused_existing_media": "Reused existing media",
   "task.retrying_demucs_preparation": "Retrying Demucs preparation",
+  "task.aligning_lyrics": "Aligning lyrics",
   "task.separating_vocals": "Separating vocals",
   "task.starting": "Starting task",
   "media.updated_title": "Updated \"{title}\"",
