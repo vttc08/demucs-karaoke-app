@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import gc
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -302,6 +303,35 @@ def preload_models(
         else:
             _get_transcription_model(value, device, compute_type=compute_type)
     return loaded_entries
+
+
+def unload_models() -> dict[str, int]:
+    """Drop WhisperX model references held by this process and release GPU memory."""
+    transcription_models = len(_TRANSCRIPTION_MODEL_CACHE)
+    align_models = len(_ALIGN_MODEL_CACHE)
+
+    _TRANSCRIPTION_MODEL_CACHE.clear()
+    _ALIGN_MODEL_CACHE.clear()
+
+    # Clear any now-unreachable Python objects before asking CUDA to return cached blocks.
+    gc.collect()
+
+    try:
+        import torch  # type: ignore
+
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+            if hasattr(torch.cuda, "ipc_collect"):
+                torch.cuda.ipc_collect()
+    except Exception:
+        pass
+
+    gc.collect()
+    return {
+        "transcription_models": transcription_models,
+        "align_models": align_models,
+    }
 
 
 def _make_segment(start: int, end: int, words: list[dict[str, Any]]) -> dict[str, Any]:

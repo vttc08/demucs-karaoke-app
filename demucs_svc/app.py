@@ -46,6 +46,7 @@ try:
         align_lyrics,
         dump_aligned_lyrics_json,
         preload_models,
+        unload_models,
         whisperx_available,
     )
 except ImportError:
@@ -82,6 +83,7 @@ except ImportError:
         align_lyrics,
         dump_aligned_lyrics_json,
         preload_models,
+        unload_models,
         whisperx_available,
     )
 
@@ -671,3 +673,16 @@ async def separate_meta(
         status="completed",
         aligned_lyrics_path=str(aligned_lyrics_path) if aligned_lyrics_path else None,
     )
+
+@app.post("/gc")
+def trigger_garbage_collection():
+    import gc
+
+    whisperx_unloaded = unload_models()
+    _cleanup_expired_jobs()
+    gc.collect()
+    return {
+        "status": "ok",
+        "detail": "Garbage collection triggered",
+        "whisperx_unloaded": whisperx_unloaded,
+    }
