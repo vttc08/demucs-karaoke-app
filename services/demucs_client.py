@@ -24,10 +24,10 @@ class DemucsClient:
     HEALTH_TIMEOUT_SECONDS = 5.0
     PRELOAD_TIMEOUT_SECONDS = 1800.0
     REQUEST_TIMEOUT_SECONDS = 600.0
-    POLL_INTERVAL_SECONDS = 0.75
 
-    def __init__(self, api_url: str = None):
+    def __init__(self, api_url: str = None, poll_interval_seconds: float | None = None):
         self.api_url = api_url or settings.demucs_api_url
+        self.poll_interval_seconds = poll_interval_seconds
 
     @staticmethod
     def _extract_stems_zip(payload: bytes) -> tuple[bytes, bytes, bytes | None, str]:
@@ -220,7 +220,12 @@ class DemucsClient:
                     if status == "canceled":
                         raise asyncio.CancelledError()
 
-                    await asyncio.sleep(self.POLL_INTERVAL_SECONDS)
+                    poll_interval = (
+                        self.poll_interval_seconds
+                        if self.poll_interval_seconds is not None
+                        else settings.demucs_poll_interval_seconds
+                    )
+                    await asyncio.sleep(poll_interval)
             except Exception:
                 if cancel_event is not None and cancel_event.is_set():
                     try:

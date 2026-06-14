@@ -33,6 +33,7 @@ const fields = {
     demucs_output_format: document.getElementById("demucs_output_format"),
     demucs_mp3_bitrate: document.getElementById("demucs_mp3_bitrate"),
     demucs_direct_media_max_mb: document.getElementById("demucs_direct_media_max_mb"),
+    demucs_poll_interval_seconds: document.getElementById("demucs_poll_interval_seconds"),
     whisperx_transcription_model: document.getElementById("whisperx_transcription_model"),
     whisperx_align_language: document.getElementById("whisperx_align_language"),
     whisperx_detect_language: document.getElementById("whisperx_detect_language"),
@@ -301,6 +302,7 @@ function applySettingsToForm(data) {
     fields.demucs_output_format.value = data.demucs_output_format || "wav";
     fields.demucs_mp3_bitrate.value = String(data.demucs_mp3_bitrate ?? 320);
     fields.demucs_direct_media_max_mb.value = String(data.demucs_direct_media_max_mb ?? 500);
+    fields.demucs_poll_interval_seconds.value = String(data.demucs_poll_interval_seconds ?? 1.0);
     fields.whisperx_transcription_model.value = data.whisperx_transcription_model || "tiny";
     fields.whisperx_align_language.value = data.whisperx_align_language || "en";
     fields.whisperx_detect_language.checked = Boolean(data.whisperx_detect_language);
@@ -374,6 +376,7 @@ async function saveSettings() {
         ffmpeg_preset: fields.ffmpeg_preset.value,
         ffmpeg_crf: Number(fields.ffmpeg_crf.value),
         demucs_direct_media_max_mb: Number(fields.demucs_direct_media_max_mb.value),
+        demucs_poll_interval_seconds: Number(fields.demucs_poll_interval_seconds.value),
         whisperx_transcription_model: fields.whisperx_transcription_model.value.trim(),
         whisperx_align_language: fields.whisperx_align_language.value.trim(),
         whisperx_detect_language: fields.whisperx_detect_language.checked,

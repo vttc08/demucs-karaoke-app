@@ -324,6 +324,8 @@
   "settings.demucs_device": "Demucs 设备",
   "settings.demucs_model": "Demucs 模型",
   "settings.demucs_direct_media_cutoff": "Demucs 直传媒体上限（MB）",
+  "settings.demucs_poll_interval": "Demucs 轮询间隔（秒）",
+  "settings.demucs_poll_interval_detail": "应用在远端任务运行时检查 GET /jobs/{job_id} 的频率。数值越小，进度更新越频繁，但日志流量也会增加。",
   "settings.already_current_version": "已是最新版本（{version}）",
   "settings.check_ytdlp_failed": "检查 yt-dlp 版本失败",
   "settings.checking_demucs": "正在检查 Demucs 健康状态...",

@@ -153,7 +153,7 @@ and `/static/...`.
        - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
        - View current runtime settings
        - Log out of the active admin session from the settings page
-       - Update Demucs URL, direct-media cutoff, FFmpeg preset/CRF, media/cache paths, tool paths, outbound proxy URL, and WhisperX alignment defaults
+       - Update Demucs URL, direct-media cutoff, Demucs poll interval, FFmpeg preset/CRF, media/cache paths, tool paths, outbound proxy URL, and WhisperX alignment defaults
        - Enable/disable concurrent yt-dlp search mode
        - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
        - Configure WhisperX transcription model, alignment language, language detection, synced-lyrics mode, and preload list for Demucs-side lyric alignment

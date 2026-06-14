@@ -379,6 +379,7 @@ class RuntimeSettingsResponse(BaseModel):
     demucs_output_format: str
     demucs_mp3_bitrate: int
     demucs_direct_media_max_mb: int
+    demucs_poll_interval_seconds: float
     whisperx_transcription_model: str
     whisperx_align_language: str | None
     whisperx_detect_language: bool
@@ -408,6 +409,7 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     demucs_output_format: Optional[str] = None
     demucs_mp3_bitrate: Optional[int] = None
     demucs_direct_media_max_mb: Optional[int] = None
+    demucs_poll_interval_seconds: Optional[float] = None
     whisperx_transcription_model: Optional[str] = None
     whisperx_align_language: Optional[str] = None
     whisperx_detect_language: Optional[bool] = None

@@ -814,6 +814,7 @@ endpoint reflects the latest saved UI configuration after the app has booted.
   "demucs_output_format": "wav",
   "demucs_mp3_bitrate": 320,
   "demucs_direct_media_max_mb": 500,
+  "demucs_poll_interval_seconds": 1.0,
   "whisperx_transcription_model": "tiny",
   "whisperx_align_language": "en",
   "whisperx_detect_language": false,
@@ -853,6 +854,7 @@ and restarts when no explicit `.env` override is present.
   "demucs_output_format": "wav",
   "demucs_mp3_bitrate": 320,
   "demucs_direct_media_max_mb": 500,
+  "demucs_poll_interval_seconds": 1.0,
   "whisperx_transcription_model": "tiny",
   "whisperx_align_language": "en",
   "whisperx_detect_language": false,
@@ -879,6 +881,7 @@ Validation:
 - `demucs_output_format` must be `wav` or `mp3`
 - `demucs_mp3_bitrate` must be between `64` and `320`
 - `demucs_direct_media_max_mb` must be between `0` and `5000`
+- `demucs_poll_interval_seconds` must be between `0.25` and `10.0`
 - `whisperx_transcription_model` controls the model preloaded on Demucs startup and used for optional lyric alignment
 - `whisperx_align_language` defaults to `en`; blank values are stored as empty strings and treated as disabled by the client
 - `whisperx_detect_language` toggles WhisperX language detection for alignment jobs
@@ -916,6 +919,10 @@ The Demucs service response ZIP still contains the standard `no_vocals` and `voc
 - `aligned_lyrics.json`
 
 `metadata.json` inside the ZIP records the same file list for downstream consumers.
+
+The main app polls `GET /jobs/{job_id}` about once per second while a remote Demucs job is running,
+then fetches `GET /jobs/{job_id}/result` after the job reaches `completed`. The interval is
+configurable through `demucs_poll_interval_seconds` in runtime settings.
 
 ---
 

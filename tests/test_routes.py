@@ -2324,6 +2324,7 @@ def test_get_runtime_settings(client):
     assert "demucs_output_format" in data
     assert "demucs_mp3_bitrate" in data
     assert "demucs_direct_media_max_mb" in data
+    assert "demucs_poll_interval_seconds" in data
     assert "whisperx_transcription_model" in data
     assert "whisperx_align_language" in data
     assert "whisperx_detect_language" in data
@@ -2365,6 +2366,7 @@ def test_update_runtime_settings(client):
             "demucs_output_format": "mp3",
             "demucs_mp3_bitrate": 256,
             "demucs_direct_media_max_mb": 750,
+            "demucs_poll_interval_seconds": 2.5,
             "whisperx_transcription_model": "base",
             "whisperx_align_language": "en",
             "whisperx_detect_language": True,
@@ -2393,6 +2395,7 @@ def test_update_runtime_settings(client):
     assert data["demucs_output_format"] == "mp3"
     assert data["demucs_mp3_bitrate"] == 256
     assert data["demucs_direct_media_max_mb"] == 750
+    assert data["demucs_poll_interval_seconds"] == 2.5
     assert data["whisperx_transcription_model"] == "base"
     assert data["whisperx_align_language"] == "en"
     assert data["whisperx_detect_language"] is True
@@ -2437,6 +2440,7 @@ def test_update_runtime_settings_persists_to_database(client):
                 "ytdlp_video_resolution": "1080",
                 "concurrent_ytdlp_search_enabled": True,
                 "demucs_direct_media_max_mb": 333,
+                "demucs_poll_interval_seconds": 1.25,
             },
         )
     assert response.status_code == 200
@@ -2452,6 +2456,9 @@ def test_update_runtime_settings_persists_to_database(client):
         ).first()
         cutoff = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "demucs_direct_media_max_mb"
+        ).first()
+        poll_interval = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "demucs_poll_interval_seconds"
         ).first()
         concurrent = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "concurrent_ytdlp_search_enabled"
@@ -2479,6 +2486,8 @@ def test_update_runtime_settings_persists_to_database(client):
         assert resolution.value == "1080"
         assert cutoff is not None
         assert cutoff.value == "333"
+        assert poll_interval is not None
+        assert poll_interval.value == "1.25"
         assert concurrent is not None
         assert concurrent.value == "true"
         assert whisperx_transcription_model is not None

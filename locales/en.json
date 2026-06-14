@@ -324,6 +324,8 @@
   "settings.demucs_device": "Demucs Device",
   "settings.demucs_model": "Demucs Model",
   "settings.demucs_direct_media_cutoff": "Demucs direct media cutoff (MB)",
+  "settings.demucs_poll_interval": "Demucs poll interval (seconds)",
+  "settings.demucs_poll_interval_detail": "How often the app checks GET /jobs/{job_id} while a remote job is running. Lower values update progress more often but increase log traffic.",
   "settings.already_current_version": "Already up to date ({version})",
   "settings.check_ytdlp_failed": "Failed to check yt-dlp version",
   "settings.checking_demucs": "Checking Demucs health...",
