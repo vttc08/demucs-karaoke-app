@@ -26,6 +26,7 @@ class DemucsJobState:
     duration_ms: int | None = None
     no_vocals_path: str | None = None
     vocals_path: str | None = None
+    aligned_lyrics_path: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -53,6 +54,7 @@ class DemucsJobState:
             "cancel_requested": self.cancel_requested,
             "no_vocals_path": self.no_vocals_path,
             "vocals_path": self.vocals_path,
+            "aligned_lyrics_path": self.aligned_lyrics_path,
         }
 
 

@@ -14,7 +14,7 @@ from services.queue_service import QueueService
 logger = logging.getLogger(__name__)
 
 _VOCALS_AUDIO_EXTENSIONS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm")
-_LYRICS_EXTENSIONS = (".lrc", ".srt", ".txt")
+_LYRICS_EXTENSIONS = (".json", ".lrc", ".srt", ".txt")
 
 
 class MediaItemNotFoundError(ValueError):

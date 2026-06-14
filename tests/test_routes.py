@@ -58,6 +58,11 @@ def client():
     original_demucs_output_format = settings.demucs_output_format
     original_demucs_mp3_bitrate = settings.demucs_mp3_bitrate
     original_demucs_direct_media_max_mb = settings.demucs_direct_media_max_mb
+    original_whisperx_transcription_model = settings.whisperx_transcription_model
+    original_whisperx_align_language = settings.whisperx_align_language
+    original_whisperx_detect_language = settings.whisperx_detect_language
+    original_whisperx_use_synced_lyrics = settings.whisperx_use_synced_lyrics
+    original_whisperx_preload_models = settings.whisperx_preload_models
     original_ffmpeg_preset = settings.ffmpeg_preset
     original_ffmpeg_crf = settings.ffmpeg_crf
     original_ytdlp_path = settings.ytdlp_path
@@ -80,6 +85,11 @@ def client():
     settings.demucs_output_format = original_demucs_output_format
     settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
     settings.demucs_direct_media_max_mb = original_demucs_direct_media_max_mb
+    settings.whisperx_transcription_model = original_whisperx_transcription_model
+    settings.whisperx_align_language = original_whisperx_align_language
+    settings.whisperx_detect_language = original_whisperx_detect_language
+    settings.whisperx_use_synced_lyrics = original_whisperx_use_synced_lyrics
+    settings.whisperx_preload_models = original_whisperx_preload_models
     settings.ffmpeg_preset = original_ffmpeg_preset
     settings.ffmpeg_crf = original_ffmpeg_crf
     settings.ytdlp_path = original_ytdlp_path
@@ -981,10 +991,10 @@ def test_queue_page_renders_clickable_processing_items_with_task_ids(client):
             processing_task_service.set_stage(
                 db,
                 task.id,
-                status=ProcessingTaskStatus.DOWNLOADING,
-                stage="download",
-                progress_label="Downloading media",
-                progress_percent=42,
+                status=ProcessingTaskStatus.PROCESSING,
+                stage="extract_audio",
+                progress_label="Extracting audio",
+                progress_percent=0,
             )
         )
 
@@ -992,8 +1002,43 @@ def test_queue_page_renders_clickable_processing_items_with_task_ids(client):
 
     assert response.status_code == 200
     assert f'data-task-id="{task.id}"' in response.text
-    assert 'data-status="downloading"' in response.text
+    assert 'data-status="processing"' in response.text
+    assert 'data-task-progress-stage="extract_audio"' in response.text
     assert 'cursor-pointer hover:border-primary/30' in response.text
+
+
+def test_media_management_page_renders_progress_stage_for_finalize_tasks(client):
+    """Media task cards should expose their stage for optimistic progress rendering."""
+    authenticate_admin_client(client)
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="media-task-stage",
+            title="Media Task Stage",
+            artist="Artist",
+            media_path="/media/media-task-stage.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        task = processing_task_service.get_or_create_media_task(db, media.id)
+        asyncio.run(
+            processing_task_service.set_stage(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.PROCESSING,
+                stage="finalize",
+                progress_label="Remuxing karaoke media",
+                progress_percent=0,
+            )
+        )
+
+    response = client.get("/media")
+
+    assert response.status_code == 200
+    assert f'data-task-id="{task.id}"' in response.text
+    assert 'data-task-progress-stage="finalize"' in response.text
 
 
 def test_get_empty_queue(client):
@@ -1271,6 +1316,8 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-shortcuts-btn"' in response.content
     assert b'id="stage-shortcuts-panel"' in response.content
     assert re.search(rb'id="stage-lyrics-overlay"[^>]*class="[^"]*\bhidden\b', response.content)
+    assert b"stage-lyric-word--highlighted" in response.content
+    assert b"findActiveLyricWordIndex" in response.content
     assert b'aria-label="Fullscreen"' in response.content
 
 
@@ -1741,7 +1788,6 @@ def test_media_management_page_uses_database_rows(client):
     assert b'data-action="edit"' not in content
     assert b'data-action="delete"' not in content
     assert b'data-action="rename"' not in content
-    assert b"synced" not in content.lower()
     assert b'id="media-edit-modal"' not in content
     assert b"Missing" in content
     assert b'data-has-multi-track="true"' in content
@@ -2278,6 +2324,12 @@ def test_get_runtime_settings(client):
     assert "demucs_output_format" in data
     assert "demucs_mp3_bitrate" in data
     assert "demucs_direct_media_max_mb" in data
+    assert "demucs_poll_interval_seconds" in data
+    assert "whisperx_transcription_model" in data
+    assert "whisperx_align_language" in data
+    assert "whisperx_detect_language" in data
+    assert "whisperx_use_synced_lyrics" in data
+    assert "whisperx_preload_models" in data
     assert "ffmpeg_preset" in data
     assert "ffmpeg_crf" in data
     assert "ytdlp_path" in data
@@ -2314,6 +2366,12 @@ def test_update_runtime_settings(client):
             "demucs_output_format": "mp3",
             "demucs_mp3_bitrate": 256,
             "demucs_direct_media_max_mb": 750,
+            "demucs_poll_interval_seconds": 2.5,
+            "whisperx_transcription_model": "base",
+            "whisperx_align_language": "en",
+            "whisperx_detect_language": True,
+            "whisperx_use_synced_lyrics": True,
+            "whisperx_preload_models": "transcription=tiny,align=en,align=zh",
             "ffmpeg_preset": "superfast",
             "ffmpeg_crf": 28,
             "media_path": "/tmp/karaoke_media_test",
@@ -2337,6 +2395,12 @@ def test_update_runtime_settings(client):
     assert data["demucs_output_format"] == "mp3"
     assert data["demucs_mp3_bitrate"] == 256
     assert data["demucs_direct_media_max_mb"] == 750
+    assert data["demucs_poll_interval_seconds"] == 2.5
+    assert data["whisperx_transcription_model"] == "base"
+    assert data["whisperx_align_language"] == "en"
+    assert data["whisperx_detect_language"] is True
+    assert data["whisperx_use_synced_lyrics"] is True
+    assert data["whisperx_preload_models"] == "transcription=tiny,align=en,align=zh"
     assert data["ffmpeg_preset"] == "superfast"
     assert data["ffmpeg_crf"] == 28
     assert data["media_path"] == "/tmp/karaoke_media_test"
@@ -2368,9 +2432,15 @@ def test_update_runtime_settings_persists_to_database(client):
             json={
                 "stage_qr_url": "https://karaoke.test/queue",
                 "stage_lobby_media_path": "/media/stage-lobby.mp4",
+                "whisperx_transcription_model": "tiny",
+                "whisperx_align_language": "",
+                "whisperx_detect_language": False,
+                "whisperx_use_synced_lyrics": False,
+                "whisperx_preload_models": "transcription=tiny",
                 "ytdlp_video_resolution": "1080",
                 "concurrent_ytdlp_search_enabled": True,
                 "demucs_direct_media_max_mb": 333,
+                "demucs_poll_interval_seconds": 1.25,
             },
         )
     assert response.status_code == 200
@@ -2387,8 +2457,26 @@ def test_update_runtime_settings_persists_to_database(client):
         cutoff = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "demucs_direct_media_max_mb"
         ).first()
+        poll_interval = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "demucs_poll_interval_seconds"
+        ).first()
         concurrent = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "concurrent_ytdlp_search_enabled"
+        ).first()
+        whisperx_transcription_model = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "whisperx_transcription_model"
+        ).first()
+        whisperx_align_language = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "whisperx_align_language"
+        ).first()
+        whisperx_detect_language = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "whisperx_detect_language"
+        ).first()
+        whisperx_use_synced_lyrics = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "whisperx_use_synced_lyrics"
+        ).first()
+        whisperx_preload_models = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "whisperx_preload_models"
         ).first()
         assert stage_qr is not None
         assert stage_qr.value == "https://karaoke.test/queue"
@@ -2398,8 +2486,20 @@ def test_update_runtime_settings_persists_to_database(client):
         assert resolution.value == "1080"
         assert cutoff is not None
         assert cutoff.value == "333"
+        assert poll_interval is not None
+        assert poll_interval.value == "1.25"
         assert concurrent is not None
         assert concurrent.value == "true"
+        assert whisperx_transcription_model is not None
+        assert whisperx_transcription_model.value == "tiny"
+        assert whisperx_align_language is not None
+        assert whisperx_align_language.value == ""
+        assert whisperx_detect_language is not None
+        assert whisperx_detect_language.value == "false"
+        assert whisperx_use_synced_lyrics is not None
+        assert whisperx_use_synced_lyrics.value == "false"
+        assert whisperx_preload_models is not None
+        assert whisperx_preload_models.value == "transcription=tiny"
     finally:
         db.close()
 
@@ -2481,6 +2581,44 @@ def test_update_ytdlp_error(client):
         response = client.post("/api/settings/ytdlp/update")
     assert response.status_code == 400
     assert "yt-dlp update failed" in response.json()["detail"]
+
+
+def test_preload_whisperx_models(client):
+    """WhisperX preload endpoint should proxy the remote preload request."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.settings.runtime_settings_service.preload_whisperx_models",
+        return_value={
+            "requested_models": "transcription=tiny,align=en,fr",
+            "device": "cuda",
+            "compute_type": None,
+            "loaded_entries": ["transcription=tiny", "align=en", "align=fr"],
+            "detail": "Preloaded 3 WhisperX model entries",
+        },
+    ):
+        response = client.post(
+            "/api/settings/whisperx/preload",
+            json={"whisperx_preload_models": "transcription=tiny,align=en,fr"},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["requested_models"] == "transcription=tiny,align=en,fr"
+    assert data["loaded_entries"] == ["transcription=tiny", "align=en", "align=fr"]
+
+
+def test_preload_whisperx_models_error(client):
+    """WhisperX preload endpoint should map runtime errors to 400."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.settings.runtime_settings_service.preload_whisperx_models",
+        side_effect=RuntimeError("WhisperX is not installed in this environment"),
+    ):
+        response = client.post(
+            "/api/settings/whisperx/preload",
+            json={"whisperx_preload_models": "transcription=tiny,align=en,fr"},
+        )
+    assert response.status_code == 400
+    assert "WhisperX is not installed" in response.json()["detail"]
 
 
 def test_update_runtime_settings_rejects_invalid_crf(client):
@@ -2846,6 +2984,81 @@ def test_get_queue_item_lyrics_cues_from_json(client):
             {"time": 4.0, "text": "Fourth"},
         ]
         assert payload["lines"] == ["First", "Fourth"]
+    finally:
+        if lyrics_file.exists():
+            lyrics_file.unlink()
+
+
+def test_get_queue_item_lyrics_cues_from_aligned_json_segments(client):
+    """Lyrics cues endpoint should normalize aligned segment JSON into line cues."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "lyric-segments-1", "title": "Lyric Segments", "is_karaoke": False},
+    ).json()
+
+    lyrics_file = Path(settings.cache_path) / "route-aligned-lyrics.json"
+    lyrics_file.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 2.5,
+                        "end": 4.0,
+                        "text": "Hello world",
+                        "words": [
+                            {"word": "Hello", "start": 2.5, "end": 3.0},
+                            {"word": "world", "start": 3.0, "end": 4.0},
+                        ],
+                    },
+                    {
+                        "start": 5.25,
+                        "end": 6.25,
+                        "words": [
+                            {"word": "Second", "start": 5.25, "end": 5.75},
+                            {"word": "line", "start": 5.75, "end": 6.25},
+                        ],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    db = TestingSessionLocal()
+    try:
+        row = db.query(QueueItem).filter(QueueItem.id == created["id"]).first()
+        assert row is not None
+        assert row.media is not None
+        row.media.lyrics_path = "/cache/route-aligned-lyrics.json"
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        response = client.get(f"/api/queue/{created['id']}/lyrics-cues")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["source_format"] == "json"
+        assert payload["is_synced"] is True
+        assert payload["cues"] == [
+            {
+                "time": 2.5,
+                "text": "Hello world",
+                "words": [
+                    {"word": "Hello", "start": 2.5, "end": 3.0},
+                    {"word": "world", "start": 3.0, "end": 4.0},
+                ],
+            },
+            {
+                "time": 5.25,
+                "text": "Second line",
+                "words": [
+                    {"word": "Second", "start": 5.25, "end": 5.75},
+                    {"word": "line", "start": 5.75, "end": 6.25},
+                ],
+            },
+        ]
+        assert payload["lines"] == ["Hello world", "Second line"]
     finally:
         if lyrics_file.exists():
             lyrics_file.unlink()

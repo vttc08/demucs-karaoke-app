@@ -271,7 +271,7 @@
                         {% if item.status.value in ('downloading', 'processing') %}
                         {% set step_label = item.processing_label or item.processing_stage or t('queue.processing_ai') %}
                         {% set step_percent = item.processing_progress if item.processing_progress is not none else 0 %}
-                        <div class="mt-2 max-w-xs" data-task-progress-key="queue-{{ item.id }}" data-task-progress-status="{{ item.status.value }}" data-task-progress-reported-percent="{{ step_percent }}" data-task-progress-label="{{ step_label }}">
+                        <div class="mt-2 max-w-xs" data-task-progress-key="queue-{{ item.id }}" data-task-progress-status="{{ item.status.value }}" data-task-progress-stage="{{ item.processing_stage or '' }}" data-task-progress-reported-percent="{{ step_percent }}" data-task-progress-label="{{ step_label }}">
                             <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ step_percent }}">
                                 <div class="h-full rounded-full bg-tertiary transition-all duration-300 ease-out" data-task-progress-fill style="width: {{ step_percent }}%"></div>
                             </div>

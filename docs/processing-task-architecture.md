@@ -90,6 +90,7 @@ value so automatic reconnects do not append the same buffered log lines twice.
 - admin task views still receive the task stream snapshot/log replay directly
 - callback failure or timeout tears down the child `yt-dlp` process before the error is surfaced
 - download attempts try yt-dlp's default selection first, then retry explicit audio/video/progressive selectors as fallbacks
+- the browser-only optimistic progress helper is limited to ffmpeg extraction and finalization stages, while download and Demucs stages rely on real progress updates
 
 When mocks or legacy callers are used in tests, the orchestration falls back to the non-streaming youtube service methods.
 
@@ -106,5 +107,11 @@ The main app polls the remote job server-side and republishes the latest Demucs 
 
 - task SSE for admin task panels
 - `queue_item_progress` websocket events for queue clients
+
+The polling cadence is intentionally throttled to about once per second by default so long-running
+jobs stay responsive without flooding the Demucs host with status checks. The exact interval is
+configurable in runtime settings through `demucs_poll_interval_seconds`.
+
+When WhisperX lyrics alignment is requested, the remote job's `Aligning lyrics` phase is surfaced as its own local `whisperx` stage so the browser can apply the optimistic progress helper there instead of letting the Demucs bar stall at the end of the separation run.
 
 Browsers do not connect directly to the Demucs host. Remote job ids are intentionally live-only and are not persisted in SQLite. On restart, any interrupted local task is restarted from the beginning with a fresh remote Demucs job.

@@ -4,6 +4,7 @@ const SETTINGS_API = appUrl("/api/settings/");
 const DEMUCS_HEALTH_API = appUrl("/api/settings/demucs-health");
 const YTDLP_VERSION_API = appUrl("/api/settings/ytdlp/version");
 const YTDLP_UPDATE_API = appUrl("/api/settings/ytdlp/update");
+const WHISPERX_PRELOAD_API = appUrl("/api/settings/whisperx/preload");
 const form = document.getElementById("settings-form");
 const saveBtn = document.getElementById("save-settings-btn");
 const reloadBtn = document.getElementById("reload-settings-btn");
@@ -13,8 +14,11 @@ const saveFeedbackIcon = document.getElementById("save-feedback-icon");
 const saveFeedbackText = document.getElementById("save-feedback-text");
 const refreshYtdlpVersionBtn = document.getElementById("refresh-ytdlp-version-btn");
 const updateYtdlpBtn = document.getElementById("update-ytdlp-btn");
+const preloadWhisperxBtn = document.getElementById("preload-whisperx-btn");
 const ytdlpVersionText = document.getElementById("ytdlp-version-text");
 const ytdlpUpdateStatus = document.getElementById("ytdlp-update-status");
+const whisperxPreloadStatus = document.getElementById("whisperx-preload-status");
+const whisperxAlignLanguageGroup = document.getElementById("whisperx-align-language-group");
 const engineStatusDot = document.getElementById("engine-status-dot");
 const engineStatusText = document.getElementById("engine-status-text");
 const lastSyncText = document.getElementById("last-sync-text");
@@ -29,6 +33,12 @@ const fields = {
     demucs_output_format: document.getElementById("demucs_output_format"),
     demucs_mp3_bitrate: document.getElementById("demucs_mp3_bitrate"),
     demucs_direct_media_max_mb: document.getElementById("demucs_direct_media_max_mb"),
+    demucs_poll_interval_seconds: document.getElementById("demucs_poll_interval_seconds"),
+    whisperx_transcription_model: document.getElementById("whisperx_transcription_model"),
+    whisperx_align_language: document.getElementById("whisperx_align_language"),
+    whisperx_detect_language: document.getElementById("whisperx_detect_language"),
+    whisperx_use_synced_lyrics: document.getElementById("whisperx_use_synced_lyrics"),
+    whisperx_preload_models: document.getElementById("whisperx_preload_models"),
     ffmpeg_preset: document.getElementById("ffmpeg_preset"),
     ffmpeg_crf: document.getElementById("ffmpeg_crf"),
     media_path: document.getElementById("media_path"),
@@ -137,6 +147,9 @@ function applyDemucsHealthToUI(health, persist = true) {
 
 function setFormState(disabled) {
     saveBtn.disabled = disabled;
+    if (preloadWhisperxBtn) {
+        preloadWhisperxBtn.disabled = disabled;
+    }
     Object.values(fields).forEach((field) => {
         field.disabled = disabled;
     });
@@ -151,6 +164,12 @@ function setYtdlpActionsState(disabled) {
     }
 }
 
+function setWhisperxPreloadState(disabled) {
+    if (preloadWhisperxBtn) {
+        preloadWhisperxBtn.disabled = disabled;
+    }
+}
+
 function setYtdlpStatus(message, isError = false) {
     if (!ytdlpUpdateStatus) {
         return;
@@ -158,6 +177,31 @@ function setYtdlpStatus(message, isError = false) {
     ytdlpUpdateStatus.textContent = message;
     ytdlpUpdateStatus.classList.toggle("text-error", isError);
     ytdlpUpdateStatus.classList.toggle("text-on-surface-variant", !isError);
+}
+
+function setWhisperxPreloadStatus(message, isError = false) {
+    if (!whisperxPreloadStatus) {
+        return;
+    }
+    whisperxPreloadStatus.textContent = message;
+    whisperxPreloadStatus.classList.toggle("text-error", isError);
+    whisperxPreloadStatus.classList.toggle("text-on-surface-variant", !isError);
+}
+
+function setWhisperxAlignLanguageState(disabled) {
+    const field = fields.whisperx_align_language;
+    if (!field) {
+        return;
+    }
+
+    field.disabled = disabled;
+    if (whisperxAlignLanguageGroup) {
+        whisperxAlignLanguageGroup.classList.toggle("opacity-60", disabled);
+    }
+}
+
+function updateWhisperxLanguageUi() {
+    setWhisperxAlignLanguageState(Boolean(fields.whisperx_detect_language?.checked));
 }
 
 async function checkYtdlpVersion() {
@@ -211,6 +255,46 @@ async function updateYtdlp() {
     }
 }
 
+async function preloadWhisperxModels() {
+    if (!fields.whisperx_preload_models) {
+        return;
+    }
+
+    setWhisperxPreloadState(true);
+    setWhisperxPreloadStatus(t("settings.preloading_whisperx_models"));
+    try {
+        const response = await fetch(WHISPERX_PRELOAD_API, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                whisperx_preload_models: fields.whisperx_preload_models.value.trim(),
+            }),
+        });
+        if (!response.ok) {
+            const errorPayload = await response.json();
+            throw new Error(errorPayload.detail || t("settings.preload_whisperx_models_failed"));
+        }
+        const data = await response.json();
+        const loadedCount = Array.isArray(data.loaded_entries) ? data.loaded_entries.length : 0;
+        setWhisperxPreloadStatus(
+            t("settings.preloaded_whisperx_models", {
+                count: loadedCount,
+                detail: data.detail || t("settings.preloaded_whisperx_models_default_detail"),
+            }),
+        );
+        showSaveFeedback(
+            t("settings.preloaded_whisperx_models_feedback", { count: loadedCount }),
+            false,
+        );
+    } catch (error) {
+        const message = String(error.message || t("settings.preload_whisperx_models_failed"));
+        setWhisperxPreloadStatus(message, true);
+        showSaveFeedback(message, true);
+    } finally {
+        setWhisperxPreloadState(false);
+    }
+}
+
 function applySettingsToForm(data) {
     fields.demucs_api_url.value = data.demucs_api_url || "";
     fields.demucs_model.value = data.demucs_model || "htdemucs";
@@ -218,6 +302,12 @@ function applySettingsToForm(data) {
     fields.demucs_output_format.value = data.demucs_output_format || "wav";
     fields.demucs_mp3_bitrate.value = String(data.demucs_mp3_bitrate ?? 320);
     fields.demucs_direct_media_max_mb.value = String(data.demucs_direct_media_max_mb ?? 500);
+    fields.demucs_poll_interval_seconds.value = String(data.demucs_poll_interval_seconds ?? 1.0);
+    fields.whisperx_transcription_model.value = data.whisperx_transcription_model || "tiny";
+    fields.whisperx_align_language.value = data.whisperx_align_language || "en";
+    fields.whisperx_detect_language.checked = Boolean(data.whisperx_detect_language);
+    fields.whisperx_use_synced_lyrics.checked = Boolean(data.whisperx_use_synced_lyrics);
+    fields.whisperx_preload_models.value = data.whisperx_preload_models || "transcription=tiny,align=en";
     fields.ffmpeg_preset.value = data.ffmpeg_preset || "veryfast";
     fields.ffmpeg_crf.value = String(data.ffmpeg_crf ?? 23);
     fields.media_path.value = data.media_path || "";
@@ -235,6 +325,7 @@ function applySettingsToForm(data) {
     if (fields.stage_lobby_media_path) {
         fields.stage_lobby_media_path.value = data.stage_lobby_media_path || "";
     }
+    updateWhisperxLanguageUi();
     updateDemucsOutputUi();
 }
 
@@ -285,6 +376,12 @@ async function saveSettings() {
         ffmpeg_preset: fields.ffmpeg_preset.value,
         ffmpeg_crf: Number(fields.ffmpeg_crf.value),
         demucs_direct_media_max_mb: Number(fields.demucs_direct_media_max_mb.value),
+        demucs_poll_interval_seconds: Number(fields.demucs_poll_interval_seconds.value),
+        whisperx_transcription_model: fields.whisperx_transcription_model.value.trim(),
+        whisperx_align_language: fields.whisperx_align_language.value.trim(),
+        whisperx_detect_language: fields.whisperx_detect_language.checked,
+        whisperx_use_synced_lyrics: fields.whisperx_use_synced_lyrics.checked,
+        whisperx_preload_models: fields.whisperx_preload_models.value.trim(),
         media_path: fields.media_path.value.trim(),
         cache_path: fields.cache_path.value.trim(),
         ytdlp_path: fields.ytdlp_path.value.trim(),
@@ -369,11 +466,17 @@ if (reloadBtn) {
 if (fields.demucs_output_format) {
     fields.demucs_output_format.addEventListener("change", updateDemucsOutputUi);
 }
+if (fields.whisperx_detect_language) {
+    fields.whisperx_detect_language.addEventListener("change", updateWhisperxLanguageUi);
+}
 if (refreshYtdlpVersionBtn) {
     refreshYtdlpVersionBtn.addEventListener("click", checkYtdlpVersion);
 }
 if (updateYtdlpBtn) {
     updateYtdlpBtn.addEventListener("click", updateYtdlp);
+}
+if (preloadWhisperxBtn) {
+    preloadWhisperxBtn.addEventListener("click", preloadWhisperxModels);
 }
 
 const persistedState = readPersistedEngineStatus();
@@ -381,5 +484,6 @@ if (persistedState?.state && persistedState?.detail) {
     setEngineStatus(persistedState.state, persistedState.detail, false);
 }
 
+updateWhisperxLanguageUi();
 loadSettings();
 checkYtdlpVersion();

@@ -485,6 +485,7 @@ class KaraokeService:
             queue_item,
             media_item,
             audio_path,
+            has_whisperx=bool(self._alignment_lyrics_for_media(media_item)[0]),
             task_id=task.id,
             progress_step_index=3,
             progress_step_total=4,
@@ -492,10 +493,24 @@ class KaraokeService:
         )
         no_vocals_path = Path(demucs_response.no_vocals_path)
         vocals_raw_path = Path(demucs_response.vocals_path) if demucs_response.vocals_path else None
+        raw_aligned_lyrics_path = getattr(demucs_response, "aligned_lyrics_path", None)
+        aligned_lyrics_path = (
+            Path(raw_aligned_lyrics_path)
+            if isinstance(raw_aligned_lyrics_path, (str, os.PathLike))
+            and str(raw_aligned_lyrics_path).strip()
+            else None
+        )
         if not no_vocals_path.exists():
             raise RuntimeError("Demucs response missing no-vocals output path")
         if vocals_raw_path is None or not vocals_raw_path.exists():
             raise RuntimeError("Demucs response missing vocals output path")
+        if aligned_lyrics_path is not None and not aligned_lyrics_path.exists():
+            logger.warning(
+                "Demucs response missing aligned lyrics sidecar media_id=%s path=%s",
+                media_item.id,
+                aligned_lyrics_path,
+            )
+            aligned_lyrics_path = None
         await self._raise_if_canceled(cancel_event, task.id)
         await processing_task_service.emit_progress(
             task.id,
@@ -554,11 +569,19 @@ class KaraokeService:
             vocals_source=vocals_raw_path,
             task_id=task.id,
         )
+        final_lyrics_path = None
+        if aligned_lyrics_path is not None:
+            final_lyrics_path = await asyncio.to_thread(
+                self._install_aligned_lyrics_sidecar,
+                media_stem,
+                aligned_lyrics_path,
+            )
         self._set_media_item_output_paths(
             db,
             media_item,
             media_path=final_media_path,
             vocals_path=vocals_sidecar_path,
+            lyrics_path=final_lyrics_path,
         )
         if original_media_path is not None and original_media_path != final_media_path:
             from services.media_thumbnail_service import MediaThumbnailService
@@ -601,6 +624,26 @@ class KaraokeService:
         if media_path.suffix.lower() in _AUDIO_EXTENSIONS:
             return True
         return not self.ffmpeg.has_video_stream(media_path)
+
+    @staticmethod
+    def _alignment_lyrics_for_media(media_item: MediaItem) -> tuple[str | None, str | None]:
+        """Return lyrics text and format suitable for WhisperX alignment."""
+        lyrics_path = KaraokeService._existing_local_file(media_item.lyrics_path)
+        if lyrics_path is None or lyrics_path.suffix.lower() not in {".lrc", ".txt"}:
+            return None, None
+        try:
+            lyrics_text = lyrics_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            logger.warning(
+                "Failed to read lyrics sidecar for alignment media_id=%s path=%s",
+                media_item.id,
+                lyrics_path,
+            )
+            return None, None
+        if not lyrics_text:
+            return None, None
+        lyrics_format = "lrc" if lyrics_path.suffix.lower() == ".lrc" else "txt"
+        return lyrics_text, lyrics_format
 
     @staticmethod
     def _local_file_size_bytes(media_path: Path) -> int:
@@ -697,12 +740,14 @@ class KaraokeService:
         media_item: MediaItem,
         audio_path: Path,
         *,
+        has_whisperx: bool,
         task_id: int,
         progress_step_index: int,
         progress_step_total: int,
         cancel_event: threading.Event | None = None,
     ):
         """Run Demucs separation with one fallback retry for extracted local audio."""
+        lyrics_text, lyrics_format = self._alignment_lyrics_for_media(media_item)
         try:
             await KaraokeService._raise_if_canceled(cancel_event, task_id)
             loop = asyncio.get_running_loop()
@@ -714,6 +759,7 @@ class KaraokeService:
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
                 queue_item_id=queue_item.id if queue_item is not None else None,
+                has_whisperx=has_whisperx,
             )
             log_callback = self._log_callback(
                 loop,
@@ -724,11 +770,25 @@ class KaraokeService:
             if cancel_event is None:
                 return await self.demucs_client.separate_vocals(
                     audio_path,
+                    lyrics_text=lyrics_text,
+                    lyrics_format=lyrics_format,
+                    transcription_model=settings.whisperx_transcription_model,
+                    align_language=settings.whisperx_align_language,
+                    detect_language=settings.whisperx_detect_language,
+                    use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+                    whisperx_preload_models=settings.whisperx_preload_models,
                     progress_callback=progress_callback,
                     log_callback=log_callback,
                 )
             return await self.demucs_client.separate_vocals(
                 audio_path,
+                lyrics_text=lyrics_text,
+                lyrics_format=lyrics_format,
+                transcription_model=settings.whisperx_transcription_model,
+                align_language=settings.whisperx_align_language,
+                detect_language=settings.whisperx_detect_language,
+                use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+                whisperx_preload_models=settings.whisperx_preload_models,
                 cancel_event=cancel_event,
                 progress_callback=progress_callback,
                 log_callback=log_callback,
@@ -782,6 +842,7 @@ class KaraokeService:
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
                 queue_item_id=queue_item.id if queue_item is not None else None,
+                has_whisperx=has_whisperx,
             )
             log_callback = self._log_callback(
                 loop,
@@ -792,11 +853,25 @@ class KaraokeService:
             if cancel_event is None:
                 return await self.demucs_client.separate_vocals(
                     fallback_audio_path,
+                    lyrics_text=lyrics_text,
+                    lyrics_format=lyrics_format,
+                    transcription_model=settings.whisperx_transcription_model,
+                    align_language=settings.whisperx_align_language,
+                    detect_language=settings.whisperx_detect_language,
+                    use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+                    whisperx_preload_models=settings.whisperx_preload_models,
                     progress_callback=progress_callback,
                     log_callback=log_callback,
                 )
             return await self.demucs_client.separate_vocals(
                 fallback_audio_path,
+                lyrics_text=lyrics_text,
+                lyrics_format=lyrics_format,
+                transcription_model=settings.whisperx_transcription_model,
+                align_language=settings.whisperx_align_language,
+                detect_language=settings.whisperx_detect_language,
+                use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+                whisperx_preload_models=settings.whisperx_preload_models,
                 cancel_event=cancel_event,
                 progress_callback=progress_callback,
                 log_callback=log_callback,
@@ -815,11 +890,22 @@ class KaraokeService:
         *,
         media_path: Path,
         vocals_path: Path,
+        lyrics_path: Path | None = None,
     ):
         media_item.media_path = QueueService.build_media_url(media_path)
         media_item.vocals_path = QueueService.build_media_url(vocals_path)
+        if lyrics_path is not None:
+            media_item.lyrics_path = QueueService.build_media_url(lyrics_path)
         media_item.missing = False
         db.commit()
+
+    @staticmethod
+    def _install_aligned_lyrics_sidecar(media_stem: str, source_path: Path) -> Path:
+        """Persist aligned lyrics JSON beside the durable media output."""
+        target_path = settings.media_path / f"{media_stem}.json"
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, target_path)
+        return target_path
 
     def cleanup_canceled_task(self, db: Session, task: ProcessingTask):
         """Remove generated outputs and reset rows for a canceled task."""
@@ -1027,49 +1113,85 @@ class KaraokeService:
         status: str,
         stage: str,
         queue_item_id: int | None = None,
+        has_whisperx: bool = False,
     ):
         last_emit_time = float("-inf")
         last_emit_percent: int | None = None
         last_emit_message: str | None = None
         last_logged_job_message: str | None = None
+        current_stage = stage
+        whisperx_started = False
 
         def callback(percent: int, message: str, metadata: dict | None = None):
-            nonlocal last_emit_time, last_emit_percent, last_emit_message, last_logged_job_message
+            nonlocal current_stage, last_emit_time, last_emit_percent
+            nonlocal last_emit_message, last_logged_job_message, whisperx_started
             mapped = max(0, min(100, int(percent)))
+            current_message = message or "Separating vocals"
+            if (
+                has_whisperx
+                and not whisperx_started
+                and current_message == "Aligning lyrics"
+                and mapped >= 95
+            ):
+                whisperx_started = True
+                KaraokeService._dispatch_loop_coroutine(
+                    loop,
+                    processing_task_service.emit_progress(
+                        task_id,
+                        queue_item_id=queue_item_id,
+                        progress_percent=100,
+                        progress_label="Separating vocals",
+                        progress_label_key="task.separating_vocals",
+                        status=status,
+                        stage="demucs",
+                        progress_step_index=step_index,
+                        progress_step_total=step_total,
+                    ),
+                )
+                current_stage = "whisperx"
+                mapped = 0
+            elif whisperx_started and mapped < 100:
+                current_stage = "whisperx"
+                current_message = "Aligning lyrics"
+                mapped = 0
             now = loop.time()
             if (
                 last_emit_percent is not None
                 and mapped != 100
                 and mapped == last_emit_percent
-                and message == last_emit_message
+                and current_message == last_emit_message
             ):
                 return
             if (
                 last_emit_percent is not None
                 and mapped != 100
-                and message == last_emit_message
+                and current_message == last_emit_message
                 and (now - last_emit_time) < 0.75
             ):
                 return
             last_emit_time = now
             last_emit_percent = mapped
-            last_emit_message = message
+            last_emit_message = current_message
             KaraokeService._dispatch_loop_coroutine(
                 loop,
                 processing_task_service.emit_progress(
                     task_id,
                     queue_item_id=queue_item_id,
                     progress_percent=mapped,
-                    progress_label=message or "Separating vocals",
-                    progress_label_key="task.separating_vocals",
+                    progress_label=current_message,
+                    progress_label_key=(
+                        "task.aligning_lyrics"
+                        if current_stage == "whisperx"
+                        else "task.separating_vocals"
+                    ),
                     status=status,
-                    stage=stage,
+                    stage=current_stage,
                     progress_step_index=step_index,
                     progress_step_total=step_total,
                 ),
             )
             job_id = metadata.get("job_id") if metadata else None
-            log_message = f"Demucs job {job_id}: {message}" if job_id else None
+            log_message = f"Demucs job {job_id}: {current_message}" if job_id else None
             if log_message and log_message != last_logged_job_message:
                 last_logged_job_message = log_message
                 KaraokeService._dispatch_loop_coroutine(
@@ -1079,10 +1201,14 @@ class KaraokeService:
                         message=log_message,
                         stream="remote",
                         status=status,
-                        stage=stage,
+                        stage=current_stage,
                         progress_percent=mapped,
-                        progress_label=message or "Separating vocals",
-                        progress_label_key="task.separating_vocals",
+                        progress_label=current_message,
+                        progress_label_key=(
+                            "task.aligning_lyrics"
+                            if current_stage == "whisperx"
+                            else "task.separating_vocals"
+                        ),
                         progress_step_index=step_index,
                         progress_step_total=step_total,
                     ),

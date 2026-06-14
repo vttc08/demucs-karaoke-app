@@ -1,5 +1,6 @@
 """Tests for service layer."""
 import asyncio
+import json
 import logging
 import threading
 import httpx
@@ -564,6 +565,43 @@ def test_media_library_sync_service_scans_one_item_sidecars(db_session, tmp_path
         assert stored.vocals_path == "/media/single-item.vocals.wav"
         assert stored.lyrics_path == "/media/single-item.lrc"
         assert stored.last_scanned_at is not None
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_library_sync_service_detects_json_lyrics_sidecar(db_session, tmp_path, monkeypatch):
+    """Single-item scans should treat adjacent JSON lyrics as a valid sidecar."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "json-sidecar.mp4"
+        lyrics_file = settings.media_path / "json-sidecar.json"
+        media_file.write_text("video", encoding="utf-8")
+        lyrics_file.write_text('[{"start":1.0,"text":"Hello"}]', encoding="utf-8")
+
+        media = MediaItem(
+            title="JSON Sidecar",
+            media_path="/media/json-sidecar.mp4",
+            missing=True,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibrarySyncService()
+        monkeypatch.setattr(
+            service.thumbnail_service,
+            "ensure_thumbnail_for_media_file",
+            lambda path: False,
+        )
+
+        summary = service.scan_media_item(db_session, media.id)
+
+        assert summary["scanned_files"] == 1
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.lyrics_path == "/media/json-sidecar.json"
     finally:
         settings.media_path = original_media
 
@@ -1523,6 +1561,51 @@ async def test_demucs_progress_callback_does_not_deadlock_on_same_event_loop():
     assert seen_progress[0]["progress_percent"] == 42
     assert len(seen_logs) == 1
     assert seen_logs[0]["message"] == "Demucs job job123: Separating vocals"
+
+
+@pytest.mark.asyncio
+async def test_demucs_progress_callback_switches_to_whisperx_stage_for_alignment():
+    """WhisperX alignment should publish its own optimistic stage after Demucs finishes."""
+    loop = asyncio.get_running_loop()
+    seen_progress = []
+    seen_logs = []
+
+    async def fake_emit_progress(*args, **kwargs):
+        seen_progress.append(kwargs)
+
+    async def fake_emit_log(*args, **kwargs):
+        seen_logs.append(kwargs)
+
+    with (
+        patch("services.karaoke_service.processing_task_service.emit_progress", side_effect=fake_emit_progress),
+        patch("services.karaoke_service.processing_task_service.emit_log", side_effect=fake_emit_log),
+    ):
+        callback = KaraokeService._demucs_progress_callback(
+            loop,
+            task_id=456,
+            step_index=3,
+            step_total=4,
+            status=ProcessingTaskStatus.PROCESSING.value,
+            stage="demucs",
+            queue_item_id=789,
+            has_whisperx=True,
+        )
+        callback(94, "Separating vocals", {"job_id": "job456", "status": "running"})
+        callback(95, "Aligning lyrics", {"job_id": "job456", "status": "running"})
+        callback(95, "Aligning lyrics", {"job_id": "job456", "status": "running"})
+        callback(100, "Completed", {"job_id": "job456", "status": "completed"})
+        await asyncio.sleep(0)
+
+    assert seen_progress[0]["stage"] == "demucs"
+    assert seen_progress[0]["progress_percent"] == 94
+    assert seen_progress[1]["stage"] == "demucs"
+    assert seen_progress[1]["progress_percent"] == 100
+    assert seen_progress[2]["stage"] == "whisperx"
+    assert seen_progress[2]["progress_percent"] == 0
+    assert seen_progress[-1]["stage"] == "whisperx"
+    assert seen_progress[-1]["progress_percent"] == 100
+    assert any(log["stage"] == "whisperx" for log in seen_logs)
+    assert seen_logs[0]["message"] == "Demucs job job456: Separating vocals"
 
 
 def test_processing_task_cancel_cleans_up_partial_artifacts_and_resets_rows(db_session, tmp_path, monkeypatch):
@@ -2581,6 +2664,101 @@ async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(d
         assert updated_item.status == QueueStatus.PLAYING
         assert updated_item.media is not None
         assert updated_item.media.lyrics_path == f"/cache/lyrics/{expected_stem}.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+@pytest.mark.asyncio
+async def test_karaoke_service_promotes_aligned_json_sidecar_for_display(db_session, tmp_path):
+    """Karaoke processing should prefer the returned aligned JSON sidecar for playback lyrics."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        expected_stem = build_media_stem("Karaoke Ready", "Singer", fallback="karaoke-ready")
+        media_file = settings.media_path / f"{expected_stem}.mp4"
+        lyrics_file = settings.cache_path / "lyrics" / f"{expected_stem}.lrc"
+        aligned_file = settings.cache_path / "demucs_outputs" / f"{expected_stem}.aligned.json"
+        lyrics_file.parent.mkdir(parents=True, exist_ok=True)
+        aligned_file.parent.mkdir(parents=True, exist_ok=True)
+        media_file.write_text("video", encoding="utf-8")
+        lyrics_file.write_text("[00:01.00]Existing lyrics", encoding="utf-8")
+        aligned_file.write_text(
+            '[{"start": 1.0, "end": 2.0, "text": "Existing lyrics", "words": [{"word": "Existing", "start": 1.0, "end": 1.5}, {"word": "lyrics", "start": 1.5, "end": 2.0}]}]',
+            encoding="utf-8",
+        )
+        db_session.add(
+            MediaItem(
+                youtube_id="karaoke-ready",
+                title="Karaoke Ready",
+                artist="Singer",
+                file_stem=expected_stem,
+                media_path=f"/media/{expected_stem}.mp4",
+                lyrics_path=f"/cache/lyrics/{expected_stem}.lrc",
+                missing=False,
+            )
+        )
+        db_session.flush()
+
+        queue_service = QueueService()
+        item = queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id="karaoke-ready",
+                title="Karaoke Ready",
+                artist="Singer",
+                is_karaoke=True,
+                lyrics_text="[00:01.00]Existing lyrics",
+            ),
+        )
+
+        service = KaraokeService()
+        service.youtube_service = Mock()
+        service.queue_service = queue_service
+        service.demucs_client = Mock()
+        service.ffmpeg = Mock()
+
+        service.demucs_client.health_check.return_value = DemucsHealthResponse(
+            api_url="http://demucs",
+            healthy=True,
+            detail="ok",
+        )
+        service.ffmpeg.extract_audio.return_value = settings.cache_path / "audio" / f"{expected_stem}.audio.wav"
+        no_vocals_path = settings.cache_path / "stem" / f"{expected_stem}.no_vocals.wav"
+        vocals_path = settings.cache_path / "stem" / f"{expected_stem}.vocals.wav"
+        no_vocals_path.parent.mkdir(parents=True, exist_ok=True)
+        no_vocals_path.write_text("no vocals", encoding="utf-8")
+        vocals_path.write_text("vocals", encoding="utf-8")
+
+        def fake_combine_audio_video(*, video_path, audio_path, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text("karaoke video", encoding="utf-8")
+
+        service.demucs_client.separate_vocals = AsyncMock(
+            return_value=DemucsResponse(
+                no_vocals_path=str(no_vocals_path),
+                vocals_path=str(vocals_path),
+                aligned_lyrics_path=str(aligned_file),
+            )
+        )
+        service.ffmpeg.combine_audio_video.side_effect = fake_combine_audio_video
+
+        await service.process_queue_item(db_session, item.id)
+
+        updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
+        assert updated_item is not None
+        assert updated_item.status == QueueStatus.PLAYING
+        assert updated_item.media is not None
+        assert updated_item.media.lyrics_path == f"/media/{expected_stem}.json"
+        assert (settings.media_path / f"{expected_stem}.json").read_text(encoding="utf-8") == aligned_file.read_text(
+            encoding="utf-8"
+        )
+        assert lyrics_file.exists()
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
@@ -4397,6 +4575,78 @@ def test_lyrics_service_parse_json_to_cues_normalizes_shape():
     ]
 
 
+def test_lyrics_service_parse_json_to_cues_accepts_aligned_segments():
+    """JSON parser should normalize WhisperX-style aligned segments into line cues."""
+    service = LyricsService()
+    payload = json.dumps(
+        {
+            "segments": [
+                {
+                    "start": 2.5,
+                    "end": 4.0,
+                    "text": "Hello world",
+                    "words": [
+                        {"word": "Hello", "start": 2.5, "end": 3.0},
+                        {"word": "world", "start": 3.0, "end": 4.0},
+                    ],
+                },
+                {
+                    "start": 5.25,
+                    "end": 6.25,
+                    "words": [
+                        {"word": "Second", "start": 5.25, "end": 5.75},
+                        {"word": "line", "start": 5.75, "end": 6.25},
+                    ],
+                },
+            ]
+        }
+    )
+
+    cues = service.parse_json_to_cues(payload)
+
+    assert cues == [
+        {
+            "time": 2.5,
+            "text": "Hello world",
+            "words": [
+                {"word": "Hello", "start": 2.5, "end": 3.0},
+                {"word": "world", "start": 3.0, "end": 4.0},
+            ],
+        },
+        {
+            "time": 5.25,
+            "text": "Second line",
+            "words": [
+                {"word": "Second", "start": 5.25, "end": 5.75},
+                {"word": "line", "start": 5.75, "end": 6.25},
+            ],
+        },
+    ]
+
+
+def test_lyrics_service_parse_json_to_cues_ignores_invalid_aligned_words():
+    """JSON parser should keep line cues when nested word timing is unusable."""
+    service = LyricsService()
+    payload = json.dumps(
+        [
+            {
+                "start": 1.0,
+                "text": "Keep this line",
+                "words": [
+                    {"word": "Keep", "start": 1.0, "end": 1.2},
+                    {"word": "missing end", "start": 1.0},
+                    {"word": "backwards", "start": 2.0, "end": 1.5},
+                    {"word": "", "start": 1.0, "end": 1.5},
+                ],
+            }
+        ]
+    )
+
+    assert service.parse_json_to_cues(payload) == [
+        {"time": 1.0, "text": "Keep this line"}
+    ]
+
+
 def test_chinese_lyrics_service_simplifies_and_adds_pinyin():
     """Chinese lyrics transformer should simplify Traditional Chinese and preserve mixed text."""
     service = ChineseLyricsService()
@@ -4420,12 +4670,13 @@ def test_chinese_lyrics_service_simplifies_and_adds_pinyin():
 
 
 @pytest.mark.asyncio
-async def test_demucs_client_upload_and_save(tmp_path):
+async def test_demucs_client_upload_and_save(tmp_path, monkeypatch):
     """Demucs client should submit, poll, download ZIP result, and save stems."""
     src = tmp_path / "input.wav"
     src.write_bytes(b"fake-audio-bytes")
     progress_events = []
     log_events = []
+    sleep_calls = []
 
     class FakeResponse:
         def __init__(self, *, json_payload=None, content=b"", headers=None, status_code=200):
@@ -4457,6 +4708,11 @@ async def test_demucs_client_upload_and_save(tmp_path):
             assert data["model"] == "htdemucs"
             assert data["device"] == "cuda"
             assert data["output_format"] == "wav"
+            assert data["transcription_model"] == "tiny"
+            assert data["align_language"] == "en"
+            assert data["detect_language"] == "false"
+            assert data["use_synced_lyrics"] == "false"
+            assert "whisperx_preload_models" in data
             return FakeResponse(
                 json_payload={
                     "job_id": "job123",
@@ -4499,6 +4755,9 @@ async def test_demucs_client_upload_and_save(tmp_path):
         async def delete(self, url):
             raise AssertionError(f"Unexpected DELETE {url}")
 
+    async def fake_sleep(delay):
+        sleep_calls.append(delay)
+
     from services import demucs_client as dc_module
 
     original_client = dc_module.httpx.AsyncClient
@@ -4507,15 +4766,26 @@ async def test_demucs_client_upload_and_save(tmp_path):
     original_demucs_device = dc_module.settings.demucs_device
     original_demucs_output_format = dc_module.settings.demucs_output_format
     original_demucs_mp3_bitrate = dc_module.settings.demucs_mp3_bitrate
-    original_poll_interval = dc_module.DemucsClient.POLL_INTERVAL_SECONDS
+    original_whisperx_transcription_model = dc_module.settings.whisperx_transcription_model
+    original_whisperx_align_language = dc_module.settings.whisperx_align_language
+    original_whisperx_detect_language = dc_module.settings.whisperx_detect_language
+    original_whisperx_use_synced_lyrics = dc_module.settings.whisperx_use_synced_lyrics
+    original_whisperx_preload_models = dc_module.settings.whisperx_preload_models
+    original_poll_interval_seconds = dc_module.settings.demucs_poll_interval_seconds
     try:
         dc_module.httpx.AsyncClient = FakeAsyncClient
+        monkeypatch.setattr(dc_module.asyncio, "sleep", fake_sleep)
         dc_module.settings.cache_path = tmp_path
         dc_module.settings.demucs_model = "htdemucs"
         dc_module.settings.demucs_device = "cuda"
         dc_module.settings.demucs_output_format = "wav"
         dc_module.settings.demucs_mp3_bitrate = 320
-        dc_module.DemucsClient.POLL_INTERVAL_SECONDS = 0
+        dc_module.settings.whisperx_transcription_model = "tiny"
+        dc_module.settings.whisperx_align_language = "en"
+        dc_module.settings.whisperx_detect_language = False
+        dc_module.settings.whisperx_use_synced_lyrics = False
+        dc_module.settings.whisperx_preload_models = "transcription=tiny,align=en"
+        dc_module.settings.demucs_poll_interval_seconds = 1.0
         client = DemucsClient(api_url="http://127.0.0.1:8001")
         result = await client.separate_vocals(
             src,
@@ -4529,10 +4799,16 @@ async def test_demucs_client_upload_and_save(tmp_path):
         dc_module.settings.demucs_device = original_demucs_device
         dc_module.settings.demucs_output_format = original_demucs_output_format
         dc_module.settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
-        dc_module.DemucsClient.POLL_INTERVAL_SECONDS = original_poll_interval
+        dc_module.settings.whisperx_transcription_model = original_whisperx_transcription_model
+        dc_module.settings.whisperx_align_language = original_whisperx_align_language
+        dc_module.settings.whisperx_detect_language = original_whisperx_detect_language
+        dc_module.settings.whisperx_use_synced_lyrics = original_whisperx_use_synced_lyrics
+        dc_module.settings.whisperx_preload_models = original_whisperx_preload_models
+        dc_module.settings.demucs_poll_interval_seconds = original_poll_interval_seconds
 
     assert result.no_vocals_path.endswith("_job123_no_vocals.wav")
     assert result.vocals_path and result.vocals_path.endswith("_job123_vocals.wav")
+    assert result.aligned_lyrics_path is None
     saved = Path(result.no_vocals_path)
     assert saved.exists()
     assert saved.read_bytes() == b"no-vocals-wav"
@@ -4543,6 +4819,289 @@ async def test_demucs_client_upload_and_save(tmp_path):
     assert any(event[0] == 41 for event in progress_events)
     assert progress_events[-1][0] == 100
     assert ("remote", "Demucs boot") in log_events
+    assert sleep_calls == [1.0]
+
+
+@pytest.mark.asyncio
+async def test_demucs_client_uses_configured_poll_interval(tmp_path, monkeypatch):
+    """Demucs client should wait the configured interval between remote job status checks."""
+    src = tmp_path / "input.wav"
+    src.write_bytes(b"fake-audio-bytes")
+    sleep_calls = []
+
+    class FakeResponse:
+        def __init__(self, *, json_payload=None, content=b"", headers=None, status_code=200):
+            self.status_code = status_code
+            self._json_payload = json_payload
+            self.content = content
+            self.headers = headers or {}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._json_payload
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+            self.status_calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, files, data):
+            return FakeResponse(
+                json_payload={
+                    "job_id": "job789",
+                    "status": "queued",
+                    "progress_percent": 0,
+                    "progress_message": "Queued",
+                }
+            )
+
+        async def get(self, url):
+            if url.endswith("/jobs/job789"):
+                self.status_calls += 1
+                if self.status_calls == 1:
+                    return FakeResponse(
+                        json_payload={
+                            "job_id": "job789",
+                            "status": "running",
+                            "progress_percent": 33,
+                            "progress_message": "Separating vocals",
+                            "output_tail": [],
+                        }
+                    )
+                return FakeResponse(
+                    json_payload={
+                        "job_id": "job789",
+                        "status": "completed",
+                        "progress_percent": 100,
+                        "progress_message": "Completed",
+                        "output_tail": [],
+                    }
+                )
+            if url.endswith("/jobs/job789/result"):
+                buffer = BytesIO()
+                with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr("no_vocals.wav", b"no-vocals-wav")
+                    archive.writestr("vocals.wav", b"vocals-wav")
+                return FakeResponse(content=buffer.getvalue())
+            raise AssertionError(f"Unexpected GET {url}")
+
+        async def delete(self, url):
+            raise AssertionError(f"Unexpected DELETE {url}")
+
+    async def fake_sleep(delay):
+        sleep_calls.append(delay)
+
+    from services import demucs_client as dc_module
+
+    original_client = dc_module.httpx.AsyncClient
+    original_cache = dc_module.settings.cache_path
+    original_demucs_model = dc_module.settings.demucs_model
+    original_demucs_device = dc_module.settings.demucs_device
+    original_demucs_output_format = dc_module.settings.demucs_output_format
+    original_demucs_mp3_bitrate = dc_module.settings.demucs_mp3_bitrate
+    original_poll_interval_seconds = dc_module.settings.demucs_poll_interval_seconds
+    original_whisperx_transcription_model = dc_module.settings.whisperx_transcription_model
+    original_whisperx_align_language = dc_module.settings.whisperx_align_language
+    original_whisperx_detect_language = dc_module.settings.whisperx_detect_language
+    original_whisperx_use_synced_lyrics = dc_module.settings.whisperx_use_synced_lyrics
+    original_whisperx_preload_models = dc_module.settings.whisperx_preload_models
+    try:
+        dc_module.httpx.AsyncClient = FakeAsyncClient
+        monkeypatch.setattr(dc_module.asyncio, "sleep", fake_sleep)
+        dc_module.settings.cache_path = tmp_path
+        dc_module.settings.demucs_model = "htdemucs"
+        dc_module.settings.demucs_device = "cuda"
+        dc_module.settings.demucs_output_format = "wav"
+        dc_module.settings.demucs_mp3_bitrate = 320
+        dc_module.settings.demucs_poll_interval_seconds = 2.5
+        dc_module.settings.whisperx_transcription_model = "tiny"
+        dc_module.settings.whisperx_align_language = "en"
+        dc_module.settings.whisperx_detect_language = False
+        dc_module.settings.whisperx_use_synced_lyrics = False
+        dc_module.settings.whisperx_preload_models = "transcription=tiny,align=en"
+        client = DemucsClient(api_url="http://127.0.0.1:8001")
+        result = await client.separate_vocals(
+            src,
+            progress_callback=lambda percent, message, metadata=None: None,
+            log_callback=lambda stream, message: None,
+        )
+    finally:
+        dc_module.httpx.AsyncClient = original_client
+        dc_module.settings.cache_path = original_cache
+        dc_module.settings.demucs_model = original_demucs_model
+        dc_module.settings.demucs_device = original_demucs_device
+        dc_module.settings.demucs_output_format = original_demucs_output_format
+        dc_module.settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
+        dc_module.settings.demucs_poll_interval_seconds = original_poll_interval_seconds
+        dc_module.settings.whisperx_transcription_model = original_whisperx_transcription_model
+        dc_module.settings.whisperx_align_language = original_whisperx_align_language
+        dc_module.settings.whisperx_detect_language = original_whisperx_detect_language
+        dc_module.settings.whisperx_use_synced_lyrics = original_whisperx_use_synced_lyrics
+        dc_module.settings.whisperx_preload_models = original_whisperx_preload_models
+
+    assert result.no_vocals_path.endswith("_job789_no_vocals.wav")
+    assert sleep_calls == [2.5]
+
+
+@pytest.mark.asyncio
+async def test_demucs_client_upload_and_save_with_aligned_lyrics(tmp_path, monkeypatch):
+    """Demucs client should extract aligned lyrics JSON when present in the zip."""
+    src = tmp_path / "input.wav"
+    src.write_bytes(b"fake-audio-bytes")
+    sleep_calls = []
+
+    class FakeResponse:
+        def __init__(self, *, json_payload=None, content=b"", headers=None, status_code=200):
+            self.status_code = status_code
+            self._json_payload = json_payload
+            self.content = content
+            self.headers = headers or {}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._json_payload
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+            self.status_calls = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, files, data):
+            return FakeResponse(
+                json_payload={
+                    "job_id": "job456",
+                    "status": "queued",
+                    "progress_percent": 0,
+                    "progress_message": "Queued",
+                }
+            )
+
+        async def get(self, url):
+            if url.endswith("/jobs/job456"):
+                self.status_calls += 1
+                if self.status_calls == 1:
+                    return FakeResponse(
+                        json_payload={
+                            "job_id": "job456",
+                            "status": "running",
+                            "progress_percent": 75,
+                            "progress_message": "Aligning lyrics",
+                            "output_tail": [],
+                        }
+                    )
+                return FakeResponse(
+                    json_payload={
+                        "job_id": "job456",
+                        "status": "completed",
+                        "progress_percent": 100,
+                        "progress_message": "Completed",
+                        "output_tail": [],
+                    }
+                )
+            if url.endswith("/jobs/job456/result"):
+                buffer = BytesIO()
+                with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr("no_vocals.wav", b"no-vocals-wav")
+                    archive.writestr("vocals.wav", b"vocals-wav")
+                    archive.writestr(
+                        "aligned_lyrics.json",
+                        json.dumps(
+                            [
+                                {
+                                    "start": 1.23,
+                                    "end": 4.56,
+                                    "text": "hello world",
+                                    "words": [
+                                        {"word": "hello", "start": 1.23, "end": 2.0, "score": 0.9},
+                                        {"word": "world", "start": 2.1, "end": 4.56, "score": 0.8},
+                                    ],
+                                }
+                            ],
+                            ensure_ascii=False,
+                        ).encode("utf-8"),
+                    )
+                return FakeResponse(content=buffer.getvalue())
+            raise AssertionError(f"Unexpected GET {url}")
+
+        async def delete(self, url):
+            raise AssertionError(f"Unexpected DELETE {url}")
+
+    async def fake_sleep(delay):
+        sleep_calls.append(delay)
+
+    from services import demucs_client as dc_module
+
+    original_client = dc_module.httpx.AsyncClient
+    original_cache = dc_module.settings.cache_path
+    original_demucs_model = dc_module.settings.demucs_model
+    original_demucs_device = dc_module.settings.demucs_device
+    original_demucs_output_format = dc_module.settings.demucs_output_format
+    original_demucs_mp3_bitrate = dc_module.settings.demucs_mp3_bitrate
+    original_whisperx_transcription_model = dc_module.settings.whisperx_transcription_model
+    original_whisperx_align_language = dc_module.settings.whisperx_align_language
+    original_whisperx_detect_language = dc_module.settings.whisperx_detect_language
+    original_whisperx_use_synced_lyrics = dc_module.settings.whisperx_use_synced_lyrics
+    original_whisperx_preload_models = dc_module.settings.whisperx_preload_models
+    original_poll_interval_seconds = dc_module.settings.demucs_poll_interval_seconds
+    try:
+        dc_module.httpx.AsyncClient = FakeAsyncClient
+        monkeypatch.setattr(dc_module.asyncio, "sleep", fake_sleep)
+        dc_module.settings.cache_path = tmp_path
+        dc_module.settings.demucs_model = "htdemucs"
+        dc_module.settings.demucs_device = "cuda"
+        dc_module.settings.demucs_output_format = "wav"
+        dc_module.settings.demucs_mp3_bitrate = 320
+        dc_module.settings.demucs_poll_interval_seconds = 1.0
+        dc_module.settings.whisperx_transcription_model = "tiny"
+        dc_module.settings.whisperx_align_language = "en"
+        dc_module.settings.whisperx_detect_language = False
+        dc_module.settings.whisperx_use_synced_lyrics = False
+        dc_module.settings.whisperx_preload_models = "transcription=tiny,align=en"
+        client = DemucsClient(api_url="http://127.0.0.1:8001")
+        result = await client.separate_vocals(
+            src,
+            lyrics_text="[00:01.00]hello world",
+            lyrics_format="lrc",
+            progress_callback=lambda percent, message, metadata=None: None,
+            log_callback=lambda stream, message: None,
+        )
+    finally:
+        dc_module.httpx.AsyncClient = original_client
+        dc_module.settings.cache_path = original_cache
+        dc_module.settings.demucs_model = original_demucs_model
+        dc_module.settings.demucs_device = original_demucs_device
+        dc_module.settings.demucs_output_format = original_demucs_output_format
+        dc_module.settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
+        dc_module.settings.whisperx_transcription_model = original_whisperx_transcription_model
+        dc_module.settings.whisperx_align_language = original_whisperx_align_language
+        dc_module.settings.whisperx_detect_language = original_whisperx_detect_language
+        dc_module.settings.whisperx_use_synced_lyrics = original_whisperx_use_synced_lyrics
+        dc_module.settings.whisperx_preload_models = original_whisperx_preload_models
+        dc_module.settings.demucs_poll_interval_seconds = original_poll_interval_seconds
+
+    assert result.aligned_lyrics_path is not None
+    aligned_path = Path(result.aligned_lyrics_path)
+    assert aligned_path.exists()
+    payload = json.loads(aligned_path.read_text(encoding="utf-8"))
+    assert payload[0]["text"] == "hello world"
+    assert len(payload[0]["words"]) == 2
+    assert sleep_calls == [1.0]
 
 
 @pytest.mark.asyncio
@@ -4605,17 +5164,17 @@ async def test_demucs_client_cancel_requests_remote_job(tmp_path):
     from services import demucs_client as dc_module
 
     original_client = dc_module.httpx.AsyncClient
-    original_poll_interval = dc_module.DemucsClient.POLL_INTERVAL_SECONDS
+    original_poll_interval_seconds = dc_module.settings.demucs_poll_interval_seconds
     try:
         fake_client = FakeAsyncClient(timeout=0)
         dc_module.httpx.AsyncClient = lambda timeout: fake_client
-        dc_module.DemucsClient.POLL_INTERVAL_SECONDS = 0
+        dc_module.settings.demucs_poll_interval_seconds = 1.0
         client = DemucsClient(api_url="http://127.0.0.1:8001")
         with pytest.raises(asyncio.CancelledError):
             await client.separate_vocals(src, cancel_event=cancel_event)
     finally:
         dc_module.httpx.AsyncClient = original_client
-        dc_module.DemucsClient.POLL_INTERVAL_SECONDS = original_poll_interval
+        dc_module.settings.demucs_poll_interval_seconds = original_poll_interval_seconds
 
     assert fake_client.deleted == ["http://127.0.0.1:8001/jobs/job-cancel"]
 
@@ -4655,6 +5214,50 @@ def test_demucs_client_health_check_uses_short_timeout():
     assert health.detail == "Health check timed out"
 
 
+def test_demucs_client_preload_whisperx_models_posts_request_and_parses_response(tmp_path):
+    """Demucs client should trigger remote WhisperX preload and parse the response."""
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {
+                "requested_models": "transcription=tiny,align=en,fr",
+                "device": "cpu",
+                "compute_type": None,
+                "loaded_entries": ["transcription=tiny", "align=en", "align=fr"],
+                "detail": "Preloaded 3 WhisperX model entries",
+            }
+
+    seen = {}
+
+    def fake_post(url, data, timeout):
+        seen["url"] = url
+        seen["data"] = data
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    with patch("services.demucs_client.httpx.post", side_effect=fake_post):
+        client = DemucsClient(api_url="http://127.0.0.1:8001")
+        result = client.preload_whisperx_models(
+            whisperx_preload_models="transcription=tiny,align=en,fr",
+            device="cpu",
+        )
+
+    assert seen["url"] == "http://127.0.0.1:8001/whisperx/preload"
+    assert seen["data"]["whisperx_preload_models"] == "transcription=tiny,align=en,fr"
+    assert seen["data"]["device"] == "cpu"
+    assert seen["timeout"] == DemucsClient.PRELOAD_TIMEOUT_SECONDS
+    assert result.requested_models == "transcription=tiny,align=en,fr"
+    assert result.loaded_entries == ["transcription=tiny", "align=en", "align=fr"]
+    assert result.detail == "Preloaded 3 WhisperX model entries"
+
+
 def test_runtime_settings_get_settings_is_non_blocking():
     """Settings snapshot should not call external health checks."""
     service = RuntimeSettingsService()
@@ -4672,6 +5275,12 @@ def test_runtime_settings_get_settings_is_non_blocking():
     assert result.demucs_output_format == settings.demucs_output_format
     assert result.demucs_mp3_bitrate == settings.demucs_mp3_bitrate
     assert result.demucs_direct_media_max_mb == settings.demucs_direct_media_max_mb
+    assert result.demucs_poll_interval_seconds == settings.demucs_poll_interval_seconds
+    assert result.whisperx_transcription_model == settings.whisperx_transcription_model
+    assert result.whisperx_align_language == settings.whisperx_align_language
+    assert result.whisperx_detect_language == settings.whisperx_detect_language
+    assert result.whisperx_use_synced_lyrics == settings.whisperx_use_synced_lyrics
+    assert result.whisperx_preload_models == settings.whisperx_preload_models
 
 
 def test_runtime_settings_update_settings_includes_demucs_health():
@@ -4690,6 +5299,37 @@ def test_runtime_settings_update_settings_includes_demucs_health():
 
     assert result.demucs_healthy is True
     assert result.demucs_health_detail == "Demucs service is healthy"
+
+
+def test_runtime_settings_preload_whisperx_models_uses_current_settings():
+    """Runtime settings service should forward the configured preload list to Demucs."""
+    service = RuntimeSettingsService()
+    original_demucs_device = settings.demucs_device
+    original_demucs_api_url = settings.demucs_api_url
+    try:
+        settings.demucs_device = "cpu"
+        settings.demucs_api_url = "http://127.0.0.1:8001"
+        with patch(
+            "services.runtime_settings_service.DemucsClient.preload_whisperx_models",
+            return_value={
+                "requested_models": "transcription=tiny,align=en,fr",
+                "device": "cpu",
+                "compute_type": None,
+                "loaded_entries": ["transcription=tiny", "align=en", "align=fr"],
+                "detail": "Preloaded 3 WhisperX model entries",
+            },
+        ) as mock_preload:
+            result = service.preload_whisperx_models("transcription=tiny,align=en,fr")
+
+        mock_preload.assert_called_once_with(
+            whisperx_preload_models="transcription=tiny,align=en,fr",
+            device="cpu",
+        )
+        assert result["requested_models"] == "transcription=tiny,align=en,fr"
+        assert result["loaded_entries"] == ["transcription=tiny", "align=en", "align=fr"]
+    finally:
+        settings.demucs_device = original_demucs_device
+        settings.demucs_api_url = original_demucs_api_url
 
 
 def test_runtime_settings_update_settings_accepts_media_and_cache_paths(tmp_path):
@@ -4734,6 +5374,12 @@ def test_runtime_settings_update_settings_accepts_demucs_advanced_fields():
     original_output = settings.demucs_output_format
     original_bitrate = settings.demucs_mp3_bitrate
     original_cutoff = settings.demucs_direct_media_max_mb
+    original_poll_interval_seconds = settings.demucs_poll_interval_seconds
+    original_whisperx_transcription_model = settings.whisperx_transcription_model
+    original_whisperx_align_language = settings.whisperx_align_language
+    original_whisperx_detect_language = settings.whisperx_detect_language
+    original_whisperx_use_synced_lyrics = settings.whisperx_use_synced_lyrics
+    original_whisperx_preload_models = settings.whisperx_preload_models
     try:
         with patch.object(
             RuntimeSettingsService,
@@ -4751,6 +5397,12 @@ def test_runtime_settings_update_settings_accepts_demucs_advanced_fields():
                     demucs_output_format="mp3",
                     demucs_mp3_bitrate=256,
                     demucs_direct_media_max_mb=750,
+                    demucs_poll_interval_seconds=2.5,
+                    whisperx_transcription_model="base",
+                    whisperx_align_language="en",
+                    whisperx_detect_language=True,
+                    whisperx_use_synced_lyrics=True,
+                    whisperx_preload_models="transcription=tiny,align=en,align=zh",
                 )
             )
         assert result.demucs_model == "htdemucs_ft"
@@ -4758,12 +5410,24 @@ def test_runtime_settings_update_settings_accepts_demucs_advanced_fields():
         assert result.demucs_output_format == "mp3"
         assert result.demucs_mp3_bitrate == 256
         assert result.demucs_direct_media_max_mb == 750
+        assert result.demucs_poll_interval_seconds == 2.5
+        assert result.whisperx_transcription_model == "base"
+        assert result.whisperx_align_language == "en"
+        assert result.whisperx_detect_language is True
+        assert result.whisperx_use_synced_lyrics is True
+        assert result.whisperx_preload_models == "transcription=tiny,align=en,align=zh"
     finally:
         settings.demucs_model = original_model
         settings.demucs_device = original_device
         settings.demucs_output_format = original_output
         settings.demucs_mp3_bitrate = original_bitrate
         settings.demucs_direct_media_max_mb = original_cutoff
+        settings.demucs_poll_interval_seconds = original_poll_interval_seconds
+        settings.whisperx_transcription_model = original_whisperx_transcription_model
+        settings.whisperx_align_language = original_whisperx_align_language
+        settings.whisperx_detect_language = original_whisperx_detect_language
+        settings.whisperx_use_synced_lyrics = original_whisperx_use_synced_lyrics
+        settings.whisperx_preload_models = original_whisperx_preload_models
 
 
 def test_runtime_settings_update_settings_rejects_invalid_demucs_fields():
@@ -4779,6 +5443,10 @@ def test_runtime_settings_update_settings_rejects_invalid_demucs_fields():
         service.update_settings(RuntimeSettingsUpdateRequest(demucs_direct_media_max_mb=-1))
     with pytest.raises(ValueError, match="demucs_direct_media_max_mb"):
         service.update_settings(RuntimeSettingsUpdateRequest(demucs_direct_media_max_mb=5001))
+    with pytest.raises(ValueError, match="demucs_poll_interval_seconds"):
+        service.update_settings(RuntimeSettingsUpdateRequest(demucs_poll_interval_seconds=0.1))
+    with pytest.raises(ValueError, match="whisperx_transcription_model"):
+        service.update_settings(RuntimeSettingsUpdateRequest(whisperx_transcription_model=" "))
 
 
 def test_runtime_settings_update_settings_rejects_empty_media_path():
@@ -4981,6 +5649,12 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
     original_lrclib = settings.lyrics_provider_lrclib_enabled
     original_resolution = settings.ytdlp_video_resolution
     original_cutoff = settings.demucs_direct_media_max_mb
+    original_poll_interval_seconds = settings.demucs_poll_interval_seconds
+    original_whisperx_transcription_model = settings.whisperx_transcription_model
+    original_whisperx_align_language = settings.whisperx_align_language
+    original_whisperx_detect_language = settings.whisperx_detect_language
+    original_whisperx_use_synced_lyrics = settings.whisperx_use_synced_lyrics
+    original_whisperx_preload_models = settings.whisperx_preload_models
     try:
         with patch.object(
             RuntimeSettingsService,
@@ -4998,6 +5672,12 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
                     lyrics_provider_lrclib_enabled=True,
                     ytdlp_video_resolution="1080",
                     demucs_direct_media_max_mb=1234,
+                    demucs_poll_interval_seconds=1.75,
+                    whisperx_transcription_model="tiny",
+                    whisperx_align_language="",
+                    whisperx_detect_language=False,
+                    whisperx_use_synced_lyrics=True,
+                    whisperx_preload_models="transcription=tiny",
                     stage_qr_url="https://karaoke.test/stage",
                     stage_lobby_media_path="/media/stage-lobby.mp4",
                 ),
@@ -5009,6 +5689,12 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert result.lyrics_provider_lrclib_enabled is True
         assert result.ytdlp_video_resolution == "1080"
         assert result.demucs_direct_media_max_mb == 1234
+        assert result.demucs_poll_interval_seconds == 1.75
+        assert result.whisperx_transcription_model == "tiny"
+        assert result.whisperx_align_language == ""
+        assert result.whisperx_detect_language is False
+        assert result.whisperx_use_synced_lyrics is True
+        assert result.whisperx_preload_models == "transcription=tiny"
         assert result.stage_qr_url == "https://karaoke.test/stage"
         assert result.stage_lobby_media_path == "/media/stage-lobby.mp4"
 
@@ -5021,6 +5707,12 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert stored["lyrics_provider_lrclib_enabled"] == "true"
         assert stored["ytdlp_video_resolution"] == "1080"
         assert stored["demucs_direct_media_max_mb"] == "1234"
+        assert stored["demucs_poll_interval_seconds"] == "1.75"
+        assert stored["whisperx_transcription_model"] == "tiny"
+        assert stored["whisperx_align_language"] == ""
+        assert stored["whisperx_detect_language"] == "false"
+        assert stored["whisperx_use_synced_lyrics"] == "true"
+        assert stored["whisperx_preload_models"] == "transcription=tiny"
         assert stored["stage_qr_url"] == "https://karaoke.test/stage"
         assert stored["stage_lobby_media_path"] == "/media/stage-lobby.mp4"
     finally:
@@ -5031,6 +5723,12 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         settings.lyrics_provider_lrclib_enabled = original_lrclib
         settings.ytdlp_video_resolution = original_resolution
         settings.demucs_direct_media_max_mb = original_cutoff
+        settings.demucs_poll_interval_seconds = original_poll_interval_seconds
+        settings.whisperx_transcription_model = original_whisperx_transcription_model
+        settings.whisperx_align_language = original_whisperx_align_language
+        settings.whisperx_detect_language = original_whisperx_detect_language
+        settings.whisperx_use_synced_lyrics = original_whisperx_use_synced_lyrics
+        settings.whisperx_preload_models = original_whisperx_preload_models
 
 
 def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
@@ -5049,6 +5747,12 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
                 RuntimeSetting(key="ffmpeg_preset", value="veryslow"),
                 RuntimeSetting(key="ytdlp_video_resolution", value="720"),
                 RuntimeSetting(key="demucs_direct_media_max_mb", value="777"),
+                RuntimeSetting(key="demucs_poll_interval_seconds", value="1.25"),
+                RuntimeSetting(key="whisperx_transcription_model", value="base"),
+                RuntimeSetting(key="whisperx_align_language", value="zh"),
+                RuntimeSetting(key="whisperx_detect_language", value="true"),
+                RuntimeSetting(key="whisperx_use_synced_lyrics", value="false"),
+                RuntimeSetting(key="whisperx_preload_models", value="transcription=base,align=zh"),
             ]
         )
         db_session.commit()
@@ -5058,6 +5762,12 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         settings.stage_lobby_media_path = ""
         settings.ytdlp_video_resolution = "default"
         settings.demucs_direct_media_max_mb = 500
+        settings.demucs_poll_interval_seconds = 1.0
+        settings.whisperx_transcription_model = "tiny"
+        settings.whisperx_align_language = "en"
+        settings.whisperx_detect_language = False
+        settings.whisperx_use_synced_lyrics = False
+        settings.whisperx_preload_models = "transcription=tiny,align=en"
 
         applied = service.load_persisted_settings(db_session)
 
@@ -5066,11 +5776,18 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         assert "stage_lobby_media_path" in applied
         assert "ytdlp_video_resolution" in applied
         assert "demucs_direct_media_max_mb" in applied
+        assert "demucs_poll_interval_seconds" in applied
         assert settings.demucs_model == "persisted-model"
         assert settings.stage_qr_url == "https://karaoke.test/stage"
         assert settings.stage_lobby_media_path == "/media/stage-lobby.mp4"
         assert settings.ytdlp_video_resolution == "720"
         assert settings.demucs_direct_media_max_mb == 777
+        assert settings.demucs_poll_interval_seconds == 1.25
+        assert settings.whisperx_transcription_model == "base"
+        assert settings.whisperx_align_language == "zh"
+        assert settings.whisperx_detect_language is True
+        assert settings.whisperx_use_synced_lyrics is False
+        assert settings.whisperx_preload_models == "transcription=base,align=zh"
 
         explicit_field = next(
             field

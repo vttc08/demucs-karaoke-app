@@ -102,6 +102,57 @@
                         <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_direct_media_cutoff') }}</span>
                         <input id="demucs_direct_media_max_mb" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="number" min="0" max="5000" step="1" required />
                     </label>
+                    <label class="flex flex-col gap-1.5">
+                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_poll_interval') }}</span>
+                        <input id="demucs_poll_interval_seconds" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="number" min="0.25" max="10" step="0.25" required />
+                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.demucs_poll_interval_detail') }}</span>
+                    </label>
+                    <div class="rounded-xl border border-white/10 bg-surface-container-highest/20 p-4">
+                        <div class="mb-4 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary">subtitles</span>
+                            <h4 class="font-headline text-base font-bold text-on-surface">{{ t('settings.whisperx') }}</h4>
+                        </div>
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <label class="flex flex-col gap-1.5">
+                                    <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_transcription_model') }}</span>
+                                    <input id="whisperx_transcription_model" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
+                                </label>
+                                <label id="whisperx-align-language-group" class="flex flex-col gap-1.5">
+                                    <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_align_language') }}</span>
+                                    <input id="whisperx_align_language" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50" type="text" placeholder="en" />
+                                </label>
+                            </div>
+                            <label class="flex items-center justify-between gap-3 rounded-lg bg-surface-container-highest/40 px-4 py-3">
+                                <div>
+                                    <span class="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_detect_language') }}</span>
+                                    <span class="text-xs text-on-surface-variant/80">{{ t('settings.whisperx_detect_language_detail') }}</span>
+                                </div>
+                                <input id="whisperx_detect_language" type="checkbox" class="h-5 w-5 accent-primary" />
+                            </label>
+                            <label class="flex items-center justify-between gap-3 rounded-lg bg-surface-container-highest/40 px-4 py-3">
+                                <div>
+                                    <span class="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_use_synced_lyrics') }}</span>
+                                    <span class="text-xs text-on-surface-variant/80">{{ t('settings.whisperx_use_synced_lyrics_detail') }}</span>
+                                </div>
+                                <input id="whisperx_use_synced_lyrics" type="checkbox" class="h-5 w-5 accent-primary" />
+                            </label>
+                            <label class="flex flex-col gap-1.5">
+                                <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_preload_models') }}</span>
+                                <input id="whisperx_preload_models" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" placeholder="transcription=tiny,align=en" />
+                                <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.whisperx_preload_models_detail') }}</span>
+                            </label>
+                            <div class="flex flex-wrap items-center gap-3">
+                                <button id="preload-whisperx-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary px-3 py-2 text-[10px] font-black uppercase tracking-widest text-on-primary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
+                                    <span class="material-symbols-outlined text-sm">download</span>
+                                    {{ t('settings.preload_whisperx_models') }}
+                                </button>
+                                <p id="whisperx-preload-status" class="text-xs text-on-surface-variant">
+                                    {{ t('settings.preload_whisperx_models_detail_short') }}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 

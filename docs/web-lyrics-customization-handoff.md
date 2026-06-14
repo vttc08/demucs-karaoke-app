@@ -6,6 +6,8 @@ This document captures extension points for future lyric-style customization on 
 - Overlay is rendered in `templates/stage.html` as `#stage-lyrics-overlay`.
 - Timed cues are loaded from `GET /api/queue/{item_id}/lyrics-cues`.
 - Active line uses `.stage-lyric-line--current` (red), nearby lines use `.stage-lyric-line` (white).
+- Aligned JSON cues may include `words: [{word, start, end}]`; the stage progressively highlights
+  completed/current words while leaving upcoming words white.
 - Timeline authority is `video.currentTime`.
 
 ## Recommended future customization surfaces
@@ -33,7 +35,7 @@ This document captures extension points for future lyric-style customization on 
 - Keep overlays clear of stage controls/QR overlays.
 
 5. **Data enrichment**
-- If future lyric providers include per-word timing, extend cue schema with nested timing while preserving current line-level `time/text` compatibility.
+- Preserve the optional nested word timing schema while keeping line-level `time/text` compatibility.
 
 ## Compatibility guidance
 - Keep endpoint output backward-compatible:

@@ -10,6 +10,7 @@ from models import (
     RuntimeSetting,
     RuntimeSettingsResponse,
     RuntimeSettingsUpdateRequest,
+    WhisperXPreloadResponse,
     YtDlpUpdateResponse,
     YtDlpVersionResponse,
 )
@@ -36,6 +37,7 @@ class RuntimeSettingsService:
     ALLOWED_PROXY_SCHEMES = {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
     ALLOWED_YTDLP_VIDEO_RESOLUTIONS = {"default", "360", "480", "720", "1080", "2160"}
     DEMUCS_DIRECT_MEDIA_MAX_MB_RANGE = (0, 5000)
+    DEMUCS_POLL_INTERVAL_SECONDS_RANGE = (0.25, 10.0)
     PERSISTED_SETTING_FIELDS = (
         "demucs_api_url",
         "demucs_model",
@@ -43,6 +45,12 @@ class RuntimeSettingsService:
         "demucs_output_format",
         "demucs_mp3_bitrate",
         "demucs_direct_media_max_mb",
+        "demucs_poll_interval_seconds",
+        "whisperx_transcription_model",
+        "whisperx_align_language",
+        "whisperx_detect_language",
+        "whisperx_use_synced_lyrics",
+        "whisperx_preload_models",
         "ffmpeg_preset",
         "ffmpeg_crf",
         "ytdlp_path",
@@ -63,6 +71,16 @@ class RuntimeSettingsService:
         """Return Demucs health for the current configured API URL."""
         return DemucsClient(api_url=settings.demucs_api_url).health_check()
 
+    def preload_whisperx_models(
+        self,
+        whisperx_preload_models: str | None = None,
+    ) -> WhisperXPreloadResponse:
+        """Trigger WhisperX model preload/download on the remote Demucs host."""
+        return DemucsClient(api_url=settings.demucs_api_url).preload_whisperx_models(
+            whisperx_preload_models=whisperx_preload_models,
+            device=settings.demucs_device,
+        )
+
     def _build_settings_response(
         self, demucs_health: DemucsHealthResponse | None
     ) -> RuntimeSettingsResponse:
@@ -82,6 +100,12 @@ class RuntimeSettingsService:
             demucs_output_format=settings.demucs_output_format,
             demucs_mp3_bitrate=settings.demucs_mp3_bitrate,
             demucs_direct_media_max_mb=settings.demucs_direct_media_max_mb,
+            demucs_poll_interval_seconds=settings.demucs_poll_interval_seconds,
+            whisperx_transcription_model=settings.whisperx_transcription_model,
+            whisperx_align_language=settings.whisperx_align_language,
+            whisperx_detect_language=settings.whisperx_detect_language,
+            whisperx_use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+            whisperx_preload_models=settings.whisperx_preload_models,
             ffmpeg_preset=settings.ffmpeg_preset,
             ffmpeg_crf=settings.ffmpeg_crf,
             ytdlp_path=settings.ytdlp_path,
@@ -187,6 +211,54 @@ class RuntimeSettingsService:
             )
             settings.demucs_direct_media_max_mb = max_mb
             updated_fields.append("demucs_direct_media_max_mb")
+
+        if payload.demucs_poll_interval_seconds is not None:
+            poll_interval = float(payload.demucs_poll_interval_seconds)
+            if not self._is_valid_demucs_poll_interval_seconds(poll_interval):
+                min_seconds, max_seconds = self.DEMUCS_POLL_INTERVAL_SECONDS_RANGE
+                raise ValueError(
+                    "demucs_poll_interval_seconds must be between "
+                    f"{min_seconds} and {max_seconds}"
+                )
+            snapshot.setdefault(
+                "demucs_poll_interval_seconds", settings.demucs_poll_interval_seconds
+            )
+            settings.demucs_poll_interval_seconds = poll_interval
+            updated_fields.append("demucs_poll_interval_seconds")
+
+        if payload.whisperx_transcription_model is not None:
+            transcription_model = payload.whisperx_transcription_model.strip()
+            if not transcription_model:
+                raise ValueError("whisperx_transcription_model cannot be empty")
+            snapshot.setdefault(
+                "whisperx_transcription_model", settings.whisperx_transcription_model
+            )
+            settings.whisperx_transcription_model = transcription_model
+            updated_fields.append("whisperx_transcription_model")
+
+        if payload.whisperx_align_language is not None:
+            align_language = payload.whisperx_align_language.strip().lower()
+            snapshot.setdefault("whisperx_align_language", settings.whisperx_align_language)
+            settings.whisperx_align_language = align_language or ""
+            updated_fields.append("whisperx_align_language")
+
+        if payload.whisperx_detect_language is not None:
+            snapshot.setdefault("whisperx_detect_language", settings.whisperx_detect_language)
+            settings.whisperx_detect_language = payload.whisperx_detect_language
+            updated_fields.append("whisperx_detect_language")
+
+        if payload.whisperx_use_synced_lyrics is not None:
+            snapshot.setdefault(
+                "whisperx_use_synced_lyrics", settings.whisperx_use_synced_lyrics
+            )
+            settings.whisperx_use_synced_lyrics = payload.whisperx_use_synced_lyrics
+            updated_fields.append("whisperx_use_synced_lyrics")
+
+        if payload.whisperx_preload_models is not None:
+            preload_models = payload.whisperx_preload_models.strip()
+            snapshot.setdefault("whisperx_preload_models", settings.whisperx_preload_models)
+            settings.whisperx_preload_models = preload_models
+            updated_fields.append("whisperx_preload_models")
 
         if payload.ffmpeg_preset is not None:
             preset = payload.ffmpeg_preset.strip().lower()
@@ -334,6 +406,24 @@ class RuntimeSettingsService:
             if not self._is_valid_demucs_direct_media_max_mb(max_mb):
                 raise ValueError(f"Invalid persisted demucs_direct_media_max_mb: {raw_value}")
             settings.demucs_direct_media_max_mb = max_mb
+        elif field_name == "demucs_poll_interval_seconds":
+            poll_interval = float(raw_value)
+            if not self._is_valid_demucs_poll_interval_seconds(poll_interval):
+                raise ValueError(f"Invalid persisted demucs_poll_interval_seconds: {raw_value}")
+            settings.demucs_poll_interval_seconds = poll_interval
+        elif field_name == "whisperx_transcription_model":
+            transcription_model = raw_value.strip()
+            if not transcription_model:
+                raise ValueError("Invalid persisted whisperx_transcription_model: empty value")
+            settings.whisperx_transcription_model = transcription_model
+        elif field_name == "whisperx_align_language":
+            settings.whisperx_align_language = raw_value.strip().lower()
+        elif field_name == "whisperx_detect_language":
+            settings.whisperx_detect_language = raw_value.lower() in {"1", "true", "yes", "on"}
+        elif field_name == "whisperx_use_synced_lyrics":
+            settings.whisperx_use_synced_lyrics = raw_value.lower() in {"1", "true", "yes", "on"}
+        elif field_name == "whisperx_preload_models":
+            settings.whisperx_preload_models = raw_value.strip()
         elif field_name == "ffmpeg_preset":
             preset = raw_value.strip().lower()
             if preset not in self.ALLOWED_FFMPEG_PRESETS:
@@ -412,6 +502,11 @@ class RuntimeSettingsService:
     def _is_valid_demucs_direct_media_max_mb(cls, value: int) -> bool:
         min_mb, max_mb = cls.DEMUCS_DIRECT_MEDIA_MAX_MB_RANGE
         return min_mb <= value <= max_mb
+
+    @classmethod
+    def _is_valid_demucs_poll_interval_seconds(cls, value: float) -> bool:
+        min_seconds, max_seconds = cls.DEMUCS_POLL_INTERVAL_SECONDS_RANGE
+        return min_seconds <= value <= max_seconds
 
     def get_ytdlp_version(self) -> YtDlpVersionResponse:
         """Return currently active yt-dlp version."""

@@ -7,7 +7,7 @@ Lightweight AI-powered karaoke application for home use.
 - **Mobile Queue Page**: Search YouTube, add songs to queue
 - **Stage Page**: Auto-play queue with karaoke mode
 - **Karaoke Mode**: Vocal removal + optional sidecar lyrics overlay
-- **Queue Lyrics Viewer**: Phone-friendly lyrics page for the currently playing song (synced + unsynced)
+- **Queue Lyrics Viewer**: Phone-friendly lyrics page for the currently playing song (synced + unsynced, line-based cues, aligned JSON preferred when AI karaoke returns it)
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
 - **Live Queue Presence**: Queue page shows active guests and join toasts in real time
@@ -153,11 +153,13 @@ and `/static/...`.
        - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
        - View current runtime settings
        - Log out of the active admin session from the settings page
-        - Update Demucs URL, direct-media cutoff, FFmpeg preset/CRF, media/cache paths, tool paths, and outbound proxy URL
+       - Update Demucs URL, direct-media cutoff, Demucs poll interval, FFmpeg preset/CRF, media/cache paths, tool paths, outbound proxy URL, and WhisperX alignment defaults
        - Enable/disable concurrent yt-dlp search mode
-        - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
-        - Configure **Stage Lobby Media URL** (`/media/...` or `/cache/...`) for empty-queue loop playback
-        - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
+       - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
+       - Configure WhisperX transcription model, alignment language, language detection, synced-lyrics mode, and preload list for Demucs-side lyric alignment
+       - Use the WhisperX preload button to ask the remote Demucs host to download/cache the listed models on demand
+       - Configure **Stage Lobby Media URL** (`/media/...` or `/cache/...`) for empty-queue loop playback
+       - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
       - Apply settings immediately without restarting the app (for processing/runtime behavior)
        - Persist changes to the database so settings survive app reloads and restarts
        - View real-time Demucs engine health (online/offline with detail)
@@ -244,6 +246,7 @@ When concurrent yt-dlp search is enabled:
 
 When karaoke mode is enabled:
 - App removes vocals with Demucs and remuxes the output media into the media library root (no subtitle burn path).
+- When lyrics are provided for karaoke processing, the Demucs sidecar flow can optionally run WhisperX forced alignment and stores an `aligned_lyrics.json` sidecar alongside the separated stems.
 - Karaoke prep uses the direct-media cutoff to decide whether small video files go straight to Demucs or get converted to audio first; set it to `0` to always extract/download audio for video files, or raise it on a fast LAN to send more media files directly.
 - Karaoke remuxes and vocals sidecars are served from `/media`, not `/cache`.
 - Lyrics workflow remains available from the queue modal (provider resolve/manual upload), and lyrics are stored as sidecars for stage overlay display.

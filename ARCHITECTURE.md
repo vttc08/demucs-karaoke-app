@@ -20,7 +20,8 @@ This project currently uses two services:
 2. Demucs service
 - receives audio processing request
 - runs demucs two-stem vocals separation
-- returns a ZIP payload containing both `no_vocals` and `vocals` stems
+- optionally runs WhisperX forced alignment when lyrics are supplied
+- returns a ZIP payload containing both `no_vocals` and `vocals` stems, plus `aligned_lyrics.json` when alignment was performed
 
 ## Reverse proxy subpath support
 
@@ -226,10 +227,15 @@ The stage page uses a websocket-first model:
 - Lyrics cues are fetched from `GET /api/queue/{item_id}/lyrics-cues`.
 - Backend cue source is media sidecar `lyrics_path` and supports:
   - `.lrc` sidecars parsed into timestamped cues
-  - `.json` sidecars validated and normalized into cue objects
+  - `.json` sidecars validated and normalized into line-level cue objects; aligned
+    Demucs/WhisperX JSON retains optional nested word start/end timing
   - `.txt` sidecars parsed into unsynced text lines for queue-side viewing
+- Karaoke finalization now promotes the returned aligned `.json` sidecar to the active
+  `lyrics_path` when Demucs/WhisperX provides one, so stage and queue lyrics views consume the
+  rebuilt line-level alignment instead of the original downloaded `.lrc`.
 - Overlay highlight logic is driven by the video timeline:
-  - current line highlighted in red
+  - ordinary cues highlight the current line in red
+  - aligned JSON progressively highlights completed/current words in red while upcoming words remain white
   - nearby lines shown in white
 - This custom pipeline keeps room for future per-user appearance/animation customization.
 
@@ -417,6 +423,12 @@ This is applied at command build time, so new operations use updated proxy setti
   - `demucs_mp3_bitrate`
   - `ffmpeg_preset`
   - `ffmpeg_crf`
+  - `whisperx_transcription_model`
+  - `whisperx_align_language`
+  - `whisperx_detect_language`
+  - `whisperx_use_synced_lyrics`
+  - `whisperx_preload_models`
+  - WhisperX preload button calls the remote Demucs preload endpoint so missing models are downloaded on the remote host before alignment jobs run
   - `ytdlp_path`
   - `ytdlp_proxy_url`
   - `concurrent_ytdlp_search_enabled`
