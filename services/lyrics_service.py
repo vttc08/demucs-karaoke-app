@@ -971,7 +971,7 @@ class LyricsService:
         cues.sort(key=lambda cue: float(cue["time"]))
         return cues
 
-    def parse_json_to_cues(self, payload: str) -> list[dict[str, float | str]]:
+    def parse_json_to_cues(self, payload: str) -> list[dict[str, object]]:
         """Parse JSON lyrics cues and normalize their shape."""
         data = json.loads(payload)
         rows: Any = None
@@ -985,7 +985,7 @@ class LyricsService:
         if not isinstance(rows, list):
             raise ValueError('JSON lyrics payload must be a list or {"cues": [...]} object')
 
-        cues: list[dict[str, float | str]] = []
+        cues: list[dict[str, object]] = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -1014,7 +1014,44 @@ class LyricsService:
             if not text:
                 continue
 
-            cues.append({"time": max(0.0, timestamp), "text": text})
+            cue: dict[str, object] = {"time": max(0.0, timestamp), "text": text}
+            raw_words = row.get("words")
+            if isinstance(raw_words, list):
+                words: list[dict[str, object]] = []
+                words_are_complete = bool(raw_words)
+                for raw_word in raw_words:
+                    if not isinstance(raw_word, dict):
+                        words_are_complete = False
+                        continue
+
+                    word_text = str(raw_word.get("word", "")).strip()
+                    raw_start = raw_word.get("start")
+                    raw_end = raw_word.get("end")
+                    if (
+                        not word_text
+                        or not isinstance(raw_start, (int, float))
+                        or not isinstance(raw_end, (int, float))
+                    ):
+                        words_are_complete = False
+                        continue
+
+                    start = float(raw_start)
+                    end = float(raw_end)
+                    if not math.isfinite(start) or not math.isfinite(end) or end < start:
+                        words_are_complete = False
+                        continue
+
+                    words.append({
+                        "word": word_text,
+                        "start": max(0.0, start),
+                        "end": max(0.0, end),
+                    })
+
+                if words_are_complete and words:
+                    words.sort(key=lambda word: float(word["start"]))
+                    cue["words"] = words
+
+            cues.append(cue)
 
         cues.sort(key=lambda cue: float(cue["time"]))
         return cues
@@ -1062,7 +1099,7 @@ class LyricsService:
 
         raise ValueError(f"Unsupported lyrics format: {suffix}")
 
-    def load_cues_from_media_url(self, lyrics_url: str) -> tuple[str, list[dict[str, float | str]]]:
+    def load_cues_from_media_url(self, lyrics_url: str) -> tuple[str, list[dict[str, object]]]:
         """Load and parse lyrics cues from a /media or /cache URL."""
         payload = self.load_lyrics_payload_from_media_url(lyrics_url)
         if not payload.get("is_synced"):

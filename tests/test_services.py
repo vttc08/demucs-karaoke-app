@@ -4560,8 +4560,45 @@ def test_lyrics_service_parse_json_to_cues_accepts_aligned_segments():
     cues = service.parse_json_to_cues(payload)
 
     assert cues == [
-        {"time": 2.5, "text": "Hello world"},
-        {"time": 5.25, "text": "Second line"},
+        {
+            "time": 2.5,
+            "text": "Hello world",
+            "words": [
+                {"word": "Hello", "start": 2.5, "end": 3.0},
+                {"word": "world", "start": 3.0, "end": 4.0},
+            ],
+        },
+        {
+            "time": 5.25,
+            "text": "Second line",
+            "words": [
+                {"word": "Second", "start": 5.25, "end": 5.75},
+                {"word": "line", "start": 5.75, "end": 6.25},
+            ],
+        },
+    ]
+
+
+def test_lyrics_service_parse_json_to_cues_ignores_invalid_aligned_words():
+    """JSON parser should keep line cues when nested word timing is unusable."""
+    service = LyricsService()
+    payload = json.dumps(
+        [
+            {
+                "start": 1.0,
+                "text": "Keep this line",
+                "words": [
+                    {"word": "Keep", "start": 1.0, "end": 1.2},
+                    {"word": "missing end", "start": 1.0},
+                    {"word": "backwards", "start": 2.0, "end": 1.5},
+                    {"word": "", "start": 1.0, "end": 1.5},
+                ],
+            }
+        ]
+    )
+
+    assert service.parse_json_to_cues(payload) == [
+        {"time": 1.0, "text": "Keep this line"}
     ]
 
 

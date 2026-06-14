@@ -1281,6 +1281,8 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-shortcuts-btn"' in response.content
     assert b'id="stage-shortcuts-panel"' in response.content
     assert re.search(rb'id="stage-lyrics-overlay"[^>]*class="[^"]*\bhidden\b', response.content)
+    assert b"stage-lyric-word--highlighted" in response.content
+    assert b"findActiveLyricWordIndex" in response.content
     assert b'aria-label="Fullscreen"' in response.content
 
 
@@ -2995,8 +2997,22 @@ def test_get_queue_item_lyrics_cues_from_aligned_json_segments(client):
         assert payload["source_format"] == "json"
         assert payload["is_synced"] is True
         assert payload["cues"] == [
-            {"time": 2.5, "text": "Hello world"},
-            {"time": 5.25, "text": "Second line"},
+            {
+                "time": 2.5,
+                "text": "Hello world",
+                "words": [
+                    {"word": "Hello", "start": 2.5, "end": 3.0},
+                    {"word": "world", "start": 3.0, "end": 4.0},
+                ],
+            },
+            {
+                "time": 5.25,
+                "text": "Second line",
+                "words": [
+                    {"word": "Second", "start": 5.25, "end": 5.75},
+                    {"word": "line", "start": 5.75, "end": 6.25},
+                ],
+            },
         ]
         assert payload["lines"] == ["Hello world", "Second line"]
     finally:

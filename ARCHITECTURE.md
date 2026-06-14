@@ -227,14 +227,15 @@ The stage page uses a websocket-first model:
 - Lyrics cues are fetched from `GET /api/queue/{item_id}/lyrics-cues`.
 - Backend cue source is media sidecar `lyrics_path` and supports:
   - `.lrc` sidecars parsed into timestamped cues
-  - `.json` sidecars validated and normalized into line-level cue objects, including
-    Demucs/WhisperX aligned segment JSON with nested word timing
+  - `.json` sidecars validated and normalized into line-level cue objects; aligned
+    Demucs/WhisperX JSON retains optional nested word start/end timing
   - `.txt` sidecars parsed into unsynced text lines for queue-side viewing
 - Karaoke finalization now promotes the returned aligned `.json` sidecar to the active
   `lyrics_path` when Demucs/WhisperX provides one, so stage and queue lyrics views consume the
   rebuilt line-level alignment instead of the original downloaded `.lrc`.
 - Overlay highlight logic is driven by the video timeline:
-  - current line highlighted in red
+  - ordinary cues highlight the current line in red
+  - aligned JSON progressively highlights completed/current words in red while upcoming words remain white
   - nearby lines shown in white
 - This custom pipeline keeps room for future per-user appearance/animation customization.
 

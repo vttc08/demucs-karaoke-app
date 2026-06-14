@@ -309,6 +309,14 @@
         opacity: 1;
     }
 
+    .stage-lyric-line--aligned.stage-lyric-line--current {
+        color: rgba(255, 255, 255, 0.9);
+    }
+
+    .stage-lyric-word--highlighted {
+        color: #ef4444;
+    }
+
     .stage-audio-hero {
         position: absolute;
         inset: 0;
@@ -825,6 +833,7 @@ let suppressSeekBroadcast = false;
 let seekBroadcastUnlockTimer = null;
 let lyricCues = [];
 let activeLyricCueIndex = null;
+let activeLyricWordIndex = null;
 let lyricsAnimationFrame = null;
 let syncOperationId = 0;
 let lastHandledSyncVersion = 0;
@@ -1046,9 +1055,30 @@ function normalizeCue(rawCue) {
     if (!text) {
         return null;
     }
+    const rawWords = Array.isArray(rawCue.words) ? rawCue.words : [];
+    const words = rawWords
+        .map((rawWord) => {
+            if (!rawWord || typeof rawWord !== "object") {
+                return null;
+            }
+            const word = typeof rawWord.word === "string" ? rawWord.word.trim() : "";
+            const start = Number(rawWord.start);
+            const end = Number(rawWord.end);
+            if (!word || !Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+                return null;
+            }
+            return {
+                word,
+                start: Math.max(0, start),
+                end: Math.max(0, end),
+            };
+        })
+        .filter((word) => word !== null)
+        .sort((a, b) => a.start - b.start);
     return {
         time: Math.max(0, rawTime),
         text,
+        words: words.length === rawWords.length ? words : [],
     };
 }
 
@@ -1075,7 +1105,44 @@ function findActiveLyricCueIndex(currentTime) {
     return best;
 }
 
-function renderLyricsWindow(activeIndex) {
+function findActiveLyricWordIndex(cue, currentTime) {
+    if (!cue?.words?.length) {
+        return null;
+    }
+
+    let activeIndex = -1;
+    for (let index = 0; index < cue.words.length; index += 1) {
+        if (cue.words[index].start > currentTime) {
+            break;
+        }
+        activeIndex = index;
+    }
+    return activeIndex;
+}
+
+function renderLyricLine(cue, isCurrent, activeWordIndex) {
+    const hasAlignedWords = cue.words.length > 0;
+    const lineClasses = [
+        "stage-lyric-line",
+        isCurrent ? "stage-lyric-line--current" : "",
+        hasAlignedWords ? "stage-lyric-line--aligned" : "",
+    ].filter(Boolean).join(" ");
+
+    if (!hasAlignedWords) {
+        return `<p class="${lineClasses}">${escapeHtml(cue.text)}</p>`;
+    }
+
+    const words = cue.words
+        .map((word, index) => {
+            const highlighted = isCurrent && index <= activeWordIndex;
+            const className = highlighted ? ' class="stage-lyric-word--highlighted"' : "";
+            return `<span${className}>${escapeHtml(word.word)}</span>`;
+        })
+        .join(" ");
+    return `<p class="${lineClasses}">${words}</p>`;
+}
+
+function renderLyricsWindow(activeIndex, activeWordIndex = null) {
     if (!lyricsLines) {
         return;
     }
@@ -1104,11 +1171,7 @@ function renderLyricsWindow(activeIndex) {
     }
 
     lyricsLines.innerHTML = linesToRender
-        .map(({ cue, isCurrent }) => `
-            <p class="stage-lyric-line${isCurrent ? " stage-lyric-line--current" : ""}">
-                ${escapeHtml(cue.text)}
-            </p>
-        `)
+        .map(({ cue, isCurrent }) => renderLyricLine(cue, isCurrent, activeWordIndex))
         .join("");
     setLyricsOverlayVisible(linesToRender.length > 0);
 }
@@ -1118,6 +1181,7 @@ function setLyricsEnabled(enabled) {
     updateLyricsUi();
     if (lyricsState.enabled) {
         activeLyricCueIndex = null;
+        activeLyricWordIndex = null;
         updateLyricsForTime(getPrimaryCurrentTime());
     } else {
         setLyricsOverlayVisible(false);
@@ -1134,12 +1198,16 @@ function updateLyricsForTime(currentTime) {
     }
 
     const nextIndex = findActiveLyricCueIndex(currentTime);
-    if (nextIndex === activeLyricCueIndex) {
+    const nextWordIndex = nextIndex !== null && nextIndex >= 0
+        ? findActiveLyricWordIndex(lyricCues[nextIndex], currentTime)
+        : null;
+    if (nextIndex === activeLyricCueIndex && nextWordIndex === activeLyricWordIndex) {
         return;
     }
 
     activeLyricCueIndex = nextIndex;
-    renderLyricsWindow(activeLyricCueIndex);
+    activeLyricWordIndex = nextWordIndex;
+    renderLyricsWindow(activeLyricCueIndex, activeLyricWordIndex);
 }
 
 function startLyricsTicker() {
@@ -1173,6 +1241,7 @@ async function loadLyricsCues() {
     if (!currentItemId) {
         lyricCues = [];
         activeLyricCueIndex = null;
+        activeLyricWordIndex = null;
         lyricsState.available = false;
         lyricsState.enabled = false;
         setLyricsOverlayVisible(false);
@@ -1186,6 +1255,7 @@ async function loadLyricsCues() {
         if (!response.ok) {
             lyricCues = [];
             activeLyricCueIndex = null;
+            activeLyricWordIndex = null;
             lyricsState.available = false;
             lyricsState.enabled = false;
             updateLyricsUi();
@@ -1204,12 +1274,14 @@ async function loadLyricsCues() {
             lyricsState.enabled = false;
         }
         activeLyricCueIndex = null;
+        activeLyricWordIndex = null;
         updateLyricsUi();
         updateLyricsForTime(getPrimaryCurrentTime());
     } catch (error) {
         console.warn("Failed to load lyrics cues:", error);
         lyricCues = [];
         activeLyricCueIndex = null;
+        activeLyricWordIndex = null;
         lyricsState.available = false;
         lyricsState.enabled = false;
         updateLyricsUi();
