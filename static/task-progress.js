@@ -1,11 +1,11 @@
 (() => {
     const ACTIVE_STATUSES = new Set(["downloading", "processing"]);
     const EXPECTED_DURATION_MS = 5000;
-    const LINEAR_CAP_PERCENT = 72;
+    const LINEAR_CAP_PERCENT = 50;
     const TAIL_CAP_PERCENT = 96;
     const TAIL_DECAY_MS = 4500;
     const TICK_MS = 120;
-    const OPTIMISTIC_STAGES = new Set(["extract_audio", "finalize"]);
+    const OPTIMISTIC_STAGES = new Set(["extract_audio", "whisperx", "finalize"]);
 
     const stateByKey = new Map();
     let tickHandle = null;

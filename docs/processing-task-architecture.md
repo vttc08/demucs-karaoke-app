@@ -108,4 +108,6 @@ The main app polls the remote job server-side and republishes the latest Demucs 
 - task SSE for admin task panels
 - `queue_item_progress` websocket events for queue clients
 
+When WhisperX lyrics alignment is requested, the remote job's `Aligning lyrics` phase is surfaced as its own local `whisperx` stage so the browser can apply the optimistic progress helper there instead of letting the Demucs bar stall at the end of the separation run.
+
 Browsers do not connect directly to the Demucs host. Remote job ids are intentionally live-only and are not persisted in SQLite. On restart, any interrupted local task is restarted from the beginning with a fresh remote Demucs job.

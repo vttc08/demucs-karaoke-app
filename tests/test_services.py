@@ -1563,6 +1563,51 @@ async def test_demucs_progress_callback_does_not_deadlock_on_same_event_loop():
     assert seen_logs[0]["message"] == "Demucs job job123: Separating vocals"
 
 
+@pytest.mark.asyncio
+async def test_demucs_progress_callback_switches_to_whisperx_stage_for_alignment():
+    """WhisperX alignment should publish its own optimistic stage after Demucs finishes."""
+    loop = asyncio.get_running_loop()
+    seen_progress = []
+    seen_logs = []
+
+    async def fake_emit_progress(*args, **kwargs):
+        seen_progress.append(kwargs)
+
+    async def fake_emit_log(*args, **kwargs):
+        seen_logs.append(kwargs)
+
+    with (
+        patch("services.karaoke_service.processing_task_service.emit_progress", side_effect=fake_emit_progress),
+        patch("services.karaoke_service.processing_task_service.emit_log", side_effect=fake_emit_log),
+    ):
+        callback = KaraokeService._demucs_progress_callback(
+            loop,
+            task_id=456,
+            step_index=3,
+            step_total=4,
+            status=ProcessingTaskStatus.PROCESSING.value,
+            stage="demucs",
+            queue_item_id=789,
+            has_whisperx=True,
+        )
+        callback(94, "Separating vocals", {"job_id": "job456", "status": "running"})
+        callback(95, "Aligning lyrics", {"job_id": "job456", "status": "running"})
+        callback(95, "Aligning lyrics", {"job_id": "job456", "status": "running"})
+        callback(100, "Completed", {"job_id": "job456", "status": "completed"})
+        await asyncio.sleep(0)
+
+    assert seen_progress[0]["stage"] == "demucs"
+    assert seen_progress[0]["progress_percent"] == 94
+    assert seen_progress[1]["stage"] == "demucs"
+    assert seen_progress[1]["progress_percent"] == 100
+    assert seen_progress[2]["stage"] == "whisperx"
+    assert seen_progress[2]["progress_percent"] == 0
+    assert seen_progress[-1]["stage"] == "whisperx"
+    assert seen_progress[-1]["progress_percent"] == 100
+    assert any(log["stage"] == "whisperx" for log in seen_logs)
+    assert seen_logs[0]["message"] == "Demucs job job456: Separating vocals"
+
+
 def test_processing_task_cancel_cleans_up_partial_artifacts_and_resets_rows(db_session, tmp_path, monkeypatch):
     """Cancel should remove partial files and reset queue/media rows for retry."""
     media_root = tmp_path / "media"

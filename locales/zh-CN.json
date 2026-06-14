@@ -191,6 +191,7 @@
   "task.reused_existing_karaoke_media": "复用已有卡拉 OK 媒体",
   "task.reused_existing_media": "复用已有媒体",
   "task.retrying_demucs_preparation": "正在重试 Demucs 准备",
+  "task.aligning_lyrics": "正在对齐歌词",
   "task.separating_vocals": "正在分离人声",
   "task.starting": "正在开始任务",
   "media.updated_title": "已更新“{title}”",
