@@ -90,6 +90,7 @@ value so automatic reconnects do not append the same buffered log lines twice.
 - admin task views still receive the task stream snapshot/log replay directly
 - callback failure or timeout tears down the child `yt-dlp` process before the error is surfaced
 - download attempts try yt-dlp's default selection first, then retry explicit audio/video/progressive selectors as fallbacks
+- the browser-only optimistic progress helper is limited to ffmpeg extraction and finalization stages, while download and Demucs stages rely on real progress updates
 
 When mocks or legacy callers are used in tests, the orchestration falls back to the non-streaming youtube service methods.
 

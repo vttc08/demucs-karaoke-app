@@ -991,10 +991,10 @@ def test_queue_page_renders_clickable_processing_items_with_task_ids(client):
             processing_task_service.set_stage(
                 db,
                 task.id,
-                status=ProcessingTaskStatus.DOWNLOADING,
-                stage="download",
-                progress_label="Downloading media",
-                progress_percent=42,
+                status=ProcessingTaskStatus.PROCESSING,
+                stage="extract_audio",
+                progress_label="Extracting audio",
+                progress_percent=0,
             )
         )
 
@@ -1002,8 +1002,43 @@ def test_queue_page_renders_clickable_processing_items_with_task_ids(client):
 
     assert response.status_code == 200
     assert f'data-task-id="{task.id}"' in response.text
-    assert 'data-status="downloading"' in response.text
+    assert 'data-status="processing"' in response.text
+    assert 'data-task-progress-stage="extract_audio"' in response.text
     assert 'cursor-pointer hover:border-primary/30' in response.text
+
+
+def test_media_management_page_renders_progress_stage_for_finalize_tasks(client):
+    """Media task cards should expose their stage for optimistic progress rendering."""
+    authenticate_admin_client(client)
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="media-task-stage",
+            title="Media Task Stage",
+            artist="Artist",
+            media_path="/media/media-task-stage.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        task = processing_task_service.get_or_create_media_task(db, media.id)
+        asyncio.run(
+            processing_task_service.set_stage(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.PROCESSING,
+                stage="finalize",
+                progress_label="Remuxing karaoke media",
+                progress_percent=0,
+            )
+        )
+
+    response = client.get("/media")
+
+    assert response.status_code == 200
+    assert f'data-task-id="{task.id}"' in response.text
+    assert 'data-task-progress-stage="finalize"' in response.text
 
 
 def test_get_empty_queue(client):

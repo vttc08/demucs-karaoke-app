@@ -1573,7 +1573,7 @@ function renderQueueProgressBlock(item) {
     const percent = Number.isFinite(Number(progressValue)) ? Number(progressValue) : 0;
     const label = getQueueProgressLabel(item);
     return `
-        <div class="mt-2 max-w-xs" data-task-progress-key="queue-${item.id}" data-task-progress-status="${escapeHtml(item.status)}" data-task-progress-reported-percent="${Math.max(0, Math.min(100, percent))}" data-task-progress-label="${escapeHtml(label)}">
+        <div class="mt-2 max-w-xs" data-task-progress-key="queue-${item.id}" data-task-progress-status="${escapeHtml(item.status)}" data-task-progress-stage="${escapeHtml(item.processing_stage || '')}" data-task-progress-reported-percent="${Math.max(0, Math.min(100, percent))}" data-task-progress-label="${escapeHtml(label)}">
             <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.max(0, Math.min(100, percent))}">
                 <div class="h-full rounded-full bg-tertiary transition-all duration-300 ease-out" data-task-progress-fill style="width: ${Math.max(0, Math.min(100, percent))}%"></div>
             </div>

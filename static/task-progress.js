@@ -5,6 +5,7 @@
     const TAIL_CAP_PERCENT = 96;
     const TAIL_DECAY_MS = 4500;
     const TICK_MS = 120;
+    const OPTIMISTIC_STAGES = new Set(["extract_audio", "finalize"]);
 
     const stateByKey = new Map();
     let tickHandle = null;
@@ -26,13 +27,17 @@
         return Number.isFinite(parsed) ? clamp(parsed, 0, 100) : 0;
     }
 
+    function shouldApplyOptimisticProgress(entry) {
+        return ACTIVE_STATUSES.has(entry.status) && OPTIMISTIC_STAGES.has(entry.stage);
+    }
+
     function estimatePercent(entry, nowMs) {
         const reported = parsePercent(entry.reportedPercent);
-        if (!ACTIVE_STATUSES.has(entry.status) || reported >= 100 || reported > 0) {
+        if (!shouldApplyOptimisticProgress(entry) || reported >= 100 || reported > 0) {
             return reported;
         }
 
-        const startedAtMs = entry.startedAtMs ?? entry.firstSeenAtMs ?? nowMs;
+        const startedAtMs = entry.stageStartedAtMs ?? entry.firstSeenAtMs ?? nowMs;
         const elapsedMs = Math.max(0, nowMs - startedAtMs);
         if (elapsedMs <= 0) {
             return 0;
@@ -58,6 +63,7 @@
         const nextReportedPercent = parsePercent(node.dataset.taskProgressReportedPercent);
         const nextStartedAtMs = parseTimestamp(node.dataset.taskProgressStartedAt);
         const nextStatus = String(node.dataset.taskProgressStatus || "");
+        const nextStage = String(node.dataset.taskProgressStage || "");
         const nextLabel = node.dataset.taskProgressLabel || "";
         const nextLabelText = node.dataset.taskProgressLabelText || "";
 
@@ -65,13 +71,18 @@
             firstSeenAtMs: nowMs,
         };
         current.status = nextStatus || current.status || "";
+        const stageChanged = nextStage !== current.stage;
+        current.stage = nextStage || current.stage || "";
         current.reportedPercent = nextReportedPercent;
         current.label = nextLabel;
         current.labelText = nextLabelText;
         if (nextStartedAtMs !== null) {
             current.startedAtMs = nextStartedAtMs;
-        } else if (ACTIVE_STATUSES.has(current.status) && current.startedAtMs === undefined) {
-            current.startedAtMs = current.firstSeenAtMs ?? nowMs;
+            current.stageStartedAtMs = nextStartedAtMs;
+        } else if (stageChanged) {
+            current.stageStartedAtMs = shouldApplyOptimisticProgress(current) ? nowMs : undefined;
+        } else if (shouldApplyOptimisticProgress(current) && current.stageStartedAtMs === undefined) {
+            current.stageStartedAtMs = current.firstSeenAtMs ?? nowMs;
         }
         if (current.firstSeenAtMs === undefined) {
             current.firstSeenAtMs = nowMs;
@@ -88,7 +99,7 @@
         if (percentLabel) {
             percentLabel.textContent = `${displayPercent}%`;
         }
-        return ACTIVE_STATUSES.has(current.status) && nextReportedPercent <= 0 && displayPercent < 100;
+        return shouldApplyOptimisticProgress(current) && nextReportedPercent <= 0 && displayPercent < 100;
     }
 
     function sync(root = document) {
