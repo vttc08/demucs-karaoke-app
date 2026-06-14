@@ -492,10 +492,24 @@ class KaraokeService:
         )
         no_vocals_path = Path(demucs_response.no_vocals_path)
         vocals_raw_path = Path(demucs_response.vocals_path) if demucs_response.vocals_path else None
+        raw_aligned_lyrics_path = getattr(demucs_response, "aligned_lyrics_path", None)
+        aligned_lyrics_path = (
+            Path(raw_aligned_lyrics_path)
+            if isinstance(raw_aligned_lyrics_path, (str, os.PathLike))
+            and str(raw_aligned_lyrics_path).strip()
+            else None
+        )
         if not no_vocals_path.exists():
             raise RuntimeError("Demucs response missing no-vocals output path")
         if vocals_raw_path is None or not vocals_raw_path.exists():
             raise RuntimeError("Demucs response missing vocals output path")
+        if aligned_lyrics_path is not None and not aligned_lyrics_path.exists():
+            logger.warning(
+                "Demucs response missing aligned lyrics sidecar media_id=%s path=%s",
+                media_item.id,
+                aligned_lyrics_path,
+            )
+            aligned_lyrics_path = None
         await self._raise_if_canceled(cancel_event, task.id)
         await processing_task_service.emit_progress(
             task.id,
@@ -554,11 +568,19 @@ class KaraokeService:
             vocals_source=vocals_raw_path,
             task_id=task.id,
         )
+        final_lyrics_path = None
+        if aligned_lyrics_path is not None:
+            final_lyrics_path = await asyncio.to_thread(
+                self._install_aligned_lyrics_sidecar,
+                media_stem,
+                aligned_lyrics_path,
+            )
         self._set_media_item_output_paths(
             db,
             media_item,
             media_path=final_media_path,
             vocals_path=vocals_sidecar_path,
+            lyrics_path=final_lyrics_path,
         )
         if original_media_path is not None and original_media_path != final_media_path:
             from services.media_thumbnail_service import MediaThumbnailService
@@ -864,11 +886,22 @@ class KaraokeService:
         *,
         media_path: Path,
         vocals_path: Path,
+        lyrics_path: Path | None = None,
     ):
         media_item.media_path = QueueService.build_media_url(media_path)
         media_item.vocals_path = QueueService.build_media_url(vocals_path)
+        if lyrics_path is not None:
+            media_item.lyrics_path = QueueService.build_media_url(lyrics_path)
         media_item.missing = False
         db.commit()
+
+    @staticmethod
+    def _install_aligned_lyrics_sidecar(media_stem: str, source_path: Path) -> Path:
+        """Persist aligned lyrics JSON beside the durable media output."""
+        target_path = settings.media_path / f"{media_stem}.json"
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, target_path)
+        return target_path
 
     def cleanup_canceled_task(self, db: Session, task: ProcessingTask):
         """Remove generated outputs and reset rows for a canceled task."""

@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -27,7 +28,21 @@ except Exception:  # pragma: no cover - optional dependency in test environments
 _TRANSCRIPTION_MODEL_CACHE: dict[tuple[str, str, str], Any] = {}
 _ALIGN_MODEL_CACHE: dict[tuple[str, str], tuple[Any, dict[str, Any]]] = {}
 
-_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]|[A-Za-z0-9]+|[^\s]")
+_TOKEN_RE = re.compile(
+    r"""
+    [\u4e00-\u9fff]
+    | [A-Za-z]+(?:['’][A-Za-z]+)*
+    | \d+(?:[.,]\d+)*
+    | [^\s]
+    """,
+    re.VERBOSE,
+)
+_ALIGNMENT_TOKEN_CONTENT_RE = re.compile(r"[\u4e00-\u9fffA-Za-z0-9]")
+_SRT_TIMING_RE = re.compile(
+    r"(?m)^\s*\d{1,2}:\d{2}:\d{2}[,.]\d{3}\s*-->\s*"
+    r"\d{1,2}:\d{2}:\d{2}[,.]\d{3}"
+)
+_LRC_TIMING_RE = re.compile(r"(?m)^\s*\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]")
 _SUPPORTED_LYRICS_FORMATS = {"lrc", "srt", "txt"}
 
 
@@ -74,14 +89,30 @@ def _lyric_tokens(text: str | None) -> list[str]:
     return _TOKEN_RE.findall(text)
 
 
+def _alignment_tokens(text: str | None) -> list[str]:
+    return [token for token in _lyric_tokens(text) if _ALIGNMENT_TOKEN_CONTENT_RE.search(token)]
+
+
+def _alignment_words(words: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        word
+        for word in words
+        if _ALIGNMENT_TOKEN_CONTENT_RE.search(str(word.get("word", "")))
+        and word.get("start") is not None
+        and word.get("end") is not None
+    ]
+
+
 def _clean_token(token: str) -> str:
     return re.sub(r"[^\w']+", "", token).lower()
 
 
 def _preprocess_line(line: str) -> str | None:
     stripped = line.strip()
-    if not stripped:
+    if not stripped or ":" in stripped:
         return None
+    if "-" in stripped:
+        stripped = stripped.replace("-", " ")
     if "/" in stripped:
         stripped = stripped.split("/", 1)[0].strip()
     return stripped or None
@@ -138,12 +169,19 @@ def _parse_lyrics(text: str, lyrics_format: str | None) -> tuple[list[ParsedLyri
     normalized_format = (lyrics_format or "").strip().lower() or None
     if normalized_format == "txt":
         return _parse_plain_text(text), False
+
+    # The notebook selected the parser from the input file suffix. For API
+    # payloads, use an unambiguous timing signature when the format field and
+    # the actual content disagree.
+    if _SRT_TIMING_RE.search(text):
+        return _parse_srt(text)
+    if _LRC_TIMING_RE.search(text):
+        return _parse_lrc(text)
+
     if normalized_format == "srt":
         return _parse_srt(text)
     if normalized_format == "lrc":
         return _parse_lrc(text)
-    if "-->" in text:
-        return _parse_srt(text)
     parsed_segments, is_synced = _parse_lrc(text)
     if parsed_segments:
         return parsed_segments, is_synced
@@ -282,42 +320,93 @@ def _realign_easy(segments: list[ParsedLyricSegment], words: list[dict[str, Any]
     aligned_segments: list[dict[str, Any]] = []
     current_index = 0
     for segment in segments:
-        token_count = len([token for token in _lyric_tokens(segment.text) if token.strip()])
+        token_count = len(_alignment_tokens(segment.text))
         start_index = current_index
         current_index += token_count
         aligned_segments.append(_make_segment(start_index, current_index, words))
     return aligned_segments
 
 
-def _realign_hard(segments: list[ParsedLyricSegment], words: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    aligned_segments: list[dict[str, Any]] = []
-    word_index = 0
-    total_words = len(words)
+def _sequence_boundary_map(source_tokens: list[str], aligned_tokens: list[str]) -> list[int]:
+    """Map every source-token boundary to a monotonic aligned-word boundary."""
+    boundaries: list[int | None] = [None] * (len(source_tokens) + 1)
+    boundaries[0] = 0
+    boundaries[-1] = len(aligned_tokens)
+
+    matcher = SequenceMatcher(a=source_tokens, b=aligned_tokens, autojunk=False)
+    for tag, source_start, source_end, aligned_start, aligned_end in matcher.get_opcodes():
+        source_length = source_end - source_start
+        aligned_length = aligned_end - aligned_start
+
+        if tag == "insert":
+            boundaries[source_start] = aligned_end
+            continue
+
+        for offset in range(source_length + 1):
+            if tag == "equal":
+                aligned_boundary = aligned_start + offset
+            elif tag == "delete":
+                aligned_boundary = aligned_start
+            else:
+                aligned_boundary = aligned_start + round(
+                    offset * aligned_length / source_length
+                )
+            boundaries[source_start + offset] = aligned_boundary
+
+    previous = 0
+    resolved: list[int] = []
+    for boundary in boundaries:
+        current = previous if boundary is None else boundary
+        current = max(previous, min(len(aligned_tokens), current))
+        resolved.append(current)
+        previous = current
+    resolved[-1] = len(aligned_tokens)
+    return resolved
+
+
+def _realign_with_sequence(
+    segments: list[ParsedLyricSegment],
+    words: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    source_tokens: list[str] = []
+    line_boundaries = [0]
     for segment in segments:
-        tokens = [token for token in (_clean_token(token) for token in _lyric_tokens(segment.text)) if token]
-        line_start = word_index
-        for token in tokens:
-            while word_index < total_words and _clean_token(str(words[word_index].get("word", ""))) != token:
-                word_index += 1
-            if word_index >= total_words:
-                break
-            word_index += 1
-        aligned_segments.append(_make_segment(line_start, word_index, words))
-    return aligned_segments
+        source_tokens.extend(
+            token
+            for token in (_clean_token(token) for token in _alignment_tokens(segment.text))
+            if token
+        )
+        line_boundaries.append(len(source_tokens))
+
+    aligned_tokens = [
+        _clean_token(str(word.get("word", "")))
+        for word in words
+    ]
+    boundary_map = _sequence_boundary_map(source_tokens, aligned_tokens)
+
+    return [
+        _make_segment(boundary_map[start], boundary_map[end], words)
+        for start, end in zip(line_boundaries, line_boundaries[1:])
+    ]
 
 
 def _rebuild_synced_segments(
     original_segments: list[ParsedLyricSegment],
     aligned_words: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    filtered_segments = [segment for segment in original_segments if segment.text.strip()]
-    if not filtered_segments or not aligned_words:
+    filtered_words = _alignment_words(aligned_words)
+    filtered_segments = [
+        segment
+        for segment in original_segments
+        if segment.text.strip() and _alignment_tokens(segment.text)
+    ]
+    if not filtered_segments or not filtered_words:
         return []
 
-    expected_word_count = sum(len(_lyric_tokens(segment.text)) for segment in filtered_segments)
-    if expected_word_count == len(aligned_words):
-        return _realign_easy(filtered_segments, aligned_words)
-    return _realign_hard(filtered_segments, aligned_words)
+    expected_word_count = sum(len(_alignment_tokens(segment.text)) for segment in filtered_segments)
+    if expected_word_count == len(filtered_words):
+        return _realign_easy(filtered_segments, filtered_words)
+    return _realign_with_sequence(filtered_segments, filtered_words)
 
 
 def align_lyrics(
@@ -373,7 +462,7 @@ def align_lyrics(
     )
 
     aligned_segments = list(aligned.get("segments") or [])
-    if parsed_is_synced and use_synced_lyrics:
+    if parsed_is_synced:
         words = [word for segment in aligned_segments for word in segment.get("words", [])]
         rebuilt = _rebuild_synced_segments(parsed_segments, words)
         if rebuilt:

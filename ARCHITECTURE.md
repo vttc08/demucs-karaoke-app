@@ -230,6 +230,9 @@ The stage page uses a websocket-first model:
   - `.json` sidecars validated and normalized into line-level cue objects, including
     Demucs/WhisperX aligned segment JSON with nested word timing
   - `.txt` sidecars parsed into unsynced text lines for queue-side viewing
+- Karaoke finalization now promotes the returned aligned `.json` sidecar to the active
+  `lyrics_path` when Demucs/WhisperX provides one, so stage and queue lyrics views consume the
+  rebuilt line-level alignment instead of the original downloaded `.lrc`.
 - Overlay highlight logic is driven by the video timeline:
   - current line highlighted in red
   - nearby lines shown in white

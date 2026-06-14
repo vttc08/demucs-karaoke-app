@@ -219,6 +219,77 @@ def test_align_lyrics_supports_srt_format(monkeypatch):
     ]
 
 
+def test_align_lyrics_rebuilds_synced_lrc_lines_with_filtered_tokens(monkeypatch):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "pylrc",
+        SimpleNamespace(
+            parse=lambda text: [
+                SimpleNamespace(text="Now he's thinkin' 'bout me every night, oh", time=8.83),
+                SimpleNamespace(text="My give-a-fucks are on vacation", time=33.32),
+                SimpleNamespace(text="♪", time=50.28),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "whisperx",
+        SimpleNamespace(
+            load_audio=lambda path: [0.0] * 16000,
+            load_align_model=lambda language_code, device: (
+                {"language_code": language_code},
+                {"language_code": language_code},
+            ),
+            align=lambda transcript, *args, **kwargs: {
+                "segments": [
+                    {
+                        "start": 22.661,
+                        "end": 51.422,
+                        "text": "flattened",
+                        "words": [
+                            {"word": "Now", "start": 22.661, "end": 22.921, "score": 0.47},
+                            {"word": "he's", "start": 23.161, "end": 23.281, "score": 0.18},
+                            {"word": "thinkin'", "start": 23.781, "end": 24.061, "score": 0.30},
+                            {"word": "'bout", "start": 24.081, "end": 24.361, "score": 0.45},
+                            {"word": "me", "start": 24.401, "end": 25.001, "score": 0.70},
+                            {"word": "every", "start": 25.061, "end": 25.241, "score": 0.28},
+                            {"word": "night,", "start": 25.281, "end": 25.581, "score": 0.42},
+                            {"word": "oh", "start": 25.821, "end": 26.101, "score": 0.72},
+                            {"word": "My", "start": 47.182, "end": 47.422, "score": 0.62},
+                            {"word": "give", "start": 47.442, "end": 47.782, "score": 0.51},
+                            {"word": "a", "start": 47.822, "end": 47.982, "score": 0.63},
+                            {"word": "fucks", "start": 48.022, "end": 48.522, "score": 0.61},
+                            {"word": "are", "start": 48.562, "end": 48.862, "score": 0.58},
+                            {"word": "on", "start": 49.002, "end": 49.262, "score": 0.60},
+                            {"word": "vacation", "start": 49.302, "end": 51.422, "score": 0.66},
+                            {"word": "♪", "start": 51.500, "end": 51.600, "score": 0.01},
+                        ],
+                    }
+                ]
+            },
+        ),
+    )
+
+    aligned = whisperx_pipeline.align_lyrics(
+        Path("input.wav"),
+        "ignored",
+        lyrics_format="lrc",
+        transcription_model="tiny",
+        align_language="en",
+        detect_language=False,
+        use_synced_lyrics=False,
+        device="cpu",
+        compute_type=None,
+    )
+
+    assert [(segment["start"], segment["end"], segment["text"]) for segment in aligned] == [
+        (22.661, 26.101, "Now he's thinkin' 'bout me every night, oh"),
+        (47.182, 51.422, "My give a fucks are on vacation"),
+    ]
+
+
 def test_separate_config_clears_mp3_bitrate_for_wav():
     config = demucs_models.SeparateConfig(output_format="wav", mp3_bitrate=256)
     assert config.output_format == "wav"

@@ -569,6 +569,43 @@ def test_media_library_sync_service_scans_one_item_sidecars(db_session, tmp_path
         settings.media_path = original_media
 
 
+def test_media_library_sync_service_detects_json_lyrics_sidecar(db_session, tmp_path, monkeypatch):
+    """Single-item scans should treat adjacent JSON lyrics as a valid sidecar."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "json-sidecar.mp4"
+        lyrics_file = settings.media_path / "json-sidecar.json"
+        media_file.write_text("video", encoding="utf-8")
+        lyrics_file.write_text('[{"start":1.0,"text":"Hello"}]', encoding="utf-8")
+
+        media = MediaItem(
+            title="JSON Sidecar",
+            media_path="/media/json-sidecar.mp4",
+            missing=True,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibrarySyncService()
+        monkeypatch.setattr(
+            service.thumbnail_service,
+            "ensure_thumbnail_for_media_file",
+            lambda path: False,
+        )
+
+        summary = service.scan_media_item(db_session, media.id)
+
+        assert summary["scanned_files"] == 1
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.lyrics_path == "/media/json-sidecar.json"
+    finally:
+        settings.media_path = original_media
+
+
 def test_media_library_sync_service_skips_sidecars_as_primary_media(db_session, tmp_path):
     """Sidecar-only files should not be inserted as standalone media rows."""
     original_media = settings.media_path
@@ -2588,6 +2625,101 @@ async def test_karaoke_service_uses_existing_lyrics_sidecar_without_resolution(d
 
 
 @pytest.mark.asyncio
+async def test_karaoke_service_promotes_aligned_json_sidecar_for_display(db_session, tmp_path):
+    """Karaoke processing should prefer the returned aligned JSON sidecar for playback lyrics."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        expected_stem = build_media_stem("Karaoke Ready", "Singer", fallback="karaoke-ready")
+        media_file = settings.media_path / f"{expected_stem}.mp4"
+        lyrics_file = settings.cache_path / "lyrics" / f"{expected_stem}.lrc"
+        aligned_file = settings.cache_path / "demucs_outputs" / f"{expected_stem}.aligned.json"
+        lyrics_file.parent.mkdir(parents=True, exist_ok=True)
+        aligned_file.parent.mkdir(parents=True, exist_ok=True)
+        media_file.write_text("video", encoding="utf-8")
+        lyrics_file.write_text("[00:01.00]Existing lyrics", encoding="utf-8")
+        aligned_file.write_text(
+            '[{"start": 1.0, "end": 2.0, "text": "Existing lyrics", "words": [{"word": "Existing", "start": 1.0, "end": 1.5}, {"word": "lyrics", "start": 1.5, "end": 2.0}]}]',
+            encoding="utf-8",
+        )
+        db_session.add(
+            MediaItem(
+                youtube_id="karaoke-ready",
+                title="Karaoke Ready",
+                artist="Singer",
+                file_stem=expected_stem,
+                media_path=f"/media/{expected_stem}.mp4",
+                lyrics_path=f"/cache/lyrics/{expected_stem}.lrc",
+                missing=False,
+            )
+        )
+        db_session.flush()
+
+        queue_service = QueueService()
+        item = queue_service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id="karaoke-ready",
+                title="Karaoke Ready",
+                artist="Singer",
+                is_karaoke=True,
+                lyrics_text="[00:01.00]Existing lyrics",
+            ),
+        )
+
+        service = KaraokeService()
+        service.youtube_service = Mock()
+        service.queue_service = queue_service
+        service.demucs_client = Mock()
+        service.ffmpeg = Mock()
+
+        service.demucs_client.health_check.return_value = DemucsHealthResponse(
+            api_url="http://demucs",
+            healthy=True,
+            detail="ok",
+        )
+        service.ffmpeg.extract_audio.return_value = settings.cache_path / "audio" / f"{expected_stem}.audio.wav"
+        no_vocals_path = settings.cache_path / "stem" / f"{expected_stem}.no_vocals.wav"
+        vocals_path = settings.cache_path / "stem" / f"{expected_stem}.vocals.wav"
+        no_vocals_path.parent.mkdir(parents=True, exist_ok=True)
+        no_vocals_path.write_text("no vocals", encoding="utf-8")
+        vocals_path.write_text("vocals", encoding="utf-8")
+
+        def fake_combine_audio_video(*, video_path, audio_path, output_path):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text("karaoke video", encoding="utf-8")
+
+        service.demucs_client.separate_vocals = AsyncMock(
+            return_value=DemucsResponse(
+                no_vocals_path=str(no_vocals_path),
+                vocals_path=str(vocals_path),
+                aligned_lyrics_path=str(aligned_file),
+            )
+        )
+        service.ffmpeg.combine_audio_video.side_effect = fake_combine_audio_video
+
+        await service.process_queue_item(db_session, item.id)
+
+        updated_item = db_session.query(QueueItem).filter(QueueItem.id == item.id).first()
+        assert updated_item is not None
+        assert updated_item.status == QueueStatus.PLAYING
+        assert updated_item.media is not None
+        assert updated_item.media.lyrics_path == f"/media/{expected_stem}.json"
+        assert (settings.media_path / f"{expected_stem}.json").read_text(encoding="utf-8") == aligned_file.read_text(
+            encoding="utf-8"
+        )
+        assert lyrics_file.exists()
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+@pytest.mark.asyncio
 async def test_lyrics_service_fetch():
     """Lyrics service should prefer syncedLyrics from LRCLIB results."""
     from services import lyrics_service as ls_module
@@ -4548,6 +4680,11 @@ async def test_demucs_client_upload_and_save(tmp_path):
     original_demucs_device = dc_module.settings.demucs_device
     original_demucs_output_format = dc_module.settings.demucs_output_format
     original_demucs_mp3_bitrate = dc_module.settings.demucs_mp3_bitrate
+    original_whisperx_transcription_model = dc_module.settings.whisperx_transcription_model
+    original_whisperx_align_language = dc_module.settings.whisperx_align_language
+    original_whisperx_detect_language = dc_module.settings.whisperx_detect_language
+    original_whisperx_use_synced_lyrics = dc_module.settings.whisperx_use_synced_lyrics
+    original_whisperx_preload_models = dc_module.settings.whisperx_preload_models
     original_poll_interval = dc_module.DemucsClient.POLL_INTERVAL_SECONDS
     try:
         dc_module.httpx.AsyncClient = FakeAsyncClient
@@ -4556,6 +4693,11 @@ async def test_demucs_client_upload_and_save(tmp_path):
         dc_module.settings.demucs_device = "cuda"
         dc_module.settings.demucs_output_format = "wav"
         dc_module.settings.demucs_mp3_bitrate = 320
+        dc_module.settings.whisperx_transcription_model = "tiny"
+        dc_module.settings.whisperx_align_language = "en"
+        dc_module.settings.whisperx_detect_language = False
+        dc_module.settings.whisperx_use_synced_lyrics = False
+        dc_module.settings.whisperx_preload_models = "transcription=tiny,align=en"
         dc_module.DemucsClient.POLL_INTERVAL_SECONDS = 0
         client = DemucsClient(api_url="http://127.0.0.1:8001")
         result = await client.separate_vocals(
@@ -4570,6 +4712,11 @@ async def test_demucs_client_upload_and_save(tmp_path):
         dc_module.settings.demucs_device = original_demucs_device
         dc_module.settings.demucs_output_format = original_demucs_output_format
         dc_module.settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
+        dc_module.settings.whisperx_transcription_model = original_whisperx_transcription_model
+        dc_module.settings.whisperx_align_language = original_whisperx_align_language
+        dc_module.settings.whisperx_detect_language = original_whisperx_detect_language
+        dc_module.settings.whisperx_use_synced_lyrics = original_whisperx_use_synced_lyrics
+        dc_module.settings.whisperx_preload_models = original_whisperx_preload_models
         dc_module.DemucsClient.POLL_INTERVAL_SECONDS = original_poll_interval
 
     assert result.no_vocals_path.endswith("_job123_no_vocals.wav")

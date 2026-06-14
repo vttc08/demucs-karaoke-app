@@ -7,7 +7,7 @@ Lightweight AI-powered karaoke application for home use.
 - **Mobile Queue Page**: Search YouTube, add songs to queue
 - **Stage Page**: Auto-play queue with karaoke mode
 - **Karaoke Mode**: Vocal removal + optional sidecar lyrics overlay
-- **Queue Lyrics Viewer**: Phone-friendly lyrics page for the currently playing song (synced + unsynced, line-based cues)
+- **Queue Lyrics Viewer**: Phone-friendly lyrics page for the currently playing song (synced + unsynced, line-based cues, aligned JSON preferred when AI karaoke returns it)
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
 - **Live Queue Presence**: Queue page shows active guests and join toasts in real time
