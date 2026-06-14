@@ -283,6 +283,16 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for system design details.
 uv run pytest
 ```
 
+The route and service suites are split into focused modules so changes stay local:
+
+- `tests/routes/` holds route/API groups
+- `tests/services/` holds service groups
+- `tests/test_routes.py` and `tests/test_services.py` are import shims for pytest discovery
+- shared fixtures live in `tests/conftest.py`, `tests/routes/common.py`, and `tests/services/common.py`
+
+Use `uv run` for Python commands in this workspace; bare `python` is not guaranteed to be on PATH.
+See [docs/testing.md](docs/testing.md) for the module map.
+
 ### Debug logging
 Set `LOG_LEVEL=DEBUG` in your local `.env` when you want to see `logger.debug(...)` output during
 agent-assisted debugging. Switch it back to `INFO` when you're done.

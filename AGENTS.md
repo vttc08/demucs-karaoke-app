@@ -22,6 +22,7 @@ This is a lightweight AI-powered karaoke app for home use.
 ## Coding rules
 - Prefer simple Python modules over heavy abstractions.
 - Use `uv` for virtual environment management and running commands.
+- Run Python entrypoints through `uv run`; bare `python` is not guaranteed to be on PATH in this workspace.
 - Keep route handlers thin; business logic belongs in `services/`.
 - External tools such as `yt-dlp` and `ffmpeg` should be wrapped in adapters.
 - Use environment variables for service URLs and media paths.
@@ -65,6 +66,9 @@ When making UI changes or adding new frontend features:
 ## Testing requirements
 - Use `uv run pytest` for the full local suite. The shared pytest setup shortens the WebSocket heartbeat during tests, so do not add `WS_HEARTBEAT_INTERVAL=30` or other production heartbeat overrides when running tests.
 - When investigating slow tests, use `uv run pytest --durations=20 --durations-min=0.05` and check for heartbeat/timeouts before assuming the whole suite is slow.
+- Route tests are split under `tests/routes/` and service tests are split under `tests/services/`.
+- `tests/test_routes.py` and `tests/test_services.py` are thin pytest shims only; add new focused tests in the matching submodule instead of extending the shims.
+- Shared route fixtures and helpers live in `tests/routes/common.py`; shared service fixtures live in `tests/services/common.py`; cross-cutting pytest fixtures stay in `tests/conftest.py`.
 - Add or update API tests for new endpoints
 - Add service-level tests where practical
 - Prefer mock/stub subprocess calls in tests

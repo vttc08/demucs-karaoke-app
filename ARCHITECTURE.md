@@ -23,6 +23,13 @@ This project currently uses two services:
 - optionally runs WhisperX forced alignment when lyrics are supplied
 - returns a ZIP payload containing both `no_vocals` and `vocals` stems, plus `aligned_lyrics.json` when alignment was performed
 
+## Test layout
+
+- Route/API tests live under `tests/routes/` and service tests live under `tests/services/`.
+- `tests/test_routes.py` and `tests/test_services.py` remain thin pytest shims that import the focused modules.
+- Shared route fixtures and helpers live in `tests/routes/common.py`; shared service fixtures live in `tests/services/common.py`; cross-cutting pytest fixtures stay in `tests/conftest.py`.
+- Run tests with `uv run pytest`; the workspace does not rely on bare `python` being on PATH.
+
 ## Reverse proxy subpath support
 
 - The main app can be served at `/` or under a preserved proxy prefix such as `/karaoke`.
