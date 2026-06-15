@@ -363,6 +363,7 @@ def test_media_management_page_shows_edit_controls_for_admin(client):
     assert b'data-action="delete"' in response.content
     assert b'data-action="scan-library"' in response.content
     assert b'data-action="upload-media"' in response.content
+    assert b'data-action="open-trim-editor"' in response.content
 
 def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
     """Manual media scan route should create and mark rows from filesystem diff."""

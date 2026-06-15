@@ -59,6 +59,15 @@ This project currently uses two services:
 - Guests can view entries and add them to the queue.
 - Edit, refresh-sidecar, scan, upload-shortcut, and delete controls are admin-only.
 - The media edit and scan API routes enforce admin sessions server-side so the page stays queue-only even if a guest tampers with the DOM.
+- The edit modal links to the admin-only `/media-editor/{item_id}` page. Its native browser media
+  player and canvas timeline display ffprobe I-frame timestamps without introducing a frontend
+  framework.
+- `MediaTrimService` owns trim validation, conflict checks, sidecar shifting, and atomic file
+  replacement. `FFmpegAdapter` owns ffprobe metadata/keyframe reads and `ffmpeg -c copy` remuxing.
+- Video ranges snap outward to surrounding keyframes; audio-only ranges retain exact requested
+  timestamps. The resolved range is also applied to vocals and timed lyrics.
+- Staged files and temporary rollback files are created beside each source so `os.replace` remains
+  same-filesystem and atomic. Rollback files are removed after success and are not permanent backups.
 
 ## Real-time queue update architecture
 

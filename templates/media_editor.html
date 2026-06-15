@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('trim.editor_title') }} - {{ trim_info.title }}{% endblock %}
+{% block header_title %}{{ t('trim.editor_title') }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ app_url('/static/media_editor.css') }}">
+{% endblock %}
+
+{% block content %}
+<main
+    id="media-trim-editor"
+    class="trim-editor-page"
+    data-media-id="{{ trim_info.media_id }}"
+    data-media-url="{{ trim_info.media_url|public_url }}"
+    data-duration="{{ trim_info.duration }}"
+    data-has-video="{{ 'true' if trim_info.has_video else 'false' }}"
+    data-keyframes="{{ trim_info.keyframes|tojson|forceescape }}"
+>
+    <div class="trim-editor-shell">
+        <aside class="trim-editor-sidebar">
+            <a href="{{ app_url('/media') }}" class="trim-back-link">
+                <span class="material-symbols-outlined">arrow_back</span>
+                <span>{{ t('trim.back_to_media') }}</span>
+            </a>
+            <div>
+                <p class="trim-eyebrow">{{ t('trim.lossless_editor') }}</p>
+                <h2>{{ trim_info.title }}</h2>
+                <p>{{ trim_info.artist or t('common.unknown_artist') }}</p>
+            </div>
+            <div class="trim-sidecar-list">
+                <div>
+                    <span class="material-symbols-outlined">movie</span>
+                    <span>{{ t('trim.primary_media') }}</span>
+                </div>
+                <div class="{{ '' if trim_info.vocals_path else 'is-muted' }}">
+                    <span class="material-symbols-outlined">mic_external_on</span>
+                    <span>{{ t('trim.vocals_sidecar') }}</span>
+                </div>
+                <div class="{{ '' if trim_info.lyrics_path else 'is-muted' }}">
+                    <span class="material-symbols-outlined">subtitles</span>
+                    <span>{{ t('trim.lyrics_sidecar') }}</span>
+                </div>
+            </div>
+            <p class="trim-lossless-note">{{ t('trim.lossless_note') }}</p>
+        </aside>
+
+        <section class="trim-editor-workspace">
+            <header class="trim-mobile-title">
+                <a href="{{ app_url('/media') }}" aria-label="{{ t('trim.back_to_media') }}">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                </a>
+                <div>
+                    <p>{{ t('trim.editor_title') }}</p>
+                    <span>{{ trim_info.title }}</span>
+                </div>
+            </header>
+
+            <div class="trim-player-and-stats">
+                <section class="trim-player-panel">
+                    {% if trim_info.has_video %}
+                    <video
+                        id="trim-media-player"
+                        src="{{ trim_info.media_url|public_url }}"
+                        controls
+                        preload="metadata"
+                    ></video>
+                    {% else %}
+                    <div class="trim-audio-art">
+                        <span class="material-symbols-outlined">graphic_eq</span>
+                        <h3>{{ trim_info.title }}</h3>
+                        <p>{{ trim_info.artist or t('common.unknown_artist') }}</p>
+                    </div>
+                    <audio
+                        id="trim-media-player"
+                        src="{{ trim_info.media_url|public_url }}"
+                        controls
+                        preload="metadata"
+                    ></audio>
+                    {% endif %}
+                </section>
+
+                <aside class="trim-stats-panel">
+                    <p class="trim-eyebrow">{{ t('trim.trim_stats') }}</p>
+                    <dl>
+                        <div>
+                            <dt>{{ t('trim.start_time') }}</dt>
+                            <dd id="trim-start-display">00:00.000</dd>
+                        </div>
+                        <div>
+                            <dt>{{ t('trim.end_time') }}</dt>
+                            <dd id="trim-end-display">00:00.000</dd>
+                        </div>
+                        <div class="trim-duration-stat">
+                            <dt>{{ t('trim.output_duration') }}</dt>
+                            <dd id="trim-duration-display">00:00.000</dd>
+                        </div>
+                    </dl>
+                    <div class="trim-sidecar-summary">
+                        <span class="material-symbols-outlined">sync</span>
+                        <span>{{ t('trim.sidecars_synced') }}</span>
+                    </div>
+                </aside>
+            </div>
+
+            <section class="trim-timeline-panel">
+                <div class="trim-timeline-heading">
+                    <div>
+                        <p class="trim-eyebrow">{{ t('trim.timeline_precision') }}</p>
+                        <h3>{{ t('trim.choose_interval') }}</h3>
+                    </div>
+                    <div class="trim-keyframe-legend">
+                        <span></span>
+                        {{ t('trim.keyframe_marker') }}
+                    </div>
+                </div>
+
+                <div id="trim-timeline" class="trim-timeline">
+                    <canvas id="trim-keyframe-canvas" aria-hidden="true"></canvas>
+                    <div id="trim-selection" class="trim-selection"></div>
+                    <div id="trim-playhead" class="trim-playhead"></div>
+                    <input id="trim-start-range" type="range" min="0" max="{{ trim_info.duration }}" step="0.001" value="0" aria-label="{{ t('trim.start_time') }}">
+                    <input id="trim-end-range" type="range" min="0" max="{{ trim_info.duration }}" step="0.001" value="{{ trim_info.duration }}" aria-label="{{ t('trim.end_time') }}">
+                </div>
+
+                <div class="trim-scale">
+                    <span>00:00</span>
+                    <span id="trim-scale-end"></span>
+                </div>
+
+                <div class="trim-time-fields">
+                    <label>
+                        <span>{{ t('trim.start_time') }}</span>
+                        <input id="trim-start-input" type="number" min="0" max="{{ trim_info.duration }}" step="0.001" value="0">
+                    </label>
+                    <label>
+                        <span>{{ t('trim.end_time') }}</span>
+                        <input id="trim-end-input" type="number" min="0" max="{{ trim_info.duration }}" step="0.001" value="{{ trim_info.duration }}">
+                    </label>
+                    <button id="trim-set-start" type="button">
+                        <span class="material-symbols-outlined">first_page</span>
+                        {{ t('trim.set_start_from_playhead') }}
+                    </button>
+                    <button id="trim-set-end" type="button">
+                        <span class="material-symbols-outlined">last_page</span>
+                        {{ t('trim.set_end_from_playhead') }}
+                    </button>
+                </div>
+
+                <p id="trim-snap-message" class="trim-snap-message"></p>
+                <p id="trim-error" class="trim-error hidden" role="alert"></p>
+            </section>
+
+            <footer class="trim-actions">
+                <a href="{{ app_url('/media') }}">{{ t('common.cancel') }}</a>
+                <button id="trim-save" type="button">
+                    <span class="material-symbols-outlined">content_cut</span>
+                    <span>{{ t('trim.apply_trim') }}</span>
+                </button>
+            </footer>
+        </section>
+    </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ app_url('/static/media_editor.js') }}"></script>
+{% endblock %}

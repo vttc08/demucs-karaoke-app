@@ -434,12 +434,14 @@ dependencies = [
     { name = "pycryptodome" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pylrc" },
     { name = "pypinyin" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "requests" },
     { name = "segno" },
     { name = "sqlalchemy" },
+    { name = "srt" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "yt-dlp" },
 ]
@@ -461,6 +463,7 @@ requires-dist = [
     { name = "pycryptodome", specifier = ">=3.22.0" },
     { name = "pydantic", specifier = ">=2.6.0" },
     { name = "pydantic-settings", specifier = ">=2.1.0" },
+    { name = "pylrc", specifier = ">=0.1.2" },
     { name = "pypinyin", specifier = ">=0.51.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.4" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.3" },
@@ -471,6 +474,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.33.1" },
     { name = "segno", specifier = ">=1.4.0" },
     { name = "sqlalchemy", specifier = ">=2.0.25" },
+    { name = "srt", specifier = ">=3.5.3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27.0" },
     { name = "yt-dlp", specifier = ">=2024.1.0" },
 ]
@@ -743,6 +747,12 @@ wheels = [
 ]
 
 [[package]]
+name = "pylrc"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/09/11/eff2a73a32b204ab040811f5a966f9342960f8c889af2bb20e544640b630/pylrc-0.1.2.tar.gz", hash = "sha256:b9d6a07b7d211f71299b3faea5a1ca64c2fc45e3d704227c07ccdb0cc09386d1", size = 3859, upload-time = "2020-07-05T15:16:39.218Z" }
+
+[[package]]
 name = "pypinyin"
 version = "0.55.0"
 source = { registry = "https://pypi.org/simple" }
@@ -955,6 +965,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d2/d7/1e073da7a4bc645eb83c76067284a0374e643bc4be57f14cc6414656f92c/sqlalchemy-2.0.48-cp314-cp314t-win_amd64.whl", hash = "sha256:d854b3970067297f3a7fbd7a4683587134aa9b3877ee15aa29eea478dc68f933", size = 2182198, upload-time = "2026-03-02T15:52:55.606Z" },
     { url = "https://files.pythonhosted.org/packages/46/2c/9664130905f03db57961b8980b05cab624afd114bf2be2576628a9f22da4/sqlalchemy-2.0.48-py3-none-any.whl", hash = "sha256:a66fe406437dd65cacd96a72689a3aaaecaebbcd62d81c5ac1c0fdbeac835096", size = 1940202, upload-time = "2026-03-02T15:52:43.285Z" },
 ]
+
+[[package]]
+name = "srt"
+version = "3.5.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/66/b7/4a1bc231e0681ebf339337b0cd05b91dc6a0d701fa852bb812e244b7a030/srt-3.5.3.tar.gz", hash = "sha256:4884315043a4f0740fd1f878ed6caa376ac06d70e135f306a6dc44632eed0cc0", size = 28296, upload-time = "2023-03-28T02:35:44.007Z" }
 
 [[package]]
 name = "starlette"

@@ -11,6 +11,7 @@ from models import QueueStatus
 from routes.auth import get_admin_user
 from services.queue_service import QueueService
 from services.media_library_service import MediaLibraryService
+from services.media_trim_service import MediaTrimNotFoundError, MediaTrimService
 from services.processing_task_service import processing_task_service
 from services.runtime_settings_service import RuntimeSettingsService
 from services.stage_lobby_service import StageLobbyService
@@ -31,6 +32,7 @@ queue_service = QueueService()
 media_library_service = MediaLibraryService()
 runtime_settings_service = RuntimeSettingsService()
 stage_lobby_service = StageLobbyService()
+media_trim_service = MediaTrimService()
 auth_service = AuthService()
 
 
@@ -293,6 +295,31 @@ async def media_management_page(request: Request, db: Session = Depends(get_db))
             "media_stats": media_stats,
             "is_admin": is_admin,
             "task_items": task_items,
+        },
+    )
+
+
+@router.get("/media-editor/{item_id}", response_class=HTMLResponse)
+async def media_editor_page(
+    item_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Admin-only lossless trim editor for one media item."""
+    admin = auth_service.get_admin_for_session(
+        db, request.cookies.get(ADMIN_SESSION_COOKIE)
+    )
+    if admin is None:
+        return RedirectResponse(url=app_url("/login"), status_code=302)
+    try:
+        trim_info = media_trim_service.get_trim_info(db, item_id)
+    except MediaTrimNotFoundError:
+        return RedirectResponse(url=app_url("/media"), status_code=302)
+    return templates.TemplateResponse(
+        "media_editor.html",
+        {
+            "request": request,
+            "trim_info": trim_info,
         },
     )
 

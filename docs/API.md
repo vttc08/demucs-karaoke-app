@@ -726,6 +726,71 @@ sidecar.
 
 ---
 
+### Get Lossless Trim Metadata
+```
+GET /api/media/{item_id}/trim-info
+```
+
+Admin-only endpoint returning the current duration, stream types, attached sidecars, and normalized
+I-frame timestamps for the first video stream.
+
+**Response:**
+```json
+{
+  "media_id": 42,
+  "title": "Song",
+  "artist": "Artist",
+  "media_url": "/media/song.mp4",
+  "duration": 183.52,
+  "has_video": true,
+  "has_audio": true,
+  "keyframes": [0.0, 2.002, 4.004],
+  "vocals_path": "/media/song.vocals.wav",
+  "lyrics_path": "/media/song.lrc",
+  "lyrics_format": "lrc"
+}
+```
+
+---
+
+### Apply Lossless Trim
+```
+POST /api/media/{item_id}/trim
+```
+
+Admin-only synchronous endpoint that replaces the primary media and attached synchronized sidecars.
+Video start/end values are snapped outward to surrounding I-frames before FFmpeg stream copy. The
+same resolved timestamps trim the vocals sidecar and shift LRC, SRT, or WhisperX JSON lyrics.
+
+**Request:**
+```json
+{
+  "start_time": 8.2,
+  "end_time": 175.0
+}
+```
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "summary": {
+    "media_id": 42,
+    "requested_start": 8.2,
+    "requested_end": 175.0,
+    "resolved_start": 8.008,
+    "resolved_end": 176.009,
+    "duration": 168.001,
+    "trimmed_sidecars": ["vocals", "lyrics"]
+  }
+}
+```
+
+Returns `404` for a missing media row/file, `409` while the item is playing or processing, `422`
+for invalid ranges or unsupported lyrics, and `500` if FFmpeg or atomic replacement fails.
+
+---
+
 ### List Processing Tasks
 ```
 GET /api/tasks/

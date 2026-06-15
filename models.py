@@ -320,6 +320,19 @@ class ProcessingTaskSnapshotResponse(BaseModel):
     event_count: int = 0
 
 
+class MediaTrimRequest(BaseModel):
+    """Requested retained interval for a lossless media trim."""
+
+    start_time: float = Field(ge=0)
+    end_time: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be greater than start_time")
+        return self
+
+
 class ProcessingTaskResponse(BaseModel):
     """Durable task response enriched with live snapshot when available."""
 

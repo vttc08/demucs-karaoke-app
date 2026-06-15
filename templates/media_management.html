@@ -482,6 +482,33 @@
                             </button>
                         </div>
 
+                        <div class="mb-6 grid grid-cols-3 gap-2" aria-label="{{ t('media.tools') }}">
+                            <button
+                                type="button"
+                                data-action="open-trim-editor"
+                                class="flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-2 py-3 text-center text-primary transition-colors hover:bg-primary/15"
+                            >
+                                <span class="material-symbols-outlined">content_cut</span>
+                                <span class="text-[10px] font-black uppercase tracking-wider">{{ t('trim.lossless_trim') }}</span>
+                            </button>
+                            <button
+                                type="button"
+                                disabled
+                                class="flex min-h-20 cursor-not-allowed flex-col items-center justify-center gap-2 rounded-xl border border-white/10 bg-surface-container-highest/20 px-2 py-3 text-center text-on-surface-variant opacity-45"
+                            >
+                                <span class="material-symbols-outlined">subtitles</span>
+                                <span class="text-[10px] font-black uppercase tracking-wider">{{ t('trim.subtitle_editor') }}</span>
+                            </button>
+                            <button
+                                type="button"
+                                disabled
+                                class="flex min-h-20 cursor-not-allowed flex-col items-center justify-center gap-2 rounded-xl border border-white/10 bg-surface-container-highest/20 px-2 py-3 text-center text-on-surface-variant opacity-45"
+                            >
+                                <span class="material-symbols-outlined">mic_external_on</span>
+                                <span class="text-[10px] font-black uppercase tracking-wider">{{ t('trim.add_vocals') }}</span>
+                            </button>
+                        </div>
+
                         <div class="space-y-4">
                             <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div class="space-y-1.5">

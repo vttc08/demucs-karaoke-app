@@ -1251,6 +1251,13 @@ function handleActionClick(event) {
         return;
     }
 
+    if (action === "open-trim-editor") {
+        if (activeEditItemId) {
+            window.location.href = appUrl(`/media-editor/${activeEditItemId}`);
+        }
+        return;
+    }
+
     const itemNode = event.target.closest(".media-item-row, .media-item-card");
     if (!itemNode) {
         return;
