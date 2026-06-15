@@ -105,8 +105,35 @@ class DemucsJobStatusResponse(BaseModel):
     output_format: str
     mp3_bitrate: int | None = None
     original_filename: str
+    job_kind: Literal["separation", "separation_with_lyrics"]
     created_at: str
     started_at: str | None = None
     finished_at: str | None = None
     output_tail: list[str] = []
     aligned_lyrics_path: str | None = None
+
+
+class DemucsMetricsJobResponse(BaseModel):
+    job_id: str
+    status: Literal["queued", "running"]
+    job_kind: Literal["separation", "separation_with_lyrics"]
+    progress_percent: int
+    progress_message: str
+    model: str
+    device: str
+    output_format: str
+    mp3_bitrate: int | None = None
+    original_filename: str
+    created_at: str
+    started_at: str | None = None
+    cancel_requested: bool
+    stdout_tail: list[str] = Field(default_factory=list)
+
+
+class DemucsMetricsResponse(BaseModel):
+    service: str
+    snapshot_at: str
+    active_job_count: int
+    active_job_counts_by_status: dict[str, int]
+    active_job_counts_by_kind: dict[str, int]
+    active_jobs: list[DemucsMetricsJobResponse] = Field(default_factory=list)

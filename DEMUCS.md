@@ -55,6 +55,38 @@ mdx: trained only on MusDB HQ, winning model on track A at the MDX challenge.
 ### `GET /health`
 Returns service status and runtime config.
 
+### `GET /metrics`
+Returns a fast JSON snapshot for observability tooling without running the readiness checks used by `/health`.
+
+Response includes:
+- `service`
+- `snapshot_at`
+- `active_job_count`
+- `active_job_counts_by_status`
+- `active_job_counts_by_kind`
+- `active_jobs`
+
+Each active job entry includes:
+- `job_id`
+- `status`
+- `job_kind`
+- `progress_percent`
+- `progress_message`
+- `model`
+- `device`
+- `output_format`
+- `mp3_bitrate`
+- `original_filename`
+- `created_at`
+- `started_at`
+- `cancel_requested`
+- `stdout_tail`
+
+Example:
+```bash
+curl http://<demucs-host>:8001/metrics
+```
+
 ### `POST /separate`
 Input: multipart file upload (`file` field, audio input from Linux backend).  
 Optional multipart form fields for per-request stateless config:

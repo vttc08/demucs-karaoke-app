@@ -19,6 +19,7 @@ class DemucsJobState:
     output_format: str
     mp3_bitrate: int | None
     original_filename: str
+    job_kind: str = "separation"
     status: str = "queued"
     progress_percent: int = 0
     progress_message: str = "Queued"
@@ -47,6 +48,7 @@ class DemucsJobState:
             "output_format": self.output_format,
             "mp3_bitrate": self.mp3_bitrate,
             "original_filename": self.original_filename,
+            "job_kind": self.job_kind,
             "created_at": self.created_at,
             "started_at": self.started_at,
             "finished_at": self.finished_at,

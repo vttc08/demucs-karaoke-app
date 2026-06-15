@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 import zipfile
+from collections import Counter
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
@@ -23,6 +24,8 @@ try:
     from .jobs import DemucsJobState, DemucsJobStore, utc_now
     from .models import (
         DemucsJobCreateResponse,
+        DemucsMetricsJobResponse,
+        DemucsMetricsResponse,
         DemucsJobStatusResponse,
         SeparateConfig,
         SeparateMetaResponse,
@@ -60,6 +63,8 @@ except ImportError:
     from jobs import DemucsJobState, DemucsJobStore, utc_now
     from models import (
         DemucsJobCreateResponse,
+        DemucsMetricsJobResponse,
+        DemucsMetricsResponse,
         DemucsJobStatusResponse,
         SeparateConfig,
         SeparateMetaResponse,
@@ -141,6 +146,29 @@ def _job_to_status_response(job: DemucsJobState) -> DemucsJobStatusResponse:
     return DemucsJobStatusResponse(**data)
 
 
+def _job_to_metrics_response(job: DemucsJobState) -> DemucsMetricsJobResponse:
+    data = job.to_dict()
+    for key in ("created_at", "started_at"):
+        value = data[key]
+        data[key] = value.isoformat() if value is not None else None
+    return DemucsMetricsJobResponse(
+        job_id=data["job_id"],
+        status=data["status"],
+        job_kind=data["job_kind"],
+        progress_percent=data["progress_percent"],
+        progress_message=data["progress_message"],
+        model=data["model"],
+        device=data["device"],
+        output_format=data["output_format"],
+        mp3_bitrate=data["mp3_bitrate"],
+        original_filename=data["original_filename"],
+        created_at=data["created_at"],
+        started_at=data["started_at"],
+        cancel_requested=data["cancel_requested"],
+        stdout_tail=data["output_tail"],
+    )
+
+
 def _job_paths(job_id: str) -> tuple[Path, Path]:
     return INCOMING_ROOT / job_id, OUTPUT_ROOT / job_id
 
@@ -162,6 +190,25 @@ def _cleanup_expired_jobs() -> None:
             continue
         job_store.delete(job.job_id)
         _cleanup_job_files(job.job_id)
+
+
+def _active_jobs_snapshot() -> DemucsMetricsResponse:
+    active_jobs = [
+        job
+        for job in job_store.all()
+        if job.status in {"queued", "running"}
+    ]
+    active_jobs.sort(key=lambda job: (job.created_at.timestamp(), job.job_id))
+    status_counts = Counter(job.status for job in active_jobs)
+    kind_counts = Counter(job.job_kind for job in active_jobs)
+    return DemucsMetricsResponse(
+        service="demucs",
+        snapshot_at=utc_now().isoformat(),
+        active_job_count=len(active_jobs),
+        active_job_counts_by_status=dict(sorted(status_counts.items())),
+        active_job_counts_by_kind=dict(sorted(kind_counts.items())),
+        active_jobs=[_job_to_metrics_response(job) for job in active_jobs],
+    )
 
 
 def _update_job_progress(job_id: str, *, percent: int | None = None, message: str | None = None) -> None:
@@ -317,6 +364,7 @@ def _start_job(payload: bytes, original_filename: str, config: SeparateConfig) -
             output_format=config.output_format,
             mp3_bitrate=config.mp3_bitrate,
             original_filename=original_filename,
+            job_kind="separation_with_lyrics" if config.lyrics_text else "separation",
         )
     )
     worker = threading.Thread(
@@ -418,6 +466,11 @@ def health():
         "checks": checks,
         "active_jobs": sum(1 for job in job_store.all() if job.status in {"queued", "running"}),
     }
+
+
+@app.get("/metrics", response_model=DemucsMetricsResponse)
+def metrics():
+    return _active_jobs_snapshot()
 
 
 @app.post("/whisperx/preload", response_model=WhisperXPreloadResponse)

@@ -466,6 +466,7 @@ Then verify from Linux host:
 
 ```bash
 curl http://10.10.120.191:8001/health
+curl http://10.10.120.191:8001/metrics
 ```
 
 If you run the local stub proxy on `localhost:8002`, keep `DEMUCS_API_URL=http://localhost:8002` for the main app and set `UPSTREAM_DEMUCS_API_URL=http://10.10.120.191:8001` for the stub.
