@@ -11,7 +11,12 @@ import zipfile
 import httpx
 
 from config import settings
-from models import DemucsHealthResponse, DemucsResponse, WhisperXPreloadResponse
+from models import (
+    DemucsGarbageCollectionResponse,
+    DemucsHealthResponse,
+    DemucsResponse,
+    WhisperXPreloadResponse,
+)
 
 
 ProgressCallback = Callable[[int, str, dict | None], None]
@@ -22,6 +27,7 @@ class DemucsClient:
     """Client for Demucs vocal separation service."""
 
     HEALTH_TIMEOUT_SECONDS = 5.0
+    GC_TIMEOUT_SECONDS = 120.0
     PRELOAD_TIMEOUT_SECONDS = 1800.0
     REQUEST_TIMEOUT_SECONDS = 600.0
 
@@ -306,3 +312,16 @@ class DemucsClient:
                 healthy=False,
                 detail=f"Demucs health check failed: {error}",
             )
+
+    def trigger_garbage_collection(
+        self, *, mode: str = "adaptive"
+    ) -> DemucsGarbageCollectionResponse:
+        """Ask the remote Demucs service to reclaim memory."""
+        response = httpx.post(
+            f"{self.api_url}/gc",
+            params={"mode": mode},
+            timeout=self.GC_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return DemucsGarbageCollectionResponse(**payload)

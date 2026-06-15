@@ -62,8 +62,14 @@ Response includes:
 - `service`
 - `snapshot_at`
 - `active_job_count`
+- `running_job_count`
 - `active_job_counts_by_status`
 - `active_job_counts_by_kind`
+- `free_vram_bytes`
+- `total_vram_bytes`
+- `last_gc_at`
+- `last_gc_mode`
+- `last_gc_detail`
 - `active_jobs`
 
 Each active job entry includes:
@@ -85,6 +91,24 @@ Each active job entry includes:
 Example:
 ```bash
 curl http://<demucs-host>:8001/metrics
+```
+
+### `POST /gc`
+Runs Demucs-side garbage collection. The default `adaptive` mode chooses full model unload when no jobs are active and falls back to lighter CUDA or Python cleanup while jobs are still running.
+
+Query parameter:
+- `mode` = `adaptive | partial | cuda | full`
+
+Response includes:
+- requested and executed mode
+- active and running job counts
+- VRAM snapshot, when available
+- Python GC count and WhisperX unload counts
+- timestamps and a human-readable detail string
+
+Example:
+```bash
+curl -X POST "http://<demucs-host>:8001/gc?mode=adaptive"
 ```
 
 ### `POST /separate`

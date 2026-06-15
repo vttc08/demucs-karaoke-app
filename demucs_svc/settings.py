@@ -1,5 +1,6 @@
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
+import os
 
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent
@@ -18,6 +19,10 @@ DEFAULT_WHISPERX_USE_SYNCED_LYRICS = False
 DEFAULT_WHISPERX_PRELOAD_MODELS = "transcription=tiny,align=en"
 JOB_RETENTION_SECONDS = int(timedelta(minutes=30).total_seconds())
 JOB_OUTPUT_TAIL_LINES = 120
+DEMUCS_GC_INTERVAL_SECONDS = float(os.getenv("DEMUCS_GC_INTERVAL_SECONDS", "600"))
+DEMUCS_GC_LOW_FREE_VRAM_BYTES = int(
+    os.getenv("DEMUCS_GC_LOW_FREE_VRAM_BYTES", str(2 * 1024 * 1024 * 1024))
+)
 
 INCOMING_ROOT.mkdir(parents=True, exist_ok=True)
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)

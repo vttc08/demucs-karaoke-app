@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal, Optional
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import (
     Column,
     Integer,
@@ -482,6 +482,25 @@ class DemucsResponse(BaseModel):
     no_vocals_path: str
     vocals_path: Optional[str] = None
     aligned_lyrics_path: Optional[str] = None
+
+
+class DemucsGarbageCollectionResponse(BaseModel):
+    """Response from Demucs garbage collection."""
+
+    requested_mode: Literal["adaptive", "partial", "cuda", "full"]
+    executed_mode: Literal["partial", "cuda", "full"]
+    triggered_by: Literal["manual", "scheduled", "job_completion"]
+    detail: str
+    active_job_count: int
+    running_job_count: int
+    free_vram_bytes: Optional[int] = None
+    total_vram_bytes: Optional[int] = None
+    python_gc_collected: int
+    whisperx_unloaded: dict[str, int] = Field(default_factory=dict)
+    cuda_cache_cleared: bool = False
+    cuda_ipc_cleared: bool = False
+    started_at: str
+    finished_at: str
 
 
 class DemucsHealthResponse(BaseModel):

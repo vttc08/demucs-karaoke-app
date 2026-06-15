@@ -78,6 +78,54 @@ def test_demucs_client_preload_whisperx_models_posts_request_and_parses_response
     assert result.loaded_entries == ["transcription=tiny", "align=en", "align=fr"]
     assert result.detail == "Preloaded 3 WhisperX model entries"
 
+
+def test_demucs_client_trigger_garbage_collection_posts_request_and_parses_response():
+    """Demucs client should trigger remote garbage collection and parse the response."""
+
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {
+                "requested_mode": "adaptive",
+                "executed_mode": "full",
+                "triggered_by": "manual",
+                "detail": "Released WhisperX caches and CUDA memory",
+                "active_job_count": 0,
+                "running_job_count": 0,
+                "free_vram_bytes": 1024,
+                "total_vram_bytes": 2048,
+                "python_gc_collected": 9,
+                "whisperx_unloaded": {"transcription_models": 1, "align_models": 1},
+                "cuda_cache_cleared": True,
+                "cuda_ipc_cleared": True,
+                "started_at": "2026-06-14T00:00:00+00:00",
+                "finished_at": "2026-06-14T00:00:00.100000+00:00",
+            }
+
+    seen = {}
+
+    def fake_post(url, params, timeout):
+        seen["url"] = url
+        seen["params"] = params
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    with patch("services.demucs_client.httpx.post", side_effect=fake_post):
+        client = DemucsClient(api_url="http://127.0.0.1:8001")
+        result = client.trigger_garbage_collection(mode="adaptive")
+
+    assert seen["url"] == "http://127.0.0.1:8001/gc"
+    assert seen["params"] == {"mode": "adaptive"}
+    assert seen["timeout"] == DemucsClient.GC_TIMEOUT_SECONDS
+    assert result.executed_mode == "full"
+    assert result.whisperx_unloaded == {"transcription_models": 1, "align_models": 1}
+
 def test_runtime_settings_get_settings_is_non_blocking():
     """Settings snapshot should not call external health checks."""
     service = RuntimeSettingsService()

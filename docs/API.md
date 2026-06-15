@@ -924,6 +924,22 @@ The main app polls `GET /jobs/{job_id}` about once per second while a remote Dem
 then fetches `GET /jobs/{job_id}/result` after the job reaches `completed`. The interval is
 configurable through `demucs_poll_interval_seconds` in runtime settings.
 
+### Demucs Observability and Maintenance
+
+The remote Demucs service also exposes:
+
+- `GET /metrics`
+  - fast JSON snapshot for curl and monitoring
+  - includes current active and running job counts
+  - includes VRAM snapshot when CUDA is available
+  - includes last GC metadata
+- `POST /gc?mode=adaptive`
+  - conservative memory cleanup endpoint
+  - `adaptive` avoids full model unload while jobs are still running
+  - `partial`, `cuda`, and `full` are available for operator use
+
+The admin settings page proxies a manual Demucs GC action through `/api/settings/demucs/gc`.
+
 ---
 
 ### Get Demucs Health

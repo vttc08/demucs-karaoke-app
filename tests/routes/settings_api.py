@@ -300,6 +300,34 @@ def test_preload_whisperx_models_error(client):
     assert response.status_code == 400
     assert "WhisperX is not installed" in response.json()["detail"]
 
+def test_trigger_demucs_gc(client):
+    """Settings GC endpoint should proxy the remote Demucs cleanup request."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.settings.runtime_settings_service.trigger_demucs_garbage_collection",
+        return_value={
+            "requested_mode": "adaptive",
+            "executed_mode": "full",
+            "triggered_by": "manual",
+            "detail": "Released WhisperX caches and CUDA memory",
+            "active_job_count": 0,
+            "running_job_count": 0,
+            "free_vram_bytes": 1024,
+            "total_vram_bytes": 2048,
+            "python_gc_collected": 9,
+            "whisperx_unloaded": {"transcription_models": 1, "align_models": 1},
+            "cuda_cache_cleared": True,
+            "cuda_ipc_cleared": True,
+            "started_at": "2026-06-14T00:00:00+00:00",
+            "finished_at": "2026-06-14T00:00:00.100000+00:00",
+        },
+    ):
+        response = client.post("/api/settings/demucs/gc")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["executed_mode"] == "full"
+    assert data["running_job_count"] == 0
+
 def test_update_runtime_settings_rejects_invalid_crf(client):
     """Runtime settings endpoint should validate ffmpeg_crf."""
     authenticate_admin_client(client)

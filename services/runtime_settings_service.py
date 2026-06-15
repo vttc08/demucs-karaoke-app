@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 from config import EXPLICIT_SETTINGS_FIELDS, find_executable, settings
 from models import (
+    DemucsGarbageCollectionResponse,
     DemucsHealthResponse,
     RuntimeSetting,
     RuntimeSettingsResponse,
@@ -79,6 +80,14 @@ class RuntimeSettingsService:
         return DemucsClient(api_url=settings.demucs_api_url).preload_whisperx_models(
             whisperx_preload_models=whisperx_preload_models,
             device=settings.demucs_device,
+        )
+
+    def trigger_demucs_garbage_collection(
+        self, mode: str = "adaptive"
+    ) -> DemucsGarbageCollectionResponse:
+        """Trigger remote Demucs garbage collection."""
+        return DemucsClient(api_url=settings.demucs_api_url).trigger_garbage_collection(
+            mode=mode
         )
 
     def _build_settings_response(

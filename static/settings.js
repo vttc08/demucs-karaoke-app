@@ -2,6 +2,7 @@ const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
 const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
 const SETTINGS_API = appUrl("/api/settings/");
 const DEMUCS_HEALTH_API = appUrl("/api/settings/demucs-health");
+const DEMUCS_GC_API = appUrl("/api/settings/demucs/gc");
 const YTDLP_VERSION_API = appUrl("/api/settings/ytdlp/version");
 const YTDLP_UPDATE_API = appUrl("/api/settings/ytdlp/update");
 const WHISPERX_PRELOAD_API = appUrl("/api/settings/whisperx/preload");
@@ -22,6 +23,8 @@ const whisperxAlignLanguageGroup = document.getElementById("whisperx-align-langu
 const engineStatusDot = document.getElementById("engine-status-dot");
 const engineStatusText = document.getElementById("engine-status-text");
 const lastSyncText = document.getElementById("last-sync-text");
+const demucsGcBtn = document.getElementById("demucs-gc-btn");
+const demucsGcStatus = document.getElementById("demucs-gc-status");
 const demucsMp3BitrateGroup = document.getElementById("demucs-mp3-bitrate-group");
 const ENGINE_STATUS_STORAGE_KEY = "karaoke.engineStatus";
 let saveFeedbackTimer = null;
@@ -150,6 +153,9 @@ function setFormState(disabled) {
     if (preloadWhisperxBtn) {
         preloadWhisperxBtn.disabled = disabled;
     }
+    if (demucsGcBtn) {
+        demucsGcBtn.disabled = disabled;
+    }
     Object.values(fields).forEach((field) => {
         field.disabled = disabled;
     });
@@ -186,6 +192,15 @@ function setWhisperxPreloadStatus(message, isError = false) {
     whisperxPreloadStatus.textContent = message;
     whisperxPreloadStatus.classList.toggle("text-error", isError);
     whisperxPreloadStatus.classList.toggle("text-on-surface-variant", !isError);
+}
+
+function setDemucsGcStatus(message, isError = false) {
+    if (!demucsGcStatus) {
+        return;
+    }
+    demucsGcStatus.textContent = message;
+    demucsGcStatus.classList.toggle("text-error", isError);
+    demucsGcStatus.classList.toggle("text-on-surface-variant", !isError);
 }
 
 function setWhisperxAlignLanguageState(disabled) {
@@ -292,6 +307,43 @@ async function preloadWhisperxModels() {
         showSaveFeedback(message, true);
     } finally {
         setWhisperxPreloadState(false);
+    }
+}
+
+async function triggerDemucsGarbageCollection() {
+    if (!demucsGcBtn) {
+        return;
+    }
+
+    demucsGcBtn.disabled = true;
+    setDemucsGcStatus(t("settings.demucs_gc_running"));
+    try {
+        const response = await fetch(DEMUCS_GC_API, {
+            method: "POST",
+        });
+        if (!response.ok) {
+            const errorPayload = await response.json();
+            throw new Error(errorPayload.detail || t("settings.demucs_gc_failed"));
+        }
+        const data = await response.json();
+        setDemucsGcStatus(
+            t("settings.demucs_gc_done", {
+                mode: data.executed_mode || t("settings.demucs_gc_mode_unknown"),
+                detail: data.detail || t("settings.demucs_gc_done_default"),
+            }),
+        );
+        showSaveFeedback(
+            t("settings.demucs_gc_feedback", {
+                mode: data.executed_mode || t("settings.demucs_gc_mode_unknown"),
+            }),
+            false,
+        );
+    } catch (error) {
+        const message = String(error.message || t("settings.demucs_gc_failed"));
+        setDemucsGcStatus(message, true);
+        showSaveFeedback(message, true);
+    } finally {
+        demucsGcBtn.disabled = false;
     }
 }
 
@@ -477,6 +529,9 @@ if (updateYtdlpBtn) {
 }
 if (preloadWhisperxBtn) {
     preloadWhisperxBtn.addEventListener("click", preloadWhisperxModels);
+}
+if (demucsGcBtn) {
+    demucsGcBtn.addEventListener("click", triggerDemucsGarbageCollection);
 }
 
 const persistedState = readPersistedEngineStatus();

@@ -1,4 +1,6 @@
+import gc
 import json
+import logging
 import shutil
 import subprocess
 import sys
@@ -24,6 +26,7 @@ try:
     from .jobs import DemucsJobState, DemucsJobStore, utc_now
     from .models import (
         DemucsJobCreateResponse,
+        DemucsGarbageCollectionResponse,
         DemucsMetricsJobResponse,
         DemucsMetricsResponse,
         DemucsJobStatusResponse,
@@ -32,6 +35,8 @@ try:
         WhisperXPreloadResponse,
     )
     from .settings import (
+        DEMUCS_GC_INTERVAL_SECONDS,
+        DEMUCS_GC_LOW_FREE_VRAM_BYTES,
         DEFAULT_DEMUCS_DEVICE,
         DEFAULT_DEMUCS_MODEL,
         DEFAULT_OUTPUT_FORMAT,
@@ -63,6 +68,7 @@ except ImportError:
     from jobs import DemucsJobState, DemucsJobStore, utc_now
     from models import (
         DemucsJobCreateResponse,
+        DemucsGarbageCollectionResponse,
         DemucsMetricsJobResponse,
         DemucsMetricsResponse,
         DemucsJobStatusResponse,
@@ -82,6 +88,8 @@ except ImportError:
         INCOMING_ROOT,
         JOB_OUTPUT_TAIL_LINES,
         JOB_RETENTION_SECONDS,
+        DEMUCS_GC_INTERVAL_SECONDS,
+        DEMUCS_GC_LOW_FREE_VRAM_BYTES,
         OUTPUT_ROOT,
     )
     from whisperx_pipeline import (
@@ -94,6 +102,16 @@ except ImportError:
 
 app = FastAPI(title="Demucs Service", version="0.2.0")
 job_store = DemucsJobStore(tail_limit=JOB_OUTPUT_TAIL_LINES)
+logger = logging.getLogger(__name__)
+_gc_lock = threading.Lock()
+_gc_scheduler_stop_event = threading.Event()
+_gc_scheduler_thread: threading.Thread | None = None
+_gc_state_lock = threading.Lock()
+_gc_state = {
+    "last_gc_at": None,
+    "last_gc_mode": None,
+    "last_gc_detail": None,
+}
 
 
 def _cuda_available() -> bool:
@@ -109,6 +127,67 @@ def _cuda_available() -> bool:
         check=False,
     )
     return probe.returncode == 0 and probe.stdout.strip() == "1"
+
+
+def _cuda_memory_snapshot() -> tuple[int | None, int | None]:
+    try:
+        import torch  # type: ignore
+    except Exception:
+        return None, None
+
+    try:
+        if not torch.cuda.is_available():
+            return None, None
+        free_vram, total_vram = torch.cuda.mem_get_info()
+    except Exception:
+        return None, None
+    return int(free_vram), int(total_vram)
+
+
+def _clear_cuda_memory() -> tuple[bool, bool]:
+    try:
+        import torch  # type: ignore
+    except Exception:
+        return False, False
+
+    if not torch.cuda.is_available():
+        return False, False
+
+    cuda_cache_cleared = False
+    cuda_ipc_cleared = False
+
+    try:
+        torch.cuda.synchronize()
+    except Exception:
+        pass
+
+    try:
+        torch.cuda.empty_cache()
+        cuda_cache_cleared = True
+    except Exception:
+        pass
+
+    ipc_collect = getattr(torch.cuda, "ipc_collect", None)
+    if callable(ipc_collect):
+        try:
+            ipc_collect()
+            cuda_ipc_cleared = True
+        except Exception:
+            pass
+
+    return cuda_cache_cleared, cuda_ipc_cleared
+
+
+def _record_gc_state(*, finished_at: str, mode: str, detail: str) -> None:
+    with _gc_state_lock:
+        _gc_state["last_gc_at"] = finished_at
+        _gc_state["last_gc_mode"] = mode
+        _gc_state["last_gc_detail"] = detail
+
+
+def _current_gc_state() -> dict[str, str | None]:
+    with _gc_state_lock:
+        return dict(_gc_state)
 
 
 def _build_stems_zip(result) -> bytes:
@@ -169,6 +248,32 @@ def _job_to_metrics_response(job: DemucsJobState) -> DemucsMetricsJobResponse:
     )
 
 
+def _current_runtime_snapshot() -> dict[str, object]:
+    active_jobs = [
+        job
+        for job in job_store.all()
+        if job.status in {"queued", "running"}
+    ]
+    active_jobs.sort(key=lambda job: (job.created_at.timestamp(), job.job_id))
+    status_counts = Counter(job.status for job in active_jobs)
+    kind_counts = Counter(job.job_kind for job in active_jobs)
+    free_vram_bytes, total_vram_bytes = _cuda_memory_snapshot()
+    gc_state = _current_gc_state()
+    running_job_count = sum(1 for job in active_jobs if job.status == "running")
+    return {
+        "active_jobs": active_jobs,
+        "active_job_count": len(active_jobs),
+        "running_job_count": running_job_count,
+        "active_job_counts_by_status": dict(sorted(status_counts.items())),
+        "active_job_counts_by_kind": dict(sorted(kind_counts.items())),
+        "free_vram_bytes": free_vram_bytes,
+        "total_vram_bytes": total_vram_bytes,
+        "last_gc_at": gc_state["last_gc_at"],
+        "last_gc_mode": gc_state["last_gc_mode"],
+        "last_gc_detail": gc_state["last_gc_detail"],
+    }
+
+
 def _job_paths(job_id: str) -> tuple[Path, Path]:
     return INCOMING_ROOT / job_id, OUTPUT_ROOT / job_id
 
@@ -193,22 +298,130 @@ def _cleanup_expired_jobs() -> None:
 
 
 def _active_jobs_snapshot() -> DemucsMetricsResponse:
-    active_jobs = [
-        job
-        for job in job_store.all()
-        if job.status in {"queued", "running"}
-    ]
-    active_jobs.sort(key=lambda job: (job.created_at.timestamp(), job.job_id))
-    status_counts = Counter(job.status for job in active_jobs)
-    kind_counts = Counter(job.job_kind for job in active_jobs)
+    snapshot = _current_runtime_snapshot()
     return DemucsMetricsResponse(
         service="demucs",
         snapshot_at=utc_now().isoformat(),
-        active_job_count=len(active_jobs),
-        active_job_counts_by_status=dict(sorted(status_counts.items())),
-        active_job_counts_by_kind=dict(sorted(kind_counts.items())),
-        active_jobs=[_job_to_metrics_response(job) for job in active_jobs],
+        active_job_count=snapshot["active_job_count"],
+        running_job_count=snapshot["running_job_count"],
+        active_job_counts_by_status=snapshot["active_job_counts_by_status"],
+        active_job_counts_by_kind=snapshot["active_job_counts_by_kind"],
+        free_vram_bytes=snapshot["free_vram_bytes"],
+        total_vram_bytes=snapshot["total_vram_bytes"],
+        last_gc_at=snapshot["last_gc_at"],
+        last_gc_mode=snapshot["last_gc_mode"],
+        last_gc_detail=snapshot["last_gc_detail"],
+        active_jobs=[_job_to_metrics_response(job) for job in snapshot["active_jobs"]],
     )
+
+
+def _select_gc_mode(snapshot: dict[str, object]) -> str:
+    running_job_count = int(snapshot["running_job_count"])
+    free_vram_bytes = snapshot["free_vram_bytes"]
+    if running_job_count == 0:
+        return "full"
+    if isinstance(free_vram_bytes, int) and free_vram_bytes < DEMUCS_GC_LOW_FREE_VRAM_BYTES:
+        return "cuda"
+    return "partial"
+
+
+def _run_garbage_collection(
+    *,
+    requested_mode: Literal["adaptive", "partial", "cuda", "full"] = "adaptive",
+    triggered_by: Literal["manual", "scheduled", "job_completion"] = "manual",
+) -> DemucsGarbageCollectionResponse:
+    if not _gc_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Garbage collection already in progress")
+
+    started_at = utc_now()
+    try:
+        snapshot = _current_runtime_snapshot()
+        active_job_count = int(snapshot["active_job_count"])
+        running_job_count = int(snapshot["running_job_count"])
+        free_vram_bytes = snapshot["free_vram_bytes"]
+        total_vram_bytes = snapshot["total_vram_bytes"]
+        executed_mode = (
+            _select_gc_mode(snapshot)
+            if requested_mode == "adaptive"
+            else requested_mode
+        )
+        detail_parts: list[str] = []
+
+        if executed_mode == "full" and running_job_count > 0:
+            executed_mode = "cuda" if isinstance(free_vram_bytes, int) else "partial"
+            detail_parts.append("Full unload skipped because jobs are still running")
+
+        python_gc_collected = 0
+        whisperx_unloaded: dict[str, int] = {}
+        cuda_cache_cleared = False
+        cuda_ipc_cleared = False
+
+        if executed_mode == "full":
+            whisperx_unloaded = unload_models()
+            python_gc_collected = gc.collect()
+            cuda_cache_cleared, cuda_ipc_cleared = _clear_cuda_memory()
+            detail_parts.append("Released WhisperX caches and CUDA memory")
+        elif executed_mode == "cuda":
+            python_gc_collected = gc.collect()
+            cuda_cache_cleared, cuda_ipc_cleared = _clear_cuda_memory()
+            detail_parts.append("Released Python and CUDA cache memory")
+        else:
+            executed_mode = "partial"
+            python_gc_collected = gc.collect()
+            detail_parts.append("Collected unreachable Python objects")
+
+        finished_at = utc_now()
+        detail = "; ".join(detail_parts) if detail_parts else "Garbage collection completed"
+        _record_gc_state(
+            finished_at=finished_at.isoformat(),
+            mode=executed_mode,
+            detail=detail,
+        )
+        return DemucsGarbageCollectionResponse(
+            requested_mode=requested_mode,
+            executed_mode=executed_mode,
+            triggered_by=triggered_by,
+            detail=detail,
+            active_job_count=active_job_count,
+            running_job_count=running_job_count,
+            free_vram_bytes=free_vram_bytes,
+            total_vram_bytes=total_vram_bytes,
+            python_gc_collected=python_gc_collected,
+            whisperx_unloaded=whisperx_unloaded,
+            cuda_cache_cleared=cuda_cache_cleared,
+            cuda_ipc_cleared=cuda_ipc_cleared,
+            started_at=started_at.isoformat(),
+            finished_at=finished_at.isoformat(),
+        )
+    finally:
+        _gc_lock.release()
+
+
+def _run_background_gc() -> None:
+    try:
+        _run_garbage_collection(requested_mode="adaptive", triggered_by="scheduled")
+    except HTTPException:
+        return
+    except Exception:
+        logger.exception("Scheduled Demucs garbage collection failed")
+
+
+def _gc_scheduler_loop() -> None:
+    while not _gc_scheduler_stop_event.wait(DEMUCS_GC_INTERVAL_SECONDS):
+        _run_background_gc()
+
+
+def _ensure_gc_scheduler_started() -> None:
+    global _gc_scheduler_thread
+    if _gc_scheduler_thread is not None and _gc_scheduler_thread.is_alive():
+        return
+    _gc_scheduler_stop_event.clear()
+    _gc_scheduler_thread = threading.Thread(
+        target=_gc_scheduler_loop,
+        name="demucs-gc-scheduler",
+        daemon=True,
+    )
+    _gc_scheduler_thread.start()
 
 
 def _update_job_progress(job_id: str, *, percent: int | None = None, message: str | None = None) -> None:
@@ -350,6 +563,12 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
             process=None,
         )
     finally:
+        try:
+            _run_garbage_collection(requested_mode="adaptive", triggered_by="job_completion")
+        except HTTPException:
+            pass
+        except Exception:
+            logger.exception("Post-job Demucs garbage collection failed")
         _cleanup_expired_jobs()
 
 
@@ -384,6 +603,12 @@ def _startup_preload_whisperx_models() -> None:
     except Exception:
         # Keep no-lyrics separation available if WhisperX warmup is unavailable.
         pass
+    _ensure_gc_scheduler_started()
+
+
+@app.on_event("shutdown")
+def _shutdown_gc_scheduler() -> None:
+    _gc_scheduler_stop_event.set()
 
 
 def _validated_config(
@@ -465,6 +690,7 @@ def health():
         "detail": detail,
         "checks": checks,
         "active_jobs": sum(1 for job in job_store.all() if job.status in {"queued", "running"}),
+        "running_jobs": sum(1 for job in job_store.all() if job.status == "running"),
     }
 
 
@@ -727,15 +953,10 @@ async def separate_meta(
         aligned_lyrics_path=str(aligned_lyrics_path) if aligned_lyrics_path else None,
     )
 
-@app.post("/gc")
-def trigger_garbage_collection():
-    import gc
-
-    whisperx_unloaded = unload_models()
+@app.post("/gc", response_model=DemucsGarbageCollectionResponse)
+def trigger_garbage_collection(
+    mode: Literal["adaptive", "partial", "cuda", "full"] = "adaptive",
+):
+    response = _run_garbage_collection(requested_mode=mode, triggered_by="manual")
     _cleanup_expired_jobs()
-    gc.collect()
-    return {
-        "status": "ok",
-        "detail": "Garbage collection triggered",
-        "whisperx_unloaded": whisperx_unloaded,
-    }
+    return response

@@ -269,6 +269,16 @@
                     <span class="material-symbols-outlined text-xs">history</span>
                     <span id="last-sync-text" class="font-medium">{{ t('settings.last_sync_never') }}</span>
                 </div>
+                <span class="hidden h-4 w-px bg-white/10 lg:block"></span>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button id="demucs-gc-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-warning transition hover:bg-warning/20 disabled:cursor-not-allowed disabled:opacity-60">
+                        <span class="material-symbols-outlined text-sm">delete_sweep</span>
+                        {{ t('settings.trigger_demucs_gc') }}
+                    </button>
+                    <p id="demucs-gc-status" class="max-w-[18rem] text-[11px] text-on-surface-variant">
+                        {{ t('settings.demucs_gc_idle') }}
+                    </p>
+                </div>
             </div>
         </div>
     </section>

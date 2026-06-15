@@ -134,6 +134,29 @@ class DemucsMetricsResponse(BaseModel):
     service: str
     snapshot_at: str
     active_job_count: int
+    running_job_count: int
     active_job_counts_by_status: dict[str, int]
     active_job_counts_by_kind: dict[str, int]
+    free_vram_bytes: int | None = None
+    total_vram_bytes: int | None = None
+    last_gc_at: str | None = None
+    last_gc_mode: Literal["partial", "cuda", "full"] | None = None
+    last_gc_detail: str | None = None
     active_jobs: list[DemucsMetricsJobResponse] = Field(default_factory=list)
+
+
+class DemucsGarbageCollectionResponse(BaseModel):
+    requested_mode: Literal["adaptive", "partial", "cuda", "full"]
+    executed_mode: Literal["partial", "cuda", "full"]
+    triggered_by: Literal["manual", "scheduled", "job_completion"]
+    detail: str
+    active_job_count: int
+    running_job_count: int
+    free_vram_bytes: int | None = None
+    total_vram_bytes: int | None = None
+    python_gc_collected: int
+    whisperx_unloaded: dict[str, int] = Field(default_factory=dict)
+    cuda_cache_cleared: bool = False
+    cuda_ipc_cleared: bool = False
+    started_at: str
+    finished_at: str
