@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}{{ t('trim.editor_title') }} - {{ trim_info.title }}{% endblock %}
-{% block header_title %}{{ t('trim.editor_title') }}{% endblock %}
+{% block header_title %}{{ t('trim.editor_short_title') }}{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ app_url('/static/media_editor.css') }}">
@@ -51,8 +51,8 @@
                     <span class="material-symbols-outlined">arrow_back</span>
                 </a>
                 <div>
-                    <p>{{ t('trim.editor_title') }}</p>
-                    <span>{{ trim_info.title }}</span>
+                    <h2>{{ trim_info.title }}</h2>
+                    <p>{{ trim_info.artist or t('common.unknown_artist') }}</p>
                 </div>
             </header>
 
@@ -165,7 +165,7 @@
                 <a href="{{ app_url('/media') }}">{{ t('common.cancel') }}</a>
                 <button id="trim-save" type="button">
                     <span class="material-symbols-outlined">content_cut</span>
-                    <span>{{ t('trim.apply_trim') }}</span>
+                    <span>{{ t('trim.apply_action') }}</span>
                 </button>
             </footer>
         </section>

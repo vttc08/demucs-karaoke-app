@@ -46,6 +46,10 @@
     margin-bottom: 0.35rem;
 }
 
+.trim-mobile-title > div {
+    min-width: 0;
+}
+
 .trim-mobile-title a {
     display: grid;
     width: 2.75rem;
@@ -56,15 +60,22 @@
     background: rgba(0, 242, 255, 0.08);
 }
 
-.trim-mobile-title p {
+.trim-mobile-title h2 {
     font-family: "Space Grotesk", sans-serif;
-    font-size: 1.2rem;
+    font-size: 1.15rem;
     font-weight: 800;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.trim-mobile-title span {
+.trim-mobile-title p {
     color: #c9c5d0;
     font-size: 0.78rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .trim-player-panel {
