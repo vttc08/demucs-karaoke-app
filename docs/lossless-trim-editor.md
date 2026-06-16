@@ -8,6 +8,10 @@ support crop, effects, filters, transitions, or re-encoding.
 Open a media row's edit modal on `/media`, then select **Lossless Trim**. The other two media-tool
 buttons are placeholders and remain disabled.
 
+The editor page renders the player shell immediately and then loads trim metadata and keyframes
+asynchronously. While the keyframes are loading, the trim controls stay disabled and the page shows
+a loading state.
+
 ## Range handling
 
 - FFprobe reads the duration, stream types, and I-frame timestamps.
@@ -16,6 +20,7 @@ buttons are placeholders and remain disabled.
 - Audio-only files use the exact requested values.
 - The backend repeats validation and snapping; frontend values are not trusted.
 - The item cannot be trimmed while it is playing or has an active processing task.
+- The page stays read-only until the trim-info request returns and keyframes are available.
 
 ## File processing
 

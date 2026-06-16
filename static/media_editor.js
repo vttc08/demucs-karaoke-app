@@ -4,6 +4,10 @@
 
     const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
     const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key) => key);
+    const loadingState = document.getElementById("trim-loading-state");
+    const loadingTitle = document.getElementById("trim-loading-title");
+    const loadingDetail = document.getElementById("trim-loading-detail");
+    const loadingRetry = document.getElementById("trim-loading-retry");
     const player = document.getElementById("trim-media-player");
     const timeline = document.getElementById("trim-timeline");
     const canvas = document.getElementById("trim-keyframe-canvas");
@@ -26,17 +30,61 @@
     const jumpEndButton = document.getElementById("trim-jump-end");
 
     const mediaId = Number(root.dataset.mediaId);
-    const duration = Number(root.dataset.duration);
-    const hasVideo = root.dataset.hasVideo === "true";
+    let duration = 0;
+    let hasVideo = root.dataset.hasVideo === "true";
     let keyframes = [];
-    try {
-        keyframes = JSON.parse(root.dataset.keyframes || "[]").map(Number).filter(Number.isFinite);
-    } catch (_error) {
-        keyframes = [];
-    }
-    const snapPoints = [...new Set([0, ...keyframes, duration])].sort((a, b) => a - b);
+    let snapPoints = [0];
     let start = 0;
-    let end = duration;
+    let end = 0;
+    let editorReady = false;
+    let isSubmitting = false;
+    let loadSequence = 0;
+
+    function setBusyState(isBusy) {
+        root.dataset.editorState = isBusy ? "loading" : "ready";
+        root.classList.toggle("is-loading", isBusy);
+        root.classList.toggle("is-ready", !isBusy);
+        root.setAttribute("aria-busy", isBusy ? "true" : "false");
+    }
+
+    function setLoadingStateVisible(visible) {
+        if (!loadingState) return;
+        loadingState.classList.toggle("hidden", !visible);
+    }
+
+    function setLoadingMessage(title, detail, showRetry = false) {
+        if (loadingTitle) loadingTitle.textContent = title;
+        if (loadingDetail) loadingDetail.textContent = detail;
+        if (loadingRetry) loadingRetry.classList.toggle("hidden", !showRetry);
+    }
+
+    function setControlsEnabled(enabled) {
+        [
+            startRange,
+            endRange,
+            startInput,
+            endInput,
+            setStartButton,
+            setEndButton,
+            jumpStartButton,
+            jumpEndButton,
+        ].forEach((control) => {
+            if (control) {
+                control.disabled = !enabled;
+            }
+        });
+        if (saveButton) {
+            saveButton.disabled = !enabled || isSubmitting;
+        }
+    }
+
+    function setTimelineBounds() {
+        const max = String(duration);
+        if (startRange) startRange.max = max;
+        if (endRange) endRange.max = max;
+        if (startInput) startInput.max = max;
+        if (endInput) endInput.max = max;
+    }
 
     function clamp(value) {
         return Math.min(duration, Math.max(0, Number(value) || 0));
@@ -67,6 +115,7 @@
     }
 
     function updateUi(source = "") {
+        if (!editorReady) return;
         start = clamp(start);
         end = clamp(end);
         if (end <= start) {
@@ -104,26 +153,28 @@
     }
 
     function seekPlayer(value) {
-        if (!player) return;
+        if (!player || !editorReady) return;
         player.currentTime = clamp(value);
         const percent = duration ? (player.currentTime / duration) * 100 : 0;
         playhead.style.left = `${Math.min(100, Math.max(0, percent))}%`;
     }
 
     function setStart(value, seek = false) {
+        if (!editorReady) return;
         start = snapStart(clamp(value));
         updateUi("start");
         if (seek) seekPlayer(start);
     }
 
     function setEnd(value, seek = false) {
+        if (!editorReady) return;
         end = snapEnd(clamp(value));
         updateUi("end");
         if (seek) seekPlayer(end);
     }
 
     function drawKeyframes() {
-        if (!canvas || !timeline) return;
+        if (!canvas || !timeline || !editorReady) return;
         const ratio = window.devicePixelRatio || 1;
         const rect = timeline.getBoundingClientRect();
         canvas.width = Math.max(1, Math.round(rect.width * ratio));
@@ -143,6 +194,64 @@
         });
     }
 
+    async function loadTrimInfo() {
+        const sequence = ++loadSequence;
+        setBusyState(true);
+        setLoadingStateVisible(true);
+        setLoadingMessage(
+            t("trim.loading_keyframes"),
+            t("trim.loading_keyframes_detail"),
+            false,
+        );
+        setControlsEnabled(false);
+        showError();
+        try {
+            const response = await fetch(appUrl(`/api/media/${mediaId}/trim-info`), {
+                method: "GET",
+                credentials: "same-origin",
+                headers: { Accept: "application/json" },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload.detail || t("trim.loading_failed_detail"));
+            }
+            if (sequence !== loadSequence) return;
+
+            duration = Number(payload.duration);
+            if (!Number.isFinite(duration) || duration <= 0) {
+                throw new Error(t("trim.loading_failed_detail"));
+            }
+            hasVideo = Boolean(payload.has_video);
+            keyframes = Array.isArray(payload.keyframes)
+                ? payload.keyframes.map(Number).filter(Number.isFinite)
+                : [];
+            snapPoints = [...new Set([0, ...keyframes, duration])].sort((a, b) => a - b);
+            start = 0;
+            end = duration;
+            root.dataset.duration = String(duration);
+            root.dataset.hasVideo = hasVideo ? "true" : "false";
+            root.dataset.keyframes = JSON.stringify(keyframes);
+            setTimelineBounds();
+            editorReady = true;
+            setControlsEnabled(true);
+            setBusyState(false);
+            setLoadingStateVisible(false);
+            updateUi();
+            drawKeyframes();
+        } catch (error) {
+            if (sequence !== loadSequence) return;
+            editorReady = false;
+            setBusyState(false);
+            setLoadingStateVisible(true);
+            setLoadingMessage(
+                t("trim.loading_failed"),
+                error instanceof Error ? error.message : t("trim.loading_failed_detail"),
+                true,
+            );
+            setControlsEnabled(false);
+        }
+    }
+
     startRange.addEventListener("input", () => setStart(startRange.value, true));
     endRange.addEventListener("input", () => setEnd(endRange.value, true));
     startInput.addEventListener("change", () => setStart(startInput.value, true));
@@ -152,24 +261,36 @@
     jumpStartButton.addEventListener("click", () => seekPlayer(start));
     jumpEndButton.addEventListener("click", () => seekPlayer(end));
 
+    if (loadingRetry) {
+        loadingRetry.addEventListener("click", () => {
+            loadTrimInfo();
+        });
+    }
+
     player.addEventListener("timeupdate", () => {
+        if (!editorReady) return;
         const percent = duration ? (player.currentTime / duration) * 100 : 0;
         playhead.style.left = `${Math.min(100, Math.max(0, percent))}%`;
     });
 
     timeline.addEventListener("dblclick", (event) => {
+        if (!editorReady) return;
         const rect = timeline.getBoundingClientRect();
         player.currentTime = clamp(((event.clientX - rect.left) / rect.width) * duration);
     });
 
     saveButton.addEventListener("click", async () => {
+        if (!editorReady || isSubmitting) {
+            return;
+        }
         if (!window.confirm(t("trim.confirm_apply", {
             start: formatTime(start),
             end: formatTime(end),
         }))) {
             return;
         }
-        saveButton.disabled = true;
+        isSubmitting = true;
+        setControlsEnabled(false);
         saveButton.querySelector("span:last-child").textContent = t("trim.trimming");
         showError();
         try {
@@ -192,12 +313,12 @@
             window.location.href = appUrl("/media");
         } catch (error) {
             showError(error instanceof Error ? error.message : t("trim.failed"));
-            saveButton.disabled = false;
+            isSubmitting = false;
+            setControlsEnabled(true);
             saveButton.querySelector("span:last-child").textContent = t("trim.apply_trim");
         }
     });
 
     window.addEventListener("resize", drawKeyframes);
-    updateUi();
-    drawKeyframes();
+    loadTrimInfo();
 })();

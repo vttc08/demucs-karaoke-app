@@ -1,4 +1,5 @@
 """HTML page routes."""
+from pathlib import Path
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, Depends, Form
@@ -7,11 +8,11 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from sqlalchemy.orm import Session
 from database import get_db
-from models import QueueStatus
+from models import MediaItem, QueueStatus
 from routes.auth import get_admin_user
 from services.queue_service import QueueService
 from services.media_library_service import MediaLibraryService
-from services.media_trim_service import MediaTrimNotFoundError, MediaTrimService
+from services.media_trim_service import MediaTrimService
 from services.processing_task_service import processing_task_service
 from services.runtime_settings_service import RuntimeSettingsService
 from services.stage_lobby_service import StageLobbyService
@@ -34,6 +35,7 @@ runtime_settings_service = RuntimeSettingsService()
 stage_lobby_service = StageLobbyService()
 media_trim_service = MediaTrimService()
 auth_service = AuthService()
+_VIDEO_SUFFIXES = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
 
 
 def app_url(path: str | None) -> str:
@@ -311,15 +313,27 @@ async def media_editor_page(
     )
     if admin is None:
         return RedirectResponse(url=app_url("/login"), status_code=302)
-    try:
-        trim_info = media_trim_service.get_trim_info(db, item_id)
-    except MediaTrimNotFoundError:
+
+    media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
+    if media_item is None or media_item.missing:
         return RedirectResponse(url=app_url("/media"), status_code=302)
+    media_file = queue_service._media_url_to_file(media_item.media_path)
+    if media_file is None or not media_file.is_file():
+        return RedirectResponse(url=app_url("/media"), status_code=302)
+
+    media_suffix = Path(media_item.media_path).suffix.lower()
+    is_video = media_suffix in _VIDEO_SUFFIXES
     return templates.TemplateResponse(
         "media_editor.html",
         {
             "request": request,
-            "trim_info": trim_info,
+            "trim_info": {
+                "media_id": media_item.id,
+                "title": media_item.title,
+                "artist": media_item.artist,
+                "media_url": media_item.media_path,
+                "has_video": is_video,
+            },
         },
     )
 
