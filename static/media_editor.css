@@ -27,14 +27,23 @@
 }
 
 .trim-editor-workspace {
+    display: grid;
+    grid-template-areas:
+        "title"
+        "player"
+        "timeline"
+        "stats"
+        "actions";
+    gap: 0.65rem;
     min-width: 0;
 }
 
 .trim-mobile-title {
+    grid-area: title;
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.35rem;
 }
 
 .trim-mobile-title a {
@@ -58,12 +67,8 @@
     font-size: 0.78rem;
 }
 
-.trim-player-and-stats {
-    display: grid;
-    gap: 1rem;
-}
-
 .trim-player-panel {
+    grid-area: player;
     overflow: hidden;
     border-radius: 1.25rem;
 }
@@ -109,9 +114,17 @@
 
 .trim-stats-panel,
 .trim-timeline-panel {
-    margin-top: 1rem;
     padding: 1.25rem;
     border-radius: 1.25rem;
+}
+
+.trim-stats-panel {
+    grid-area: stats;
+}
+
+.trim-timeline-panel {
+    grid-area: timeline;
+    padding-top: 0.85rem;
 }
 
 .trim-eyebrow {
@@ -155,28 +168,11 @@
     color: #ff6e84;
 }
 
-.trim-sidecar-summary {
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-    margin-top: 1.25rem;
-    padding: 0.8rem;
-    border-radius: 0.8rem;
-    color: #c9c5d0;
-    background: rgba(0, 242, 255, 0.06);
-    font-size: 0.75rem;
-}
-
 .trim-timeline-heading {
     display: flex;
-    align-items: end;
+    align-items: center;
     justify-content: space-between;
     gap: 1rem;
-}
-
-.trim-timeline-heading h3 {
-    margin-top: 0.25rem;
-    font: 800 1.1rem/1.2 "Space Grotesk", sans-serif;
 }
 
 .trim-keyframe-legend {
@@ -197,10 +193,11 @@
 
 .trim-timeline {
     position: relative;
-    height: 7rem;
-    margin-top: 1.25rem;
+    height: 4rem;
+    width: min(100%, 48rem);
+    margin: 0.65rem auto 0;
     overflow: hidden;
-    border-radius: 1rem;
+    border-radius: 0.75rem;
     background: #000;
     touch-action: none;
 }
@@ -215,21 +212,41 @@
     height: 100%;
 }
 
+#trim-keyframe-canvas {
+    z-index: 0;
+}
+
 .trim-selection {
+    z-index: 1;
     pointer-events: none;
-    border-block: 3px solid #00f2ff;
+    border-block: 2px solid #00f2ff;
     background: rgba(0, 242, 255, 0.1);
 }
 
 .trim-playhead {
+    z-index: 2;
     left: 0;
-    width: 2px;
+    width: 1.5px;
     pointer-events: none;
     background: rgba(255, 255, 255, 0.9);
     box-shadow: 0 0 10px white;
 }
 
+.trim-playhead::before {
+    position: absolute;
+    top: 0.18rem;
+    left: 50%;
+    width: 0.42rem;
+    height: 0.42rem;
+    content: "";
+    border-radius: 9999px;
+    background: #ffffff;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
+    transform: translateX(-50%);
+}
+
 .trim-timeline input[type="range"] {
+    z-index: 3;
     margin: 0;
     appearance: none;
     pointer-events: none;
@@ -237,24 +254,24 @@
 }
 
 .trim-timeline input[type="range"]::-webkit-slider-thumb {
-    width: 2rem;
-    height: 4.5rem;
+    width: 1.15rem;
+    height: 2.65rem;
     appearance: none;
     pointer-events: auto;
     cursor: ew-resize;
     border: 0;
-    border-radius: 0.75rem;
+    border-radius: 0.55rem;
     background: #c1fffe;
     box-shadow: 0 0 18px rgba(0, 242, 255, 0.65);
 }
 
 .trim-timeline input[type="range"]::-moz-range-thumb {
-    width: 2rem;
-    height: 4.5rem;
+    width: 1.15rem;
+    height: 2.65rem;
     pointer-events: auto;
     cursor: ew-resize;
     border: 0;
-    border-radius: 0.75rem;
+    border-radius: 0.55rem;
     background: #c1fffe;
     box-shadow: 0 0 18px rgba(0, 242, 255, 0.65);
 }
@@ -262,7 +279,9 @@
 .trim-scale {
     display: flex;
     justify-content: space-between;
+    width: min(100%, 48rem);
     margin-top: 0.55rem;
+    margin-inline: auto;
     color: #aca8c2;
     font: 700 0.68rem/1 "Space Grotesk", sans-serif;
     letter-spacing: 0.12em;
@@ -272,7 +291,16 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.75rem;
-    margin-top: 1.25rem;
+    width: min(100%, 48rem);
+    margin: 1rem auto 0;
+}
+
+.trim-action-rail {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+    gap: 0.45rem;
+    align-items: stretch;
 }
 
 .trim-time-fields label span {
@@ -311,6 +339,75 @@
     font-weight: 700;
 }
 
+.trim-action-rail button {
+    min-width: 0;
+    padding-inline: 0.45rem;
+    font-size: 0.63rem;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.trim-action-rail button .material-symbols-outlined {
+    flex: none;
+    font-size: 1rem;
+}
+
+.trim-action-help {
+    position: relative;
+}
+
+.trim-action-help summary {
+    display: grid;
+    width: 100%;
+    min-height: 2.8rem;
+    place-items: center;
+    list-style: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.8rem;
+    color: #00f2ff;
+    background: rgba(37, 34, 62, 0.8);
+    cursor: help;
+}
+
+.trim-action-help summary::-webkit-details-marker {
+    display: none;
+}
+
+.trim-action-help summary .material-symbols-outlined {
+    font-size: 1.05rem;
+}
+
+.trim-action-help[open] summary {
+    border-color: rgba(0, 242, 255, 0.35);
+    background: rgba(0, 242, 255, 0.1);
+}
+
+.trim-action-help-panel {
+    position: absolute;
+    inset-block-start: calc(100% + 0.45rem);
+    inset-inline-end: 0;
+    z-index: 20;
+    width: min(20rem, calc(100vw - 2rem));
+    padding: 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.95rem;
+    background: linear-gradient(145deg, rgba(31, 28, 54, 0.98), rgba(19, 17, 38, 0.98));
+    box-shadow: 0 24px 50px rgba(0, 0, 0, 0.36);
+    backdrop-filter: blur(20px);
+}
+
+.trim-action-help-panel p {
+    color: #c9c5d0;
+    font-size: 0.74rem;
+    line-height: 1.55;
+}
+
+.trim-action-help-panel p + p {
+    margin-top: 0.55rem;
+}
+
 .trim-snap-message,
 .trim-error {
     margin-top: 0.9rem;
@@ -326,6 +423,7 @@
 }
 
 .trim-actions {
+    grid-area: actions;
     position: sticky;
     bottom: 0;
     z-index: 10;
@@ -440,16 +538,17 @@
         display: none;
     }
 
-    .trim-player-and-stats {
+    .trim-editor-workspace {
         grid-template-columns: minmax(0, 1fr) 18rem;
+        grid-template-areas:
+            "player stats"
+            "timeline timeline"
+            "actions actions";
+        gap: 1rem;
     }
 
     .trim-stats-panel {
-        margin-top: 0;
-    }
-
-    .trim-time-fields {
-        grid-template-columns: 10rem 10rem minmax(10rem, 1fr) minmax(10rem, 1fr);
-        align-items: end;
+        align-self: start;
+        min-height: 100%;
     }
 }

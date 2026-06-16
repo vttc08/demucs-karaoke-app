@@ -22,6 +22,8 @@
     const saveButton = document.getElementById("trim-save");
     const setStartButton = document.getElementById("trim-set-start");
     const setEndButton = document.getElementById("trim-set-end");
+    const jumpStartButton = document.getElementById("trim-jump-start");
+    const jumpEndButton = document.getElementById("trim-jump-end");
 
     const mediaId = Number(root.dataset.mediaId);
     const duration = Number(root.dataset.duration);
@@ -101,14 +103,23 @@
         showError();
     }
 
-    function setStart(value) {
-        start = snapStart(clamp(value));
-        updateUi("start");
+    function seekPlayer(value) {
+        if (!player) return;
+        player.currentTime = clamp(value);
+        const percent = duration ? (player.currentTime / duration) * 100 : 0;
+        playhead.style.left = `${Math.min(100, Math.max(0, percent))}%`;
     }
 
-    function setEnd(value) {
+    function setStart(value, seek = false) {
+        start = snapStart(clamp(value));
+        updateUi("start");
+        if (seek) seekPlayer(start);
+    }
+
+    function setEnd(value, seek = false) {
         end = snapEnd(clamp(value));
         updateUi("end");
+        if (seek) seekPlayer(end);
     }
 
     function drawKeyframes() {
@@ -132,12 +143,14 @@
         });
     }
 
-    startRange.addEventListener("input", () => setStart(startRange.value));
-    endRange.addEventListener("input", () => setEnd(endRange.value));
-    startInput.addEventListener("change", () => setStart(startInput.value));
-    endInput.addEventListener("change", () => setEnd(endInput.value));
+    startRange.addEventListener("input", () => setStart(startRange.value, true));
+    endRange.addEventListener("input", () => setEnd(endRange.value, true));
+    startInput.addEventListener("change", () => setStart(startInput.value, true));
+    endInput.addEventListener("change", () => setEnd(endInput.value, true));
     setStartButton.addEventListener("click", () => setStart(player.currentTime));
     setEndButton.addEventListener("click", () => setEnd(player.currentTime));
+    jumpStartButton.addEventListener("click", () => seekPlayer(start));
+    jumpEndButton.addEventListener("click", () => seekPlayer(end));
 
     player.addEventListener("timeupdate", () => {
         const percent = duration ? (player.currentTime / duration) * 100 : 0;
