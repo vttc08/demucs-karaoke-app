@@ -111,21 +111,21 @@
                         <input id="trim-end-input" type="number" min="0" max="{{ trim_info.duration }}" step="0.001" value="{{ trim_info.duration }}">
                     </label>
                     <div class="trim-action-rail">
-                        <button id="trim-set-start" type="button">
+                        <button id="trim-set-start" type="button" title="{{ t('trim.set_start_from_playhead') }}" aria-label="{{ t('trim.set_start_from_playhead') }}">
                             <span class="material-symbols-outlined">first_page</span>
-                            <span>{{ t('trim.set_start_from_playhead') }}</span>
+                            <span>{{ t('trim.set_action') }}</span>
                         </button>
-                        <button id="trim-set-end" type="button">
+                        <button id="trim-set-end" type="button" title="{{ t('trim.set_end_from_playhead') }}" aria-label="{{ t('trim.set_end_from_playhead') }}">
                             <span class="material-symbols-outlined">last_page</span>
-                            <span>{{ t('trim.set_end_from_playhead') }}</span>
+                            <span>{{ t('trim.set_action') }}</span>
                         </button>
-                        <button id="trim-jump-start" type="button">
+                        <button id="trim-jump-start" type="button" title="{{ t('trim.jump_to_start') }}" aria-label="{{ t('trim.jump_to_start') }}">
                             <span class="material-symbols-outlined">keyboard_tab_rtl</span>
-                            <span>{{ t('trim.jump_to_start') }}</span>
+                            <span>{{ t('trim.jump_action') }}</span>
                         </button>
-                        <button id="trim-jump-end" type="button">
+                        <button id="trim-jump-end" type="button" title="{{ t('trim.jump_to_end') }}" aria-label="{{ t('trim.jump_to_end') }}">
                             <span class="material-symbols-outlined">keyboard_tab</span>
-                            <span>{{ t('trim.jump_to_end') }}</span>
+                            <span>{{ t('trim.jump_action') }}</span>
                         </button>
                         <details class="trim-action-help">
                             <summary aria-label="{{ t('trim.action_help') }}" title="{{ t('trim.action_help') }}">
