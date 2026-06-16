@@ -122,3 +122,75 @@ def test_extract_audio_terminates_child_on_cancel(monkeypatch, tmp_path):
 
     assert fake_process.terminated is True
     assert fake_process.killed is False
+
+
+def test_probe_media_reads_duration_and_stream_types(monkeypatch, tmp_path):
+    adapter = FFmpegAdapter(ffmpeg_path="/opt/bin/ffmpeg")
+
+    def fake_run(cmd, check, capture_output, text):
+        assert cmd[0] == "/opt/bin/ffprobe"
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout='{"format":{"duration":"12.5","start_time":"1.0"},'
+            '"streams":[{"codec_type":"video"},{"codec_type":"audio"}]}',
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = adapter.probe_media(tmp_path / "input.mp4")
+
+    assert result == {
+        "duration": 12.5,
+        "start_time": 1.0,
+        "has_video": True,
+        "has_audio": True,
+    }
+
+
+def test_get_video_keyframes_normalizes_media_start_time(monkeypatch, tmp_path):
+    adapter = FFmpegAdapter(ffmpeg_path="/opt/bin/ffmpeg")
+    monkeypatch.setattr(
+        adapter,
+        "probe_media",
+        lambda _path: {
+            "duration": 10.0,
+            "start_time": 2.0,
+            "has_video": True,
+            "has_audio": True,
+        },
+    )
+
+    def fake_run(cmd, check, capture_output, text):
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout='{"frames":[{"best_effort_timestamp_time":"2.0"},'
+            '{"pts_time":"6.5"},{"best_effort_timestamp_time":"20.0"}]}',
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert adapter.get_video_keyframes(tmp_path / "input.mp4") == [0.0, 4.5, 10.0]
+
+
+def test_lossless_trim_maps_all_streams_and_uses_copy(monkeypatch, tmp_path):
+    adapter = FFmpegAdapter(ffmpeg_path="/bin/ffmpeg")
+    captured = {}
+    monkeypatch.setattr(adapter, "_run_command", lambda cmd, **_kwargs: captured.setdefault("cmd", cmd))
+
+    adapter.lossless_trim(
+        tmp_path / "input.mp4",
+        tmp_path / "output.mp4",
+        5.0,
+        20.0,
+    )
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("-ss") + 1] == "5.000000"
+    assert cmd[cmd.index("-t") + 1] == "15.000000"
+    assert cmd[cmd.index("-map") + 1] == "0"
+    assert cmd[cmd.index("-c") + 1] == "copy"
+    assert "-c:v" not in cmd
+    assert "-c:a" not in cmd
+    assert cmd[cmd.index("-movflags") + 1] == "+faststart"

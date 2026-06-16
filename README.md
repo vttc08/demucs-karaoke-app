@@ -175,9 +175,13 @@ and `/static/...`.
           - The edit modal can enable **AI Karaoke** for single-track media when Demucs is online; saving creates a monitored media-processing task
           - Existing multi-track items show AI Karaoke as enabled but locked, preventing duplicate separation work
           - Admin users can use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
+          - Admin users can open **Lossless Trim** from the edit modal to retain an intro/outro interval without re-encoding; video boundaries snap outward to I-frames and attached vocals/lyrics are shifted to the same interval
           - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
           - Admin users can trigger **Scan Library** to reconcile DB with filesystem on demand
           - App also performs one media-library scan on startup/restart
+
+See [docs/lossless-trim-editor.md](docs/lossless-trim-editor.md) for supported
+sidecars, FFmpeg behavior, and the destructive replacement contract.
 
 6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
         - Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files into the media library with title and artist metadata

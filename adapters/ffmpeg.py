@@ -1,5 +1,7 @@
 """FFmpeg adapter for video/audio processing."""
 import asyncio
+import json
+import math
 import subprocess
 import threading
 import time
@@ -132,7 +134,7 @@ class FFmpegAdapter:
     def has_video_stream(self, source_path: Path) -> bool:
         """Return whether the source file exposes at least one video stream."""
         probe_cmd = [
-            "ffprobe",
+            self.ffprobe_path,
             "-v",
             "error",
             "-select_streams",
@@ -148,6 +150,130 @@ class FFmpegAdapter:
         except (FileNotFoundError, subprocess.CalledProcessError):
             return False
         return bool((result.stdout or "").strip())
+
+    @property
+    def ffprobe_path(self) -> str:
+        """Resolve ffprobe next to a configured ffmpeg binary when possible."""
+        ffmpeg_path = Path(self.ffmpeg_path)
+        if ffmpeg_path.name.lower() in {"ffmpeg", "ffmpeg.exe"}:
+            sibling_name = (
+                "ffprobe.exe" if ffmpeg_path.suffix.lower() == ".exe" else "ffprobe"
+            )
+            if ffmpeg_path.parent != Path("."):
+                return str(ffmpeg_path.with_name(sibling_name))
+        return "ffprobe"
+
+    def probe_media(self, source_path: Path) -> dict[str, object]:
+        """Return duration, start time, and stream presence for a media file."""
+        cmd = [
+            self.ffprobe_path,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration,start_time:stream=codec_type",
+            "-of",
+            "json",
+            str(source_path),
+        ]
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        payload = json.loads(result.stdout or "{}")
+        format_data = payload.get("format") if isinstance(payload, dict) else {}
+        streams = payload.get("streams") if isinstance(payload, dict) else []
+        if not isinstance(format_data, dict):
+            format_data = {}
+        if not isinstance(streams, list):
+            streams = []
+
+        duration = self._finite_float(format_data.get("duration"))
+        start_time = self._finite_float(format_data.get("start_time")) or 0.0
+        if duration is None or duration <= 0:
+            raise ValueError(f"Unable to determine media duration: {source_path}")
+
+        stream_types = {
+            str(stream.get("codec_type"))
+            for stream in streams
+            if isinstance(stream, dict) and stream.get("codec_type")
+        }
+        return {
+            "duration": duration,
+            "start_time": start_time,
+            "has_video": "video" in stream_types,
+            "has_audio": "audio" in stream_types,
+        }
+
+    def get_video_keyframes(self, source_path: Path) -> list[float]:
+        """Return browser-timeline keyframe timestamps for the first video stream."""
+        media = self.probe_media(source_path)
+        if not media["has_video"]:
+            return []
+
+        cmd = [
+            self.ffprobe_path,
+            "-v",
+            "error",
+            "-skip_frame",
+            "nokey",
+            "-select_streams",
+            "v:0",
+            "-show_frames",
+            "-show_entries",
+            "frame=best_effort_timestamp_time,pts_time",
+            "-of",
+            "json",
+            str(source_path),
+        ]
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        payload = json.loads(result.stdout or "{}")
+        frames = payload.get("frames") if isinstance(payload, dict) else []
+        if not isinstance(frames, list):
+            frames = []
+
+        start_time = float(media["start_time"])
+        duration = float(media["duration"])
+        timestamps: set[float] = {0.0}
+        for frame in frames:
+            if not isinstance(frame, dict):
+                continue
+            raw = frame.get("best_effort_timestamp_time") or frame.get("pts_time")
+            timestamp = self._finite_float(raw)
+            if timestamp is None:
+                continue
+            normalized = min(duration, max(0.0, timestamp - start_time))
+            timestamps.add(round(normalized, 6))
+        return sorted(timestamps)
+
+    def lossless_trim(
+        self,
+        source_path: Path,
+        output_path: Path,
+        start_time: float,
+        end_time: float,
+    ) -> Path:
+        """Copy all known streams into a trimmed file without re-encoding."""
+        if end_time <= start_time:
+            raise ValueError("Trim end must be after trim start")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        cmd = [
+            self.ffmpeg_path,
+            "-hide_banner",
+            "-ss",
+            f"{start_time:.6f}",
+            "-i",
+            str(source_path),
+            "-t",
+            f"{end_time - start_time:.6f}",
+            "-map",
+            "0",
+            "-c",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
+        ]
+        if output_path.suffix.lower() in {".mp4", ".m4v", ".mov"}:
+            cmd.extend(["-movflags", "+faststart"])
+        cmd.extend(["-y", str(output_path)])
+        self._run_command(cmd)
+        return output_path
 
     def _run_command(self, cmd: list[str], *, cancel_event: threading.Event | None = None) -> None:
         if cancel_event is None:
@@ -187,7 +313,7 @@ class FFmpegAdapter:
     def _probe_audio_codec(self, source_path: Path) -> str | None:
         """Return the first audio codec name for a local source file when available."""
         probe_cmd = [
-            "ffprobe",
+            self.ffprobe_path,
             "-v",
             "error",
             "-select_streams",
@@ -204,6 +330,14 @@ class FFmpegAdapter:
             return None
         codec = (result.stdout or "").strip().lower()
         return codec or None
+
+    @staticmethod
+    def _finite_float(value: object) -> float | None:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if math.isfinite(parsed) else None
 
     @staticmethod
     def _terminate_process(process: subprocess.Popen) -> None:

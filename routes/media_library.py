@@ -1,6 +1,9 @@
 """API routes for media library maintenance operations."""
+
+import json
 import logging
 import shutil
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -8,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from database import get_db
-from models import MediaItem, QueueItemCreate
+from models import MediaItem, MediaTrimRequest, QueueItemCreate
 from routes.auth import require_admin_user
 from services.media_library_maintenance_service import (
     MediaItemDeleteConflictError,
@@ -19,6 +22,13 @@ from services.media_library_maintenance_service import (
 from services.media_library_sync_service import MediaLibrarySyncService
 from services.media_naming import build_media_stem
 from services.media_thumbnail_service import MediaThumbnailService
+from services.media_trim_service import (
+    MediaTrimConflictError,
+    MediaTrimError,
+    MediaTrimNotFoundError,
+    MediaTrimService,
+    MediaTrimUnsupportedError,
+)
 from services.processing_task_service import processing_task_service, task_execution_coordinator
 from services.queue_service import QueueService
 from services.runtime_settings_service import RuntimeSettingsService
@@ -31,7 +41,56 @@ media_library_maintenance_service = MediaLibraryMaintenanceService()
 media_thumbnail_service = MediaThumbnailService()
 queue_service = QueueService()
 runtime_settings_service = RuntimeSettingsService()
+media_trim_service = MediaTrimService()
 _UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
+
+
+@router.get("/{item_id}/trim-info")
+def get_media_trim_info(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Return timing and sidecar metadata for the lossless trim editor."""
+    try:
+        return media_trim_service.get_trim_info(db, item_id)
+    except MediaTrimNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (MediaTrimError, OSError, ValueError) as exc:
+        logger.exception("Failed to inspect media trim data media_id=%s", item_id)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/{item_id}/trim")
+def trim_media_item(
+    item_id: int,
+    payload: MediaTrimRequest,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Destructively replace a media item with a synchronized lossless trim."""
+    try:
+        summary = media_trim_service.trim_media_item(
+            db,
+            item_id,
+            payload.start_time,
+            payload.end_time,
+        )
+    except MediaTrimNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MediaTrimConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (MediaTrimUnsupportedError, MediaTrimError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        db.rollback()
+        logger.exception("Lossless media trim failed media_id=%s", item_id)
+        raise HTTPException(status_code=500, detail="Lossless trim failed") from exc
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Unexpected lossless media trim failure media_id=%s", item_id)
+        raise HTTPException(status_code=500, detail="Lossless trim failed") from exc
+    return {"status": "ok", "summary": summary}
 
 
 def _karaoke_availability(media_item: MediaItem) -> tuple[bool, str | None, str | None]:

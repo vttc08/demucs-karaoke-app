@@ -437,6 +437,32 @@
                             <span id="media-edit-preview-duration" class="rounded-lg bg-surface-container-highest/60 px-3 py-1 text-[11px] font-bold text-on-surface-variant">00:00</span>
                         </div>
                     </div>
+                    <div class="mt-8 grid grid-cols-3 gap-2" aria-label="{{ t('media.tools') }}">
+                        <button
+                            type="button"
+                            data-action="open-trim-editor"
+                            class="flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-2 py-3 text-center text-primary transition-colors hover:bg-primary/15"
+                        >
+                            <span class="material-symbols-outlined">content_cut</span>
+                            <span class="text-[10px] font-black uppercase tracking-wider">{{ t('trim.lossless_trim') }}</span>
+                        </button>
+                        <button
+                            type="button"
+                            disabled
+                            class="flex min-h-20 cursor-not-allowed flex-col items-center justify-center gap-2 rounded-xl border border-white/10 bg-surface-container-highest/20 px-2 py-3 text-center text-on-surface-variant opacity-45"
+                        >
+                            <span class="material-symbols-outlined">subtitles</span>
+                            <span class="text-[10px] font-black uppercase tracking-wider">{{ t('trim.subtitle_editor') }}</span>
+                        </button>
+                        <button
+                            type="button"
+                            disabled
+                            class="flex min-h-20 cursor-not-allowed flex-col items-center justify-center gap-2 rounded-xl border border-white/10 bg-surface-container-highest/20 px-2 py-3 text-center text-on-surface-variant opacity-45"
+                        >
+                            <span class="material-symbols-outlined">mic_external_on</span>
+                            <span class="text-[10px] font-black uppercase tracking-wider">{{ t('trim.add_vocals') }}</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Right Column: Form Body -->
@@ -479,6 +505,33 @@
                                 class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-tertiary/20 bg-tertiary/10 text-tertiary transition-transform hover:scale-105 active:scale-95"
                             >
                                 <span class="material-symbols-outlined text-[18px]">refresh</span>
+                            </button>
+                        </div>
+
+                        <div class="mb-6 grid grid-cols-3 gap-2 md:hidden" aria-label="{{ t('media.tools') }}">
+                            <button
+                                type="button"
+                                data-action="open-trim-editor"
+                                class="flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-2 py-3 text-center text-primary transition-colors hover:bg-primary/15"
+                            >
+                                <span class="material-symbols-outlined">content_cut</span>
+                                <span class="text-[10px] font-black uppercase tracking-wider">{{ t('trim.lossless_trim') }}</span>
+                            </button>
+                            <button
+                                type="button"
+                                disabled
+                                class="flex min-h-20 cursor-not-allowed flex-col items-center justify-center gap-2 rounded-xl border border-white/10 bg-surface-container-highest/20 px-2 py-3 text-center text-on-surface-variant opacity-45"
+                            >
+                                <span class="material-symbols-outlined">subtitles</span>
+                                <span class="text-[10px] font-black uppercase tracking-wider">{{ t('trim.subtitle_editor') }}</span>
+                            </button>
+                            <button
+                                type="button"
+                                disabled
+                                class="flex min-h-20 cursor-not-allowed flex-col items-center justify-center gap-2 rounded-xl border border-white/10 bg-surface-container-highest/20 px-2 py-3 text-center text-on-surface-variant opacity-45"
+                            >
+                                <span class="material-symbols-outlined">mic_external_on</span>
+                                <span class="text-[10px] font-black uppercase tracking-wider">{{ t('trim.add_vocals') }}</span>
                             </button>
                         </div>
 

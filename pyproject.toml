@@ -19,6 +19,8 @@ dependencies = [
     "sqlalchemy>=2.0.25",
     "requests>=2.33.1",
     "pycryptodome>=3.22.0",
+    "pylrc>=0.1.2",
+    "srt>=3.5.3",
 ]
 
 [tool.setuptools]
