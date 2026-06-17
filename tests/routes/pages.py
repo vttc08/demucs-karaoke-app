@@ -276,9 +276,9 @@ def test_stage_page_renders_client_qr_controls(client):
     ):
         response = client.get("/stage")
     assert response.status_code == 200
-    assert b'id="stage-qr-settings-btn"' in response.content
-    assert b'id="stage-qr-settings-panel"' in response.content
-    assert b'id="stage-qr-size"' in response.content
+    assert b'id="stage-qr-close-btn"' in response.content
+    assert b'id="stage-qr-size-decrease-btn"' in response.content
+    assert b'id="stage-qr-size-increase-btn"' in response.content
     assert b"karaoke.stage.qrDisplay" in response.content
     assert b"SERVER_STAGE_QR_SIZE" not in response.content
     assert b"SERVER_STAGE_QR_POSITION" not in response.content

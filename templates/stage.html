@@ -221,10 +221,11 @@
         position: absolute;
         flex-direction: column;
         align-items: center;
-        gap: 0.5rem;
-        width: fit-content;
+        gap: 0.35rem;
+        width: max-content;
         max-width: min(calc(100vw - 2rem), calc(100dvh - 2rem));
-        padding: 0.75rem;
+        box-sizing: border-box;
+        padding: 0.5rem;
         border-radius: 1rem;
         border: 1px solid rgba(255, 255, 255, 0.15);
         background: rgba(0, 0, 0, 0.65);
@@ -256,8 +257,8 @@
         display: block;
         width: min(var(--stage-qr-size, 20rem), calc(100vw - 4rem), calc(100dvh - 4rem));
         height: min(var(--stage-qr-size, 20rem), calc(100vw - 4rem), calc(100dvh - 4rem));
-        max-width: 100%;
-        max-height: 100%;
+        max-width: none;
+        max-height: none;
         border-radius: 0.75rem;
         background: #fff;
         padding: 0.25rem;
@@ -269,13 +270,8 @@
         position: relative;
     }
 
-    .stage-qr-settings-control {
-        position: relative;
-    }
-
     .stage-shortcuts-panel,
-    .stage-lyrics-settings-panel,
-    .stage-qr-settings-panel {
+    .stage-lyrics-settings-panel {
         position: absolute;
         right: 0;
         bottom: calc(100% + 0.75rem);
@@ -297,8 +293,7 @@
     }
 
     .stage-shortcuts-panel-title,
-    .stage-lyrics-settings-title,
-    .stage-qr-settings-title {
+    .stage-lyrics-settings-title {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -345,62 +340,97 @@
         color: rgba(255, 255, 255, 0.62);
     }
 
-    .stage-qr-settings-body {
+    .stage-qr-overlay-controls {
         display: flex;
         flex-direction: column;
-        gap: 0.9rem;
-    }
-
-    .stage-qr-settings-field {
-        display: flex;
-        flex-direction: column;
-        gap: 0.45rem;
-    }
-
-    .stage-qr-settings-label {
-        display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem;
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: rgba(255, 255, 255, 0.95);
+        gap: 0.25rem;
+        width: auto;
+        align-self: center;
     }
 
-    .stage-qr-settings-value {
-        font-size: 0.78rem;
+    .stage-qr-overlay-close {
+        position: absolute;
+        top: 0.45rem;
+        right: 0.45rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.8rem;
+        height: 1.8rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.45);
+        color: rgba(255, 255, 255, 0.9);
+        opacity: 0;
+        transform: scale(0.92);
+        transition:
+            opacity 160ms ease,
+            transform 160ms ease,
+            background 160ms ease,
+            border-color 160ms ease;
+        pointer-events: none;
+    }
+
+    .stage-qr-overlay-close:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .stage-qr-overlay:hover .stage-qr-overlay-close,
+    .stage-qr-overlay:focus-within .stage-qr-overlay-close,
+    .stage-qr-overlay.is-dragging .stage-qr-overlay-close {
+        opacity: 1;
+        transform: scale(1);
+        pointer-events: auto;
+    }
+
+    .stage-qr-overlay-stepper {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.2rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.06);
+        flex: 0 0 auto;
+    }
+
+    .stage-qr-overlay-stepper-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.8rem;
+        height: 1.8rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.32);
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1;
+        transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+        pointer-events: auto;
+    }
+
+    .stage-qr-overlay-stepper-btn:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .stage-qr-overlay-stepper-btn:active {
+        transform: scale(0.96);
+    }
+
+    .stage-qr-overlay-size-value {
+        min-width: 4.1ch;
+        text-align: center;
+        font-size: 0.74rem;
         color: rgba(255, 255, 255, 0.74);
     }
 
-    .stage-qr-settings-hint {
-        font-size: 0.76rem;
-        line-height: 1.45;
-        color: rgba(255, 255, 255, 0.72);
-    }
-
-    .stage-qr-settings-actions {
-        display: flex;
-        justify-content: flex-end;
-    }
-
-    .stage-qr-settings-action {
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        border-radius: 999px;
-        padding: 0.45rem 0.9rem;
-        font-size: 0.78rem;
-        font-weight: 700;
-        color: rgba(255, 255, 255, 0.92);
-        background: rgba(255, 255, 255, 0.08);
-        transition: background 160ms ease, border-color 160ms ease;
-    }
-
-    .stage-qr-settings-action:hover {
-        background: rgba(255, 255, 255, 0.14);
-        border-color: rgba(255, 255, 255, 0.18);
-    }
-
-    .stage-qr-settings-slider {
-        width: 100%;
+    .stage-qr-overlay-stepper-btn--minus {
+        padding-bottom: 0.06rem;
     }
 
     .stage-lyrics-settings-grid {
@@ -928,45 +958,6 @@
                             <span class="material-symbols-outlined text-base">qr_code_2</span>
                             <span class="stage-control-label">{{ t('stage.qr') }}</span>
                         </button>
-                        <div class="stage-qr-settings-control">
-                            <button
-                                id="stage-qr-settings-btn"
-                                class="stage-control-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
-                                aria-label="{{ t('stage.qr_customize') }}"
-                                title="{{ t('stage.qr_customize') }}"
-                                aria-controls="stage-qr-settings-panel"
-                                aria-expanded="false"
-                            >
-                                <span class="material-symbols-outlined text-base">open_with</span>
-                                <span class="stage-control-label">{{ t('stage.qr_customize') }}</span>
-                            </button>
-                            <div id="stage-qr-settings-panel" class="stage-qr-settings-panel hidden" role="dialog" aria-label="{{ t('stage.qr_customize_title') }}">
-                                <div class="stage-qr-settings-title">
-                                    <h3 class="text-sm font-semibold text-on-surface">{{ t('stage.qr_customize_title') }}</h3>
-                                    <button
-                                        id="stage-qr-settings-close"
-                                        type="button"
-                                        class="rounded-full p-1 text-on-surface-variant transition hover:bg-white/10 hover:text-on-surface"
-                                        aria-label="{{ t('common.close') }}"
-                                    >
-                                        <span class="material-symbols-outlined text-base">close</span>
-                                    </button>
-                                </div>
-                                <div class="stage-qr-settings-body">
-                                    <label class="stage-qr-settings-field" for="stage-qr-size">
-                                        <span class="stage-qr-settings-label">
-                                            {{ t('stage.qr_size') }}
-                                            <span id="stage-qr-size-value" class="stage-qr-settings-value"></span>
-                                        </span>
-                                        <input id="stage-qr-size" class="stage-qr-settings-slider h-1.5 accent-primary" type="range" min="128" max="640" step="16" />
-                                    </label>
-                                    <p class="stage-qr-settings-hint">{{ t('stage.qr_customize_hint') }}</p>
-                                    <div class="stage-qr-settings-actions">
-                                        <button id="stage-qr-reset-btn" type="button" class="stage-qr-settings-action">{{ t('stage.qr_customize_reset') }}</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
                         <div class="stage-shortcuts-control">
                             <button
                                 id="stage-shortcuts-btn"
@@ -1163,8 +1154,39 @@
             </div>
 
             <aside id="stage-qr-overlay" class="stage-qr-overlay">
+                <button
+                    id="stage-qr-close-btn"
+                    type="button"
+                    class="stage-qr-overlay-close"
+                    aria-label="{{ t('common.close') }}"
+                    title="{{ t('common.close') }}"
+                >
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
                 <img id="stage-qr-image" alt="{{ t('stage.queue_qr') }}" class="stage-qr-image" />
-                <p id="stage-qr-label" class="mt-2 max-w-36 truncate text-center text-[11px] font-medium text-on-surface-variant"></p>
+                <div class="stage-qr-overlay-controls">
+                    <div class="stage-qr-overlay-stepper" role="group" aria-label="{{ t('stage.qr_size') }}">
+                        <button
+                            id="stage-qr-size-decrease-btn"
+                            type="button"
+                            class="stage-qr-overlay-stepper-btn stage-qr-overlay-stepper-btn--minus"
+                            aria-label="{{ t('stage.qr_size_decrease') }}"
+                            title="{{ t('stage.qr_size_decrease') }}"
+                        >
+                            -
+                        </button>
+                        <span id="stage-qr-size-value" class="stage-qr-overlay-size-value"></span>
+                        <button
+                            id="stage-qr-size-increase-btn"
+                            type="button"
+                            class="stage-qr-overlay-stepper-btn"
+                            aria-label="{{ t('stage.qr_size_increase') }}"
+                            title="{{ t('stage.qr_size_increase') }}"
+                        >
+                            +
+                        </button>
+                    </div>
+                </div>
             </aside>
         </section>
 
@@ -1241,11 +1263,9 @@ const lyricsToggleBtn = document.getElementById("lyrics-toggle-btn");
 const lyricsToggleIcon = document.getElementById("lyrics-toggle-icon");
 const lyricsToggleLabel = document.getElementById("lyrics-toggle-label");
 const qrToggleBtn = document.getElementById("qr-toggle-btn");
-const qrSettingsBtn = document.getElementById("stage-qr-settings-btn");
-const qrSettingsPanel = document.getElementById("stage-qr-settings-panel");
-const qrSettingsClose = document.getElementById("stage-qr-settings-close");
-const qrResetBtn = document.getElementById("stage-qr-reset-btn");
-const qrSizeInput = document.getElementById("stage-qr-size");
+const qrCloseBtn = document.getElementById("stage-qr-close-btn");
+const qrSizeDecreaseBtn = document.getElementById("stage-qr-size-decrease-btn");
+const qrSizeIncreaseBtn = document.getElementById("stage-qr-size-increase-btn");
 const qrSizeValue = document.getElementById("stage-qr-size-value");
 const shortcutsBtn = document.getElementById("stage-shortcuts-btn");
 const shortcutsPanel = document.getElementById("stage-shortcuts-panel");
@@ -1257,7 +1277,6 @@ const fullscreenBtn = document.getElementById("fullscreen-btn");
 const fullscreenIcon = document.getElementById("fullscreen-icon");
 const qrOverlay = document.getElementById("stage-qr-overlay");
 const qrImage = document.getElementById("stage-qr-image");
-const qrLabel = document.getElementById("stage-qr-label");
 const stageMedia = document.querySelector(".stage-media");
 const lyricsOverlay = document.getElementById("stage-lyrics-overlay");
 const lyricsLines = document.getElementById("stage-lyrics-lines");
@@ -1277,7 +1296,6 @@ const stageLyrics = new window.StageLyricsController({
     onPanelVisibilityChange: (visible) => {
         if (visible) {
             setShortcutsPanelVisible(false);
-            setQrSettingsPanelVisible(false);
             showStageControls();
         } else {
             scheduleHideStageControls();
@@ -1308,7 +1326,6 @@ if (lyricsSettingsSave) {
 const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
 let controlsHideTimer = null;
 let isQrVisible = false;
-let qrSettingsPanelVisible = false;
 let shortcutsPanelVisible = false;
 let qrDragState = null;
 let stageSocket = null;
@@ -2286,10 +2303,9 @@ function applyQrOverlayPlacement() {
 }
 
 function updateQrOverlayContent() {
-    if (!qrImage || !qrLabel) return;
+    if (!qrImage) return;
     applyQrOverlayPlacement();
     const target = resolveStageQrUrl();
-    qrLabel.textContent = target;
     const params = new URLSearchParams({
         data: target,
         size: String(qrDisplayState.sizePx),
@@ -2298,25 +2314,26 @@ function updateQrOverlayContent() {
 }
 
 function syncQrSettingsUi() {
-    if (qrSizeInput) {
-        qrSizeInput.value = String(qrDisplayState.sizePx);
-    }
     if (qrSizeValue) {
         qrSizeValue.textContent = `${qrDisplayState.sizePx}px`;
     }
-    if (qrSettingsBtn && qrSettingsPanel) {
-        qrSettingsBtn.setAttribute("aria-expanded", qrSettingsPanelVisible ? "true" : "false");
-        qrSettingsPanel.classList.toggle("hidden", !qrSettingsPanelVisible);
-    }
 }
 
-function setQrSettingsPanelVisible(visible) {
-    qrSettingsPanelVisible = Boolean(visible);
+function changeQrSize(delta) {
+    qrDisplayState.sizePx = clampQrSize(qrDisplayState.sizePx + delta);
     syncQrSettingsUi();
+    saveQrDisplayState();
+    updateQrOverlayContent();
 }
 
 function beginQrDrag(event) {
-    if (!qrOverlay || !isQrVisible || event.button === 2) {
+    const target = event.target;
+    if (
+        !qrOverlay ||
+        !isQrVisible ||
+        event.button === 2 ||
+        (target instanceof HTMLElement && target.closest("button, input, label"))
+    ) {
         return;
     }
     const rect = qrOverlay.getBoundingClientRect();
@@ -2387,7 +2404,6 @@ function toggleShortcutsPanel() {
     setShortcutsPanelVisible(nextVisible);
     if (nextVisible) {
         stageLyrics.setSettingsPanelVisible(false);
-        setQrSettingsPanelVisible(false);
         showStageControls();
     } else {
         scheduleHideStageControls();
@@ -2408,7 +2424,7 @@ function showStageControls() {
         controlsHideTimer = null;
     }
 
-    if (shortcutsPanelVisible || stageLyrics.settingsPanelVisible || qrSettingsPanelVisible || qrDragState) {
+    if (shortcutsPanelVisible || stageLyrics.settingsPanelVisible || qrDragState) {
         return;
     }
 
@@ -2827,42 +2843,23 @@ if (qrToggleBtn) {
     });
 }
 
-if (qrSettingsBtn) {
-    qrSettingsBtn.addEventListener("click", () => {
-        const nextVisible = !qrSettingsPanelVisible;
-        setQrSettingsPanelVisible(nextVisible);
-        if (nextVisible) {
-            setShortcutsPanelVisible(false);
-            stageLyrics.setSettingsPanelVisible(false);
-            showStageControls();
-        } else {
-            scheduleHideStageControls();
-        }
-    });
-}
-
-if (qrSettingsClose) {
-    qrSettingsClose.addEventListener("click", () => {
-        setQrSettingsPanelVisible(false);
+if (qrCloseBtn) {
+    qrCloseBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        setQrOverlayVisible(false);
         scheduleHideStageControls();
     });
 }
 
-if (qrResetBtn) {
-    qrResetBtn.addEventListener("click", () => {
-        Object.assign(qrDisplayState, createDefaultQrDisplayState());
-        saveQrDisplayState();
-        syncQrSettingsUi();
-        updateQrOverlayContent();
+if (qrSizeDecreaseBtn) {
+    qrSizeDecreaseBtn.addEventListener("click", () => {
+        changeQrSize(-16);
     });
 }
 
-if (qrSizeInput) {
-    qrSizeInput.addEventListener("input", () => {
-        qrDisplayState.sizePx = clampQrSize(qrSizeInput.value);
-        syncQrSettingsUi();
-        saveQrDisplayState();
-        updateQrOverlayContent();
+if (qrSizeIncreaseBtn) {
+    qrSizeIncreaseBtn.addEventListener("click", () => {
+        changeQrSize(16);
     });
 }
 
@@ -2955,9 +2952,9 @@ window.addEventListener("keydown", async (event) => {
         return;
     }
 
-    if (event.key === "Escape" && qrSettingsPanelVisible) {
+    if (event.key === "Escape" && isQrVisible) {
         event.preventDefault();
-        setQrSettingsPanelVisible(false);
+        setQrOverlayVisible(false);
         scheduleHideStageControls();
         return;
     }
