@@ -28,19 +28,19 @@ class StageLyricsController {
   };
 
   static DEFAULT_SETTINGS = {
-    fontPreset: "karaoke_cjk",
+    fontPreset: "readable_cjk",
     customFontFamily: "",
-    sizeVw: 5.6,
-    lineWidthPct: 100,
-    neighborLineScalePct: 46,
-    neighborLineOpacityPct: 52,
+    sizeVw: 4.5,
+    lineWidthPct: 85,
+    neighborLineScalePct: 60,
+    neighborLineOpacityPct: 60,
     textColor: "#fff8df",
     activeColor: "#ffd84f",
     outlineColor: "#050505",
-    outlineWidth: 7,
+    outlineWidth: 5,
     previousLines: 1,
-    nextLines: 1,
-    animation: "slide",
+    nextLines: 2,
+    animation: "fade",
   };
 
   static SETTINGS_KEYS = new Set(Object.keys(StageLyricsController.DEFAULT_SETTINGS));

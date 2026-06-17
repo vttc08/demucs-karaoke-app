@@ -12,14 +12,16 @@ This document captures extension points for future lyric-style customization on 
 - Timeline authority is `video.currentTime`.
 - Appearance settings are stored per browser in `localStorage` under
   `karaoke_stage_lyrics_settings_v1` and can be downloaded, applied from the textarea, or uploaded as JSON.
-- The default font stack is CJK-safe: self-hosted ZCOOL KuaiLe with Noto Sans SC and local system
-  CJK fallbacks.
+- The default stage baseline is the readable CJK stack with 4.5vw text, 85% max width, 5px outline,
+  one previous line, two next lines, 60% surrounding line size/opacity, and fade animation.
 
 ## Recommended future customization surfaces
 
 1. **Typography + color tokens**
 - Typography, color, size, and outline are now browser-configurable CSS tokens.
 - Keep backend lyrics payloads independent of presentation settings.
+- The default preset is `readable_cjk` rather than the more decorative karaoke face, which keeps the
+  stage usable on mobile without further tuning.
 
 2. **Line window behavior**
 - Previous and upcoming line counts are browser-configurable.
