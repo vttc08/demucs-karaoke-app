@@ -397,6 +397,28 @@
         font-size: 0.75rem;
     }
 
+    .stage-lyrics-settings-footer {
+        position: sticky;
+        bottom: 0;
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 72%, rgba(0, 0, 0, 0));
+    }
+
+    .stage-lyrics-settings-save {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        justify-content: center;
+        border-color: rgba(255, 216, 79, 0.38);
+        background: rgba(255, 216, 79, 0.16);
+        color: rgba(255, 248, 223, 0.98);
+    }
+
+    .stage-lyrics-settings-save:hover {
+        background: rgba(255, 216, 79, 0.22);
+    }
+
     .stage-lyrics-overlay {
         position: absolute;
         left: 0;
@@ -948,6 +970,9 @@
                                     <button id="stage-lyrics-reset-btn" type="button" class="stage-lyrics-settings-action">{{ t('stage.lyrics_reset') }}</button>
                                 </div>
                                 <p id="stage-lyrics-settings-status" class="stage-lyrics-settings-status" aria-live="polite"></p>
+                                <div class="stage-lyrics-settings-footer">
+                                    <button id="stage-lyrics-settings-save" type="button" class="stage-lyrics-settings-action stage-lyrics-settings-save">{{ t('common.save') }}</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1078,6 +1103,7 @@ const shortcutsPanel = document.getElementById("stage-shortcuts-panel");
 const lyricsSettingsBtn = document.getElementById("stage-lyrics-settings-btn");
 const lyricsSettingsPanel = document.getElementById("stage-lyrics-settings-panel");
 const lyricsSettingsClose = document.getElementById("stage-lyrics-settings-close");
+const lyricsSettingsSave = document.getElementById("stage-lyrics-settings-save");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const fullscreenIcon = document.getElementById("fullscreen-icon");
 const qrOverlay = document.getElementById("stage-qr-overlay");
@@ -1122,6 +1148,13 @@ const stageLyrics = new window.StageLyricsController({
         animation: document.getElementById("stage-lyrics-animation"),
     },
 });
+
+if (lyricsSettingsSave) {
+    lyricsSettingsSave.addEventListener("click", () => {
+        stageLyrics.saveSettings();
+        stageLyrics.setSettingsPanelVisible(false);
+    });
+}
 const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
 const QR_IMAGE_SIZE = 320;
 let controlsHideTimer = null;
