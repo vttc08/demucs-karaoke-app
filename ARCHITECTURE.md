@@ -253,7 +253,7 @@ The stage page uses a websocket-first model:
   rebuilt line-level alignment instead of the original downloaded `.lrc`.
 - Overlay highlight logic is driven by the video timeline:
   - ordinary cues highlight the current line without per-word animation
-  - aligned JSON progressively highlights completed/current words and can apply the stage word-slide effect
+  - aligned JSON progressively highlights completed/current words and can apply the stage word-slide or crop effect
   - nearby lines are shown above/below the active line according to browser-local stage lyrics settings
 - Stage lyric appearance is browser-local and stored in `localStorage` by `static/stage-lyrics.js`.
   The settings panel exposes CJK-safe font presets, size, colors, outline, line-window, animation,

@@ -650,8 +650,29 @@
 
     .stage-lyric-word {
         display: inline-block;
+        position: relative;
+        isolation: isolate;
         transform: translateY(0);
         transition: color 140ms ease, opacity 140ms ease, transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+        overflow: visible;
+    }
+
+    .stage-lyric-word::after {
+        content: attr(data-word);
+        position: absolute;
+        left: 0;
+        top: -0.22em;
+        bottom: -0.22em;
+        width: calc(var(--stage-word-progress, 0) * 100%);
+        padding-top: 0.22em;
+        box-sizing: border-box;
+        overflow: hidden;
+        white-space: pre;
+        color: var(--stage-lyrics-active-color);
+        text-shadow: none;
+        opacity: 0;
+        transition: width 110ms linear, opacity 120ms ease;
+        pointer-events: none;
     }
 
     .stage-lyric-word--highlighted {
@@ -660,6 +681,18 @@
 
     .stage-lyric-line--word-slide .stage-lyric-word--active {
         transform: translateY(-0.12em) scale(1.04);
+    }
+
+    .stage-lyric-line--word-crop .stage-lyric-word {
+        color: var(--stage-lyrics-text-color);
+    }
+
+    .stage-lyric-line--word-crop .stage-lyric-word::after {
+        opacity: 1;
+    }
+
+    .stage-lyric-line--word-crop .stage-lyric-word--active {
+        transform: none;
     }
 
     .stage-lyrics-overlay[data-animation="fade"] .stage-lyric-line {
@@ -1136,6 +1169,7 @@
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_animation') }}</span>
                                         <select id="stage-lyrics-animation" class="stage-lyrics-settings-select">
                                             <option value="slide">{{ t('stage.lyrics_animation_slide') }}</option>
+                                            <option value="crop">{{ t('stage.lyrics_animation_crop') }}</option>
                                             <option value="fade">{{ t('stage.lyrics_animation_fade') }}</option>
                                             <option value="none">{{ t('stage.lyrics_animation_none') }}</option>
                                         </select>

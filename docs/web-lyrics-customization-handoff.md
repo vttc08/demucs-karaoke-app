@@ -8,7 +8,8 @@ This document captures extension points for future lyric-style customization on 
 - Timed cues are loaded from `GET /api/queue/{item_id}/lyrics-cues`.
 - Active line uses `.stage-lyric-line--current`, nearby lines use `.stage-lyric-line`.
 - Aligned JSON cues may include `words: [{word, start, end}]`; the stage progressively highlights
-  completed/current words while leaving upcoming words in the configured base color.
+  completed/current words while leaving upcoming words in the configured base color. The crop mode
+  uses a left-to-right clipped fill on the active word to mimic traditional karaoke.
 - Timeline authority is `video.currentTime`.
 - Appearance settings are stored per browser in `localStorage` under
   `karaoke_stage_lyrics_settings_v1` and can be downloaded, applied from the textarea, or uploaded as JSON.
@@ -32,6 +33,7 @@ This document captures extension points for future lyric-style customization on 
 3. **Animation behaviors**
 - Supported settings:
   - `slide` for word-aligned JSON tracks
+  - `crop` for clipped word fill on aligned JSON tracks
   - `fade`
   - `none`
 - Reduced-motion mode disables motion while preserving lyric state.

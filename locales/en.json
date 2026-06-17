@@ -461,6 +461,7 @@
   "stage.lyrics_on": "Lyrics On",
   "stage.lyrics_active_color": "Active color",
   "stage.lyrics_animation": "Animation",
+  "stage.lyrics_animation_crop": "Crop",
   "stage.lyrics_animation_fade": "Fade",
   "stage.lyrics_animation_none": "None",
   "stage.lyrics_animation_slide": "Slide",

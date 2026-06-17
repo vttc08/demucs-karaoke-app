@@ -137,12 +137,14 @@ class StageLyricsController {
       return;
     }
 
+    this.currentTime = currentTime;
     const nextIndex = this.findActiveCueIndex(currentTime);
     const nextWordIndex = nextIndex !== null && nextIndex >= 0
       ? this.findActiveWordIndex(this.cues[nextIndex], currentTime)
       : null;
 
-    if (nextIndex === this.activeCueIndex && nextWordIndex === this.activeWordIndex) {
+    const stateUnchanged = nextIndex === this.activeCueIndex && nextWordIndex === this.activeWordIndex;
+    if (stateUnchanged && this.settings.animation !== "crop") {
       return;
     }
 
@@ -151,9 +153,9 @@ class StageLyricsController {
     this.activeWordIndex = nextWordIndex;
 
     if (needsWindowRender) {
-      this.renderWindow();
+      this.renderWindow(currentTime);
     } else {
-      this.updateRenderedWords();
+      this.updateRenderedWords(currentTime);
     }
   }
 
@@ -263,7 +265,7 @@ class StageLyricsController {
     };
   }
 
-  renderWindow() {
+  renderWindow(currentTime = this.currentTime ?? 0) {
     if (!this.lines || !this.enabled || !this.cues.length) {
       this.clear();
       return;
@@ -278,7 +280,7 @@ class StageLyricsController {
       this.lines.appendChild(this.renderLine(this.cues[cueIndex], cueIndex));
     }
 
-    this.updateRenderedWords();
+    this.updateRenderedWords(currentTime);
     this.setOverlayVisible(end > start);
   }
 
@@ -306,13 +308,14 @@ class StageLyricsController {
       const span = document.createElement("span");
       span.className = "stage-lyric-word";
       span.dataset.wordIndex = String(wordIndex);
+      span.dataset.word = word.word;
       span.textContent = word.word;
       line.appendChild(span);
     });
     return line;
   }
 
-  updateRenderedWords() {
+  updateRenderedWords(currentTime = this.currentTime ?? 0) {
     if (!this.lines) {
       return;
     }
@@ -328,15 +331,50 @@ class StageLyricsController {
         return;
       }
 
-      const shouldAnimateWords = isCurrent && !this.reducedMotion && this.settings.animation === "slide";
-      line.classList.toggle("stage-lyric-line--word-slide", shouldAnimateWords);
+      const shouldSlideWords = isCurrent && !this.reducedMotion && this.settings.animation === "slide";
+      const shouldCropWords = isCurrent && !this.reducedMotion && this.settings.animation === "crop";
+      line.classList.toggle("stage-lyric-line--word-slide", shouldSlideWords);
+      line.classList.toggle("stage-lyric-line--word-crop", shouldCropWords);
       line.querySelectorAll(".stage-lyric-word").forEach((wordNode) => {
         const wordIndex = Number(wordNode.dataset.wordIndex);
+        const isActiveWord = isCurrent && wordIndex === this.activeWordIndex;
+        if (shouldCropWords) {
+          const progress = wordIndex < this.activeWordIndex
+            ? 1
+            : isActiveWord
+              ? this.getWordProgress(cueIndex, wordIndex, currentTime)
+              : 0;
+          wordNode.style.setProperty("--stage-word-progress", String(Math.max(0, Math.min(1, progress))));
+          wordNode.classList.toggle("stage-lyric-word--highlighted", progress >= 1);
+          wordNode.classList.toggle("stage-lyric-word--active", isActiveWord);
+          return;
+        }
+
+        wordNode.style.removeProperty("--stage-word-progress");
         const highlighted = isCurrent && wordIndex <= this.activeWordIndex;
         wordNode.classList.toggle("stage-lyric-word--highlighted", highlighted);
-        wordNode.classList.toggle("stage-lyric-word--active", isCurrent && wordIndex === this.activeWordIndex);
+        wordNode.classList.toggle("stage-lyric-word--active", isActiveWord);
       });
     });
+  }
+
+  getWordProgress(cueIndex, wordIndex, currentTime) {
+    const cue = this.cues[cueIndex];
+    const word = cue?.words?.[wordIndex];
+    if (!word) {
+      return 0;
+    }
+    if (currentTime <= word.start) {
+      return 0;
+    }
+    if (currentTime >= word.end) {
+      return 1;
+    }
+    const duration = word.end - word.start;
+    if (duration <= 0) {
+      return 1;
+    }
+    return (currentTime - word.start) / duration;
   }
 
   loadSettings() {
@@ -371,7 +409,7 @@ class StageLyricsController {
       outlineWidth: Math.round(this.clampNumber(settings.outlineWidth, 2, 14, StageLyricsController.DEFAULT_SETTINGS.outlineWidth)),
       previousLines: Math.round(this.clampNumber(settings.previousLines, 0, 3, StageLyricsController.DEFAULT_SETTINGS.previousLines)),
       nextLines: Math.round(this.clampNumber(settings.nextLines, 0, 3, StageLyricsController.DEFAULT_SETTINGS.nextLines)),
-      animation: ["slide", "fade", "none"].includes(settings.animation)
+      animation: ["slide", "crop", "fade", "none"].includes(settings.animation)
         ? settings.animation
         : StageLyricsController.DEFAULT_SETTINGS.animation,
     };

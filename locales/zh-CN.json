@@ -461,6 +461,7 @@
   "stage.lyrics_on": "歌词开",
   "stage.lyrics_active_color": "高亮颜色",
   "stage.lyrics_animation": "动画",
+  "stage.lyrics_animation_crop": "裁切",
   "stage.lyrics_animation_fade": "淡入淡出",
   "stage.lyrics_animation_none": "无",
   "stage.lyrics_animation_slide": "滑动",
