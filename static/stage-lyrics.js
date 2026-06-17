@@ -103,6 +103,11 @@ class StageLyricsController {
     this.setOverlayVisible(false);
   }
 
+  clearCues() {
+    this.cues = [];
+    this.clear();
+  }
+
   resetActiveState() {
     this.activeCueIndex = null;
     this.activeWordIndex = null;

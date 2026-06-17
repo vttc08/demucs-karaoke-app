@@ -1345,6 +1345,7 @@ let syncTimer = null;
 let suppressSeekBroadcast = false;
 let seekBroadcastUnlockTimer = null;
 let lyricsAnimationFrame = null;
+let lyricsLoadRequestId = 0;
 let syncOperationId = 0;
 let lastHandledSyncVersion = 0;
 let hardSyncInProgress = false;
@@ -1544,7 +1545,7 @@ function updateLyricsUi() {
     lyricsToggleBtn.setAttribute("aria-pressed", lyricsState.available && lyricsState.enabled ? "true" : "false");
     lyricsToggleBtn.setAttribute("aria-label", label);
     lyricsToggleBtn.setAttribute("title", label);
-    lyricsToggleIcon.textContent = lyricsState.enabled ? "subtitles" : "subtitles_off";
+    lyricsToggleIcon.textContent = lyricsState.available && lyricsState.enabled ? "subtitles" : "subtitles_off";
     lyricsToggleLabel.textContent = label;
 }
 
@@ -1554,9 +1555,10 @@ function setLyricsOverlayVisible(visible) {
 
 function setLyricsEnabled(enabled) {
     lyricsState.enabled = Boolean(enabled);
-    stageLyrics.setEnabled(lyricsState.enabled);
+    const shouldRenderLyrics = lyricsState.available && lyricsState.enabled;
+    stageLyrics.setEnabled(shouldRenderLyrics);
     updateLyricsUi();
-    if (lyricsState.enabled) {
+    if (shouldRenderLyrics) {
         updateLyricsForTime(getPrimaryCurrentTime());
     } else {
         setLyricsOverlayVisible(false);
@@ -1596,38 +1598,48 @@ function stopLyricsTicker() {
 
 async function loadLyricsCues() {
     if (!currentItemId) {
-        stageLyrics.clear();
+        lyricsLoadRequestId += 1;
+        stageLyrics.clearCues();
         lyricsState.available = false;
-        lyricsState.enabled = false;
+        stageLyrics.setEnabled(false);
         updateLyricsUi();
         return;
     }
 
+    const requestId = ++lyricsLoadRequestId;
+    const itemId = currentItemId;
+
     try {
-        const response = await fetch(window.KaraokeURLs.appUrl(`/api/queue/${currentItemId}/lyrics-cues`));
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/queue/${itemId}/lyrics-cues`));
+        if (requestId !== lyricsLoadRequestId || currentItemId !== itemId) {
+            return;
+        }
         if (!response.ok) {
-            stageLyrics.clear();
+            stageLyrics.clearCues();
             lyricsState.available = false;
-            lyricsState.enabled = false;
+            stageLyrics.setEnabled(false);
             updateLyricsUi();
             return;
         }
 
         const payload = await response.json();
+        if (requestId !== lyricsLoadRequestId || currentItemId !== itemId) {
+            return;
+        }
         const cues = Array.isArray(payload?.cues) ? payload.cues : [];
         stageLyrics.setCues(cues);
         lyricsState.available = stageLyrics.hasCues();
-        if (!lyricsState.available) {
-            lyricsState.enabled = false;
-        }
-        stageLyrics.setEnabled(lyricsState.enabled);
+        stageLyrics.setEnabled(lyricsState.available && lyricsState.enabled);
         updateLyricsUi();
         updateLyricsForTime(getPrimaryCurrentTime());
     } catch (error) {
+        if (requestId !== lyricsLoadRequestId || currentItemId !== itemId) {
+            return;
+        }
         console.warn("Failed to load lyrics cues:", error);
-        stageLyrics.clear();
+        stageLyrics.clearCues();
         lyricsState.available = false;
-        lyricsState.enabled = false;
+        stageLyrics.setEnabled(false);
         updateLyricsUi();
     }
 }
@@ -1705,7 +1717,7 @@ async function applyCurrentPlaybackItem(item) {
         return;
     }
     resetSyncStateForSourceSwap();
-    stageLyrics.clear();
+    stageLyrics.clearCues();
     if (vocalsAudio) {
         vocalsAudio.pause();
         vocalsAudio.currentTime = 0;
