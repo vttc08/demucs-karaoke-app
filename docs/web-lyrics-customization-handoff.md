@@ -11,7 +11,7 @@ This document captures extension points for future lyric-style customization on 
   completed/current words while leaving upcoming words in the configured base color.
 - Timeline authority is `video.currentTime`.
 - Appearance settings are stored per browser in `localStorage` under
-  `karaoke_stage_lyrics_settings_v1` and can be downloaded/uploaded as JSON.
+  `karaoke_stage_lyrics_settings_v1` and can be downloaded, applied from the textarea, or uploaded as JSON.
 - The default font stack is CJK-safe: self-hosted ZCOOL KuaiLe with Noto Sans SC and local system
   CJK fallbacks.
 

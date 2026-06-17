@@ -48,6 +48,7 @@ class StageLyricsController {
     this.closeButton = options.closeButton || null;
     this.resetButton = options.resetButton || null;
     this.exportButton = options.exportButton || null;
+    this.applyButton = options.applyButton || null;
     this.importButton = options.importButton || null;
     this.importExport = options.importExport || null;
     this.fileInput = options.fileInput || null;
@@ -427,13 +428,16 @@ class StageLyricsController {
     this.exportButton?.addEventListener("click", () => {
       this.downloadSettings();
     });
+    this.applyButton?.addEventListener("click", () => {
+      this.applySettingsFromTextarea();
+    });
     this.importButton?.addEventListener("click", () => {
       if (this.fileInput) {
         this.fileInput.value = "";
         this.fileInput.click();
         return;
       }
-      this.importSettings();
+      this.applySettingsFromTextarea();
     });
     this.fileInput?.addEventListener("change", () => {
       void this.importSettingsFromFile(this.fileInput?.files?.[0] || null);
@@ -492,7 +496,7 @@ class StageLyricsController {
     }
   }
 
-  importSettings() {
+  applySettingsFromTextarea() {
     if (!this.importExport) {
       return;
     }
@@ -505,7 +509,7 @@ class StageLyricsController {
       this.saveSettings();
       this.applySettings();
       this.syncSettingsUi();
-      this.setStatus(this.t("stage.lyrics_settings_imported"));
+      this.setStatus(this.t("stage.lyrics_settings_applied"));
     } catch (_) {
       this.setStatus(this.t("stage.lyrics_settings_import_failed"));
     }

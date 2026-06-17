@@ -145,7 +145,7 @@ and `/static/...`.
      - Responsive controls overlay: desktop adds a dedicated playback seek bar row, while mobile stays icon-first and moves detailed vocals volume adjustment to `/queue`
      - Toggle the lyrics overlay on or off while playback is running; vocal mix and lyrics visibility persist across song changes, and the centered karaoke-style overlay only appears in fullscreen so it does not block stage controls on mobile
      - Desktop stage also includes keyboard shortcuts, lyrics-style customization, and a help icon: `←`/`→` seek 5 seconds, `R` resync, `V` vocals, `L` lyrics, `Q` QR, `?` help; the help panel stays open until you close it explicitly
-     - Lyrics style settings are stored in the browser for quick per-device JSON download/upload and include CJK-safe font presets, size, color, outline, line-window, and animation options
+     - Lyrics style settings are stored in the browser for quick per-device JSON download/apply/upload and include CJK-safe font presets, size, color, outline, line-window, and animation options
     - Compact "up next" chips without queue-management actions
     - Auto-advances when song ends
    - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling

@@ -290,6 +290,7 @@
         width: min(28rem, 92vw);
         max-height: min(70vh, 44rem);
         overflow: auto;
+        color-scheme: dark;
     }
 
     .stage-shortcuts-panel-title,
@@ -468,9 +469,34 @@
         min-width: 0;
         border-radius: 0.65rem;
         border: 1px solid rgba(255, 255, 255, 0.14);
-        background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.94);
+        background-color: rgba(16, 16, 16, 0.82);
+        color: rgba(255, 255, 255, 0.96);
         font-size: 0.85rem;
+        caret-color: #fff8df;
+    }
+
+    .stage-lyrics-settings-input::placeholder {
+        color: rgba(255, 255, 255, 0.55);
+    }
+
+    .stage-lyrics-settings-input:not([type="color"]):not([type="range"]),
+    .stage-lyrics-settings-select,
+    .stage-lyrics-settings-textarea {
+        appearance: none;
+        -webkit-appearance: none;
+        color-scheme: dark;
+        background: rgba(16, 16, 16, 0.96) !important;
+        box-shadow: inset 0 0 0 1000px rgba(16, 16, 16, 0.96);
+    }
+
+    .stage-lyrics-settings-input[type="number"] {
+        -moz-appearance: textfield;
+    }
+
+    .stage-lyrics-settings-input[type="number"]::-webkit-outer-spin-button,
+    .stage-lyrics-settings-input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
     }
 
     .stage-lyrics-settings-input,
@@ -1102,6 +1128,10 @@
                                         <span class="material-symbols-outlined text-sm">download</span>
                                         {{ t('stage.lyrics_download') }}
                                     </button>
+                                    <button id="stage-lyrics-apply-btn" type="button" class="stage-lyrics-settings-action">
+                                        <span class="material-symbols-outlined text-sm">check</span>
+                                        {{ t('stage.lyrics_apply') }}
+                                    </button>
                                     <button id="stage-lyrics-import-btn" type="button" class="stage-lyrics-settings-action">
                                         <span class="material-symbols-outlined text-sm">upload_file</span>
                                         {{ t('stage.lyrics_upload') }}
@@ -1299,6 +1329,7 @@ const stageLyrics = new window.StageLyricsController({
     closeButton: lyricsSettingsClose,
     resetButton: document.getElementById("stage-lyrics-reset-btn"),
     exportButton: document.getElementById("stage-lyrics-export-btn"),
+    applyButton: document.getElementById("stage-lyrics-apply-btn"),
     importButton: document.getElementById("stage-lyrics-import-btn"),
     importExport: document.getElementById("stage-lyrics-settings-json"),
     fileInput: document.getElementById("stage-lyrics-settings-file"),
