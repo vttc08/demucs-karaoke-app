@@ -1537,6 +1537,7 @@ async function applyCurrentPlaybackItem(item) {
         return;
     }
     resetSyncStateForSourceSwap();
+    stageLyrics.clear();
     if (vocalsAudio) {
         vocalsAudio.pause();
         vocalsAudio.currentTime = 0;

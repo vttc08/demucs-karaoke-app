@@ -78,7 +78,7 @@ class StageLyricsController {
   setEnabled(enabled) {
     this.enabled = Boolean(enabled);
     if (!this.enabled) {
-      this.setOverlayVisible(false);
+      this.clear();
       return;
     }
     this.resetActiveState();
