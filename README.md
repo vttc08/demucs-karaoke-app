@@ -117,7 +117,7 @@ and `/static/...`.
      - Local matches are preferred in results; duplicate YouTube matches are hidden
      - Tap **Add** on a YouTube result to open the queue configuration interaction
      - Tap **Add** on a local library result to enqueue it immediately as a local file
-    - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, a Google search link, an editable lyrics box, and lyrics file upload before adding to queue; resolved metadata is saved back into the media entry before queueing
+     - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, a Google search link, an editable lyrics box, lyrics file upload, and an optional WhisperX language override before adding to queue; resolved metadata is saved back into the media entry before queueing
      - Confirm to add to queue
      - Queue items show who requested them
       - Open **Lyrics Viewer** from the queue page to read current-song lyrics on phone/secondary display
@@ -143,8 +143,9 @@ and `/static/...`.
      - Audio-only items such as MP3s use embedded album art as the stage background when available, with a branded fallback background otherwise
      - When the queue is empty, stage loops lobby media; when a song becomes playable, stage switches to it automatically and returns to lobby when queue drains
      - Responsive controls overlay: desktop adds a dedicated playback seek bar row, while mobile stays icon-first and moves detailed vocals volume adjustment to `/queue`
-     - Toggle the lyrics overlay on or off while playback is running; vocal mix and lyrics visibility persist across song changes, and the overlay only appears in fullscreen so it does not block stage controls on mobile
-     - Desktop stage also includes keyboard shortcuts and a help icon: `←`/`→` seek 5 seconds, `R` resync, `V` vocals, `L` lyrics, `Q` QR, `?` help; the help panel stays open until you close it explicitly
+     - Toggle the lyrics overlay on or off while playback is running; vocal mix and lyrics visibility persist across song changes, and the centered karaoke-style overlay only appears in fullscreen so it does not block stage controls on mobile
+     - Desktop stage also includes keyboard shortcuts, lyrics-style customization, and a help icon: `←`/`→` seek 5 seconds, `R` resync, `V` vocals, `L` lyrics, `Q` QR, `?` help; the help panel stays open until you close it explicitly
+     - Lyrics style settings are stored in the browser for quick per-device export/import and include CJK-safe font presets, size, color, outline, line-window, and animation options
     - Compact "up next" chips without queue-management actions
     - Auto-advances when song ends
    - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling

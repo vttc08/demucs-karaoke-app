@@ -63,6 +63,7 @@ class QueueItem(Base):
     user_id = Column(String, nullable=True)
     session_id = Column(String, nullable=True)
     requester_name = Column(String, nullable=True)
+    whisperx_align_language_override = Column(String, nullable=True)
     status = Column(String, default=QueueStatus.PENDING)
     error = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -204,6 +205,7 @@ class QueueItemCreate(BaseModel):
     is_karaoke: bool = False
     lyrics_text: Optional[str] = None
     lyrics_format: Optional[Literal["lrc", "txt"]] = None
+    whisperx_align_language_override: Optional[str] = None
     queue_as_name: Optional[str] = None
     queue_as_guest_id: Optional[str] = None
 
@@ -214,6 +216,9 @@ class QueueItemCreate(BaseModel):
             self.youtube_id = self.youtube_id.strip() or None
         if isinstance(self.lyrics_text, str):
             self.lyrics_text = self.lyrics_text.strip() or None
+        if isinstance(self.whisperx_align_language_override, str):
+            override = " ".join(self.whisperx_align_language_override.split()).strip().lower()
+            self.whisperx_align_language_override = override if override not in {"", "auto", "default"} else None
         if isinstance(self.queue_as_name, str):
             normalized_queue_as = " ".join(self.queue_as_name.split()).strip()
             self.queue_as_name = normalized_queue_as[:40] or None
@@ -295,6 +300,7 @@ class QueueItemResponse(BaseModel):
     media_path: Optional[str] = None
     lyrics_path: Optional[str] = None
     vocals_path: Optional[str] = None
+    whisperx_align_language_override: Optional[str] = None
     error: Optional[str] = None
     task_id: Optional[int] = None
     processing_stage: Optional[str] = None

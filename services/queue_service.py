@@ -128,6 +128,9 @@ class QueueService:
             user_id=normalized_owner_guest_id or normalized_requester_id,
             session_id=self._normalize_optional_metadata(requester_session_id),
             requester_name=self._normalize_optional_metadata(requester_name),
+            whisperx_align_language_override=self._normalize_optional_metadata(
+                item.whisperx_align_language_override
+            ),
             status=QueueStatus.PENDING,
         )
         db.add(db_item)
@@ -743,6 +746,7 @@ class QueueService:
             media_path=media_path,
             lyrics_path=lyrics_path,
             vocals_path=vocals_path,
+            whisperx_align_language_override=item.whisperx_align_language_override,
             error=item.error,
             task_id=active_task.id if active_task is not None else None,
             processing_stage=(active_task.stage if active_task is not None else None),

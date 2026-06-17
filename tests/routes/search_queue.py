@@ -145,6 +145,28 @@ def test_add_to_queue(client):
     assert data["is_karaoke"] is True
     assert data["status"] == "pending"
 
+def test_add_to_queue_persists_whisperx_language_override(client):
+    """Queue items should persist a per-song WhisperX language override."""
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "test456",
+            "title": "Override Song",
+            "artist": "Test Artist",
+            "is_karaoke": True,
+            "whisperx_align_language_override": "JA",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["whisperx_align_language_override"] == "ja"
+
+    with TestingSessionLocal() as db:
+        stored = db.query(QueueItem).filter(QueueItem.id == data["id"]).first()
+
+    assert stored is not None
+    assert stored.whisperx_align_language_override == "ja"
+
 def test_process_queue_item_returns_task_id(client):
     """Queue processing trigger should create or reuse a durable task id."""
     queue_response = client.post(

@@ -6,6 +6,30 @@
 
 {% block head %}
 <style>
+    @font-face {
+        font-family: "ZCOOL KuaiLe";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url("{{ app_url('/static/fonts/ZCOOLKuaiLe-Regular.ttf') }}") format("truetype");
+    }
+
+    @font-face {
+        font-family: "Noto Sans SC";
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src: url("{{ app_url('/static/fonts/NotoSansSC-Bold.ttf') }}") format("truetype");
+    }
+
+    @font-face {
+        font-family: "Noto Sans SC";
+        font-style: normal;
+        font-weight: 900;
+        font-display: swap;
+        src: url("{{ app_url('/static/fonts/NotoSansSC-Black.ttf') }}") format("truetype");
+    }
+
     #stage-page:fullscreen,
     #stage-page:-webkit-full-screen {
         background: #000;
@@ -204,12 +228,14 @@
         transform: translateY(0) scale(1);
     }
 
-    .stage-shortcuts-control {
+    .stage-shortcuts-control,
+    .stage-lyrics-settings-control {
         display: none;
         position: relative;
     }
 
-    .stage-shortcuts-panel {
+    .stage-shortcuts-panel,
+    .stage-lyrics-settings-panel {
         position: absolute;
         right: 0;
         bottom: calc(100% + 0.75rem);
@@ -224,7 +250,14 @@
         z-index: 25;
     }
 
-    .stage-shortcuts-panel-title {
+    .stage-lyrics-settings-panel {
+        width: min(28rem, 92vw);
+        max-height: min(70vh, 44rem);
+        overflow: auto;
+    }
+
+    .stage-shortcuts-panel-title,
+    .stage-lyrics-settings-title {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -271,16 +304,116 @@
         color: rgba(255, 255, 255, 0.62);
     }
 
+    .stage-lyrics-settings-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+    }
+
+    .stage-lyrics-settings-field {
+        display: grid;
+        gap: 0.35rem;
+        min-width: 0;
+    }
+
+    .stage-lyrics-settings-field--wide {
+        grid-column: 1 / -1;
+    }
+
+    .stage-lyrics-settings-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        color: rgba(255, 255, 255, 0.72);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .stage-lyrics-settings-input,
+    .stage-lyrics-settings-select,
+    .stage-lyrics-settings-textarea {
+        width: 100%;
+        min-width: 0;
+        border-radius: 0.65rem;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.94);
+        font-size: 0.85rem;
+    }
+
+    .stage-lyrics-settings-input,
+    .stage-lyrics-settings-select {
+        min-height: 2.35rem;
+    }
+
+    .stage-lyrics-settings-input[type="color"] {
+        padding: 0.2rem;
+    }
+
+    .stage-lyrics-settings-input[type="range"] {
+        accent-color: rgb(255, 216, 79);
+    }
+
+    .stage-lyrics-settings-textarea {
+        min-height: 5.2rem;
+        resize: vertical;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.75rem;
+    }
+
+    .stage-lyrics-settings-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        margin-top: 0.75rem;
+    }
+
+    .stage-lyrics-settings-action {
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.08);
+        padding: 0.45rem 0.7rem;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.75rem;
+        font-weight: 700;
+        transition: background 160ms ease, transform 160ms ease;
+    }
+
+    .stage-lyrics-settings-action:hover {
+        background: rgba(255, 255, 255, 0.14);
+    }
+
+    .stage-lyrics-settings-action:active {
+        transform: scale(0.98);
+    }
+
+    .stage-lyrics-settings-status {
+        min-height: 1rem;
+        margin-top: 0.55rem;
+        color: rgba(255, 255, 255, 0.66);
+        font-size: 0.75rem;
+    }
+
     .stage-lyrics-overlay {
         position: absolute;
         left: 0;
         right: 0;
-        bottom: 5.75rem;
+        top: 50%;
+        transform: translateY(-35%);
         z-index: 15;
         pointer-events: none;
         display: flex;
         justify-content: center;
-        padding: 0 1rem;
+        padding: 0 clamp(1rem, 4vw, 5rem);
+        --stage-lyrics-font-family: "ZCOOL KuaiLe", "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+        --stage-lyrics-size: clamp(2.4rem, 5.6vw, 6.8rem);
+        --stage-lyrics-text-color: #fff8df;
+        --stage-lyrics-active-color: #ffd84f;
+        --stage-lyrics-outline-color: #050505;
+        --stage-lyrics-outline-width: 7px;
     }
 
     .stage-media:not(.is-fullscreen) .stage-lyrics-overlay {
@@ -288,33 +421,66 @@
     }
 
     .stage-lyrics-lines {
-        width: min(100%, 58rem);
+        width: min(100%, 74rem);
         display: grid;
-        gap: 0.2rem;
+        gap: clamp(0.2rem, 0.8vw, 0.75rem);
         text-align: center;
+        transform: translateZ(0);
     }
 
     .stage-lyric-line {
         margin: 0;
-        font-size: clamp(1.05rem, 1.35vw, 1.65rem);
-        font-weight: 600;
-        line-height: 1.35;
-        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
-        color: rgba(255, 255, 255, 0.9);
-        opacity: 0.9;
+        font-family: var(--stage-lyrics-font-family);
+        font-size: calc(var(--stage-lyrics-size) * 0.46);
+        font-weight: 900;
+        line-height: 1.12;
+        letter-spacing: 0.02em;
+        color: var(--stage-lyrics-text-color);
+        opacity: 0.52;
+        text-shadow:
+            calc(var(--stage-lyrics-outline-width) * -1) 0 0 var(--stage-lyrics-outline-color),
+            var(--stage-lyrics-outline-width) 0 0 var(--stage-lyrics-outline-color),
+            0 calc(var(--stage-lyrics-outline-width) * -1) 0 var(--stage-lyrics-outline-color),
+            0 var(--stage-lyrics-outline-width) 0 var(--stage-lyrics-outline-color),
+            0 0 18px rgba(0, 0, 0, 0.95),
+            0 12px 34px rgba(0, 0, 0, 0.82);
+        transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1), transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .stage-lyric-line--current {
-        color: #ef4444;
+        color: var(--stage-lyrics-active-color);
+        font-size: var(--stage-lyrics-size);
         opacity: 1;
+        transform: translateY(0) scale(1);
     }
 
     .stage-lyric-line--aligned.stage-lyric-line--current {
-        color: rgba(255, 255, 255, 0.9);
+        color: var(--stage-lyrics-text-color);
+    }
+
+    .stage-lyric-word {
+        display: inline-block;
+        transform: translateY(0);
+        transition: color 140ms ease, opacity 140ms ease, transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .stage-lyric-word--highlighted {
-        color: #ef4444;
+        color: var(--stage-lyrics-active-color);
+    }
+
+    .stage-lyric-line--word-slide .stage-lyric-word--active {
+        transform: translateY(-0.12em) scale(1.04);
+    }
+
+    .stage-lyrics-overlay[data-animation="fade"] .stage-lyric-line {
+        transition: opacity 260ms cubic-bezier(0.16, 1, 0.3, 1), color 180ms ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .stage-lyric-line,
+        .stage-lyric-word {
+            transition: none !important;
+        }
     }
 
     .stage-audio-hero {
@@ -407,7 +573,8 @@
             display: inline-flex;
         }
 
-        .stage-shortcuts-control {
+        .stage-shortcuts-control,
+        .stage-lyrics-settings-control {
             display: block;
         }
     }
@@ -677,6 +844,99 @@
                                 <p class="stage-shortcuts-hint">{{ t('stage.shortcuts_hint') }}</p>
                             </div>
                         </div>
+                        <div class="stage-lyrics-settings-control">
+                            <button
+                                id="stage-lyrics-settings-btn"
+                                class="stage-control-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                                aria-label="{{ t('stage.lyrics_settings') }}"
+                                title="{{ t('stage.lyrics_settings') }}"
+                                aria-controls="stage-lyrics-settings-panel"
+                                aria-expanded="false"
+                            >
+                                <span class="material-symbols-outlined text-base">tune</span>
+                                <span class="stage-control-label">{{ t('stage.lyrics_settings') }}</span>
+                            </button>
+                            <div id="stage-lyrics-settings-panel" class="stage-lyrics-settings-panel hidden" role="dialog" aria-label="{{ t('stage.lyrics_settings_title') }}">
+                                <div class="stage-lyrics-settings-title">
+                                    <h3 class="text-sm font-semibold text-on-surface">{{ t('stage.lyrics_settings_title') }}</h3>
+                                    <button
+                                        id="stage-lyrics-settings-close"
+                                        type="button"
+                                        class="rounded-full p-1 text-on-surface-variant transition hover:bg-white/10 hover:text-on-surface"
+                                        aria-label="{{ t('common.close') }}"
+                                    >
+                                        <span class="material-symbols-outlined text-base">close</span>
+                                    </button>
+                                </div>
+                                <div class="stage-lyrics-settings-grid">
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_font') }}</span>
+                                        <select id="stage-lyrics-font-preset" class="stage-lyrics-settings-select">
+                                            <option value="karaoke_cjk">{{ t('stage.lyrics_font_karaoke_cjk') }}</option>
+                                            <option value="readable_cjk">{{ t('stage.lyrics_font_readable_cjk') }}</option>
+                                            <option value="system_cjk">{{ t('stage.lyrics_font_system_cjk') }}</option>
+                                            <option value="custom">{{ t('stage.lyrics_font_custom') }}</option>
+                                        </select>
+                                    </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_custom_font') }}</span>
+                                        <input id="stage-lyrics-custom-font" class="stage-lyrics-settings-input" type="text" placeholder='"Noto Sans SC", sans-serif' />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">
+                                            {{ t('stage.lyrics_text_size') }}
+                                            <span id="stage-lyrics-size-value"></span>
+                                        </span>
+                                        <input id="stage-lyrics-size" class="stage-lyrics-settings-input" type="range" min="3.2" max="8.8" step="0.1" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_text_color') }}</span>
+                                        <input id="stage-lyrics-text-color" class="stage-lyrics-settings-input" type="color" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_active_color') }}</span>
+                                        <input id="stage-lyrics-active-color" class="stage-lyrics-settings-input" type="color" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_outline_color') }}</span>
+                                        <input id="stage-lyrics-outline-color" class="stage-lyrics-settings-input" type="color" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field">
+                                        <span class="stage-lyrics-settings-label">
+                                            {{ t('stage.lyrics_outline_width') }}
+                                            <span id="stage-lyrics-outline-width-value"></span>
+                                        </span>
+                                        <input id="stage-lyrics-outline-width" class="stage-lyrics-settings-input" type="range" min="2" max="14" step="1" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_previous_lines') }}</span>
+                                        <input id="stage-lyrics-previous-lines" class="stage-lyrics-settings-input" type="number" min="0" max="3" step="1" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_next_lines') }}</span>
+                                        <input id="stage-lyrics-next-lines" class="stage-lyrics-settings-input" type="number" min="0" max="3" step="1" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_animation') }}</span>
+                                        <select id="stage-lyrics-animation" class="stage-lyrics-settings-select">
+                                            <option value="slide">{{ t('stage.lyrics_animation_slide') }}</option>
+                                            <option value="fade">{{ t('stage.lyrics_animation_fade') }}</option>
+                                            <option value="none">{{ t('stage.lyrics_animation_none') }}</option>
+                                        </select>
+                                    </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_settings_json') }}</span>
+                                        <textarea id="stage-lyrics-settings-json" class="stage-lyrics-settings-textarea" spellcheck="false"></textarea>
+                                    </label>
+                                </div>
+                                <div class="stage-lyrics-settings-actions">
+                                    <button id="stage-lyrics-export-btn" type="button" class="stage-lyrics-settings-action">{{ t('stage.lyrics_export') }}</button>
+                                    <button id="stage-lyrics-import-btn" type="button" class="stage-lyrics-settings-action">{{ t('stage.lyrics_import') }}</button>
+                                    <button id="stage-lyrics-reset-btn" type="button" class="stage-lyrics-settings-action">{{ t('stage.lyrics_reset') }}</button>
+                                </div>
+                                <p id="stage-lyrics-settings-status" class="stage-lyrics-settings-status" aria-live="polite"></p>
+                            </div>
+                        </div>
                     </div>
                     <div class="stage-vocals-control rounded-full border border-white/10 bg-black/35 px-3 py-1.5">
                         <button
@@ -755,6 +1015,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ app_url('/static/stage-lyrics.js') }}"></script>
 <script>
 const API_BASE = window.KaraokeURLs.basePath;
 const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
@@ -801,6 +1062,9 @@ const lyricsToggleLabel = document.getElementById("lyrics-toggle-label");
 const qrToggleBtn = document.getElementById("qr-toggle-btn");
 const shortcutsBtn = document.getElementById("stage-shortcuts-btn");
 const shortcutsPanel = document.getElementById("stage-shortcuts-panel");
+const lyricsSettingsBtn = document.getElementById("stage-lyrics-settings-btn");
+const lyricsSettingsPanel = document.getElementById("stage-lyrics-settings-panel");
+const lyricsSettingsClose = document.getElementById("stage-lyrics-settings-close");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const fullscreenIcon = document.getElementById("fullscreen-icon");
 const fullscreenLabel = document.getElementById("fullscreen-label");
@@ -810,6 +1074,42 @@ const qrLabel = document.getElementById("stage-qr-label");
 const stageMedia = document.querySelector(".stage-media");
 const lyricsOverlay = document.getElementById("stage-lyrics-overlay");
 const lyricsLines = document.getElementById("stage-lyrics-lines");
+const stageLyrics = new window.StageLyricsController({
+    overlay: lyricsOverlay,
+    lines: lyricsLines,
+    button: lyricsSettingsBtn,
+    panel: lyricsSettingsPanel,
+    closeButton: lyricsSettingsClose,
+    resetButton: document.getElementById("stage-lyrics-reset-btn"),
+    exportButton: document.getElementById("stage-lyrics-export-btn"),
+    importButton: document.getElementById("stage-lyrics-import-btn"),
+    importExport: document.getElementById("stage-lyrics-settings-json"),
+    status: document.getElementById("stage-lyrics-settings-status"),
+    isFullscreenActive,
+    t,
+    onPanelVisibilityChange: (visible) => {
+        if (visible) {
+            setShortcutsPanelVisible(false);
+            showStageControls();
+        } else {
+            scheduleHideStageControls();
+        }
+    },
+    inputs: {
+        fontPreset: document.getElementById("stage-lyrics-font-preset"),
+        customFontFamily: document.getElementById("stage-lyrics-custom-font"),
+        sizeVw: document.getElementById("stage-lyrics-size"),
+        sizeVwValue: document.getElementById("stage-lyrics-size-value"),
+        textColor: document.getElementById("stage-lyrics-text-color"),
+        activeColor: document.getElementById("stage-lyrics-active-color"),
+        outlineColor: document.getElementById("stage-lyrics-outline-color"),
+        outlineWidth: document.getElementById("stage-lyrics-outline-width"),
+        outlineWidthValue: document.getElementById("stage-lyrics-outline-width-value"),
+        previousLines: document.getElementById("stage-lyrics-previous-lines"),
+        nextLines: document.getElementById("stage-lyrics-next-lines"),
+        animation: document.getElementById("stage-lyrics-animation"),
+    },
+});
 const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
 const QR_IMAGE_SIZE = 320;
 let controlsHideTimer = null;
@@ -831,9 +1131,6 @@ let vocalsGainNode = null;
 let syncTimer = null;
 let suppressSeekBroadcast = false;
 let seekBroadcastUnlockTimer = null;
-let lyricCues = [];
-let activeLyricCueIndex = null;
-let activeLyricWordIndex = null;
 let lyricsAnimationFrame = null;
 let syncOperationId = 0;
 let lastHandledSyncVersion = 0;
@@ -1039,149 +1336,14 @@ function updateLyricsUi() {
 }
 
 function setLyricsOverlayVisible(visible) {
-    if (!lyricsOverlay) return;
-    lyricsOverlay.classList.toggle("hidden", !visible || !isFullscreenActive());
-}
-
-function normalizeCue(rawCue) {
-    if (!rawCue || typeof rawCue !== "object") {
-        return null;
-    }
-    const rawTime = Number(rawCue.time);
-    if (!Number.isFinite(rawTime)) {
-        return null;
-    }
-    const text = typeof rawCue.text === "string" ? rawCue.text.trim() : "";
-    if (!text) {
-        return null;
-    }
-    const rawWords = Array.isArray(rawCue.words) ? rawCue.words : [];
-    const words = rawWords
-        .map((rawWord) => {
-            if (!rawWord || typeof rawWord !== "object") {
-                return null;
-            }
-            const word = typeof rawWord.word === "string" ? rawWord.word.trim() : "";
-            const start = Number(rawWord.start);
-            const end = Number(rawWord.end);
-            if (!word || !Number.isFinite(start) || !Number.isFinite(end) || end < start) {
-                return null;
-            }
-            return {
-                word,
-                start: Math.max(0, start),
-                end: Math.max(0, end),
-            };
-        })
-        .filter((word) => word !== null)
-        .sort((a, b) => a.start - b.start);
-    return {
-        time: Math.max(0, rawTime),
-        text,
-        words: words.length === rawWords.length ? words : [],
-    };
-}
-
-function findActiveLyricCueIndex(currentTime) {
-    if (!lyricCues.length) {
-        return null;
-    }
-    if (currentTime < lyricCues[0].time) {
-        return -1;
-    }
-
-    let left = 0;
-    let right = lyricCues.length - 1;
-    let best = 0;
-    while (left <= right) {
-        const mid = Math.floor((left + right) / 2);
-        if (lyricCues[mid].time <= currentTime) {
-            best = mid;
-            left = mid + 1;
-        } else {
-            right = mid - 1;
-        }
-    }
-    return best;
-}
-
-function findActiveLyricWordIndex(cue, currentTime) {
-    if (!cue?.words?.length) {
-        return null;
-    }
-
-    let activeIndex = -1;
-    for (let index = 0; index < cue.words.length; index += 1) {
-        if (cue.words[index].start > currentTime) {
-            break;
-        }
-        activeIndex = index;
-    }
-    return activeIndex;
-}
-
-function renderLyricLine(cue, isCurrent, activeWordIndex) {
-    const hasAlignedWords = cue.words.length > 0;
-    const lineClasses = [
-        "stage-lyric-line",
-        isCurrent ? "stage-lyric-line--current" : "",
-        hasAlignedWords ? "stage-lyric-line--aligned" : "",
-    ].filter(Boolean).join(" ");
-
-    if (!hasAlignedWords) {
-        return `<p class="${lineClasses}">${escapeHtml(cue.text)}</p>`;
-    }
-
-    const words = cue.words
-        .map((word, index) => {
-            const highlighted = isCurrent && index <= activeWordIndex;
-            const className = highlighted ? ' class="stage-lyric-word--highlighted"' : "";
-            return `<span${className}>${escapeHtml(word.word)}</span>`;
-        })
-        .join(" ");
-    return `<p class="${lineClasses}">${words}</p>`;
-}
-
-function renderLyricsWindow(activeIndex, activeWordIndex = null) {
-    if (!lyricsLines) {
-        return;
-    }
-    if (!lyricsState.enabled) {
-        setLyricsOverlayVisible(false);
-        return;
-    }
-    if (!lyricCues.length) {
-        lyricsLines.innerHTML = "";
-        setLyricsOverlayVisible(false);
-        return;
-    }
-
-    let linesToRender;
-    if (activeIndex === -1) {
-        linesToRender = lyricCues.slice(0, 3).map((cue) => ({ cue, isCurrent: false }));
-    } else if (typeof activeIndex === "number") {
-        const start = Math.max(0, activeIndex - 2);
-        const end = Math.min(lyricCues.length, activeIndex + 3);
-        linesToRender = [];
-        for (let index = start; index < end; index += 1) {
-            linesToRender.push({ cue: lyricCues[index], isCurrent: index === activeIndex });
-        }
-    } else {
-        linesToRender = [];
-    }
-
-    lyricsLines.innerHTML = linesToRender
-        .map(({ cue, isCurrent }) => renderLyricLine(cue, isCurrent, activeWordIndex))
-        .join("");
-    setLyricsOverlayVisible(linesToRender.length > 0);
+    stageLyrics.setOverlayVisible(visible);
 }
 
 function setLyricsEnabled(enabled) {
     lyricsState.enabled = Boolean(enabled);
+    stageLyrics.setEnabled(lyricsState.enabled);
     updateLyricsUi();
     if (lyricsState.enabled) {
-        activeLyricCueIndex = null;
-        activeLyricWordIndex = null;
         updateLyricsForTime(getPrimaryCurrentTime());
     } else {
         setLyricsOverlayVisible(false);
@@ -1189,25 +1351,7 @@ function setLyricsEnabled(enabled) {
 }
 
 function updateLyricsForTime(currentTime) {
-    if (!lyricCues.length) {
-        if (activeLyricCueIndex !== null) {
-            activeLyricCueIndex = null;
-            renderLyricsWindow(null);
-        }
-        return;
-    }
-
-    const nextIndex = findActiveLyricCueIndex(currentTime);
-    const nextWordIndex = nextIndex !== null && nextIndex >= 0
-        ? findActiveLyricWordIndex(lyricCues[nextIndex], currentTime)
-        : null;
-    if (nextIndex === activeLyricCueIndex && nextWordIndex === activeLyricWordIndex) {
-        return;
-    }
-
-    activeLyricCueIndex = nextIndex;
-    activeLyricWordIndex = nextWordIndex;
-    renderLyricsWindow(activeLyricCueIndex, activeLyricWordIndex);
+    stageLyrics.updateForTime(currentTime);
 }
 
 function startLyricsTicker() {
@@ -1239,53 +1383,39 @@ function stopLyricsTicker() {
 
 async function loadLyricsCues() {
     if (!currentItemId) {
-        lyricCues = [];
-        activeLyricCueIndex = null;
-        activeLyricWordIndex = null;
+        stageLyrics.clear();
         lyricsState.available = false;
         lyricsState.enabled = false;
-        setLyricsOverlayVisible(false);
         updateLyricsUi();
-        renderLyricsWindow(null);
         return;
     }
 
     try {
         const response = await fetch(window.KaraokeURLs.appUrl(`/api/queue/${currentItemId}/lyrics-cues`));
         if (!response.ok) {
-            lyricCues = [];
-            activeLyricCueIndex = null;
-            activeLyricWordIndex = null;
+            stageLyrics.clear();
             lyricsState.available = false;
             lyricsState.enabled = false;
             updateLyricsUi();
-            renderLyricsWindow(null);
             return;
         }
 
         const payload = await response.json();
         const cues = Array.isArray(payload?.cues) ? payload.cues : [];
-        lyricCues = cues
-            .map(normalizeCue)
-            .filter((cue) => cue !== null)
-            .sort((a, b) => a.time - b.time);
-        lyricsState.available = lyricCues.length > 0;
+        stageLyrics.setCues(cues);
+        lyricsState.available = stageLyrics.hasCues();
         if (!lyricsState.available) {
             lyricsState.enabled = false;
         }
-        activeLyricCueIndex = null;
-        activeLyricWordIndex = null;
+        stageLyrics.setEnabled(lyricsState.enabled);
         updateLyricsUi();
         updateLyricsForTime(getPrimaryCurrentTime());
     } catch (error) {
         console.warn("Failed to load lyrics cues:", error);
-        lyricCues = [];
-        activeLyricCueIndex = null;
-        activeLyricWordIndex = null;
+        stageLyrics.clear();
         lyricsState.available = false;
         lyricsState.enabled = false;
         updateLyricsUi();
-        renderLyricsWindow(null);
     }
 }
 
@@ -1890,6 +2020,7 @@ function toggleShortcutsPanel() {
     const nextVisible = !shortcutsPanelVisible;
     setShortcutsPanelVisible(nextVisible);
     if (nextVisible) {
+        stageLyrics.setSettingsPanelVisible(false);
         showStageControls();
     } else {
         scheduleHideStageControls();
@@ -1910,7 +2041,7 @@ function showStageControls() {
         controlsHideTimer = null;
     }
 
-    if (shortcutsPanelVisible) {
+    if (shortcutsPanelVisible || stageLyrics.settingsPanelVisible) {
         return;
     }
 
@@ -2315,14 +2446,7 @@ if (lyricsToggleBtn) {
         const nextEnabled = !lyricsState.enabled;
         const sent = sendStageCommand("set_lyrics_enabled", { lyrics_enabled: nextEnabled });
         if (!sent) {
-            lyricsState.enabled = nextEnabled;
-            updateLyricsUi();
-            if (lyricsState.enabled) {
-                activeLyricCueIndex = null;
-                updateLyricsForTime(getPrimaryCurrentTime());
-            } else {
-                setLyricsOverlayVisible(false);
-            }
+            setLyricsEnabled(nextEnabled);
         }
     });
 }
@@ -2397,6 +2521,13 @@ window.addEventListener("keydown", async (event) => {
     if (event.key === "Escape" && shortcutsPanelVisible) {
         event.preventDefault();
         setShortcutsPanelVisible(false);
+        scheduleHideStageControls();
+        return;
+    }
+
+    if (event.key === "Escape" && stageLyrics.settingsPanelVisible) {
+        event.preventDefault();
+        stageLyrics.setSettingsPanelVisible(false);
         scheduleHideStageControls();
         return;
     }
@@ -2484,7 +2615,7 @@ document.addEventListener("fullscreenchange", () => {
     syncFullscreenState();
     updateFullscreenUi();
     if (lyricsState.enabled) {
-        activeLyricCueIndex = null;
+        stageLyrics.resetActiveState();
         updateLyricsForTime(getPrimaryCurrentTime());
     } else {
         setLyricsOverlayVisible(false);

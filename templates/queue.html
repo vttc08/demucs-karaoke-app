@@ -432,6 +432,21 @@
                         <span id="queue-config-lyrics-state" class="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.idle') }}</span>
                     </div>
 
+                    <label class="flex flex-col gap-2">
+                        <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.whisperx_language_override') }}</span>
+                        <input
+                            id="queue-config-lyrics-language-code"
+                            type="text"
+                            inputmode="text"
+                            autocomplete="off"
+                            spellcheck="false"
+                            maxlength="16"
+                            class="w-full max-w-xs rounded-xl bg-surface-container-highest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30"
+                            placeholder="{{ t('lyrics.whisperx_language_override_placeholder') }}"
+                        />
+                        <p class="text-[11px] leading-tight text-on-surface-variant sm:text-xs">{{ t('lyrics.whisperx_language_override_detail') }}</p>
+                    </label>
+
                     <div class="grid gap-3 sm:grid-cols-2">
                         <label class="flex flex-col gap-2">
                             <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('common.title') }}</span>

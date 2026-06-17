@@ -259,9 +259,11 @@ def test_stage_page_loads_for_admin(client):
     assert b'stage-fullscreen-button' in response.content
     assert b'id="stage-shortcuts-btn"' in response.content
     assert b'id="stage-shortcuts-panel"' in response.content
+    assert b'id="stage-lyrics-settings-btn"' in response.content
+    assert b'id="stage-lyrics-settings-panel"' in response.content
     assert re.search(rb'id="stage-lyrics-overlay"[^>]*class="[^"]*\bhidden\b', response.content)
     assert b"stage-lyric-word--highlighted" in response.content
-    assert b"findActiveLyricWordIndex" in response.content
+    assert b"/static/stage-lyrics.js" in response.content
     assert b'aria-label="Fullscreen"' in response.content
 
 def test_stage_page_renders_audio_mode_for_current_mp3(client, tmp_path):

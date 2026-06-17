@@ -85,6 +85,7 @@ def _migrate_legacy_queue_items_if_needed():
                     requested_karaoke BOOLEAN NOT NULL DEFAULT 0,
                     user_id TEXT,
                     session_id TEXT,
+                    whisperx_align_language_override TEXT,
                     status TEXT DEFAULT 'pending',
                     error TEXT,
                     created_at DATETIME NOT NULL,
@@ -168,6 +169,8 @@ def _ensure_queue_items_columns(bind_engine=None):
         statements.append("ALTER TABLE queue_items ADD COLUMN user_id TEXT")
     if "session_id" not in columns:
         statements.append("ALTER TABLE queue_items ADD COLUMN session_id TEXT")
+    if "whisperx_align_language_override" not in columns:
+        statements.append("ALTER TABLE queue_items ADD COLUMN whisperx_align_language_override TEXT")
     if "requester_name" not in columns:
         statements.append("ALTER TABLE queue_items ADD COLUMN requester_name TEXT")
 

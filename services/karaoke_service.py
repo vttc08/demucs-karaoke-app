@@ -734,6 +734,19 @@ class KaraokeService:
         shutil.move(str(source_path), str(target_path))
         return target_path
 
+    @staticmethod
+    def _resolve_whisperx_alignment_settings(queue_item: QueueItem | None) -> tuple[str | None, bool]:
+        """Return the WhisperX language settings for one queue item."""
+        align_language = settings.whisperx_align_language
+        detect_language = settings.whisperx_detect_language
+        if queue_item is None:
+            return align_language, detect_language
+
+        override_language = (queue_item.whisperx_align_language_override or "").strip().lower()
+        if override_language:
+            return override_language, False
+        return align_language, detect_language
+
     async def _separate_vocals_with_retry(
         self,
         queue_item: QueueItem | None,
@@ -748,6 +761,24 @@ class KaraokeService:
     ):
         """Run Demucs separation with one fallback retry for extracted local audio."""
         lyrics_text, lyrics_format = self._alignment_lyrics_for_media(media_item)
+        align_language, detect_language = self._resolve_whisperx_alignment_settings(queue_item)
+
+        async def run_demucs(target_audio_path: Path):
+            demucs_kwargs = {
+                "lyrics_text": lyrics_text,
+                "lyrics_format": lyrics_format,
+                "transcription_model": settings.whisperx_transcription_model,
+                "align_language": align_language,
+                "detect_language": detect_language,
+                "use_synced_lyrics": settings.whisperx_use_synced_lyrics,
+                "whisperx_preload_models": settings.whisperx_preload_models,
+                "progress_callback": progress_callback,
+                "log_callback": log_callback,
+            }
+            if cancel_event is not None:
+                demucs_kwargs["cancel_event"] = cancel_event
+            return await self.demucs_client.separate_vocals(target_audio_path, **demucs_kwargs)
+
         try:
             await KaraokeService._raise_if_canceled(cancel_event, task_id)
             loop = asyncio.get_running_loop()
@@ -767,32 +798,7 @@ class KaraokeService:
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
             )
-            if cancel_event is None:
-                return await self.demucs_client.separate_vocals(
-                    audio_path,
-                    lyrics_text=lyrics_text,
-                    lyrics_format=lyrics_format,
-                    transcription_model=settings.whisperx_transcription_model,
-                    align_language=settings.whisperx_align_language,
-                    detect_language=settings.whisperx_detect_language,
-                    use_synced_lyrics=settings.whisperx_use_synced_lyrics,
-                    whisperx_preload_models=settings.whisperx_preload_models,
-                    progress_callback=progress_callback,
-                    log_callback=log_callback,
-                )
-            return await self.demucs_client.separate_vocals(
-                audio_path,
-                lyrics_text=lyrics_text,
-                lyrics_format=lyrics_format,
-                transcription_model=settings.whisperx_transcription_model,
-                align_language=settings.whisperx_align_language,
-                detect_language=settings.whisperx_detect_language,
-                use_synced_lyrics=settings.whisperx_use_synced_lyrics,
-                whisperx_preload_models=settings.whisperx_preload_models,
-                cancel_event=cancel_event,
-                progress_callback=progress_callback,
-                log_callback=log_callback,
-            )
+            return await run_demucs(audio_path)
         except httpx.HTTPStatusError as error:
             status_code = error.response.status_code if error.response is not None else None
             can_retry = (
@@ -850,32 +856,7 @@ class KaraokeService:
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
             )
-            if cancel_event is None:
-                return await self.demucs_client.separate_vocals(
-                    fallback_audio_path,
-                    lyrics_text=lyrics_text,
-                    lyrics_format=lyrics_format,
-                    transcription_model=settings.whisperx_transcription_model,
-                    align_language=settings.whisperx_align_language,
-                    detect_language=settings.whisperx_detect_language,
-                    use_synced_lyrics=settings.whisperx_use_synced_lyrics,
-                    whisperx_preload_models=settings.whisperx_preload_models,
-                    progress_callback=progress_callback,
-                    log_callback=log_callback,
-                )
-            return await self.demucs_client.separate_vocals(
-                fallback_audio_path,
-                lyrics_text=lyrics_text,
-                lyrics_format=lyrics_format,
-                transcription_model=settings.whisperx_transcription_model,
-                align_language=settings.whisperx_align_language,
-                detect_language=settings.whisperx_detect_language,
-                use_synced_lyrics=settings.whisperx_use_synced_lyrics,
-                whisperx_preload_models=settings.whisperx_preload_models,
-                cancel_event=cancel_event,
-                progress_callback=progress_callback,
-                log_callback=log_callback,
-            )
+            return await run_demucs(fallback_audio_path)
 
     @staticmethod
     def _set_media_item_media_path(db: Session, media_item: MediaItem, media_path: Path):

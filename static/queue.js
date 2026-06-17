@@ -74,6 +74,7 @@ const queueConfigKaraokeStatus = document.getElementById('queue-config-karaoke-s
 const queueConfigKaraokeDetail = document.getElementById('queue-config-karaoke-detail');
 const queueConfigLyricsToggle = document.getElementById('queue-config-lyrics-toggle');
 const queueConfigLyricsDetail = document.getElementById('queue-config-lyrics-detail');
+const queueConfigLyricsLanguageInput = document.getElementById('queue-config-lyrics-language-code');
 const queueToast = document.getElementById('queue-toast');
 const queueToastText = document.getElementById('queue-toast-text');
 const QUEUE_AS_ENABLED_STORAGE_KEY = 'karaoke.queueAs.enabled';
@@ -506,6 +507,11 @@ function getModalDefaults() {
     return { karaokeEnabled: karaokeAvailable, lyricsEnabled: karaokeAvailable };
 }
 
+function normalizeWhisperxLanguageCode(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return normalized === 'auto' || normalized === 'default' ? '' : normalized;
+}
+
 /**
  * Initialize lyrics manager for the queue modal
  */
@@ -898,6 +904,9 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     lyricsManager.reset();
     lyricsManager.setMetadata(modalSelection.title || '', modalSelection.channel || '', modalSelection.title || '');
     lyricsManager.setEnabled(defaults.lyricsEnabled);
+    if (queueConfigLyricsLanguageInput) {
+        queueConfigLyricsLanguageInput.value = '';
+    }
 
     syncQueueSongTitleLink();
     if (queueConfigSongChannel) queueConfigSongChannel.textContent = modalSelection.channel || '';
@@ -943,6 +952,9 @@ function closeQueueConfigModal() {
     if (!queueConfigModal) return;
     if (lyricsManager) {
         lyricsManager.reset();
+    }
+    if (queueConfigLyricsLanguageInput) {
+        queueConfigLyricsLanguageInput.value = '';
     }
     queueConfigModal.classList.add('hidden');
     queueConfigModal.classList.remove('flex');
@@ -1126,6 +1138,9 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
     
     const lyricsText = lyricsEnabled ? lyricsManager.getSubmissionText() : '';
     const lyricsFormat = lyricsText ? LyricsManager.inferFormat(lyricsText) : null;
+    const whisperxAlignLanguageOverride = lyricsEnabled
+        ? normalizeWhisperxLanguageCode(queueConfigLyricsLanguageInput?.value)
+        : '';
     const button = buttonElement || queueConfigConfirmBtn;
     if (!button) {
         throw new Error('Missing add-to-queue trigger button');
@@ -1148,6 +1163,9 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
         if (isKaraoke && lyricsEnabled && lyricsText) {
             payload.lyrics_text = lyricsText;
             payload.lyrics_format = lyricsFormat;
+            if (whisperxAlignLanguageOverride) {
+                payload.whisperx_align_language_override = whisperxAlignLanguageOverride;
+            }
         }
         if (source === 'local' && mediaItemId) {
             payload.media_item_id = Number(mediaItemId);

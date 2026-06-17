@@ -4,35 +4,37 @@ This document captures extension points for future lyric-style customization on 
 
 ## Current baseline
 - Overlay is rendered in `templates/stage.html` as `#stage-lyrics-overlay`.
+- Stage lyric cue rendering and browser-local appearance settings live in `static/stage-lyrics.js`.
 - Timed cues are loaded from `GET /api/queue/{item_id}/lyrics-cues`.
-- Active line uses `.stage-lyric-line--current` (red), nearby lines use `.stage-lyric-line` (white).
+- Active line uses `.stage-lyric-line--current`, nearby lines use `.stage-lyric-line`.
 - Aligned JSON cues may include `words: [{word, start, end}]`; the stage progressively highlights
-  completed/current words while leaving upcoming words white.
+  completed/current words while leaving upcoming words in the configured base color.
 - Timeline authority is `video.currentTime`.
+- Appearance settings are stored per browser in `localStorage` under
+  `karaoke_stage_lyrics_settings_v1` and can be exported/imported as JSON.
+- The default font stack is CJK-safe: self-hosted ZCOOL KuaiLe with Noto Sans SC and local system
+  CJK fallbacks.
 
 ## Recommended future customization surfaces
 
 1. **Typography + color tokens**
-- Move hardcoded lyric colors/font sizes into runtime-configurable tokens.
-- Keep defaults identical to current behavior for backwards compatibility.
+- Typography, color, size, and outline are now browser-configurable CSS tokens.
+- Keep backend lyrics payloads independent of presentation settings.
 
 2. **Line window behavior**
-- Current window is fixed (roughly previous 2 + current + next 2).
-- Add settings for:
-  - number of previous lines
-  - number of upcoming lines
-  - optional single-line focus mode
+- Previous and upcoming line counts are browser-configurable.
+- Single-line focus is available by setting both values to `0`.
 
 3. **Animation behaviors**
-- Add optional transitions for active-line changes:
-  - fade
-  - slide
-  - scale pulse on active line
-- Ensure reduced-motion mode is supported.
+- Supported settings:
+  - `slide` for word-aligned JSON tracks
+  - `fade`
+  - `none`
+- Reduced-motion mode disables motion while preserving lyric state.
 
 4. **Positioning and safe areas**
-- Expose vertical anchor (bottom/center/top) and margin offsets.
-- Keep overlays clear of stage controls/QR overlays.
+- Default position is centered/slightly below midpoint to read like karaoke instead of captions.
+- If adding position controls later, keep overlays clear of stage controls/QR overlays.
 
 5. **Data enrichment**
 - Preserve the optional nested word timing schema while keeping line-level `time/text` compatibility.

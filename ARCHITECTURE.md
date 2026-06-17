@@ -250,10 +250,14 @@ The stage page uses a websocket-first model:
   `lyrics_path` when Demucs/WhisperX provides one, so stage and queue lyrics views consume the
   rebuilt line-level alignment instead of the original downloaded `.lrc`.
 - Overlay highlight logic is driven by the video timeline:
-  - ordinary cues highlight the current line in red
-  - aligned JSON progressively highlights completed/current words in red while upcoming words remain white
-  - nearby lines shown in white
-- This custom pipeline keeps room for future per-user appearance/animation customization.
+  - ordinary cues highlight the current line without per-word animation
+  - aligned JSON progressively highlights completed/current words and can apply the stage word-slide effect
+  - nearby lines are shown above/below the active line according to browser-local stage lyrics settings
+- Stage lyric appearance is browser-local and stored in `localStorage` by `static/stage-lyrics.js`.
+  The settings panel exposes CJK-safe font presets, size, colors, outline, line-window, animation,
+  reset, and JSON import/export without changing backend API payloads.
+- Stage lyric fonts are self-hosted under `static/fonts/` so fullscreen playback can render Chinese
+  lyrics without depending on Google Fonts at runtime.
 
 ## Queue lyrics viewer flow
 
@@ -290,6 +294,7 @@ The stage page uses a websocket-first model:
 - Queue, upload, and media edit lyrics interactions share the same lightweight frontend manager/adapter modules:
   - `static/lyrics-manager.js` owns lyrics state, metadata, provider lookup, uploads, and submission payloads
   - `static/lyrics-ui.js` binds that state to page-specific DOM selectors without introducing a frontend framework
+- Queue lyrics lookup can carry a per-item WhisperX language override. When present, the queue item stores it and karaoke processing uses that code instead of the global `/settings` detect/alignment defaults for that song only.
 
 ## Media upload flow
 
