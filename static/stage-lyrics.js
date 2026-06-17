@@ -43,6 +43,8 @@ class StageLyricsController {
     animation: "slide",
   };
 
+  static SETTINGS_KEYS = new Set(Object.keys(StageLyricsController.DEFAULT_SETTINGS));
+
   constructor(options = {}) {
     this.overlay = options.overlay || null;
     this.lines = options.lines || null;
@@ -518,8 +520,15 @@ class StageLyricsController {
     if (!this.importExport) {
       return;
     }
+    const raw = this.importExport.value.trim();
+    if (!raw) {
+      return;
+    }
     try {
-      const parsed = JSON.parse(this.importExport.value || "{}");
+      const parsed = JSON.parse(raw);
+      if (!this.isPlainObject(parsed) || !this.hasEditableSettingKey(parsed)) {
+        throw new Error("Invalid settings payload");
+      }
       this.settings = this.normalizeSettings({
         ...StageLyricsController.DEFAULT_SETTINGS,
         ...parsed,
@@ -563,6 +572,9 @@ class StageLyricsController {
     try {
       const raw = await file.text();
       const parsed = JSON.parse(raw);
+      if (!this.isPlainObject(parsed) || !this.hasEditableSettingKey(parsed)) {
+        throw new Error("Invalid settings payload");
+      }
       this.settings = this.normalizeSettings({
         ...StageLyricsController.DEFAULT_SETTINGS,
         ...parsed,
@@ -588,6 +600,14 @@ class StageLyricsController {
       return;
     }
     this.status.textContent = message || "";
+  }
+
+  isPlainObject(value) {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+
+  hasEditableSettingKey(value) {
+    return Object.keys(value).some((key) => StageLyricsController.SETTINGS_KEYS.has(key));
   }
 }
 
