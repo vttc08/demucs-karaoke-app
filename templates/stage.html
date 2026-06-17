@@ -501,6 +501,10 @@
     }
 
     .stage-lyrics-settings-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
         border-radius: 999px;
         border: 1px solid rgba(255, 255, 255, 0.14);
         background: rgba(255, 255, 255, 0.08);
@@ -1094,10 +1098,17 @@
                                     </label>
                                 </div>
                                 <div class="stage-lyrics-settings-actions">
-                                    <button id="stage-lyrics-export-btn" type="button" class="stage-lyrics-settings-action">{{ t('stage.lyrics_export') }}</button>
-                                    <button id="stage-lyrics-import-btn" type="button" class="stage-lyrics-settings-action">{{ t('stage.lyrics_import') }}</button>
+                                    <button id="stage-lyrics-export-btn" type="button" class="stage-lyrics-settings-action">
+                                        <span class="material-symbols-outlined text-sm">download</span>
+                                        {{ t('stage.lyrics_download') }}
+                                    </button>
+                                    <button id="stage-lyrics-import-btn" type="button" class="stage-lyrics-settings-action">
+                                        <span class="material-symbols-outlined text-sm">upload_file</span>
+                                        {{ t('stage.lyrics_upload') }}
+                                    </button>
                                     <button id="stage-lyrics-reset-btn" type="button" class="stage-lyrics-settings-action">{{ t('stage.lyrics_reset') }}</button>
                                 </div>
+                                <input id="stage-lyrics-settings-file" type="file" class="hidden" accept=".json,application/json" />
                                 <p id="stage-lyrics-settings-status" class="stage-lyrics-settings-status" aria-live="polite"></p>
                                 <div class="stage-lyrics-settings-footer">
                                     <button id="stage-lyrics-settings-save" type="button" class="stage-lyrics-settings-action stage-lyrics-settings-save">{{ t('common.save') }}</button>
@@ -1290,6 +1301,7 @@ const stageLyrics = new window.StageLyricsController({
     exportButton: document.getElementById("stage-lyrics-export-btn"),
     importButton: document.getElementById("stage-lyrics-import-btn"),
     importExport: document.getElementById("stage-lyrics-settings-json"),
+    fileInput: document.getElementById("stage-lyrics-settings-file"),
     status: document.getElementById("stage-lyrics-settings-status"),
     isFullscreenActive,
     t,

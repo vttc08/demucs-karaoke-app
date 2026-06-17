@@ -50,6 +50,7 @@ class StageLyricsController {
     this.exportButton = options.exportButton || null;
     this.importButton = options.importButton || null;
     this.importExport = options.importExport || null;
+    this.fileInput = options.fileInput || null;
     this.status = options.status || null;
     this.inputs = options.inputs || {};
     this.isFullscreenActive = options.isFullscreenActive || (() => false);
@@ -424,13 +425,19 @@ class StageLyricsController {
       this.setStatus(this.t("stage.lyrics_settings_reset_done"));
     });
     this.exportButton?.addEventListener("click", () => {
-      if (this.importExport) {
-        this.importExport.value = JSON.stringify(this.settings, null, 2);
-        this.importExport.select();
-      }
-      this.setStatus(this.t("stage.lyrics_settings_exported"));
+      this.downloadSettings();
     });
-    this.importButton?.addEventListener("click", () => this.importSettings());
+    this.importButton?.addEventListener("click", () => {
+      if (this.fileInput) {
+        this.fileInput.value = "";
+        this.fileInput.click();
+        return;
+      }
+      this.importSettings();
+    });
+    this.fileInput?.addEventListener("change", () => {
+      void this.importSettingsFromFile(this.fileInput?.files?.[0] || null);
+    });
 
     Object.entries(this.inputs).forEach(([name, input]) => {
       if (!input) {
@@ -501,6 +508,56 @@ class StageLyricsController {
       this.setStatus(this.t("stage.lyrics_settings_imported"));
     } catch (_) {
       this.setStatus(this.t("stage.lyrics_settings_import_failed"));
+    }
+  }
+
+  downloadSettings() {
+    const payload = JSON.stringify(this.settings, null, 2);
+    if (this.importExport) {
+      this.importExport.value = payload;
+    }
+
+    try {
+      const blob = new Blob([payload], { type: "application/json" });
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "karaoke-stage-lyrics-settings.json";
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
+      this.setStatus(this.t("stage.lyrics_settings_downloaded"));
+    } catch (_) {
+      this.setStatus(this.t("stage.lyrics_settings_download_failed"));
+    }
+  }
+
+  async importSettingsFromFile(file) {
+    if (!file) {
+      return;
+    }
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw);
+      this.settings = this.normalizeSettings({
+        ...StageLyricsController.DEFAULT_SETTINGS,
+        ...parsed,
+      });
+      this.saveSettings();
+      this.applySettings();
+      this.syncSettingsUi();
+      if (this.importExport) {
+        this.importExport.value = JSON.stringify(this.settings, null, 2);
+      }
+      this.setStatus(this.t("stage.lyrics_settings_imported"));
+    } catch (_) {
+      this.setStatus(this.t("stage.lyrics_settings_import_failed"));
+    } finally {
+      if (this.fileInput) {
+        this.fileInput.value = "";
+      }
     }
   }
 

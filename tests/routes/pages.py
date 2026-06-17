@@ -261,6 +261,9 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-shortcuts-panel"' in response.content
     assert b'id="stage-lyrics-settings-btn"' in response.content
     assert b'id="stage-lyrics-settings-panel"' in response.content
+    assert b'id="stage-lyrics-settings-file"' in response.content
+    assert b'id="stage-lyrics-export-btn"' in response.content
+    assert b'id="stage-lyrics-import-btn"' in response.content
     assert re.search(rb'id="stage-lyrics-overlay"[^>]*class="[^"]*\bhidden\b', response.content)
     assert b"stage-lyric-word--highlighted" in response.content
     assert b"/static/stage-lyrics.js" in response.content
