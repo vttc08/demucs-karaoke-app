@@ -610,7 +610,8 @@
     }
 
     .stage-lyrics-lines {
-        width: min(100%, 74rem);
+        width: min(var(--stage-lyrics-lines-width, 100vw), calc(100vw - (clamp(1rem, 4vw, 5rem) * 2)));
+        max-width: none;
         display: grid;
         gap: clamp(0.2rem, 0.8vw, 0.75rem);
         text-align: center;
@@ -620,12 +621,12 @@
     .stage-lyric-line {
         margin: 0;
         font-family: var(--stage-lyrics-font-family);
-        font-size: calc(var(--stage-lyrics-size) * 0.46);
+        font-size: calc(var(--stage-lyrics-size) * var(--stage-lyrics-line-scale, 0.46));
         font-weight: 900;
         line-height: 1.12;
         letter-spacing: 0.02em;
         color: var(--stage-lyrics-text-color);
-        opacity: 0.52;
+        opacity: var(--stage-lyrics-line-opacity, 0.52);
         text-shadow:
             calc(var(--stage-lyrics-outline-width) * -1) 0 0 var(--stage-lyrics-outline-color),
             var(--stage-lyrics-outline-width) 0 0 var(--stage-lyrics-outline-color),
@@ -1083,6 +1084,13 @@
                                         </span>
                                         <input id="stage-lyrics-size" class="stage-lyrics-settings-input" type="range" min="3.2" max="8.8" step="0.1" />
                                     </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">
+                                            {{ t('stage.lyrics_max_width') }}
+                                            <span id="stage-lyrics-line-width-pct-value"></span>
+                                        </span>
+                                        <input id="stage-lyrics-line-width-pct" class="stage-lyrics-settings-input" type="range" min="60" max="100" step="1" />
+                                    </label>
                                     <label class="stage-lyrics-settings-field">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_text_color') }}</span>
                                         <input id="stage-lyrics-text-color" class="stage-lyrics-settings-input" type="color" />
@@ -1109,6 +1117,20 @@
                                     <label class="stage-lyrics-settings-field">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_next_lines') }}</span>
                                         <input id="stage-lyrics-next-lines" class="stage-lyrics-settings-input" type="number" min="0" max="3" step="1" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field">
+                                        <span class="stage-lyrics-settings-label">
+                                            {{ t('stage.lyrics_surrounding_size') }}
+                                            <span id="stage-lyrics-neighbor-line-scale-pct-value"></span>
+                                        </span>
+                                        <input id="stage-lyrics-neighbor-line-scale-pct" class="stage-lyrics-settings-input" type="range" min="30" max="100" step="1" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field">
+                                        <span class="stage-lyrics-settings-label">
+                                            {{ t('stage.lyrics_surrounding_opacity') }}
+                                            <span id="stage-lyrics-neighbor-line-opacity-pct-value"></span>
+                                        </span>
+                                        <input id="stage-lyrics-neighbor-line-opacity-pct" class="stage-lyrics-settings-input" type="range" min="10" max="100" step="1" />
                                     </label>
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_animation') }}</span>
@@ -1349,6 +1371,8 @@ const stageLyrics = new window.StageLyricsController({
         customFontFamily: document.getElementById("stage-lyrics-custom-font"),
         sizeVw: document.getElementById("stage-lyrics-size"),
         sizeVwValue: document.getElementById("stage-lyrics-size-value"),
+        lineWidthPct: document.getElementById("stage-lyrics-line-width-pct"),
+        lineWidthPctValue: document.getElementById("stage-lyrics-line-width-pct-value"),
         textColor: document.getElementById("stage-lyrics-text-color"),
         activeColor: document.getElementById("stage-lyrics-active-color"),
         outlineColor: document.getElementById("stage-lyrics-outline-color"),
@@ -1356,6 +1380,10 @@ const stageLyrics = new window.StageLyricsController({
         outlineWidthValue: document.getElementById("stage-lyrics-outline-width-value"),
         previousLines: document.getElementById("stage-lyrics-previous-lines"),
         nextLines: document.getElementById("stage-lyrics-next-lines"),
+        neighborLineScalePct: document.getElementById("stage-lyrics-neighbor-line-scale-pct"),
+        neighborLineScalePctValue: document.getElementById("stage-lyrics-neighbor-line-scale-pct-value"),
+        neighborLineOpacityPct: document.getElementById("stage-lyrics-neighbor-line-opacity-pct"),
+        neighborLineOpacityPctValue: document.getElementById("stage-lyrics-neighbor-line-opacity-pct-value"),
         animation: document.getElementById("stage-lyrics-animation"),
     },
 });

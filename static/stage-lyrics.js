@@ -31,6 +31,9 @@ class StageLyricsController {
     fontPreset: "karaoke_cjk",
     customFontFamily: "",
     sizeVw: 5.6,
+    lineWidthPct: 100,
+    neighborLineScalePct: 46,
+    neighborLineOpacityPct: 52,
     textColor: "#fff8df",
     activeColor: "#ffd84f",
     outlineColor: "#050505",
@@ -357,6 +360,9 @@ class StageLyricsController {
       fontPreset,
       customFontFamily: String(settings.customFontFamily || "").slice(0, 220),
       sizeVw: this.clampNumber(settings.sizeVw, 3.2, 8.8, StageLyricsController.DEFAULT_SETTINGS.sizeVw),
+      lineWidthPct: Math.round(this.clampNumber(settings.lineWidthPct, 60, 100, StageLyricsController.DEFAULT_SETTINGS.lineWidthPct)),
+      neighborLineScalePct: Math.round(this.clampNumber(settings.neighborLineScalePct, 30, 100, StageLyricsController.DEFAULT_SETTINGS.neighborLineScalePct)),
+      neighborLineOpacityPct: Math.round(this.clampNumber(settings.neighborLineOpacityPct, 10, 100, StageLyricsController.DEFAULT_SETTINGS.neighborLineOpacityPct)),
       textColor: this.normalizeColor(settings.textColor, StageLyricsController.DEFAULT_SETTINGS.textColor),
       activeColor: this.normalizeColor(settings.activeColor, StageLyricsController.DEFAULT_SETTINGS.activeColor),
       outlineColor: this.normalizeColor(settings.outlineColor, StageLyricsController.DEFAULT_SETTINGS.outlineColor),
@@ -401,6 +407,9 @@ class StageLyricsController {
 
     this.overlay.style.setProperty("--stage-lyrics-font-family", fontFamily);
     this.overlay.style.setProperty("--stage-lyrics-size", `clamp(2.4rem, ${this.settings.sizeVw}vw, 6.8rem)`);
+    this.overlay.style.setProperty("--stage-lyrics-lines-width", `${this.settings.lineWidthPct}vw`);
+    this.overlay.style.setProperty("--stage-lyrics-line-scale", `${this.settings.neighborLineScalePct / 100}`);
+    this.overlay.style.setProperty("--stage-lyrics-line-opacity", `${this.settings.neighborLineOpacityPct / 100}`);
     this.overlay.style.setProperty("--stage-lyrics-text-color", this.settings.textColor);
     this.overlay.style.setProperty("--stage-lyrics-active-color", this.settings.activeColor);
     this.overlay.style.setProperty("--stage-lyrics-outline-color", this.settings.outlineColor);
@@ -490,6 +499,15 @@ class StageLyricsController {
     }
     if (this.inputs.sizeVwValue) {
       this.inputs.sizeVwValue.textContent = `${this.settings.sizeVw.toFixed(1)}vw`;
+    }
+    if (this.inputs.lineWidthPctValue) {
+      this.inputs.lineWidthPctValue.textContent = `${this.settings.lineWidthPct}%`;
+    }
+    if (this.inputs.neighborLineScalePctValue) {
+      this.inputs.neighborLineScalePctValue.textContent = `${this.settings.neighborLineScalePct}%`;
+    }
+    if (this.inputs.neighborLineOpacityPctValue) {
+      this.inputs.neighborLineOpacityPctValue.textContent = `${this.settings.neighborLineOpacityPct}%`;
     }
     if (this.inputs.outlineWidthValue) {
       this.inputs.outlineWidthValue.textContent = `${this.settings.outlineWidth}px`;

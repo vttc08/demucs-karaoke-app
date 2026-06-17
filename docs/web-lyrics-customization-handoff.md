@@ -24,6 +24,8 @@ This document captures extension points for future lyric-style customization on 
 2. **Line window behavior**
 - Previous and upcoming line counts are browser-configurable.
 - Single-line focus is available by setting both values to `0`.
+- The lyric row width now scales with the available stage viewport width instead of capping at a fixed pixel value, and the controller stores that width as a percentage setting for later UI exposure.
+- The surrounding line size and opacity are browser-configurable percentages relative to the active line, so the window can be tuned without changing cue payloads.
 
 3. **Animation behaviors**
 - Supported settings:
