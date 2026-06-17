@@ -161,6 +161,7 @@ and `/static/...`.
        - Use the WhisperX preload button to ask the remote Demucs host to download/cache the listed models on demand
        - Trigger a remote Demucs garbage-collection pass from the settings page when you want to reclaim GPU memory without shell access
        - Configure **Stage Lobby Media URL** (`/media/...` or `/cache/...`) for empty-queue loop playback
+       - Configure the stage QR overlay URL for the fullscreen stage view; QR size and placement are adjusted per device on `/stage`
        - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
       - Apply settings immediately without restarting the app (for processing/runtime behavior)
        - Persist changes to the database so settings survive app reloads and restarts

@@ -266,6 +266,23 @@ def test_stage_page_loads_for_admin(client):
     assert b"/static/stage-lyrics.js" in response.content
     assert b'aria-label="Fullscreen"' in response.content
 
+
+def test_stage_page_renders_client_qr_controls(client):
+    """Stage page should render client-side QR customization controls."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.pages.stage_lobby_service.resolve_lobby_media_url",
+        return_value="/media/stage-lobby-fallback.mp4",
+    ):
+        response = client.get("/stage")
+    assert response.status_code == 200
+    assert b'id="stage-qr-settings-btn"' in response.content
+    assert b'id="stage-qr-settings-panel"' in response.content
+    assert b'id="stage-qr-size"' in response.content
+    assert b"karaoke.stage.qrDisplay" in response.content
+    assert b"SERVER_STAGE_QR_SIZE" not in response.content
+    assert b"SERVER_STAGE_QR_POSITION" not in response.content
+
 def test_stage_page_renders_audio_mode_for_current_mp3(client, tmp_path):
     """Stage page should bootstrap audio-mode playback for current MP3 items."""
     original_media = settings.media_path

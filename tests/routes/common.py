@@ -125,5 +125,3 @@ def subscribe_websocket(websocket, page: str) -> None:
             "timestamp": 123,
         }
     )
-
-

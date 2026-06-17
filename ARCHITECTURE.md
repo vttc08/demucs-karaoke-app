@@ -183,6 +183,8 @@ The stage page uses a websocket-first model:
 ## Stage lobby media fallback
 
 - Runtime settings include `stage_lobby_media_path` for optional empty-queue loop media.
+- Runtime settings include `stage_qr_url` for the stage QR overlay link.
+- Stage QR size and placement are stored in browser local storage on `/stage`, so each device can keep its own layout.
 - The stage route resolves lobby playback in this order:
   1. Configured media URL exists (`/media/...` or `/cache/...`) -> use it.
   2. Otherwise generate one deterministic fallback loop media file in `media_path`

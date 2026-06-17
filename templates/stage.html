@@ -217,15 +217,50 @@
     }
 
     .stage-qr-overlay {
+        display: flex;
+        position: absolute;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        width: fit-content;
+        max-width: min(calc(100vw - 2rem), calc(100dvh - 2rem));
+        padding: 0.75rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: rgba(0, 0, 0, 0.65);
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
         opacity: 0;
-        transform: translateY(8px) scale(0.97);
+        transform: translate3d(0, 8px, 0) scale(0.97);
         transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1), transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
         pointer-events: none;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        cursor: grab;
+        z-index: 20;
+    }
+
+    .stage-qr-overlay.is-dragging {
+        cursor: grabbing;
+        transition: none;
     }
 
     .stage-qr-overlay.is-visible {
         opacity: 1;
-        transform: translateY(0) scale(1);
+        pointer-events: auto;
+    }
+
+    .stage-qr-image {
+        display: block;
+        width: min(var(--stage-qr-size, 20rem), calc(100vw - 4rem), calc(100dvh - 4rem));
+        height: min(var(--stage-qr-size, 20rem), calc(100vw - 4rem), calc(100dvh - 4rem));
+        max-width: 100%;
+        max-height: 100%;
+        border-radius: 0.75rem;
+        background: #fff;
+        padding: 0.25rem;
     }
 
     .stage-shortcuts-control,
@@ -234,8 +269,13 @@
         position: relative;
     }
 
+    .stage-qr-settings-control {
+        position: relative;
+    }
+
     .stage-shortcuts-panel,
-    .stage-lyrics-settings-panel {
+    .stage-lyrics-settings-panel,
+    .stage-qr-settings-panel {
         position: absolute;
         right: 0;
         bottom: calc(100% + 0.75rem);
@@ -257,7 +297,8 @@
     }
 
     .stage-shortcuts-panel-title,
-    .stage-lyrics-settings-title {
+    .stage-lyrics-settings-title,
+    .stage-qr-settings-title {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -302,6 +343,64 @@
         margin-top: 0.75rem;
         font-size: 0.75rem;
         color: rgba(255, 255, 255, 0.62);
+    }
+
+    .stage-qr-settings-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.9rem;
+    }
+
+    .stage-qr-settings-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+    }
+
+    .stage-qr-settings-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .stage-qr-settings-value {
+        font-size: 0.78rem;
+        color: rgba(255, 255, 255, 0.74);
+    }
+
+    .stage-qr-settings-hint {
+        font-size: 0.76rem;
+        line-height: 1.45;
+        color: rgba(255, 255, 255, 0.72);
+    }
+
+    .stage-qr-settings-actions {
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .stage-qr-settings-action {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 999px;
+        padding: 0.45rem 0.9rem;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: rgba(255, 255, 255, 0.92);
+        background: rgba(255, 255, 255, 0.08);
+        transition: background 160ms ease, border-color 160ms ease;
+    }
+
+    .stage-qr-settings-action:hover {
+        background: rgba(255, 255, 255, 0.14);
+        border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .stage-qr-settings-slider {
+        width: 100%;
     }
 
     .stage-lyrics-settings-grid {
@@ -829,6 +928,45 @@
                             <span class="material-symbols-outlined text-base">qr_code_2</span>
                             <span class="stage-control-label">{{ t('stage.qr') }}</span>
                         </button>
+                        <div class="stage-qr-settings-control">
+                            <button
+                                id="stage-qr-settings-btn"
+                                class="stage-control-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                                aria-label="{{ t('stage.qr_customize') }}"
+                                title="{{ t('stage.qr_customize') }}"
+                                aria-controls="stage-qr-settings-panel"
+                                aria-expanded="false"
+                            >
+                                <span class="material-symbols-outlined text-base">open_with</span>
+                                <span class="stage-control-label">{{ t('stage.qr_customize') }}</span>
+                            </button>
+                            <div id="stage-qr-settings-panel" class="stage-qr-settings-panel hidden" role="dialog" aria-label="{{ t('stage.qr_customize_title') }}">
+                                <div class="stage-qr-settings-title">
+                                    <h3 class="text-sm font-semibold text-on-surface">{{ t('stage.qr_customize_title') }}</h3>
+                                    <button
+                                        id="stage-qr-settings-close"
+                                        type="button"
+                                        class="rounded-full p-1 text-on-surface-variant transition hover:bg-white/10 hover:text-on-surface"
+                                        aria-label="{{ t('common.close') }}"
+                                    >
+                                        <span class="material-symbols-outlined text-base">close</span>
+                                    </button>
+                                </div>
+                                <div class="stage-qr-settings-body">
+                                    <label class="stage-qr-settings-field" for="stage-qr-size">
+                                        <span class="stage-qr-settings-label">
+                                            {{ t('stage.qr_size') }}
+                                            <span id="stage-qr-size-value" class="stage-qr-settings-value"></span>
+                                        </span>
+                                        <input id="stage-qr-size" class="stage-qr-settings-slider h-1.5 accent-primary" type="range" min="128" max="640" step="16" />
+                                    </label>
+                                    <p class="stage-qr-settings-hint">{{ t('stage.qr_customize_hint') }}</p>
+                                    <div class="stage-qr-settings-actions">
+                                        <button id="stage-qr-reset-btn" type="button" class="stage-qr-settings-action">{{ t('stage.qr_customize_reset') }}</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <div class="stage-shortcuts-control">
                             <button
                                 id="stage-shortcuts-btn"
@@ -1024,8 +1162,8 @@
                 </div>
             </div>
 
-            <aside id="stage-qr-overlay" class="stage-qr-overlay pointer-events-none absolute bottom-4 right-4 z-20 rounded-xl border border-white/15 bg-black/65 p-3 shadow-2xl backdrop-blur sm:bottom-6 sm:right-6">
-                <img id="stage-qr-image" alt="{{ t('stage.queue_qr') }}" class="h-32 w-32 rounded-md bg-white p-1 sm:h-36 sm:w-36" />
+            <aside id="stage-qr-overlay" class="stage-qr-overlay">
+                <img id="stage-qr-image" alt="{{ t('stage.queue_qr') }}" class="stage-qr-image" />
                 <p id="stage-qr-label" class="mt-2 max-w-36 truncate text-center text-[11px] font-medium text-on-surface-variant"></p>
             </aside>
         </section>
@@ -1059,6 +1197,11 @@ const API_BASE = window.KaraokeURLs.basePath;
 const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
 const SERVER_STAGE_QR_URL = {{ (stage_qr_url or "") | tojson }};
 const STAGE_LOBBY_MEDIA_URL = {{ stage_lobby_media_url|public_url|tojson }};
+const STAGE_QR_STORAGE_KEY = "karaoke.stage.qrDisplay";
+const STAGE_QR_DEFAULT_SIZE = 320;
+const STAGE_QR_MIN_SIZE = 128;
+const STAGE_QR_MAX_SIZE = 640;
+const STAGE_QR_EDGE_PADDING = 24;
 let currentItemId = {{ (current.id if current else None) | tojson }};
 const INITIAL_CURRENT_ITEM = {{ {
     "id": (current.id if current else None),
@@ -1098,6 +1241,12 @@ const lyricsToggleBtn = document.getElementById("lyrics-toggle-btn");
 const lyricsToggleIcon = document.getElementById("lyrics-toggle-icon");
 const lyricsToggleLabel = document.getElementById("lyrics-toggle-label");
 const qrToggleBtn = document.getElementById("qr-toggle-btn");
+const qrSettingsBtn = document.getElementById("stage-qr-settings-btn");
+const qrSettingsPanel = document.getElementById("stage-qr-settings-panel");
+const qrSettingsClose = document.getElementById("stage-qr-settings-close");
+const qrResetBtn = document.getElementById("stage-qr-reset-btn");
+const qrSizeInput = document.getElementById("stage-qr-size");
+const qrSizeValue = document.getElementById("stage-qr-size-value");
 const shortcutsBtn = document.getElementById("stage-shortcuts-btn");
 const shortcutsPanel = document.getElementById("stage-shortcuts-panel");
 const lyricsSettingsBtn = document.getElementById("stage-lyrics-settings-btn");
@@ -1128,6 +1277,7 @@ const stageLyrics = new window.StageLyricsController({
     onPanelVisibilityChange: (visible) => {
         if (visible) {
             setShortcutsPanelVisible(false);
+            setQrSettingsPanelVisible(false);
             showStageControls();
         } else {
             scheduleHideStageControls();
@@ -1156,10 +1306,11 @@ if (lyricsSettingsSave) {
     });
 }
 const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
-const QR_IMAGE_SIZE = 320;
 let controlsHideTimer = null;
 let isQrVisible = false;
+let qrSettingsPanelVisible = false;
 let shortcutsPanelVisible = false;
+let qrDragState = null;
 let stageSocket = null;
 let mixState = {
     vocals_enabled: true,
@@ -2028,21 +2179,191 @@ function resolveStageQrUrl() {
     return window.location.hostname;
 }
 
+function clampNumber(value, min, max, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        return fallback;
+    }
+    return Math.max(min, Math.min(max, number));
+}
+
+function clampQrSize(value) {
+    return Math.round(clampNumber(value, STAGE_QR_MIN_SIZE, STAGE_QR_MAX_SIZE, STAGE_QR_DEFAULT_SIZE));
+}
+
+function createDefaultQrDisplayState() {
+    return {
+        sizePx: STAGE_QR_DEFAULT_SIZE,
+        xRatio: 1,
+        yRatio: 1,
+    };
+}
+
+function normalizeQrDisplayState(state) {
+    const source = state && typeof state === "object" ? state : {};
+    return {
+        sizePx: clampQrSize(source.sizePx),
+        xRatio: clampNumber(source.xRatio, 0, 1, 1),
+        yRatio: clampNumber(source.yRatio, 0, 1, 1),
+    };
+}
+
+function loadQrDisplayState() {
+    try {
+        const stored = window.localStorage?.getItem(STAGE_QR_STORAGE_KEY);
+        if (!stored) {
+            return createDefaultQrDisplayState();
+        }
+        return normalizeQrDisplayState(JSON.parse(stored));
+    } catch (_) {
+        return createDefaultQrDisplayState();
+    }
+}
+
+function saveQrDisplayState() {
+    try {
+        window.localStorage?.setItem(STAGE_QR_STORAGE_KEY, JSON.stringify(qrDisplayState));
+    } catch (_) {
+        stageLyrics.setStatus(t("stage.qr_customize_save_failed"));
+    }
+}
+
+function getQrViewportBounds() {
+    const containerWidth = qrOverlay?.offsetWidth || qrDisplayState.sizePx + 24;
+    const containerHeight = qrOverlay?.offsetHeight || qrDisplayState.sizePx + 48;
+    return {
+        minX: STAGE_QR_EDGE_PADDING,
+        minY: STAGE_QR_EDGE_PADDING,
+        maxX: Math.max(STAGE_QR_EDGE_PADDING, window.innerWidth - containerWidth - STAGE_QR_EDGE_PADDING),
+        maxY: Math.max(STAGE_QR_EDGE_PADDING, window.innerHeight - containerHeight - STAGE_QR_EDGE_PADDING),
+    };
+}
+
+function ratioToCoordinate(ratio, min, max) {
+    if (max <= min) {
+        return min;
+    }
+    return min + (max - min) * clampNumber(ratio, 0, 1, 1);
+}
+
+function coordinateToRatio(value, min, max) {
+    if (max <= min) {
+        return 1;
+    }
+    return clampNumber((value - min) / (max - min), 0, 1, 1);
+}
+
+function getQrCoordinatesFromState() {
+    const bounds = getQrViewportBounds();
+    return {
+        x: ratioToCoordinate(qrDisplayState.xRatio, bounds.minX, bounds.maxX),
+        y: ratioToCoordinate(qrDisplayState.yRatio, bounds.minY, bounds.maxY),
+    };
+}
+
+function setQrCoordinates(x, y, persist = true) {
+    const bounds = getQrViewportBounds();
+    const clampedX = clampNumber(x, bounds.minX, bounds.maxX, bounds.maxX);
+    const clampedY = clampNumber(y, bounds.minY, bounds.maxY, bounds.maxY);
+    qrDisplayState.xRatio = coordinateToRatio(clampedX, bounds.minX, bounds.maxX);
+    qrDisplayState.yRatio = coordinateToRatio(clampedY, bounds.minY, bounds.maxY);
+    if (persist) {
+        saveQrDisplayState();
+    }
+    return { x: clampedX, y: clampedY };
+}
+
+function applyQrOverlayPlacement() {
+    if (!qrOverlay) return;
+    const coords = getQrCoordinatesFromState();
+    const { x, y } = setQrCoordinates(coords.x, coords.y, false);
+    qrOverlay.style.setProperty("--stage-qr-size", `${qrDisplayState.sizePx}px`);
+    qrOverlay.style.left = `${x}px`;
+    qrOverlay.style.top = `${y}px`;
+    qrOverlay.style.transform = isQrVisible
+        ? "translate3d(0, 0, 0) scale(1)"
+        : "translate3d(0, 8px, 0) scale(0.97)";
+}
+
 function updateQrOverlayContent() {
     if (!qrImage || !qrLabel) return;
+    applyQrOverlayPlacement();
     const target = resolveStageQrUrl();
     qrLabel.textContent = target;
     const params = new URLSearchParams({
         data: target,
-        size: String(QR_IMAGE_SIZE),
+        size: String(qrDisplayState.sizePx),
     });
     qrImage.src = `${QR_CODE_ENDPOINT}?${params.toString()}`;
 }
+
+function syncQrSettingsUi() {
+    if (qrSizeInput) {
+        qrSizeInput.value = String(qrDisplayState.sizePx);
+    }
+    if (qrSizeValue) {
+        qrSizeValue.textContent = `${qrDisplayState.sizePx}px`;
+    }
+    if (qrSettingsBtn && qrSettingsPanel) {
+        qrSettingsBtn.setAttribute("aria-expanded", qrSettingsPanelVisible ? "true" : "false");
+        qrSettingsPanel.classList.toggle("hidden", !qrSettingsPanelVisible);
+    }
+}
+
+function setQrSettingsPanelVisible(visible) {
+    qrSettingsPanelVisible = Boolean(visible);
+    syncQrSettingsUi();
+}
+
+function beginQrDrag(event) {
+    if (!qrOverlay || !isQrVisible || event.button === 2) {
+        return;
+    }
+    const rect = qrOverlay.getBoundingClientRect();
+    qrDragState = {
+        pointerId: event.pointerId,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+    };
+    qrOverlay.setPointerCapture?.(event.pointerId);
+    qrOverlay.classList.add("is-dragging");
+    showStageControls();
+    event.preventDefault();
+}
+
+function updateQrDrag(event) {
+    if (!qrDragState || qrDragState.pointerId !== event.pointerId) {
+        return;
+    }
+    const nextX = event.clientX - qrDragState.offsetX;
+    const nextY = event.clientY - qrDragState.offsetY;
+    const { x, y } = setQrCoordinates(nextX, nextY, false);
+    qrOverlay.style.left = `${x}px`;
+    qrOverlay.style.top = `${y}px`;
+    qrOverlay.style.transform = "translate3d(0, 0, 0) scale(1)";
+    event.preventDefault();
+}
+
+function endQrDrag(event) {
+    if (!qrDragState || qrDragState.pointerId !== event.pointerId) {
+        return;
+    }
+    qrOverlay.releasePointerCapture?.(event.pointerId);
+    qrOverlay.classList.remove("is-dragging");
+    saveQrDisplayState();
+    qrDragState = null;
+    scheduleHideStageControls();
+}
+
+const qrDisplayState = loadQrDisplayState();
+syncQrSettingsUi();
+applyQrOverlayPlacement();
 
 function setQrOverlayVisible(visible) {
     if (!qrOverlay || !qrToggleBtn) return;
     isQrVisible = visible;
     qrOverlay.classList.toggle("is-visible", visible);
+    applyQrOverlayPlacement();
     qrToggleBtn.setAttribute("aria-pressed", visible ? "true" : "false");
     qrToggleBtn.classList.toggle("bg-primary/85", visible);
     qrToggleBtn.classList.toggle("text-on-primary", visible);
@@ -2066,6 +2387,7 @@ function toggleShortcutsPanel() {
     setShortcutsPanelVisible(nextVisible);
     if (nextVisible) {
         stageLyrics.setSettingsPanelVisible(false);
+        setQrSettingsPanelVisible(false);
         showStageControls();
     } else {
         scheduleHideStageControls();
@@ -2086,7 +2408,7 @@ function showStageControls() {
         controlsHideTimer = null;
     }
 
-    if (shortcutsPanelVisible || stageLyrics.settingsPanelVisible) {
+    if (shortcutsPanelVisible || stageLyrics.settingsPanelVisible || qrSettingsPanelVisible || qrDragState) {
         return;
     }
 
@@ -2505,6 +2827,52 @@ if (qrToggleBtn) {
     });
 }
 
+if (qrSettingsBtn) {
+    qrSettingsBtn.addEventListener("click", () => {
+        const nextVisible = !qrSettingsPanelVisible;
+        setQrSettingsPanelVisible(nextVisible);
+        if (nextVisible) {
+            setShortcutsPanelVisible(false);
+            stageLyrics.setSettingsPanelVisible(false);
+            showStageControls();
+        } else {
+            scheduleHideStageControls();
+        }
+    });
+}
+
+if (qrSettingsClose) {
+    qrSettingsClose.addEventListener("click", () => {
+        setQrSettingsPanelVisible(false);
+        scheduleHideStageControls();
+    });
+}
+
+if (qrResetBtn) {
+    qrResetBtn.addEventListener("click", () => {
+        Object.assign(qrDisplayState, createDefaultQrDisplayState());
+        saveQrDisplayState();
+        syncQrSettingsUi();
+        updateQrOverlayContent();
+    });
+}
+
+if (qrSizeInput) {
+    qrSizeInput.addEventListener("input", () => {
+        qrDisplayState.sizePx = clampQrSize(qrSizeInput.value);
+        syncQrSettingsUi();
+        saveQrDisplayState();
+        updateQrOverlayContent();
+    });
+}
+
+if (qrOverlay) {
+    qrOverlay.addEventListener("pointerdown", beginQrDrag);
+    qrOverlay.addEventListener("pointermove", updateQrDrag);
+    qrOverlay.addEventListener("pointerup", endQrDrag);
+    qrOverlay.addEventListener("pointercancel", endQrDrag);
+}
+
 if (shortcutsBtn) {
     shortcutsBtn.addEventListener("click", () => {
         toggleShortcutsPanel();
@@ -2538,6 +2906,16 @@ if (stageMedia) {
     stageMedia.addEventListener("focusin", showStageControls);
     stageMedia.addEventListener("mouseleave", scheduleHideStageControls);
 }
+
+window.addEventListener("resize", () => {
+    applyQrOverlayPlacement();
+});
+
+document.addEventListener("fullscreenchange", () => {
+    window.setTimeout(() => {
+        applyQrOverlayPlacement();
+    }, 0);
+});
 
 if (vocalsAudio) {
     vocalsAudio.addEventListener("error", () => {
@@ -2573,6 +2951,13 @@ window.addEventListener("keydown", async (event) => {
     if (event.key === "Escape" && stageLyrics.settingsPanelVisible) {
         event.preventDefault();
         stageLyrics.setSettingsPanelVisible(false);
+        scheduleHideStageControls();
+        return;
+    }
+
+    if (event.key === "Escape" && qrSettingsPanelVisible) {
+        event.preventDefault();
+        setQrSettingsPanelVisible(false);
         scheduleHideStageControls();
         return;
     }
