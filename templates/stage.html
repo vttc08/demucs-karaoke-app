@@ -565,17 +565,19 @@
     }
 
     @media (min-width: 960px) {
+        .stage-shortcuts-control,
+        .stage-lyrics-settings-control {
+            display: block;
+        }
+    }
+
+    @media (min-width: 1200px) {
         .stage-control-label {
             display: inline-flex;
         }
 
         .stage-vocals-label-text {
             display: inline-flex;
-        }
-
-        .stage-shortcuts-control,
-        .stage-lyrics-settings-control {
-            display: block;
         }
     }
 
@@ -767,7 +769,6 @@
                         title="{{ t('stage.fullscreen') }}"
                     >
                         <span id="fullscreen-icon" class="material-symbols-outlined text-base">fullscreen</span>
-                        <span id="fullscreen-label" class="stage-control-label">{{ t('stage.fullscreen') }}</span>
                     </button>
                     <div class="stage-control-cluster stage-control-cluster--utilities">
                         <button
@@ -831,6 +832,10 @@
                                     <div class="stage-shortcuts-row">
                                         <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_lyrics') }}</span>
                                         <span class="stage-shortcuts-kbd">L</span>
+                                    </div>
+                                    <div class="stage-shortcuts-row">
+                                        <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_style') }}</span>
+                                        <span class="stage-shortcuts-kbd">S</span>
                                     </div>
                                     <div class="stage-shortcuts-row">
                                         <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_qr') }}</span>
@@ -1067,7 +1072,6 @@ const lyricsSettingsPanel = document.getElementById("stage-lyrics-settings-panel
 const lyricsSettingsClose = document.getElementById("stage-lyrics-settings-close");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const fullscreenIcon = document.getElementById("fullscreen-icon");
-const fullscreenLabel = document.getElementById("fullscreen-label");
 const qrOverlay = document.getElementById("stage-qr-overlay");
 const qrImage = document.getElementById("stage-qr-image");
 const qrLabel = document.getElementById("stage-qr-label");
@@ -1964,11 +1968,10 @@ function applyStageStateFromServer(data) {
 }
 
 function updateFullscreenUi() {
-    if (!fullscreenIcon || !fullscreenLabel) return;
+    if (!fullscreenIcon) return;
     const inFullscreen = !!document.fullscreenElement;
     const label = inFullscreen ? t("stage.exit_fullscreen") : t("stage.fullscreen");
     fullscreenIcon.textContent = inFullscreen ? "fullscreen_exit" : "fullscreen";
-    fullscreenLabel.textContent = label;
     if (fullscreenBtn) {
         fullscreenBtn.setAttribute("aria-label", label);
         fullscreenBtn.setAttribute("title", label);
@@ -2564,6 +2567,14 @@ window.addEventListener("keydown", async (event) => {
         event.preventDefault();
         if (lyricsToggleBtn) {
             lyricsToggleBtn.click();
+        }
+        return;
+    }
+
+    if (event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (lyricsSettingsBtn) {
+            lyricsSettingsBtn.click();
         }
         return;
     }
