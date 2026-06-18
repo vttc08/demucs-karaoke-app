@@ -23,6 +23,10 @@ class StageLyricsController {
     "fangsong",
   ]);
 
+  static LOCAL_FONT_FAMILIES = new Set([
+    "ZCOOL QingKe HuangYou",
+  ]);
+
   static FONT_PRESETS = {
     karaoke_cjk: {
       labelKey: "stage.lyrics_font_karaoke",
@@ -92,6 +96,8 @@ class StageLyricsController {
     this.reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false;
     this.settings = this.loadSettings();
     this.appliedCustomFontFamily = String(this.settings.customFontFamily || "").trim();
+    this.loadedFontFamilies = new Set();
+    this.pendingFontLoads = new Map();
 
     this.applySettings();
     this.syncSettingsUi();
@@ -314,6 +320,7 @@ class StageLyricsController {
       hasAlignedWords ? "stage-lyric-line--aligned" : "",
     ].filter(Boolean).join(" ");
     line.dataset.cueIndex = String(cueIndex);
+    line.dataset.text = cue.text;
     line.dataset.aligned = hasAlignedWords ? "true" : "false";
 
     if (!hasAlignedWords) {
@@ -476,7 +483,64 @@ class StageLyricsController {
     this.overlay.style.setProperty("--stage-lyrics-outline-color", this.settings.outlineColor);
     this.overlay.style.setProperty("--stage-lyrics-outline-width", `${this.settings.outlineWidth}px`);
     this.overlay.dataset.animation = this.reducedMotion ? "none" : this.settings.animation;
+    void this.ensureFontStackLoaded(fontFamily);
     this.renderWindow();
+  }
+
+  async ensureFontStackLoaded(fontStack) {
+    const primaryFamily = this.getPrimaryFontFamily(fontStack);
+    if (!primaryFamily || this.isGenericFontFamily(primaryFamily) || this.isLocalFontFamily(primaryFamily)) {
+      return;
+    }
+    if (this.isFontAvailable(primaryFamily)) {
+      this.loadedFontFamilies.add(primaryFamily);
+      return;
+    }
+    await this.loadGoogleFont(primaryFamily);
+  }
+
+  getPrimaryFontFamily(fontStack) {
+    const families = this.splitFontFamilyStack(fontStack);
+    return families.find((family) => !this.isGenericFontFamily(family)) || "";
+  }
+
+  isLocalFontFamily(fontFamily) {
+    return StageLyricsController.LOCAL_FONT_FAMILIES.has(String(fontFamily || "").trim());
+  }
+
+  isFontAvailable(fontFamily) {
+    if (!fontFamily || !document?.fonts?.check) {
+      return false;
+    }
+    const probe = `"${fontFamily.replace(/"/g, '\\"')}"`;
+    return document.fonts.check(`900 16px ${probe}`) || document.fonts.check(`400 16px ${probe}`);
+  }
+
+  async loadGoogleFont(fontFamily) {
+    const normalized = String(fontFamily || "").trim();
+    if (!normalized || this.loadedFontFamilies.has(normalized) || this.pendingFontLoads.has(normalized)) {
+      return this.pendingFontLoads.get(normalized) || null;
+    }
+
+    const promise = new Promise((resolve) => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(normalized).replace(/%20/g, "+")}&display=swap`;
+      link.crossOrigin = "anonymous";
+      link.onload = () => {
+        this.loadedFontFamilies.add(normalized);
+        this.pendingFontLoads.delete(normalized);
+        resolve();
+      };
+      link.onerror = () => {
+        this.pendingFontLoads.delete(normalized);
+        resolve();
+      };
+      document.head.appendChild(link);
+    });
+
+    this.pendingFontLoads.set(normalized, promise);
+    return promise;
   }
 
   normalizeCustomFontStack(fontStack) {

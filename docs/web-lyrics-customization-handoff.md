@@ -17,7 +17,8 @@ This document captures extension points for future lyric-style customization on 
   one previous line, two next lines, 60% surrounding line size/opacity, and fade animation.
 - The karaoke preset uses the local `ZCOOL QingKe HuangYou` face instead of the decorative script fallback.
 - Custom font stacks are applied as CSS `font-family` values and only take effect when the user clicks
-  the explicit Apply or Save actions.
+  the explicit Apply or Save actions. At that point the page loads the first non-generic font family
+  if it is not already available locally.
 - Outline rendering is stroke-first on supporting browsers, with a shadow fallback for older engines.
 
 ## Recommended future customization surfaces
