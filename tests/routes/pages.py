@@ -261,6 +261,12 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-shortcuts-panel"' in response.content
     assert b'id="stage-lyrics-settings-btn"' in response.content
     assert b'id="stage-lyrics-settings-panel"' in response.content
+    assert b'id="stage-lyrics-preset-select"' in response.content
+    assert b'id="stage-lyrics-preset-name"' in response.content
+    assert b'id="stage-lyrics-preset-apply"' in response.content
+    assert b'id="stage-lyrics-preset-create"' in response.content
+    assert b'id="stage-lyrics-preset-update"' in response.content
+    assert b'id="stage-lyrics-preset-delete"' in response.content
     assert b'id="stage-lyrics-settings-file"' in response.content
     assert b'id="stage-lyrics-export-btn"' in response.content
     assert b'id="stage-lyrics-import-btn"' in response.content

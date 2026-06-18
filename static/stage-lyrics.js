@@ -465,6 +465,30 @@ class StageLyricsController {
     }
   }
 
+  getSettingsSnapshot() {
+    return this.normalizeSettings({ ...this.settings });
+  }
+
+  applySettingsObject(rawSettings, options = {}) {
+    if (!this.isPlainObject(rawSettings)) {
+      return false;
+    }
+
+    const nextSettings = this.normalizeSettings({
+      ...StageLyricsController.DEFAULT_SETTINGS,
+      ...rawSettings,
+    });
+    this.settings = nextSettings;
+
+    if (options.persist !== false) {
+      this.persistSettings();
+    } else {
+      this.applySettings();
+      this.syncSettingsUi();
+    }
+    return true;
+  }
+
   applySettings() {
     if (!this.overlay) {
       return;

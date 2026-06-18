@@ -440,6 +440,44 @@
         gap: 0.75rem;
     }
 
+    .stage-lyrics-presets {
+        display: grid;
+        gap: 0.7rem;
+        margin-top: 0.8rem;
+        padding-top: 0.8rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .stage-lyrics-presets-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    .stage-lyrics-presets-title {
+        display: grid;
+        gap: 0.18rem;
+        min-width: 0;
+    }
+
+    .stage-lyrics-presets-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 0.45rem;
+        align-items: center;
+    }
+
+    .stage-lyrics-presets-row--name {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+
+    .stage-lyrics-presets-row .stage-lyrics-settings-action {
+        min-height: 2.35rem;
+        padding-inline: 0.7rem;
+        white-space: nowrap;
+    }
+
     .stage-lyrics-settings-field {
         display: grid;
         gap: 0.35rem;
@@ -576,6 +614,16 @@
 
     .stage-lyrics-settings-save:hover {
         background: rgba(255, 216, 79, 0.22);
+    }
+
+    @media (max-width: 639px) {
+        .stage-lyrics-presets-row {
+            grid-template-columns: 1fr;
+        }
+
+        .stage-lyrics-presets-row .stage-lyrics-settings-action {
+            width: 100%;
+        }
     }
 
     .stage-lyrics-overlay {
@@ -1220,11 +1268,46 @@
                                             <option value="none">{{ t('stage.lyrics_animation_none') }}</option>
                                         </select>
                                     </label>
-                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                </div>
+
+                                <div class="stage-lyrics-presets">
+                                    <div class="stage-lyrics-presets-head">
+                                        <div class="stage-lyrics-presets-title">
+                                            <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_presets_title') }}</span>
+                                            <p class="text-xs leading-tight text-on-surface-variant">{{ t('stage.lyrics_presets_detail') }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="stage-lyrics-presets-row">
+                                        <label class="sr-only" for="stage-lyrics-preset-select">{{ t('stage.lyrics_presets_select') }}</label>
+                                        <select id="stage-lyrics-preset-select" class="stage-lyrics-settings-select">
+                                            <option value="">{{ t('stage.lyrics_presets_empty') }}</option>
+                                        </select>
+                                        <button id="stage-lyrics-preset-apply" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">play_arrow</span>
+                                            <span>{{ t('stage.lyrics_preset_apply') }}</span>
+                                        </button>
+                                        <button id="stage-lyrics-preset-delete" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">delete</span>
+                                            <span>{{ t('common.delete') }}</span>
+                                        </button>
+                                    </div>
+                                    <div class="stage-lyrics-presets-row stage-lyrics-presets-row--name">
+                                        <label class="sr-only" for="stage-lyrics-preset-name">{{ t('stage.lyrics_preset_name') }}</label>
+                                        <input id="stage-lyrics-preset-name" class="stage-lyrics-settings-input" type="text" maxlength="80" placeholder="{{ t('stage.lyrics_preset_name_placeholder') }}" />
+                                        <button id="stage-lyrics-preset-create" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">add</span>
+                                            <span>{{ t('stage.lyrics_preset_create') }}</span>
+                                        </button>
+                                        <button id="stage-lyrics-preset-update" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">save</span>
+                                            <span>{{ t('stage.lyrics_preset_update') }}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_settings_json') }}</span>
                                         <textarea id="stage-lyrics-settings-json" class="stage-lyrics-settings-textarea" spellcheck="false"></textarea>
                                     </label>
-                                </div>
                                 <div class="stage-lyrics-settings-actions">
                                     <button id="stage-lyrics-export-btn" type="button" class="stage-lyrics-settings-action">
                                         <span class="material-symbols-outlined text-sm">download</span>
@@ -1416,6 +1499,12 @@ const lyricsSettingsBtn = document.getElementById("stage-lyrics-settings-btn");
 const lyricsSettingsPanel = document.getElementById("stage-lyrics-settings-panel");
 const lyricsSettingsClose = document.getElementById("stage-lyrics-settings-close");
 const lyricsSettingsSave = document.getElementById("stage-lyrics-settings-save");
+const lyricsPresetSelect = document.getElementById("stage-lyrics-preset-select");
+const lyricsPresetName = document.getElementById("stage-lyrics-preset-name");
+const lyricsPresetApply = document.getElementById("stage-lyrics-preset-apply");
+const lyricsPresetCreate = document.getElementById("stage-lyrics-preset-create");
+const lyricsPresetUpdate = document.getElementById("stage-lyrics-preset-update");
+const lyricsPresetDelete = document.getElementById("stage-lyrics-preset-delete");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const fullscreenIcon = document.getElementById("fullscreen-icon");
 const qrOverlay = document.getElementById("stage-qr-overlay");
@@ -1474,6 +1563,221 @@ if (lyricsSettingsSave) {
         stageLyrics.setSettingsPanelVisible(false);
     });
 }
+const LYRICS_PRESETS_API = window.KaraokeURLs.appUrl("/api/lyrics-presets/");
+let lyricsPresets = [];
+
+function getSelectedLyricsPreset() {
+    return lyricsPresets.find((preset) => String(preset.id) === String(lyricsPresetSelect?.value || "")) || null;
+}
+
+function setLyricsPresetControlsState() {
+    const hasSelection = Boolean(getSelectedLyricsPreset());
+    const hasName = Boolean(lyricsPresetName?.value.trim());
+
+    if (lyricsPresetApply) {
+        lyricsPresetApply.disabled = !hasSelection;
+    }
+    if (lyricsPresetDelete) {
+        lyricsPresetDelete.disabled = !hasSelection;
+    }
+    if (lyricsPresetUpdate) {
+        lyricsPresetUpdate.disabled = !hasSelection;
+    }
+    if (lyricsPresetCreate) {
+        lyricsPresetCreate.disabled = !hasName;
+    }
+}
+
+function renderLyricsPresetOptions(selectedId = "") {
+    if (!lyricsPresetSelect) {
+        return;
+    }
+
+    const currentValue = selectedId || lyricsPresetSelect.value || "";
+    lyricsPresetSelect.innerHTML = "";
+
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = t("stage.lyrics_presets_empty");
+    lyricsPresetSelect.appendChild(emptyOption);
+
+    lyricsPresets.forEach((preset) => {
+        const option = document.createElement("option");
+        option.value = String(preset.id);
+        option.textContent = preset.name;
+        lyricsPresetSelect.appendChild(option);
+    });
+
+    lyricsPresetSelect.value = currentValue;
+    if (!lyricsPresetSelect.value) {
+        lyricsPresetSelect.selectedIndex = 0;
+    }
+    setLyricsPresetControlsState();
+}
+
+async function loadLyricsPresets(selectedId = "") {
+    if (!lyricsPresetSelect) {
+        return;
+    }
+
+    try {
+        const response = await fetch(LYRICS_PRESETS_API, { credentials: "same-origin" });
+        if (!response.ok) {
+            throw new Error(`Failed to load presets (${response.status})`);
+        }
+        lyricsPresets = await response.json();
+        renderLyricsPresetOptions(selectedId);
+    } catch (error) {
+        lyricsPresets = [];
+        renderLyricsPresetOptions();
+        stageLyrics.setStatus(t("stage.lyrics_presets_load_failed"));
+    }
+}
+
+function syncPresetNameFromSelection() {
+    const selected = getSelectedLyricsPreset();
+    if (lyricsPresetName && selected) {
+        lyricsPresetName.value = selected.name;
+    }
+    setLyricsPresetControlsState();
+}
+
+async function applySelectedLyricsPreset() {
+    const selected = getSelectedLyricsPreset();
+    if (!selected) {
+        return;
+    }
+
+    try {
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/lyrics-presets/${selected.id}`), {
+            credentials: "same-origin",
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to load preset (${response.status})`);
+        }
+        const preset = await response.json();
+        stageLyrics.applySettingsObject(preset.settings, { persist: true });
+        if (lyricsPresetName) {
+            lyricsPresetName.value = preset.name;
+        }
+        stageLyrics.setStatus(t("stage.lyrics_presets_applied", { name: preset.name }));
+    } catch (error) {
+        stageLyrics.setStatus(t("stage.lyrics_presets_apply_failed"));
+    }
+}
+
+async function createLyricsPreset() {
+    const name = lyricsPresetName?.value.trim();
+    if (!name) {
+        stageLyrics.setStatus(t("stage.lyrics_preset_name_required"));
+        return;
+    }
+
+    try {
+        const response = await fetch(LYRICS_PRESETS_API, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                name,
+                settings: stageLyrics.getSettingsSnapshot(),
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to create preset (${response.status})`);
+        }
+        const preset = await response.json();
+        lyricsPresets = lyricsPresets.filter((item) => String(item.id) !== String(preset.id));
+        lyricsPresets.push(preset);
+        lyricsPresets.sort((a, b) => a.name.localeCompare(b.name));
+        renderLyricsPresetOptions(String(preset.id));
+        if (lyricsPresetName) {
+            lyricsPresetName.value = preset.name;
+        }
+        stageLyrics.setStatus(t("stage.lyrics_preset_created", { name: preset.name }));
+    } catch (error) {
+        stageLyrics.setStatus(t("stage.lyrics_preset_create_failed"));
+    }
+}
+
+async function updateSelectedLyricsPreset() {
+    const selected = getSelectedLyricsPreset();
+    if (!selected) {
+        return;
+    }
+
+    const name = lyricsPresetName?.value.trim() || selected.name;
+    try {
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/lyrics-presets/${selected.id}`), {
+            method: "PATCH",
+            credentials: "same-origin",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                name,
+                settings: stageLyrics.getSettingsSnapshot(),
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to update preset (${response.status})`);
+        }
+        const preset = await response.json();
+        lyricsPresets = lyricsPresets.filter((item) => String(item.id) !== String(preset.id));
+        lyricsPresets.push(preset);
+        lyricsPresets.sort((a, b) => a.name.localeCompare(b.name));
+        renderLyricsPresetOptions(String(preset.id));
+        if (lyricsPresetName) {
+            lyricsPresetName.value = preset.name;
+        }
+        stageLyrics.setStatus(t("stage.lyrics_preset_updated", { name: preset.name }));
+    } catch (error) {
+        stageLyrics.setStatus(t("stage.lyrics_preset_update_failed"));
+    }
+}
+
+async function deleteSelectedLyricsPreset() {
+    const selected = getSelectedLyricsPreset();
+    if (!selected) {
+        return;
+    }
+    const confirmed = window.confirm(t("stage.lyrics_preset_delete_confirm", { name: selected.name }));
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/lyrics-presets/${selected.id}`), {
+            method: "DELETE",
+            credentials: "same-origin",
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to delete preset (${response.status})`);
+        }
+        lyricsPresets = lyricsPresets.filter((item) => String(item.id) !== String(selected.id));
+        renderLyricsPresetOptions("");
+        if (lyricsPresetName) {
+            lyricsPresetName.value = "";
+        }
+        stageLyrics.setStatus(t("stage.lyrics_preset_deleted", { name: selected.name }));
+    } catch (error) {
+        stageLyrics.setStatus(t("stage.lyrics_preset_delete_failed"));
+    }
+}
+
+lyricsPresetSelect?.addEventListener("change", syncPresetNameFromSelection);
+lyricsPresetName?.addEventListener("input", setLyricsPresetControlsState);
+lyricsPresetApply?.addEventListener("click", () => {
+    void applySelectedLyricsPreset();
+});
+lyricsPresetCreate?.addEventListener("click", () => {
+    void createLyricsPreset();
+});
+lyricsPresetUpdate?.addEventListener("click", () => {
+    void updateSelectedLyricsPreset();
+});
+lyricsPresetDelete?.addEventListener("click", () => {
+    void deleteSelectedLyricsPreset();
+});
+void loadLyricsPresets();
 const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
 let controlsHideTimer = null;
 let isQrVisible = false;

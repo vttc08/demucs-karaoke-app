@@ -7,5 +7,6 @@ from tests.services.processing_task import *  # noqa: F401,F403
 from tests.services.youtube_service import *  # noqa: F401,F403
 from tests.services.lyrics_service import *  # noqa: F401,F403
 from tests.services.runtime_settings import *  # noqa: F401,F403
+from tests.services.lyrics_presets import *  # noqa: F401,F403
 from tests.services.stage_lobby import *  # noqa: F401,F403
 from tests.services.media_trim import *  # noqa: F401,F403
