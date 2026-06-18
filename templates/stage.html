@@ -628,13 +628,34 @@
         color: var(--stage-lyrics-text-color);
         opacity: var(--stage-lyrics-line-opacity, 0.52);
         text-shadow:
-            calc(var(--stage-lyrics-outline-width) * -1) 0 0 var(--stage-lyrics-outline-color),
-            var(--stage-lyrics-outline-width) 0 0 var(--stage-lyrics-outline-color),
-            0 calc(var(--stage-lyrics-outline-width) * -1) 0 var(--stage-lyrics-outline-color),
-            0 var(--stage-lyrics-outline-width) 0 var(--stage-lyrics-outline-color),
             0 0 18px rgba(0, 0, 0, 0.95),
             0 12px 34px rgba(0, 0, 0, 0.82);
         transition: opacity 180ms cubic-bezier(0.16, 1, 0.3, 1), transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @supports (-webkit-text-stroke: 1px #000) {
+        .stage-lyric-line {
+            -webkit-text-stroke: var(--stage-lyrics-outline-width) var(--stage-lyrics-outline-color);
+            text-shadow:
+                0 0 18px rgba(0, 0, 0, 0.95),
+                0 12px 34px rgba(0, 0, 0, 0.82);
+        }
+    }
+
+    @supports not (-webkit-text-stroke: 1px #000) {
+        .stage-lyric-line {
+            text-shadow:
+                calc(var(--stage-lyrics-outline-width) * -1) calc(var(--stage-lyrics-outline-width) * -1) 0 var(--stage-lyrics-outline-color),
+                0 calc(var(--stage-lyrics-outline-width) * -1) 0 var(--stage-lyrics-outline-color),
+                var(--stage-lyrics-outline-width) calc(var(--stage-lyrics-outline-width) * -1) 0 var(--stage-lyrics-outline-color),
+                calc(var(--stage-lyrics-outline-width) * -1) 0 0 var(--stage-lyrics-outline-color),
+                var(--stage-lyrics-outline-width) 0 0 var(--stage-lyrics-outline-color),
+                calc(var(--stage-lyrics-outline-width) * -1) var(--stage-lyrics-outline-width) 0 var(--stage-lyrics-outline-color),
+                0 var(--stage-lyrics-outline-width) 0 var(--stage-lyrics-outline-color),
+                var(--stage-lyrics-outline-width) var(--stage-lyrics-outline-width) 0 var(--stage-lyrics-outline-color),
+                0 0 18px rgba(0, 0, 0, 0.95),
+                0 12px 34px rgba(0, 0, 0, 0.82);
+        }
     }
 
     .stage-lyric-line--current {
