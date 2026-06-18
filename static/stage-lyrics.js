@@ -24,6 +24,7 @@ class StageLyricsController {
   ]);
 
   static LOCAL_FONT_FAMILIES = new Set([
+    "Noto Sans SC",
     "ZCOOL QingKe HuangYou",
   ]);
 
@@ -97,6 +98,7 @@ class StageLyricsController {
     this.settings = this.loadSettings();
     this.appliedCustomFontFamily = String(this.settings.customFontFamily || "").trim();
     this.loadedFontFamilies = new Set();
+    this.failedFontFamilies = new Set();
     this.pendingFontLoads = new Map();
 
     this.applySettings();
@@ -492,10 +494,6 @@ class StageLyricsController {
     if (!primaryFamily || this.isGenericFontFamily(primaryFamily) || this.isLocalFontFamily(primaryFamily)) {
       return;
     }
-    if (this.isFontAvailable(primaryFamily)) {
-      this.loadedFontFamilies.add(primaryFamily);
-      return;
-    }
     await this.loadGoogleFont(primaryFamily);
   }
 
@@ -508,17 +506,14 @@ class StageLyricsController {
     return StageLyricsController.LOCAL_FONT_FAMILIES.has(String(fontFamily || "").trim());
   }
 
-  isFontAvailable(fontFamily) {
-    if (!fontFamily || !document?.fonts?.check) {
-      return false;
-    }
-    const probe = `"${fontFamily.replace(/"/g, '\\"')}"`;
-    return document.fonts.check(`900 16px ${probe}`) || document.fonts.check(`400 16px ${probe}`);
-  }
-
   async loadGoogleFont(fontFamily) {
     const normalized = String(fontFamily || "").trim();
-    if (!normalized || this.loadedFontFamilies.has(normalized) || this.pendingFontLoads.has(normalized)) {
+    if (
+      !normalized
+      || this.loadedFontFamilies.has(normalized)
+      || this.failedFontFamilies.has(normalized)
+      || this.pendingFontLoads.has(normalized)
+    ) {
       return this.pendingFontLoads.get(normalized) || null;
     }
 
@@ -533,6 +528,7 @@ class StageLyricsController {
         resolve();
       };
       link.onerror = () => {
+        this.failedFontFamilies.add(normalized);
         this.pendingFontLoads.delete(normalized);
         resolve();
       };
@@ -661,6 +657,7 @@ class StageLyricsController {
 
   persistSettings() {
     this.commitCustomFontFamily();
+    this.failedFontFamilies.clear();
     this.saveSettings();
     this.applySettings();
     this.syncSettingsUi();
@@ -679,10 +676,14 @@ class StageLyricsController {
 
   updateSettingFromInput(name, input) {
     const value = input.type === "number" || input.type === "range" ? Number(input.value) : input.value;
+    const previousFontPreset = this.settings.fontPreset;
     this.settings = this.normalizeSettings({
       ...this.settings,
       [name]: value,
     });
+    if (name === "fontPreset" && this.settings.fontPreset !== previousFontPreset) {
+      this.failedFontFamilies.clear();
+    }
   }
 
   syncSettingsUi(options = {}) {
