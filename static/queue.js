@@ -2476,35 +2476,35 @@ if (stageRemoteSeekForwardBtn) {
     });
 }
 
-function sendBasicStageLyricsToggle() {
-    if (!queueWebSocket) return;
-    if (!canSendStageControl()) return;
-    if (!stageRemoteLyricsAvailable) {
+function sendStageLyricsEnabled(nextEnabled, { requireLyricsTrack = false } = {}) {
+    if (!queueWebSocket) return false;
+    if (!canSendStageControl()) return false;
+    if (requireLyricsTrack && !stageRemoteLyricsAvailable) {
         alert(t('queue.no_lyrics_track'));
-        return;
+        return false;
     }
-    const nextEnabled = !stageRemoteLyricsEnabled;
     const sent = queueWebSocket.send({
         type: 'stage_command',
         data: {
             command: 'set_lyrics_enabled',
             source: 'queue',
-            lyrics_enabled: nextEnabled,
+            lyrics_enabled: Boolean(nextEnabled),
         },
         timestamp: Date.now(),
     });
     if (!sent) {
         alert(t('queue.stage_offline'));
-        return;
+        return false;
     }
-    stageRemoteLyricsEnabled = nextEnabled;
+    stageRemoteLyricsEnabled = Boolean(nextEnabled);
     updateStageRemoteLyricsUi();
+    return true;
 }
 
 if (stageRemoteLyricsSettingsBtn) {
     stageRemoteLyricsSettingsBtn.addEventListener('click', () => {
         if (!isAdminUser) {
-            sendBasicStageLyricsToggle();
+            sendStageLyricsEnabled(!stageRemoteLyricsEnabled, { requireLyricsTrack: true });
             return;
         }
         if (!queueWebSocket) return;
@@ -2524,8 +2524,10 @@ stageRemoteStageRefreshBtn?.addEventListener('click', () => {
 stageRemoteStageSelect?.addEventListener('change', updateStageRemoteLyricsUi);
 stageRemoteLyricsPresetSelect?.addEventListener('change', updateStageRemoteLyricsUi);
 stageRemoteLyricsEnabledToggle?.addEventListener('change', () => {
-    stageRemoteLyricsEnabled = Boolean(stageRemoteLyricsEnabledToggle.checked);
-    updateStageRemoteLyricsUi();
+    const nextEnabled = Boolean(stageRemoteLyricsEnabledToggle.checked);
+    if (!sendStageLyricsEnabled(nextEnabled)) {
+        stageRemoteLyricsEnabledToggle.checked = stageRemoteLyricsEnabled;
+    }
 });
 stageRemoteLyricsSizeSlider?.addEventListener('input', updateRemoteLyricsSliderLabels);
 stageRemoteLyricsWidthSlider?.addEventListener('input', updateRemoteLyricsSliderLabels);
