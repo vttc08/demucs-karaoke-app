@@ -13,8 +13,11 @@ This document captures extension points for future lyric-style customization on 
 - Timeline authority is `video.currentTime`.
 - Appearance settings are stored per browser in `localStorage` under
   `karaoke_stage_lyrics_settings_v1` and can be downloaded, applied from the textarea, or uploaded as JSON.
-- The default stage baseline is the readable CJK stack with 4.5vw text, 85% max width, 5px outline,
+- The default stage baseline is the sans-serif CJK stack with 4.5vw text, 85% max width, 5px outline,
   one previous line, two next lines, 60% surrounding line size/opacity, and fade animation.
+- The karaoke preset uses the local `ZCOOL QingKe HuangYou` face instead of the decorative script fallback.
+- Custom font stacks are applied as CSS `font-family` values and only take effect when the user clicks
+  the explicit Apply or Save actions.
 
 ## Recommended future customization surfaces
 

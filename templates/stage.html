@@ -7,11 +7,11 @@
 {% block head %}
 <style>
     @font-face {
-        font-family: "ZCOOL KuaiLe";
+        font-family: "ZCOOL QingKe HuangYou";
         font-style: normal;
         font-weight: 400;
         font-display: swap;
-        src: url("{{ app_url('/static/fonts/ZCOOLKuaiLe-Regular.ttf') }}") format("truetype");
+        src: url("{{ app_url('/static/fonts/ZCOOLQingKeHuangYou-Regular.ttf') }}") format("truetype");
     }
 
     @font-face {
@@ -589,7 +589,7 @@
         display: flex;
         justify-content: center;
         padding: 0 clamp(1rem, 4vw, 5rem);
-        --stage-lyrics-font-family: "ZCOOL KuaiLe", "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+        --stage-lyrics-font-family: "ZCOOL QingKe HuangYou", "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif;
         --stage-lyrics-size: clamp(2.4rem, 5.6vw, 6.8rem);
         --stage-lyrics-text-color: #fff8df;
         --stage-lyrics-active-color: #ffd84f;
@@ -1100,9 +1100,10 @@
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_font') }}</span>
                                         <select id="stage-lyrics-font-preset" class="stage-lyrics-settings-select">
-                                            <option value="karaoke_cjk">{{ t('stage.lyrics_font_karaoke_cjk') }}</option>
-                                            <option value="readable_cjk">{{ t('stage.lyrics_font_readable_cjk') }}</option>
-                                            <option value="system_cjk">{{ t('stage.lyrics_font_system_cjk') }}</option>
+                                            <option value="karaoke_cjk">{{ t('stage.lyrics_font_karaoke') }}</option>
+                                            <option value="readable_cjk">{{ t('stage.lyrics_font_sans_serif') }}</option>
+                                            <option value="system_cjk">{{ t('stage.lyrics_font_system') }}</option>
+                                            <option value="serif_cjk">{{ t('stage.lyrics_font_serif') }}</option>
                                             <option value="custom">{{ t('stage.lyrics_font_custom') }}</option>
                                         </select>
                                     </label>
@@ -1424,7 +1425,7 @@ const stageLyrics = new window.StageLyricsController({
 
 if (lyricsSettingsSave) {
     lyricsSettingsSave.addEventListener("click", () => {
-        stageLyrics.saveSettings();
+        stageLyrics.persistSettings();
         stageLyrics.setSettingsPanelVisible(false);
     });
 }

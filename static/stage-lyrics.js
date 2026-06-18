@@ -7,19 +7,38 @@
  */
 class StageLyricsController {
   static STORAGE_KEY = "karaoke_stage_lyrics_settings_v1";
+  static GENERIC_FONT_FAMILIES = new Set([
+    "serif",
+    "sans-serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+    "ui-serif",
+    "ui-sans-serif",
+    "ui-monospace",
+    "ui-rounded",
+    "math",
+    "emoji",
+    "fangsong",
+  ]);
 
   static FONT_PRESETS = {
     karaoke_cjk: {
-      labelKey: "stage.lyrics_font_karaoke_cjk",
-      value: '"ZCOOL KuaiLe", "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif',
+      labelKey: "stage.lyrics_font_karaoke",
+      value: '"ZCOOL QingKe HuangYou", "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif',
     },
     readable_cjk: {
-      labelKey: "stage.lyrics_font_readable_cjk",
+      labelKey: "stage.lyrics_font_sans_serif",
       value: '"Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", sans-serif',
     },
     system_cjk: {
-      labelKey: "stage.lyrics_font_system_cjk",
+      labelKey: "stage.lyrics_font_system",
       value: '"Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif',
+    },
+    serif_cjk: {
+      labelKey: "stage.lyrics_font_serif",
+      value: '"Noto Serif SC", "Noto Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", serif',
     },
     custom: {
       labelKey: "stage.lyrics_font_custom",
@@ -72,6 +91,7 @@ class StageLyricsController {
     this.settingsPanelVisible = false;
     this.reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false;
     this.settings = this.loadSettings();
+    this.appliedCustomFontFamily = String(this.settings.customFontFamily || "").trim();
 
     this.applySettings();
     this.syncSettingsUi();
@@ -441,9 +461,10 @@ class StageLyricsController {
       return;
     }
     const preset = StageLyricsController.FONT_PRESETS[this.settings.fontPreset] || StageLyricsController.FONT_PRESETS.karaoke_cjk;
-    const fontFamily = this.settings.fontPreset === "custom" && this.settings.customFontFamily.trim()
-      ? this.settings.customFontFamily.trim()
-      : preset.value;
+    const customFontFamily = this.settings.fontPreset === "custom" ? this.appliedCustomFontFamily : "";
+    const fontFamily = customFontFamily
+      ? this.normalizeCustomFontStack(customFontFamily)
+      : (preset.value || StageLyricsController.FONT_PRESETS.readable_cjk.value);
 
     this.overlay.style.setProperty("--stage-lyrics-font-family", fontFamily);
     this.overlay.style.setProperty("--stage-lyrics-size", `clamp(2.4rem, ${this.settings.sizeVw}vw, 6.8rem)`);
@@ -458,6 +479,69 @@ class StageLyricsController {
     this.renderWindow();
   }
 
+  normalizeCustomFontStack(fontStack) {
+    const stack = String(fontStack || "").trim();
+    if (!stack) {
+      return "";
+    }
+    return this.splitFontFamilyStack(stack).some((family) => this.isGenericFontFamily(family))
+      ? stack
+      : `${stack}, sans-serif`;
+  }
+
+  splitFontFamilyStack(fontStack) {
+    const stack = String(fontStack || "").trim();
+    if (!stack) {
+      return [];
+    }
+
+    const families = [];
+    let current = "";
+    let quote = "";
+    for (let index = 0; index < stack.length; index += 1) {
+      const char = stack[index];
+      if (quote) {
+        if (char === quote) {
+          quote = "";
+        } else {
+          current += char;
+        }
+        continue;
+      }
+      if (char === "'" || char === '"') {
+        quote = char;
+        continue;
+      }
+      if (char === ",") {
+        const family = current.trim();
+        if (family) {
+          families.push(this.stripOuterQuotes(family));
+        }
+        current = "";
+        continue;
+      }
+      current += char;
+    }
+
+    const lastFamily = current.trim();
+    if (lastFamily) {
+      families.push(this.stripOuterQuotes(lastFamily));
+    }
+    return families;
+  }
+
+  stripOuterQuotes(value) {
+    const text = String(value || "").trim();
+    if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+      return text.slice(1, -1).trim();
+    }
+    return text;
+  }
+
+  isGenericFontFamily(fontFamily) {
+    return StageLyricsController.GENERIC_FONT_FAMILIES.has(String(fontFamily || "").trim().toLowerCase());
+  }
+
   bindSettingsUi() {
     if (!this.button || !this.panel) {
       return;
@@ -469,9 +553,7 @@ class StageLyricsController {
     this.closeButton?.addEventListener("click", () => this.setSettingsPanelVisible(false));
     this.resetButton?.addEventListener("click", () => {
       this.settings = { ...StageLyricsController.DEFAULT_SETTINGS };
-      this.saveSettings();
-      this.applySettings();
-      this.syncSettingsUi();
+      this.persistSettings();
       this.setStatus(this.t("stage.lyrics_settings_reset_done"));
     });
     this.exportButton?.addEventListener("click", () => {
@@ -498,17 +580,30 @@ class StageLyricsController {
       }
       input.addEventListener("input", () => {
         this.updateSettingFromInput(name, input);
-        this.saveSettings();
-        this.applySettings();
+        if (name !== "customFontFamily") {
+          this.applySettings();
+        }
         this.syncSettingsUi({ keepFocus: true });
       });
       input.addEventListener("change", () => {
         this.updateSettingFromInput(name, input);
-        this.saveSettings();
-        this.applySettings();
+        if (name !== "customFontFamily") {
+          this.applySettings();
+        }
         this.syncSettingsUi({ keepFocus: true });
       });
     });
+  }
+
+  persistSettings() {
+    this.commitCustomFontFamily();
+    this.saveSettings();
+    this.applySettings();
+    this.syncSettingsUi();
+  }
+
+  commitCustomFontFamily() {
+    this.appliedCustomFontFamily = String(this.settings.customFontFamily || "").trim();
   }
 
   setSettingsPanelVisible(visible) {
@@ -571,9 +666,7 @@ class StageLyricsController {
         ...StageLyricsController.DEFAULT_SETTINGS,
         ...parsed,
       });
-      this.saveSettings();
-      this.applySettings();
-      this.syncSettingsUi();
+      this.persistSettings();
       this.setStatus(this.t("stage.lyrics_settings_applied"));
     } catch (_) {
       this.setStatus(this.t("stage.lyrics_settings_import_failed"));
@@ -617,9 +710,7 @@ class StageLyricsController {
         ...StageLyricsController.DEFAULT_SETTINGS,
         ...parsed,
       });
-      this.saveSettings();
-      this.applySettings();
-      this.syncSettingsUi();
+      this.persistSettings();
       if (this.importExport) {
         this.importExport.value = JSON.stringify(this.settings, null, 2);
       }
