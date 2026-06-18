@@ -67,6 +67,13 @@ def _normalize_stage_name(value: object) -> str | None:
     return _normalize_presence_value(value if isinstance(value, str) else None, max_length=80)
 
 
+def _default_stage_name(stage_id: str) -> str:
+    """Return a fallback label for a stage display when the client sends none."""
+    compact_id = "".join(character for character in stage_id if character.isalnum())
+    suffix = (compact_id[-4:] or stage_id[-4:]).upper()
+    return f"Stage {suffix}"
+
+
 def _validated_queue_as_guest_id(item: QueueItemCreate) -> str | None:
     """Validate the delegated guest id for an admin queue-as request."""
     if item.queue_as_guest_id is None:
@@ -458,7 +465,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                     await _send_ws_error(websocket, "Invalid stage_presence_hello payload")
                     continue
                 stage_id = _normalize_stage_id(payload.get("stage_id"))
-                stage_name = _normalize_stage_name(payload.get("stage_name")) or "Stage Display"
+                stage_name = _normalize_stage_name(payload.get("stage_name")) or _default_stage_name(stage_id or "")
                 if not stage_id:
                     await _send_ws_error(websocket, "stage_presence_hello requires stage_id")
                     continue

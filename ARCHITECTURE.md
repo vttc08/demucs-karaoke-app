@@ -189,6 +189,8 @@ The stage page uses a websocket-first model:
 - Stage page stores its display id/name and lyric appearance in `localStorage`. When it receives a
   targeted lyrics settings command, it fetches the named shared preset itself, merges the quick
   overrides, persists the result locally, and acknowledges the queue client.
+- If a stage browser has no custom display name, it derives a default label from platform, screen
+  size, and a short local id suffix so `/queue` can distinguish untouched displays.
 - Stage page also exposes desktop keyboard shortcuts for seek/resync/vocals/lyrics/QR and a desktop-only help popover. The help panel stays open until explicitly dismissed, and keyboard or remote-control actions do not auto-reveal the stage chrome.
 - Stage page refreshes queue/current state over API and applies source changes to existing media
   elements instead of reloading the page.

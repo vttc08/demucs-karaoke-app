@@ -1677,7 +1677,7 @@ function sendLyricsSettingsAck(ok, payload = {}) {
     sendStageCommandRaw({
         type: "lyrics_settings_ack",
         data: {
-            stage_id: stageDisplayId,
+            stage_id: getStageDisplayId(),
             ok: Boolean(ok),
             ...payload,
         },
@@ -1903,6 +1903,11 @@ function normalizeStageDisplayName(value) {
     return String(value || "").replace(/\s+/g, " ").trim().slice(0, 80);
 }
 
+const LEGACY_STAGE_DISPLAY_DEFAULTS = new Set([
+    "Stage Display",
+    "舞台显示",
+]);
+
 function ensureStageDisplayId() {
     try {
         const stored = window.localStorage?.getItem(STAGE_DISPLAY_ID_STORAGE_KEY);
@@ -1919,25 +1924,86 @@ function ensureStageDisplayId() {
     }
 }
 
-const stageDisplayId = ensureStageDisplayId();
+function getStageDisplayId() {
+    return ensureStageDisplayId();
+}
 
-function getStageDisplayName() {
-    const fallback = t("stage.display_name_default");
+function getStageDisplayIdSuffix() {
+    const compact = String(getStageDisplayId() || "").replace(/[^a-zA-Z0-9]/g, "");
+    return compact.slice(-4) || "0000";
+}
+
+function getStageScreenLabel() {
+    const width = Number(window.screen?.width);
+    const height = Number(window.screen?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        return "";
+    }
+    const shortSide = Math.min(width, height);
+    const longSide = Math.max(width, height);
+    return `${shortSide}x${longSide}`;
+}
+
+function getStagePlatformLabel() {
+    const platformSource = String(
+        window.navigator?.userAgentData?.platform
+        || window.navigator?.platform
+        || window.navigator?.userAgent
+        || ""
+    ).toLowerCase();
+    const userAgent = String(window.navigator?.userAgent || "").toLowerCase();
+
+    if (userAgent.includes("iphone")) return "iPhone";
+    if (userAgent.includes("ipad")) return "iPad";
+    if (userAgent.includes("android")) {
+        return userAgent.includes("mobile") ? "Android Phone" : "Android Tablet";
+    }
+    if (platformSource.includes("mac")) return "Mac";
+    if (platformSource.includes("win")) return "Windows";
+    if (platformSource.includes("cros")) return "ChromeOS";
+    if (platformSource.includes("linux")) return "Linux";
+    if (userAgent.includes("smart-tv") || userAgent.includes("smarttv") || userAgent.includes("hbbtv")) return "TV";
+    return "Stage";
+}
+
+function getDefaultStageDisplayName() {
+    const parts = [getStagePlatformLabel()];
+    const screenLabel = getStageScreenLabel();
+    if (screenLabel) {
+        parts.push(screenLabel);
+    }
+    parts.push(getStageDisplayIdSuffix());
+    return normalizeStageDisplayName(parts.join(" "));
+}
+
+function getStoredCustomStageDisplayName() {
     try {
-        return normalizeStageDisplayName(window.localStorage?.getItem(STAGE_DISPLAY_NAME_STORAGE_KEY)) || fallback;
+        const normalized = normalizeStageDisplayName(window.localStorage?.getItem(STAGE_DISPLAY_NAME_STORAGE_KEY));
+        if (!normalized || LEGACY_STAGE_DISPLAY_DEFAULTS.has(normalized)) {
+            return null;
+        }
+        return normalized;
     } catch (_) {
-        return fallback;
+        return null;
     }
 }
 
+function getStageDisplayName() {
+    return getStoredCustomStageDisplayName() || getDefaultStageDisplayName();
+}
+
 function persistStageDisplayName(name) {
-    const normalized = normalizeStageDisplayName(name) || t("stage.display_name_default");
+    const normalized = normalizeStageDisplayName(name);
     try {
+        if (!normalized || LEGACY_STAGE_DISPLAY_DEFAULTS.has(normalized)) {
+            window.localStorage?.removeItem(STAGE_DISPLAY_NAME_STORAGE_KEY);
+            return getDefaultStageDisplayName();
+        }
         window.localStorage?.setItem(STAGE_DISPLAY_NAME_STORAGE_KEY, normalized);
     } catch (_) {
         // Local display names are best-effort only.
     }
-    return normalized;
+    return normalized || getDefaultStageDisplayName();
 }
 
 function syncStageDisplayNameInput() {
@@ -1950,7 +2016,7 @@ function sendStagePresenceHello() {
     return sendStageCommandRaw({
         type: "stage_presence_hello",
         data: {
-            stage_id: stageDisplayId,
+            stage_id: getStageDisplayId(),
             stage_name: getStageDisplayName(),
         },
         timestamp: Date.now(),

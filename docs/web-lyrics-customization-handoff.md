@@ -13,6 +13,9 @@ This document captures extension points for future lyric-style customization on 
 - Timeline authority is `video.currentTime`.
 - Appearance settings are stored per browser in `localStorage` under
   `karaoke_stage_lyrics_settings_v1` and can be downloaded, applied from the textarea, or uploaded as JSON.
+- Stage display identity is also browser-local: `karaoke.stage.displayId` stays stable per browser and
+  `karaoke.stage.displayName` is only stored when the operator sets a custom name. Otherwise `/stage`
+  derives a label from platform, screen size, and id suffix for `/queue` targeting.
 - Shared lyric presets are now stored server-side and managed from `/stage` through `/api/lyrics-presets`;
   the stored preset payload should stay aligned with the same normalized stage settings object.
 - The default stage baseline is the sans-serif CJK stack with 4.5vw text, 85% max width, 5px outline,

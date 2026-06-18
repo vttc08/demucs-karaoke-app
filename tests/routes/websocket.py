@@ -86,6 +86,27 @@ def test_websocket_stage_presence_registers_and_queue_can_refresh(client):
             assert refreshed["data"]["stages"][0]["connection_count"] == 1
 
 
+def test_websocket_stage_presence_falls_back_to_stage_id_label(client):
+    """Unnamed stage displays should still expose a distinguishable fallback label."""
+    with client.websocket_connect("/api/queue/ws") as queue_socket:
+        assert queue_socket.receive_json()["type"] == "connected"
+        subscribe_websocket(queue_socket, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            subscribe_websocket(stage_socket, "stage")
+            stage_socket.send_json(
+                {
+                    "type": "stage_presence_hello",
+                    "data": {"stage_id": "stage-tv-4f2a", "stage_name": "   "},
+                    "timestamp": 123,
+                }
+            )
+
+            snapshot = receive_non_ping(queue_socket)
+            assert snapshot["type"] == "stage_presence_snapshot"
+            assert snapshot["data"]["stages"][0]["stage_name"] == "Stage 4F2A"
+
+
 def test_websocket_targeted_lyrics_settings_requires_admin(client):
     """Remote lyrics style application should be admin-only."""
     with client.websocket_connect("/api/queue/ws") as sender:

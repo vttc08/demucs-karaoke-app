@@ -2166,6 +2166,10 @@ function getSelectedRemoteStage() {
     return stageRemoteStageDisplays.find((stage) => String(stage.stage_id) === selectedId) || null;
 }
 
+function getRemoteStageDisplayLabel(stage) {
+    return stage?.stage_name || stage?.stage_id || t('stage.display_name_default');
+}
+
 function renderRemoteStageOptions() {
     if (!stageRemoteStageSelect) return;
     const previousValue = stageRemoteStageSelect.value;
@@ -2194,10 +2198,10 @@ function renderRemoteStageOptions() {
         option.value = stage.stage_id;
         option.textContent = stage.connection_count > 1
             ? t('queue.stage_display_with_tabs', {
-                name: stage.stage_name || t('stage.display_name_default'),
+                name: getRemoteStageDisplayLabel(stage),
                 count: stage.connection_count,
             })
-            : (stage.stage_name || t('stage.display_name_default'));
+            : getRemoteStageDisplayLabel(stage);
         stageRemoteStageSelect.appendChild(option);
     });
 
@@ -2560,7 +2564,7 @@ stageRemoteLyricsApplyBtn?.addEventListener('click', () => {
 
     stageRemoteLyricsApplyPending = true;
     stageRemoteLyricsPendingStageId = selectedStage.stage_id;
-    setStageRemoteLyricsStatus(t('queue.stage_lyrics_applying', { name: selectedStage.stage_name || t('stage.display_name_default') }));
+    setStageRemoteLyricsStatus(t('queue.stage_lyrics_applying', { name: getRemoteStageDisplayLabel(selectedStage) }));
     updateStageRemoteLyricsUi();
     window.clearTimeout(stageRemoteLyricsAckTimer);
     stageRemoteLyricsAckTimer = window.setTimeout(() => {
@@ -2807,7 +2811,7 @@ window.addEventListener('lyrics_settings_ack', (event) => {
     if (detail.stage_id !== stageRemoteLyricsPendingStageId) {
         return;
     }
-    const stageName = getSelectedRemoteStage()?.stage_name || t('stage.display_name_default');
+    const stageName = getRemoteStageDisplayLabel(getSelectedRemoteStage());
     clearRemoteLyricsApplyPending(
         detail.ok
             ? t('queue.stage_lyrics_applied', { name: stageName })
