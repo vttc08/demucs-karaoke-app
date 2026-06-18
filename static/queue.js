@@ -39,9 +39,20 @@ const stageRemotePlayPauseLabel = document.getElementById('stage-remote-play-pau
 const stageRemoteSkipBtn = document.getElementById('stage-remote-skip-btn');
 const stageRemoteResyncBtn = document.getElementById('stage-remote-resync-btn');
 const stageRemoteSeekForwardBtn = document.getElementById('stage-remote-seek-forward-btn');
-const stageRemoteLyricsToggleBtn = document.getElementById('stage-remote-lyrics-toggle-btn');
+const stageRemoteLyricsSettingsBtn = document.getElementById('stage-remote-lyrics-settings-btn');
 const stageRemoteLyricsToggleIcon = document.getElementById('stage-remote-lyrics-toggle-icon');
 const stageRemoteLyricsToggleLabel = document.getElementById('stage-remote-lyrics-toggle-label');
+const stageRemoteLyricsSettingsPanel = document.getElementById('stage-remote-lyrics-settings-panel');
+const stageRemoteLyricsSettingsStatus = document.getElementById('stage-remote-lyrics-settings-status');
+const stageRemoteStageRefreshBtn = document.getElementById('stage-remote-stage-refresh-btn');
+const stageRemoteStageSelect = document.getElementById('stage-remote-stage-select');
+const stageRemoteLyricsPresetSelect = document.getElementById('stage-remote-lyrics-preset-select');
+const stageRemoteLyricsSizeSlider = document.getElementById('stage-remote-lyrics-size-slider');
+const stageRemoteLyricsSizeValue = document.getElementById('stage-remote-lyrics-size-value');
+const stageRemoteLyricsWidthSlider = document.getElementById('stage-remote-lyrics-width-slider');
+const stageRemoteLyricsWidthValue = document.getElementById('stage-remote-lyrics-width-value');
+const stageRemoteLyricsEnabledToggle = document.getElementById('stage-remote-lyrics-enabled-toggle');
+const stageRemoteLyricsApplyBtn = document.getElementById('stage-remote-lyrics-apply-btn');
 const stageRemoteVocalsControl = document.getElementById('stage-remote-vocals-control');
 const stageRemoteVocalsToggleBtn = document.getElementById('stage-remote-vocals-toggle-btn');
 const stageRemoteVocalsToggleIcon = document.getElementById('stage-remote-vocals-toggle-icon');
@@ -80,6 +91,7 @@ const queueToastText = document.getElementById('queue-toast-text');
 const QUEUE_AS_ENABLED_STORAGE_KEY = 'karaoke.queueAs.enabled';
 const QUEUE_AS_LAST_NAME_STORAGE_KEY = 'karaoke.queueAs.lastName';
 const QUEUE_AS_LAST_GUEST_ID_STORAGE_KEY = 'karaoke.queueAs.lastGuestId';
+const QUEUE_LYRICS_PRESETS_API = appUrl('/api/lyrics-presets/');
 const QUEUE_CONFIRM_DEFAULT_HTML = `<span class="material-symbols-outlined text-base" style="font-variation-settings: 'FILL' 1">add_circle</span>${t('common.add_to_queue')}`;
 const QUEUE_CONFIRM_LOADING_HTML = `<span class="material-symbols-outlined animate-spin text-base">sync</span>${t('lyrics.searching_providers')}`;
 const KARAOKE_TITLE_HINT_RE = /\b(karaoke|ktv|sing[-\s]?along|off[-\s]?vocal|no[-\s]?vocal|instrumental|noraebang)\b/i;
@@ -93,6 +105,12 @@ let stageRemoteVocalsVolume = 1.0;
 let stageRemoteVocalsLastVolume = 1.0;
 let stageRemoteVocalsAvailable = false;
 let stageRemoteCurrentTime = null;
+let stageRemoteStageDisplays = [];
+let stageRemoteLyricsPresets = [];
+let stageRemoteLyricsSettingsOpen = false;
+let stageRemoteLyricsApplyPending = false;
+let stageRemoteLyricsAckTimer = null;
+let stageRemoteLyricsPendingStageId = null;
 let demucsHealth = { healthy: true, detail: t('settings.engine_unknown') };
 let modalSelection = null;
 let modalKaraokeEnabled = false;
@@ -1902,6 +1920,8 @@ class QueueWebSocket {
                     timestamp: Date.now(),
                 });
                 this.sendPresenceHello();
+                requestStagePresenceSnapshot();
+                void loadRemoteLyricsPresets();
                 refreshQueue(true);
             };
             
@@ -1921,6 +1941,7 @@ class QueueWebSocket {
             this.ws.onclose = () => {
                 logger.log('[WebSocket] Disconnected');
                 this.isConnected = false;
+                clearRemoteLyricsApplyPending(t('queue.stage_offline'));
                 
                 if (this.heartbeatTimeout) {
                     clearTimeout(this.heartbeatTimeout);
@@ -2047,6 +2068,13 @@ class QueueWebSocket {
             case 'stage_time_update':
                 window.dispatchEvent(new CustomEvent('stage_time_update', { detail: message.data }));
                 break;
+            case 'stage_presence_snapshot':
+                stageRemoteStageDisplays = Array.isArray(message.data?.stages) ? message.data.stages : [];
+                renderRemoteStageOptions();
+                break;
+            case 'lyrics_settings_ack':
+                window.dispatchEvent(new CustomEvent('lyrics_settings_ack', { detail: message.data }));
+                break;
             case 'error':
                 if (message.data?.detail) {
                     const detail = message.data.detail === 'Not allowed to control this stage item'
@@ -2127,15 +2155,194 @@ function updateStageRemoteVocalsUi() {
     }
 }
 
+function setStageRemoteLyricsStatus(message) {
+    if (stageRemoteLyricsSettingsStatus) {
+        stageRemoteLyricsSettingsStatus.textContent = message;
+    }
+}
+
+function getSelectedRemoteStage() {
+    const selectedId = stageRemoteStageSelect?.value || '';
+    return stageRemoteStageDisplays.find((stage) => String(stage.stage_id) === selectedId) || null;
+}
+
+function renderRemoteStageOptions() {
+    if (!stageRemoteStageSelect) return;
+    const previousValue = stageRemoteStageSelect.value;
+    stageRemoteStageSelect.innerHTML = '';
+
+    if (!stageRemoteStageDisplays.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = t('queue.stage_no_displays');
+        stageRemoteStageSelect.appendChild(option);
+        setStageRemoteLyricsStatus(t('queue.stage_no_displays'));
+        updateStageRemoteLyricsUi();
+        return;
+    }
+
+    const requireSelection = stageRemoteStageDisplays.length > 1;
+    if (requireSelection) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = t('queue.stage_choose_display');
+        stageRemoteStageSelect.appendChild(option);
+    }
+
+    stageRemoteStageDisplays.forEach((stage) => {
+        const option = document.createElement('option');
+        option.value = stage.stage_id;
+        option.textContent = stage.connection_count > 1
+            ? t('queue.stage_display_with_tabs', {
+                name: stage.stage_name || t('stage.display_name_default'),
+                count: stage.connection_count,
+            })
+            : (stage.stage_name || t('stage.display_name_default'));
+        stageRemoteStageSelect.appendChild(option);
+    });
+
+    const hasPrevious = stageRemoteStageDisplays.some((stage) => stage.stage_id === previousValue);
+    if (hasPrevious) {
+        stageRemoteStageSelect.value = previousValue;
+    } else if (!requireSelection) {
+        stageRemoteStageSelect.value = stageRemoteStageDisplays[0].stage_id;
+    } else {
+        stageRemoteStageSelect.value = '';
+    }
+
+    setStageRemoteLyricsStatus(
+        requireSelection ? t('queue.stage_lyrics_choose_target') : t('queue.stage_lyrics_ready')
+    );
+    updateStageRemoteLyricsUi();
+}
+
+function renderRemoteLyricsPresetOptions() {
+    if (!stageRemoteLyricsPresetSelect) return;
+    const previousValue = stageRemoteLyricsPresetSelect.value;
+    stageRemoteLyricsPresetSelect.innerHTML = '';
+
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = t('queue.stage_lyrics_no_preset');
+    stageRemoteLyricsPresetSelect.appendChild(emptyOption);
+
+    stageRemoteLyricsPresets.forEach((preset) => {
+        const option = document.createElement('option');
+        option.value = String(preset.id);
+        option.textContent = preset.name;
+        stageRemoteLyricsPresetSelect.appendChild(option);
+    });
+
+    if (Array.from(stageRemoteLyricsPresetSelect.options).some((option) => option.value === previousValue)) {
+        stageRemoteLyricsPresetSelect.value = previousValue;
+    }
+}
+
+async function loadRemoteLyricsPresets() {
+    if (!isAdminUser || !stageRemoteLyricsPresetSelect) return;
+    try {
+        const response = await fetch(QUEUE_LYRICS_PRESETS_API, { credentials: 'same-origin' });
+        if (!response.ok) {
+            throw new Error(`Failed to load presets (${response.status})`);
+        }
+        stageRemoteLyricsPresets = await response.json();
+    } catch (error) {
+        stageRemoteLyricsPresets = [];
+        setStageRemoteLyricsStatus(t('queue.stage_lyrics_presets_failed'));
+    }
+    renderRemoteLyricsPresetOptions();
+}
+
+function updateRemoteLyricsSliderLabels() {
+    if (stageRemoteLyricsSizeValue && stageRemoteLyricsSizeSlider) {
+        stageRemoteLyricsSizeValue.textContent = `${Number(stageRemoteLyricsSizeSlider.value).toFixed(1)}vw`;
+    }
+    if (stageRemoteLyricsWidthValue && stageRemoteLyricsWidthSlider) {
+        stageRemoteLyricsWidthValue.textContent = `${Math.round(Number(stageRemoteLyricsWidthSlider.value))}%`;
+    }
+}
+
+function requestStagePresenceSnapshot() {
+    if (!queueWebSocket) return false;
+    return queueWebSocket.send({
+        type: 'stage_presence_request',
+        data: {},
+        timestamp: Date.now(),
+    });
+}
+
+function setRemoteLyricsSettingsPanelOpen(open) {
+    stageRemoteLyricsSettingsOpen = Boolean(open);
+    if (stageRemoteLyricsSettingsPanel) {
+        stageRemoteLyricsSettingsPanel.classList.toggle('hidden', !stageRemoteLyricsSettingsOpen);
+    }
+    if (stageRemoteLyricsSettingsBtn) {
+        stageRemoteLyricsSettingsBtn.setAttribute('aria-expanded', stageRemoteLyricsSettingsOpen ? 'true' : 'false');
+    }
+    if (stageRemoteLyricsSettingsOpen) {
+        updateRemoteLyricsSliderLabels();
+        requestStagePresenceSnapshot();
+        void loadRemoteLyricsPresets();
+    }
+    updateStageRemoteLyricsUi();
+}
+
+function clearRemoteLyricsApplyPending(message = '') {
+    window.clearTimeout(stageRemoteLyricsAckTimer);
+    stageRemoteLyricsApplyPending = false;
+    stageRemoteLyricsPendingStageId = null;
+    if (message) {
+        setStageRemoteLyricsStatus(message);
+    }
+    updateStageRemoteLyricsUi();
+}
+
 function updateStageRemoteLyricsUi() {
-    if (stageRemoteLyricsToggleBtn) {
-        stageRemoteLyricsToggleBtn.disabled = !stageRemoteCanControl || !stageRemoteLyricsAvailable || !(queueWebSocket && queueWebSocket.isConnected);
+    const connected = !!(queueWebSocket && queueWebSocket.isConnected);
+    const canUseLyricsControl = connected && stageRemoteCanControl;
+    const canOpenSettings = canUseLyricsControl && isAdminUser;
+    const selectedStage = getSelectedRemoteStage();
+    const canApplySettings = canOpenSettings
+        && stageRemoteStageDisplays.length > 0
+        && Boolean(selectedStage)
+        && !stageRemoteLyricsApplyPending;
+
+    if (stageRemoteLyricsSettingsBtn) {
+        stageRemoteLyricsSettingsBtn.disabled = isAdminUser
+            ? !canOpenSettings
+            : (!canUseLyricsControl || !stageRemoteLyricsAvailable);
     }
     if (stageRemoteLyricsToggleIcon) {
-        stageRemoteLyricsToggleIcon.textContent = stageRemoteLyricsEnabled ? 'subtitles' : 'subtitles_off';
+        stageRemoteLyricsToggleIcon.textContent = isAdminUser
+            ? (stageRemoteLyricsSettingsOpen ? 'close' : 'tune')
+            : (stageRemoteLyricsEnabled ? 'subtitles' : 'subtitles_off');
     }
     if (stageRemoteLyricsToggleLabel) {
-        stageRemoteLyricsToggleLabel.textContent = stageRemoteLyricsAvailable ? (stageRemoteLyricsEnabled ? t('stage.lyrics_on') : t('stage.lyrics_off')) : t('stage.no_lyrics');
+        stageRemoteLyricsToggleLabel.textContent = isAdminUser
+            ? t('stage.lyrics_settings')
+            : (stageRemoteLyricsAvailable ? (stageRemoteLyricsEnabled ? t('stage.lyrics_on') : t('stage.lyrics_off')) : t('stage.no_lyrics'));
+    }
+    if (stageRemoteStageRefreshBtn) {
+        stageRemoteStageRefreshBtn.disabled = !connected;
+    }
+    if (stageRemoteStageSelect) {
+        stageRemoteStageSelect.disabled = !canOpenSettings || stageRemoteStageDisplays.length === 0 || stageRemoteLyricsApplyPending;
+    }
+    if (stageRemoteLyricsPresetSelect) {
+        stageRemoteLyricsPresetSelect.disabled = !canOpenSettings || stageRemoteLyricsApplyPending;
+    }
+    if (stageRemoteLyricsEnabledToggle) {
+        stageRemoteLyricsEnabledToggle.disabled = !canOpenSettings || stageRemoteLyricsApplyPending;
+        stageRemoteLyricsEnabledToggle.checked = stageRemoteLyricsEnabled;
+    }
+    if (stageRemoteLyricsSizeSlider) {
+        stageRemoteLyricsSizeSlider.disabled = !canOpenSettings || stageRemoteLyricsApplyPending;
+    }
+    if (stageRemoteLyricsWidthSlider) {
+        stageRemoteLyricsWidthSlider.disabled = !canOpenSettings || stageRemoteLyricsApplyPending;
+    }
+    if (stageRemoteLyricsApplyBtn) {
+        stageRemoteLyricsApplyBtn.disabled = !canApplySettings;
     }
 }
 
@@ -2265,32 +2472,101 @@ if (stageRemoteSeekForwardBtn) {
     });
 }
 
-if (stageRemoteLyricsToggleBtn) {
-    stageRemoteLyricsToggleBtn.addEventListener('click', () => {
+function sendBasicStageLyricsToggle() {
+    if (!queueWebSocket) return;
+    if (!canSendStageControl()) return;
+    if (!stageRemoteLyricsAvailable) {
+        alert(t('queue.no_lyrics_track'));
+        return;
+    }
+    const nextEnabled = !stageRemoteLyricsEnabled;
+    const sent = queueWebSocket.send({
+        type: 'stage_command',
+        data: {
+            command: 'set_lyrics_enabled',
+            source: 'queue',
+            lyrics_enabled: nextEnabled,
+        },
+        timestamp: Date.now(),
+    });
+    if (!sent) {
+        alert(t('queue.stage_offline'));
+        return;
+    }
+    stageRemoteLyricsEnabled = nextEnabled;
+    updateStageRemoteLyricsUi();
+}
+
+if (stageRemoteLyricsSettingsBtn) {
+    stageRemoteLyricsSettingsBtn.addEventListener('click', () => {
+        if (!isAdminUser) {
+            sendBasicStageLyricsToggle();
+            return;
+        }
         if (!queueWebSocket) return;
         if (!canSendStageControl()) return;
-        if (!stageRemoteLyricsAvailable) {
-            alert(t('queue.no_lyrics_track'));
-            return;
-        }
-        const nextEnabled = !stageRemoteLyricsEnabled;
-        const sent = queueWebSocket.send({
-            type: 'stage_command',
-            data: {
-                command: 'set_lyrics_enabled',
-                source: 'queue',
-                lyrics_enabled: nextEnabled,
-            },
-            timestamp: Date.now(),
-        });
-        if (!sent) {
-            alert(t('queue.stage_offline'));
-            return;
-        }
-        stageRemoteLyricsEnabled = nextEnabled;
-        updateStageRemoteLyricsUi();
+        setRemoteLyricsSettingsPanelOpen(!stageRemoteLyricsSettingsOpen);
     });
 }
+
+stageRemoteStageRefreshBtn?.addEventListener('click', () => {
+    if (!requestStagePresenceSnapshot()) {
+        setStageRemoteLyricsStatus(t('queue.stage_offline'));
+    } else {
+        setStageRemoteLyricsStatus(t('queue.stage_lyrics_refreshing'));
+    }
+});
+
+stageRemoteStageSelect?.addEventListener('change', updateStageRemoteLyricsUi);
+stageRemoteLyricsPresetSelect?.addEventListener('change', updateStageRemoteLyricsUi);
+stageRemoteLyricsEnabledToggle?.addEventListener('change', () => {
+    stageRemoteLyricsEnabled = Boolean(stageRemoteLyricsEnabledToggle.checked);
+    updateStageRemoteLyricsUi();
+});
+stageRemoteLyricsSizeSlider?.addEventListener('input', updateRemoteLyricsSliderLabels);
+stageRemoteLyricsWidthSlider?.addEventListener('input', updateRemoteLyricsSliderLabels);
+
+stageRemoteLyricsApplyBtn?.addEventListener('click', () => {
+    if (!queueWebSocket) return;
+    if (!canSendStageControl()) return;
+    const selectedStage = getSelectedRemoteStage();
+    if (!selectedStage) {
+        setStageRemoteLyricsStatus(t('queue.stage_lyrics_choose_target'));
+        updateStageRemoteLyricsUi();
+        return;
+    }
+
+    const presetId = Number(stageRemoteLyricsPresetSelect?.value || 0);
+    const sizeVw = Number(stageRemoteLyricsSizeSlider?.value || 4.5);
+    const lineWidthPct = Number(stageRemoteLyricsWidthSlider?.value || 85);
+    const lyricsEnabled = Boolean(stageRemoteLyricsEnabledToggle?.checked);
+    const sent = queueWebSocket.send({
+        type: 'stage_command',
+        data: {
+            command: 'apply_lyrics_settings',
+            source: 'queue',
+            target_stage_id: selectedStage.stage_id,
+            lyrics_enabled: lyricsEnabled,
+            preset_id: presetId > 0 ? presetId : null,
+            size_vw: Number.isFinite(sizeVw) ? sizeVw : 4.5,
+            line_width_pct: Number.isFinite(lineWidthPct) ? Math.round(lineWidthPct) : 85,
+        },
+        timestamp: Date.now(),
+    });
+    if (!sent) {
+        setStageRemoteLyricsStatus(t('queue.stage_offline'));
+        return;
+    }
+
+    stageRemoteLyricsApplyPending = true;
+    stageRemoteLyricsPendingStageId = selectedStage.stage_id;
+    setStageRemoteLyricsStatus(t('queue.stage_lyrics_applying', { name: selectedStage.stage_name || t('stage.display_name_default') }));
+    updateStageRemoteLyricsUi();
+    window.clearTimeout(stageRemoteLyricsAckTimer);
+    stageRemoteLyricsAckTimer = window.setTimeout(() => {
+        clearRemoteLyricsApplyPending(t('queue.stage_lyrics_apply_timeout'));
+    }, 7000);
+});
 
 function sendStageVocalsVolume(nextVolume) {
     if (!queueWebSocket || !stageRemoteCanControl || !stageRemoteVocalsAvailable) {
@@ -2521,6 +2797,22 @@ window.addEventListener('stage_time_update', (event) => {
         updateStageRemotePlayPauseUi();
     }
     updateStageRemoteSeekForwardUi();
+});
+
+window.addEventListener('lyrics_settings_ack', (event) => {
+    const detail = event.detail || {};
+    if (!stageRemoteLyricsApplyPending) {
+        return;
+    }
+    if (detail.stage_id !== stageRemoteLyricsPendingStageId) {
+        return;
+    }
+    const stageName = getSelectedRemoteStage()?.stage_name || t('stage.display_name_default');
+    clearRemoteLyricsApplyPending(
+        detail.ok
+            ? t('queue.stage_lyrics_applied', { name: stageName })
+            : (detail.error || t('queue.stage_lyrics_apply_failed'))
+    );
 });
 
 function startQueueRefresh() {

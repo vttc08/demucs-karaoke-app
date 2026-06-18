@@ -123,6 +123,7 @@ and `/static/...`.
       - Open **Lyrics Viewer** from the queue page to read current-song lyrics on phone/secondary display
      - Admins can use remote stage controls for any current song; guests can use them only while their own queued song is playing
      - Queue remote controls include `play/pause`, `skip`, `resync`, and a `+5` forward seek button driven by the live stage playback clock
+     - Admin queue controls can target connected stage displays, apply shared lyric presets, and adjust lyric text size/max width without changing each display's browser-local defaults
      - When an admin queues a song as a live guest from the queue presence list, that guest becomes the owner for later stage controls and queue-item actions; manual typed queue-as names remain display-only
     - Admin users can clear queued songs, remove individual queued items, and move non-playing queue items up or down
     - Guest users can remove only their own non-playing queue items from the queue page
@@ -145,7 +146,7 @@ and `/static/...`.
      - Responsive controls overlay: desktop adds a dedicated playback seek bar row, while mobile stays icon-first and moves detailed vocals volume adjustment to `/queue`
      - Toggle the lyrics overlay on or off while playback is running; vocal mix and lyrics visibility persist across song changes, and the centered karaoke-style overlay only appears in fullscreen so it does not block stage controls on mobile
      - Desktop stage also includes keyboard shortcuts, lyrics-style customization, and a help icon: `←`/`→` seek 5 seconds, `R` resync, `V` vocals, `L` lyrics, `Q` QR, `?` help; the help panel stays open until you close it explicitly
-     - Lyrics style settings are stored in the browser for quick per-device JSON download/apply/upload and include CJK-safe font presets, size, color, outline, line-window, and animation options, including a crop-style fill for aligned karaoke cues; admins can also manage shared lyric presets from the stage panel and apply them across devices
+     - Lyrics style settings are stored in the browser for quick per-device JSON download/apply/upload and include CJK-safe font presets, size, color, outline, line-window, and animation options, including a crop-style fill for aligned karaoke cues; admins can also manage shared lyric presets from the stage panel, name each stage display locally, and receive targeted preset changes from `/queue`
     - Compact "up next" chips without queue-management actions
     - Auto-advances when song ends
    - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling

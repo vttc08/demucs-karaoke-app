@@ -1189,6 +1189,10 @@
                                         <span class="material-symbols-outlined text-base">close</span>
                                     </button>
                                 </div>
+                                <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                    <span class="stage-lyrics-settings-label">{{ t('stage.display_name') }}</span>
+                                    <input id="stage-display-name" class="stage-lyrics-settings-input" type="text" maxlength="80" placeholder="{{ t('stage.display_name_placeholder') }}" />
+                                </label>
                                 <div class="stage-lyrics-settings-grid">
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_font') }}</span>
@@ -1446,6 +1450,8 @@ const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {})
 const SERVER_STAGE_QR_URL = {{ (stage_qr_url or "") | tojson }};
 const STAGE_LOBBY_MEDIA_URL = {{ stage_lobby_media_url|public_url|tojson }};
 const STAGE_QR_STORAGE_KEY = "karaoke.stage.qrDisplay";
+const STAGE_DISPLAY_ID_STORAGE_KEY = "karaoke.stage.displayId";
+const STAGE_DISPLAY_NAME_STORAGE_KEY = "karaoke.stage.displayName";
 const STAGE_QR_DEFAULT_SIZE = 320;
 const STAGE_QR_MIN_SIZE = 128;
 const STAGE_QR_MAX_SIZE = 640;
@@ -1505,6 +1511,7 @@ const lyricsPresetApply = document.getElementById("stage-lyrics-preset-apply");
 const lyricsPresetCreate = document.getElementById("stage-lyrics-preset-create");
 const lyricsPresetUpdate = document.getElementById("stage-lyrics-preset-update");
 const lyricsPresetDelete = document.getElementById("stage-lyrics-preset-delete");
+const stageDisplayNameInput = document.getElementById("stage-display-name");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const fullscreenIcon = document.getElementById("fullscreen-icon");
 const qrOverlay = document.getElementById("stage-qr-overlay");
@@ -1666,6 +1673,60 @@ async function applySelectedLyricsPreset() {
     }
 }
 
+function sendLyricsSettingsAck(ok, payload = {}) {
+    sendStageCommandRaw({
+        type: "lyrics_settings_ack",
+        data: {
+            stage_id: stageDisplayId,
+            ok: Boolean(ok),
+            ...payload,
+        },
+        timestamp: Date.now(),
+    });
+}
+
+async function applyRemoteLyricsSettings(payload) {
+    const presetId = Number.isInteger(payload?.preset_id) ? payload.preset_id : null;
+    try {
+        if (typeof payload?.lyrics_enabled === "boolean") {
+            setLyricsEnabled(payload.lyrics_enabled);
+        }
+
+        let nextSettings = stageLyrics.getSettingsSnapshot();
+        if (presetId) {
+            const response = await fetch(window.KaraokeURLs.appUrl(`/api/lyrics-presets/${presetId}`), {
+                credentials: "same-origin",
+            });
+            if (!response.ok) {
+                throw new Error(`Failed to load preset (${response.status})`);
+            }
+            const preset = await response.json();
+            nextSettings = {
+                ...nextSettings,
+                ...preset.settings,
+            };
+        }
+
+        if (typeof payload?.size_vw === "number" && Number.isFinite(payload.size_vw)) {
+            nextSettings.sizeVw = payload.size_vw;
+        }
+        if (typeof payload?.line_width_pct === "number" && Number.isFinite(payload.line_width_pct)) {
+            nextSettings.lineWidthPct = payload.line_width_pct;
+        }
+
+        stageLyrics.applySettingsObject(nextSettings, { persist: true });
+        sendLyricsSettingsAck(true, { preset_id: presetId });
+        stageLyrics.setStatus(t("stage.lyrics_remote_settings_applied"));
+    } catch (error) {
+        console.warn("Failed to apply remote lyrics settings:", error);
+        sendLyricsSettingsAck(false, {
+            preset_id: presetId,
+            error: t("stage.lyrics_remote_settings_failed"),
+        });
+        stageLyrics.setStatus(t("stage.lyrics_remote_settings_failed"));
+    }
+}
+
 async function createLyricsPreset() {
     const name = lyricsPresetName?.value.trim();
     if (!name) {
@@ -1777,6 +1838,16 @@ lyricsPresetUpdate?.addEventListener("click", () => {
 lyricsPresetDelete?.addEventListener("click", () => {
     void deleteSelectedLyricsPreset();
 });
+if (stageDisplayNameInput) {
+    syncStageDisplayNameInput();
+    stageDisplayNameInput.addEventListener("input", scheduleStageDisplayNameUpdate);
+    stageDisplayNameInput.addEventListener("blur", () => {
+        window.clearTimeout(stageDisplayNameUpdateTimer);
+        const normalized = persistStageDisplayName(stageDisplayNameInput.value);
+        stageDisplayNameInput.value = normalized;
+        sendStagePresenceHello();
+    });
+}
 void loadLyricsPresets();
 const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
 let controlsHideTimer = null;
@@ -1810,6 +1881,7 @@ let currentPrimarySrc = null;
 let lastPlaybackStateBroadcastAt = 0;
 let isPlaybarScrubbing = false;
 let playbarPreviewTime = 0;
+let stageDisplayNameUpdateTimer = null;
 const SOFT_DRIFT_THRESHOLD_SECONDS = 0.12;
 const MEDIA_SEEK_TIMEOUT_MS = 1200;
 const MEDIA_READY_TIMEOUT_MS = 1200;
@@ -1825,6 +1897,76 @@ function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text || "";
     return div.innerHTML;
+}
+
+function normalizeStageDisplayName(value) {
+    return String(value || "").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+function ensureStageDisplayId() {
+    try {
+        const stored = window.localStorage?.getItem(STAGE_DISPLAY_ID_STORAGE_KEY);
+        if (stored && /^[a-zA-Z0-9._:-]{8,120}$/.test(stored)) {
+            return stored;
+        }
+        const nextId = window.crypto?.randomUUID
+            ? window.crypto.randomUUID()
+            : `stage-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+        window.localStorage?.setItem(STAGE_DISPLAY_ID_STORAGE_KEY, nextId);
+        return nextId;
+    } catch (_) {
+        return `stage-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+}
+
+const stageDisplayId = ensureStageDisplayId();
+
+function getStageDisplayName() {
+    const fallback = t("stage.display_name_default");
+    try {
+        return normalizeStageDisplayName(window.localStorage?.getItem(STAGE_DISPLAY_NAME_STORAGE_KEY)) || fallback;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+function persistStageDisplayName(name) {
+    const normalized = normalizeStageDisplayName(name) || t("stage.display_name_default");
+    try {
+        window.localStorage?.setItem(STAGE_DISPLAY_NAME_STORAGE_KEY, normalized);
+    } catch (_) {
+        // Local display names are best-effort only.
+    }
+    return normalized;
+}
+
+function syncStageDisplayNameInput() {
+    if (stageDisplayNameInput) {
+        stageDisplayNameInput.value = getStageDisplayName();
+    }
+}
+
+function sendStagePresenceHello() {
+    return sendStageCommandRaw({
+        type: "stage_presence_hello",
+        data: {
+            stage_id: stageDisplayId,
+            stage_name: getStageDisplayName(),
+        },
+        timestamp: Date.now(),
+    });
+}
+
+function scheduleStageDisplayNameUpdate() {
+    if (!stageDisplayNameInput) {
+        return;
+    }
+    window.clearTimeout(stageDisplayNameUpdateTimer);
+    stageDisplayNameUpdateTimer = window.setTimeout(() => {
+        const normalized = persistStageDisplayName(stageDisplayNameInput.value);
+        stageDisplayNameInput.value = normalized;
+        sendStagePresenceHello();
+    }, 350);
 }
 
 function mediaExtensionFromSrc(src) {
@@ -2971,6 +3113,7 @@ function connectStageWebSocket() {
             data: { page: "stage" },
             timestamp: Date.now(),
         });
+        sendStagePresenceHello();
     };
 
     stageSocket.onmessage = async (event) => {
@@ -3008,6 +3151,10 @@ function connectStageWebSocket() {
             }
             if (messageType === "stage_control_command") {
                 const command = message?.data?.command;
+                if (command === "apply_lyrics_settings") {
+                    await applyRemoteLyricsSettings(message?.data || {});
+                    return;
+                }
                 const primary = getPrimaryPlayer();
                 if (!primary) return;
                 if (command === "resync") {

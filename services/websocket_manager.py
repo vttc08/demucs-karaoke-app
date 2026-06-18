@@ -19,8 +19,9 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: list[Any] = []
         self._lock = asyncio.Lock()
-        self._connection_context: dict[Any, dict[str, str]] = {}
+        self._connection_context: dict[Any, dict[str, Any]] = {}
         self._queue_presence: dict[str, dict[str, Any]] = {}
+        self._stage_presence: dict[str, dict[str, Any]] = {}
         self._stage_state = {
             "is_paused": False,
             "vocals_enabled": True,
@@ -59,12 +60,22 @@ class ConnectionManager:
                         if not presence["tab_ids"]:
                             self._queue_presence.pop(guest_id, None)
                             left_payload = {"guest_id": guest_id}
+            if context and context.get("page") == "stage":
+                stage_id = context.get("stage_id")
+                if stage_id:
+                    presence = self._stage_presence.get(stage_id)
+                    if presence:
+                        presence["connections"].discard(websocket)
+                        if not presence["connections"]:
+                            self._stage_presence.pop(stage_id, None)
 
         logger.info(
             "WebSocket disconnected total_connections=%s", len(self.active_connections)
         )
         if left_payload:
             await self.broadcast_queue_presence_event("user_left", left_payload)
+        if context and context.get("page") == "stage":
+            await self.broadcast_stage_presence_snapshot()
 
     async def send_personal_message(self, message: dict, websocket: Any):
         """Send a message to a specific connection."""
@@ -134,6 +145,78 @@ class ConnectionManager:
             context = self._connection_context.get(websocket, {}).copy()
             context["role"] = role
             self._connection_context[websocket] = context
+
+    def get_stage_presence_snapshot(self) -> list[dict[str, Any]]:
+        """Return a stable snapshot of active stage displays."""
+        displays = [
+            {
+                "stage_id": stage_id,
+                "stage_name": presence["stage_name"],
+                "connected_at": presence["connected_at"],
+                "last_seen": presence["last_seen"],
+                "connection_count": len(presence["connections"]),
+            }
+            for stage_id, presence in self._stage_presence.items()
+        ]
+        displays.sort(key=lambda item: (item["stage_name"].lower(), item["stage_id"]))
+        return displays
+
+    async def register_stage_presence(
+        self,
+        websocket: Any,
+        *,
+        stage_id: str,
+        stage_name: str,
+    ):
+        """Register or refresh a connected stage display."""
+        async with self._lock:
+            self._connection_context[websocket] = {
+                "page": "stage",
+                "role": "stage",
+                "stage_id": stage_id,
+            }
+            existing = self._stage_presence.get(stage_id)
+            if existing is None:
+                now = self._timestamp()
+                self._stage_presence[stage_id] = {
+                    "stage_name": stage_name,
+                    "connected_at": now,
+                    "last_seen": now,
+                    "connections": {websocket},
+                }
+            else:
+                existing["stage_name"] = stage_name or existing["stage_name"]
+                existing["last_seen"] = self._timestamp()
+                existing["connections"].add(websocket)
+
+        await self.broadcast_stage_presence_snapshot()
+
+    async def send_stage_presence_snapshot(self, websocket: Any):
+        """Send the current stage display snapshot to one websocket client."""
+        await self.send_personal_message(
+            {
+                "type": "stage_presence_snapshot",
+                "data": {"stages": self.get_stage_presence_snapshot()},
+                "timestamp": self._timestamp(),
+            },
+            websocket,
+        )
+
+    async def broadcast_stage_presence_snapshot(self):
+        """Broadcast active stage display state to queue-page clients."""
+        targets = await self._get_connections_by_roles({"queue"})
+        await self._broadcast_to_connections(
+            {
+                "type": "stage_presence_snapshot",
+                "data": {"stages": self.get_stage_presence_snapshot()},
+                "timestamp": self._timestamp(),
+            },
+            targets,
+        )
+
+    def has_stage_display(self, stage_id: str) -> bool:
+        """Return whether a stage display id is currently connected."""
+        return stage_id in self._stage_presence
 
     def get_queue_presence_snapshot(self) -> list[dict[str, Any]]:
         """Return a stable snapshot of active queue viewers."""
@@ -365,15 +448,37 @@ class ConnectionManager:
         command: str,
         source: str = "unknown",
         extra_data: dict | None = None,
+        target_stage_id: str | None = None,
     ):
-        """Broadcast a stage control command to all connected clients."""
+        """Broadcast a stage control command to all or one connected stage display."""
         payload = {"command": command, "source": source}
         if extra_data:
             payload.update(extra_data)
-        targets = await self._get_connections_by_roles(self.STAGE_STATE_ROLES)
+        if target_stage_id:
+            async with self._lock:
+                targets = [
+                    connection
+                    for connection in self.active_connections
+                    if self._connection_context.get(connection, {}).get("role") == "stage"
+                    and self._connection_context.get(connection, {}).get("stage_id") == target_stage_id
+                ]
+        else:
+            targets = await self._get_connections_by_roles(self.STAGE_STATE_ROLES)
         await self._broadcast_to_connections(
             {
                 "type": "stage_control_command",
+                "data": payload,
+                "timestamp": self._timestamp(),
+            },
+            targets,
+        )
+
+    async def broadcast_lyrics_settings_ack(self, payload: dict[str, Any]):
+        """Forward a stage lyrics settings acknowledgement to queue clients."""
+        targets = await self._get_connections_by_roles({"queue"})
+        await self._broadcast_to_connections(
+            {
+                "type": "lyrics_settings_ack",
                 "data": payload,
                 "timestamp": self._timestamp(),
             },

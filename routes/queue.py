@@ -11,6 +11,10 @@ from database import get_db
 from models import ProcessingTaskResponse, QueueItem, QueueItemCreate, QueueItemMoveRequest, QueueItemResponse, QueueStatus
 from routes.auth import auth_service, get_admin_user, require_admin_user
 from services.lyrics_service import LyricsService
+from services.lyrics_preset_service import (
+    LyricsPresetNotFoundError,
+    lyrics_preset_service,
+)
 from services.processing_task_service import processing_task_service, task_execution_coordinator
 from services.auth_service import ADMIN_SESSION_COOKIE
 from services.queue_service import QueueService
@@ -51,6 +55,16 @@ def _normalize_websocket_role(value: object) -> str | None:
     if normalized in {"queue", "stage", "lyrics_viewer"}:
         return normalized
     return None
+
+
+def _normalize_stage_id(value: object) -> str | None:
+    """Validate and normalize a stage display id from websocket payloads."""
+    return _normalize_presence_value(value if isinstance(value, str) else None, max_length=120)
+
+
+def _normalize_stage_name(value: object) -> str | None:
+    """Validate and normalize a stage display name from websocket payloads."""
+    return _normalize_presence_value(value if isinstance(value, str) else None, max_length=80)
 
 
 def _validated_queue_as_guest_id(item: QueueItemCreate) -> str | None:
@@ -438,6 +452,46 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                 await manager.set_connection_role(websocket, role)
                 continue
 
+            if data.get("type") == "stage_presence_hello":
+                payload = data.get("data")
+                if not isinstance(payload, dict):
+                    await _send_ws_error(websocket, "Invalid stage_presence_hello payload")
+                    continue
+                stage_id = _normalize_stage_id(payload.get("stage_id"))
+                stage_name = _normalize_stage_name(payload.get("stage_name")) or "Stage Display"
+                if not stage_id:
+                    await _send_ws_error(websocket, "stage_presence_hello requires stage_id")
+                    continue
+                await manager.register_stage_presence(
+                    websocket,
+                    stage_id=stage_id,
+                    stage_name=stage_name,
+                )
+                continue
+
+            if data.get("type") == "stage_presence_request":
+                await manager.send_stage_presence_snapshot(websocket)
+                continue
+
+            if data.get("type") == "lyrics_settings_ack":
+                payload = data.get("data")
+                if not isinstance(payload, dict):
+                    await _send_ws_error(websocket, "Invalid lyrics_settings_ack payload")
+                    continue
+                stage_id = _normalize_stage_id(payload.get("stage_id"))
+                if not stage_id:
+                    await _send_ws_error(websocket, "lyrics_settings_ack requires stage_id")
+                    continue
+                await manager.broadcast_lyrics_settings_ack(
+                    {
+                        "stage_id": stage_id,
+                        "ok": bool(payload.get("ok")),
+                        "preset_id": payload.get("preset_id") if isinstance(payload.get("preset_id"), int) else None,
+                        "error": _normalize_presence_value(payload.get("error"), max_length=160),
+                    }
+                )
+                continue
+
             if data.get("type") in {"presence_hello", "presence_update"}:
                 payload = data.get("data")
                 if not isinstance(payload, dict):
@@ -503,7 +557,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
 
                 command = payload.get("command")
                 source = payload.get("source", "unknown")
-                if command not in {"play", "pause", "skip", "seek", "resync", "set_vocals_enabled", "set_vocals_volume", "set_lyrics_enabled"}:
+                if command not in {"play", "pause", "skip", "seek", "resync", "set_vocals_enabled", "set_vocals_volume", "set_lyrics_enabled", "apply_lyrics_settings"}:
                     await manager.send_personal_message(
                         {
                             "type": "error",
@@ -515,6 +569,77 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                     continue
 
                 is_admin = _is_admin_websocket(websocket, db)
+                if command == "apply_lyrics_settings":
+                    if not is_admin:
+                        await _send_ws_error(websocket, "Admin session required for lyrics settings")
+                        continue
+
+                    target_stage_id = _normalize_stage_id(payload.get("target_stage_id"))
+                    if not target_stage_id:
+                        stages = manager.get_stage_presence_snapshot()
+                        if len(stages) == 1:
+                            target_stage_id = stages[0]["stage_id"]
+                        else:
+                            await _send_ws_error(websocket, "Lyrics settings require a target stage")
+                            continue
+                    if not manager.has_stage_display(target_stage_id):
+                        await _send_ws_error(websocket, "Target stage is not connected")
+                        continue
+
+                    lyrics_enabled = payload.get("lyrics_enabled")
+                    if lyrics_enabled is not None and not isinstance(lyrics_enabled, bool):
+                        await _send_ws_error(websocket, "lyrics_enabled must be boolean")
+                        continue
+
+                    preset_id = payload.get("preset_id")
+                    if preset_id is not None:
+                        if not isinstance(preset_id, int) or preset_id <= 0:
+                            await _send_ws_error(websocket, "preset_id must be a positive integer")
+                            continue
+                        try:
+                            lyrics_preset_service.get_preset(db, preset_id)
+                        except LyricsPresetNotFoundError:
+                            await _send_ws_error(websocket, "Lyrics preset not found")
+                            continue
+
+                    raw_size = payload.get("size_vw")
+                    size_vw = None
+                    if raw_size is not None:
+                        if not isinstance(raw_size, (int, float)) or not math.isfinite(float(raw_size)):
+                            await _send_ws_error(websocket, "size_vw must be numeric")
+                            continue
+                        size_vw = float(raw_size)
+                        if size_vw < 3.2 or size_vw > 8.8:
+                            await _send_ws_error(websocket, "size_vw must be between 3.2 and 8.8")
+                            continue
+
+                    raw_width = payload.get("line_width_pct")
+                    line_width_pct = None
+                    if raw_width is not None:
+                        if not isinstance(raw_width, (int, float)) or not math.isfinite(float(raw_width)):
+                            await _send_ws_error(websocket, "line_width_pct must be numeric")
+                            continue
+                        line_width_pct = int(round(float(raw_width)))
+                        if line_width_pct < 60 or line_width_pct > 100:
+                            await _send_ws_error(websocket, "line_width_pct must be between 60 and 100")
+                            continue
+
+                    extra_data = {
+                        "target_stage_id": target_stage_id,
+                        "lyrics_enabled": lyrics_enabled,
+                        "preset_id": preset_id,
+                        "size_vw": size_vw,
+                        "line_width_pct": line_width_pct,
+                    }
+                    extra_data = {key: value for key, value in extra_data.items() if value is not None}
+                    await manager.broadcast_stage_control_command(
+                        command=command,
+                        source=source,
+                        extra_data=extra_data,
+                        target_stage_id=target_stage_id,
+                    )
+                    continue
+
                 if not _can_control_current_stage(
                     db,
                     is_admin=is_admin,
