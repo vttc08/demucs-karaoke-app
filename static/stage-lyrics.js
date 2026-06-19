@@ -120,10 +120,11 @@ class StageLyricsController {
   }
 
   setCues(rawCues) {
-    this.cues = (Array.isArray(rawCues) ? rawCues : [])
+    const normalizedCues = (Array.isArray(rawCues) ? rawCues : [])
       .map((cue) => this.normalizeCue(cue))
       .filter((cue) => cue !== null)
       .sort((a, b) => a.time - b.time);
+    this.cues = this.insertCountdownCues(normalizedCues);
     this.resetActiveState();
     if (!this.cues.length) {
       this.clear();
@@ -200,6 +201,8 @@ class StageLyricsController {
       return null;
     }
 
+    const rawEnd = Number(rawCue.end);
+    const end = Number.isFinite(rawEnd) && rawEnd >= rawTime ? Math.max(0, rawEnd) : null;
     const rawWords = Array.isArray(rawCue.words) ? rawCue.words : [];
     const words = rawWords
       .map((rawWord) => {
@@ -221,10 +224,27 @@ class StageLyricsController {
       .filter((word) => word !== null)
       .sort((a, b) => a.start - b.start);
 
+    const countdown = this.isCountdownCueShape({
+      countdown: rawCue.countdown === true,
+      text,
+      words,
+      end,
+      time: rawTime,
+    });
+    const normalizedWords = countdown
+      ? words.map((word) => ({
+          word: ".",
+          start: word.start,
+          end: word.end,
+        }))
+      : words;
+
     return {
       time: Math.max(0, rawTime),
+      end,
       text,
-      words: words.length === rawWords.length ? words : [],
+      words: words.length === rawWords.length ? normalizedWords : [],
+      countdown,
     };
   }
 
@@ -316,14 +336,17 @@ class StageLyricsController {
     const line = document.createElement("p");
     const isCurrent = cueIndex === this.activeCueIndex;
     const hasAlignedWords = cue.words.length > 0;
+    const isCountdown = Boolean(cue.countdown);
     line.className = [
       "stage-lyric-line",
       isCurrent ? "stage-lyric-line--current" : "",
       hasAlignedWords ? "stage-lyric-line--aligned" : "",
+      isCountdown ? "stage-lyric-line--countdown" : "",
     ].filter(Boolean).join(" ");
     line.dataset.cueIndex = String(cueIndex);
     line.dataset.text = cue.text;
     line.dataset.aligned = hasAlignedWords ? "true" : "false";
+    line.dataset.countdown = isCountdown ? "true" : "false";
 
     if (!hasAlignedWords) {
       line.textContent = cue.text;
@@ -331,7 +354,7 @@ class StageLyricsController {
     }
 
     cue.words.forEach((word, wordIndex) => {
-      if (wordIndex > 0) {
+      if (wordIndex > 0 && !isCountdown) {
         line.appendChild(document.createTextNode(" "));
       }
       const span = document.createElement("span");
@@ -354,14 +377,15 @@ class StageLyricsController {
       const cueIndex = Number(line.dataset.cueIndex);
       const isCurrent = cueIndex === this.activeCueIndex;
       const hasAlignedWords = line.dataset.aligned === "true";
+      const isCountdown = line.dataset.countdown === "true";
       line.classList.toggle("stage-lyric-line--current", isCurrent);
 
       if (!hasAlignedWords) {
         return;
       }
 
-      const shouldSlideWords = isCurrent && !this.reducedMotion && this.settings.animation === "slide";
-      const shouldCropWords = isCurrent && !this.reducedMotion && this.settings.animation === "crop";
+      const shouldSlideWords = isCurrent && !this.reducedMotion && this.settings.animation === "slide" && !isCountdown;
+      const shouldCropWords = isCurrent && !this.reducedMotion && this.settings.animation === "crop" && !isCountdown;
       line.classList.toggle("stage-lyric-line--word-slide", shouldSlideWords);
       line.classList.toggle("stage-lyric-line--word-crop", shouldCropWords);
       line.querySelectorAll(".stage-lyric-word").forEach((wordNode) => {
@@ -404,6 +428,61 @@ class StageLyricsController {
       return 1;
     }
     return (currentTime - word.start) / duration;
+  }
+
+  insertCountdownCues(cues) {
+    const expanded = [];
+    let previousBoundary = 0;
+
+    cues.forEach((cue) => {
+      if (!cue) {
+        return;
+      }
+
+      const cueStart = Number(cue.time);
+      const cueEnd = Number.isFinite(cue.end) && cue.end !== null ? Number(cue.end) : cueStart;
+      if (!cue.countdown && Number.isFinite(cueStart) && cueStart - previousBoundary > 4) {
+        expanded.push(this.makeCountdownCue(cueStart));
+      }
+
+      expanded.push(cue);
+      previousBoundary = Math.max(previousBoundary, Number.isFinite(cueEnd) ? cueEnd : cueStart);
+    });
+
+    return expanded;
+  }
+
+  makeCountdownCue(time) {
+    const end = this.roundTime(time);
+    const start = this.roundTime(Math.max(0, end - 4));
+    return {
+      time: start,
+      end,
+      text: "....",
+      countdown: true,
+      words: Array.from({ length: 4 }, (_, index) => ({
+        word: ".",
+        start: this.roundTime(start + index),
+        end: this.roundTime(start + index + 1),
+      })),
+    };
+  }
+
+  roundTime(value) {
+    return Math.round(Number(value) * 1000) / 1000;
+  }
+
+  isCountdownCueShape(cue) {
+    if (cue?.countdown === true) {
+      return true;
+    }
+    if (cue?.text !== "...." || !Array.isArray(cue?.words) || cue.words.length !== 4) {
+      return false;
+    }
+    if (typeof cue.end !== "number" || !Number.isFinite(cue.end) || cue.end <= cue.time) {
+      return false;
+    }
+    return cue.words.every((word) => typeof word?.word === "string" && /^\.+$/.test(word.word.trim()));
   }
 
   loadSettings() {

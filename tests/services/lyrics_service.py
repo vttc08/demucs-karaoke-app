@@ -157,6 +157,7 @@ def test_lyrics_service_parse_json_to_cues_accepts_aligned_segments():
     assert cues == [
         {
             "time": 2.5,
+            "end": 4.0,
             "text": "Hello world",
             "words": [
                 {"word": "Hello", "start": 2.5, "end": 3.0},
@@ -165,6 +166,7 @@ def test_lyrics_service_parse_json_to_cues_accepts_aligned_segments():
         },
         {
             "time": 5.25,
+            "end": 6.25,
             "text": "Second line",
             "words": [
                 {"word": "Second", "start": 5.25, "end": 5.75},

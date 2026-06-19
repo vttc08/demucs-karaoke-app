@@ -258,6 +258,8 @@ The stage page uses a websocket-first model:
 - The lyrics overlay only becomes visible when the stage player is in fullscreen mode so mobile
   controls stay unobstructed in the default windowed view.
 - Lyrics cues are fetched from `GET /api/queue/{item_id}/lyrics-cues`.
+- The stage client can inject a 4-second dot countdown before the first cue or any later cue with a
+  gap larger than four seconds, using cue timing metadata when available.
 - Backend cue source is media sidecar `lyrics_path` and supports:
   - `.lrc` sidecars parsed into timestamped cues
   - `.json` sidecars validated and normalized into line-level cue objects; aligned

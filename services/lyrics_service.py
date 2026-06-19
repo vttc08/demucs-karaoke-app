@@ -1015,6 +1015,11 @@ class LyricsService:
                 continue
 
             cue: dict[str, object] = {"time": max(0.0, timestamp), "text": text}
+            raw_end = row.get("end")
+            if isinstance(raw_end, (int, float)):
+                end = float(raw_end)
+                if math.isfinite(end) and end >= timestamp:
+                    cue["end"] = max(0.0, end)
             raw_words = row.get("words")
             if isinstance(raw_words, list):
                 words: list[dict[str, object]] = []
