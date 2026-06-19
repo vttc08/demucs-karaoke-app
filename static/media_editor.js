@@ -17,6 +17,8 @@
     const endRange = document.getElementById("trim-end-range");
     const startInput = document.getElementById("trim-start-input");
     const endInput = document.getElementById("trim-end-input");
+    const prevIframeButton = document.getElementById("trim-prev-iframe");
+    const nextIframeButton = document.getElementById("trim-next-iframe");
     const startDisplay = document.getElementById("trim-start-display");
     const endDisplay = document.getElementById("trim-end-display");
     const durationDisplay = document.getElementById("trim-duration-display");
@@ -30,6 +32,7 @@
     const jumpEndButton = document.getElementById("trim-jump-end");
 
     const mediaId = Number(root.dataset.mediaId);
+    const SNAP_EPSILON = 0.000001;
     let duration = 0;
     let hasVideo = root.dataset.hasVideo === "true";
     let keyframes = [];
@@ -39,6 +42,7 @@
     let editorReady = false;
     let isSubmitting = false;
     let loadSequence = 0;
+    let isDraggingPlayhead = false;
 
     function setBusyState(isBusy) {
         root.dataset.editorState = isBusy ? "loading" : "ready";
@@ -64,6 +68,8 @@
             endRange,
             startInput,
             endInput,
+            prevIframeButton,
+            nextIframeButton,
             setStartButton,
             setEndButton,
             jumpStartButton,
@@ -152,11 +158,65 @@
         showError();
     }
 
+    function syncPlayheadPosition(value) {
+        const percent = duration ? (player.currentTime / duration) * 100 : 0;
+        playhead.style.left = `${Math.min(100, Math.max(0, percent))}%`;
+        playhead.setAttribute("aria-valuenow", player.currentTime.toFixed(3));
+        playhead.setAttribute("aria-valuetext", formatTime(player.currentTime));
+    }
+
     function seekPlayer(value) {
         if (!player || !editorReady) return;
         player.currentTime = clamp(value);
-        const percent = duration ? (player.currentTime / duration) * 100 : 0;
-        playhead.style.left = `${Math.min(100, Math.max(0, percent))}%`;
+        syncPlayheadPosition(player.currentTime);
+    }
+
+    function updatePlayheadA11y() {
+        playhead.setAttribute("aria-valuemax", duration.toFixed(3));
+        playhead.setAttribute("aria-valuenow", clamp(player.currentTime).toFixed(3));
+        playhead.setAttribute("aria-valuetext", formatTime(player.currentTime));
+    }
+
+    function getTimelineTimeFromClientX(clientX) {
+        if (!timeline || !duration) {
+            return 0;
+        }
+        const rect = timeline.getBoundingClientRect();
+        const percent = rect.width ? (clientX - rect.left) / rect.width : 0;
+        return clamp(percent * duration);
+    }
+
+    function seekAdjacentIframe(direction) {
+        if (!editorReady || !snapPoints.length) return;
+        const currentTime = clamp(player.currentTime);
+        const target = direction < 0
+            ? [...snapPoints].filter((point) => point < currentTime - SNAP_EPSILON).at(-1) ?? 0
+            : snapPoints.find((point) => point > currentTime + SNAP_EPSILON) ?? duration;
+        seekPlayer(target);
+    }
+
+    function startPlayheadDrag(event) {
+        if (!editorReady || event.button !== 0) return;
+        event.preventDefault();
+        isDraggingPlayhead = true;
+        playhead.classList.add("is-dragging");
+        playhead.setPointerCapture(event.pointerId);
+        seekPlayer(getTimelineTimeFromClientX(event.clientX));
+    }
+
+    function movePlayheadDrag(event) {
+        if (!isDraggingPlayhead) return;
+        event.preventDefault();
+        seekPlayer(getTimelineTimeFromClientX(event.clientX));
+    }
+
+    function endPlayheadDrag(event) {
+        if (!isDraggingPlayhead) return;
+        isDraggingPlayhead = false;
+        playhead.classList.remove("is-dragging");
+        if (playhead.hasPointerCapture(event.pointerId)) {
+            playhead.releasePointerCapture(event.pointerId);
+        }
     }
 
     function setStart(value, seek = false) {
@@ -237,6 +297,7 @@
             setBusyState(false);
             setLoadingStateVisible(false);
             updateUi();
+            updatePlayheadA11y();
             drawKeyframes();
         } catch (error) {
             if (sequence !== loadSequence) return;
@@ -256,10 +317,36 @@
     endRange.addEventListener("input", () => setEnd(endRange.value, true));
     startInput.addEventListener("change", () => setStart(startInput.value, true));
     endInput.addEventListener("change", () => setEnd(endInput.value, true));
+    prevIframeButton.addEventListener("click", () => seekAdjacentIframe(-1));
+    nextIframeButton.addEventListener("click", () => seekAdjacentIframe(1));
     setStartButton.addEventListener("click", () => setStart(player.currentTime));
     setEndButton.addEventListener("click", () => setEnd(player.currentTime));
     jumpStartButton.addEventListener("click", () => seekPlayer(start));
     jumpEndButton.addEventListener("click", () => seekPlayer(end));
+    playhead.addEventListener("pointerdown", startPlayheadDrag);
+    playhead.addEventListener("pointermove", movePlayheadDrag);
+    playhead.addEventListener("pointerup", endPlayheadDrag);
+    playhead.addEventListener("pointercancel", endPlayheadDrag);
+    playhead.addEventListener("lostpointercapture", () => {
+        isDraggingPlayhead = false;
+        playhead.classList.remove("is-dragging");
+    });
+    playhead.addEventListener("keydown", (event) => {
+        if (!editorReady) return;
+        if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            seekAdjacentIframe(-1);
+        } else if (event.key === "ArrowRight") {
+            event.preventDefault();
+            seekAdjacentIframe(1);
+        } else if (event.key === "Home") {
+            event.preventDefault();
+            seekPlayer(0);
+        } else if (event.key === "End") {
+            event.preventDefault();
+            seekPlayer(duration);
+        }
+    });
 
     if (loadingRetry) {
         loadingRetry.addEventListener("click", () => {
@@ -269,14 +356,12 @@
 
     player.addEventListener("timeupdate", () => {
         if (!editorReady) return;
-        const percent = duration ? (player.currentTime / duration) * 100 : 0;
-        playhead.style.left = `${Math.min(100, Math.max(0, percent))}%`;
+        syncPlayheadPosition(player.currentTime);
     });
 
     timeline.addEventListener("dblclick", (event) => {
         if (!editorReady) return;
-        const rect = timeline.getBoundingClientRect();
-        player.currentTime = clamp(((event.clientX - rect.left) / rect.width) * duration);
+        seekPlayer(getTimelineTimeFromClientX(event.clientX));
     });
 
     saveButton.addEventListener("click", async () => {

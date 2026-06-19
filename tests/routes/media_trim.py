@@ -80,6 +80,9 @@ def test_media_editor_page_renders_loading_shell_without_keyframes_probe(
     assert 'id="trim-loading-state"' in response.text
     assert 'id="trim-keyframe-canvas"' in response.text
     assert 'id="trim-media-player"' in response.text
+    assert 'id="trim-playhead"' in response.text
+    assert 'id="trim-prev-iframe"' in response.text
+    assert 'id="trim-next-iframe"' in response.text
     assert 'data-keyframes=' not in response.text
     assert "Loading keyframes" in response.text
     assert "Test" in response.text

@@ -103,7 +103,18 @@
                 <div id="trim-timeline" class="trim-timeline">
                     <canvas id="trim-keyframe-canvas" aria-hidden="true"></canvas>
                     <div id="trim-selection" class="trim-selection"></div>
-                    <div id="trim-playhead" class="trim-playhead"></div>
+                    <div
+                        id="trim-playhead"
+                        class="trim-playhead"
+                        role="slider"
+                        tabindex="0"
+                        aria-label="{{ t('trim.playhead') }}"
+                        aria-orientation="horizontal"
+                        aria-valuemin="0"
+                        aria-valuemax="0"
+                        aria-valuenow="0"
+                        aria-valuetext="00:00.000"
+                    ></div>
                     <input id="trim-start-range" type="range" min="0" max="0" step="0.001" value="0" disabled aria-label="{{ t('trim.start_time') }}">
                     <input id="trim-end-range" type="range" min="0" max="0" step="0.001" value="0" disabled aria-label="{{ t('trim.end_time') }}">
                 </div>
@@ -114,14 +125,24 @@
                 </div>
 
                 <div class="trim-time-fields">
-                    <label>
-                        <span>{{ t('trim.start_time') }}</span>
+                    <div class="trim-time-field trim-time-field-start">
+                        <label for="trim-start-input">
+                            <span>{{ t('trim.start_time') }}</span>
+                        </label>
                         <input id="trim-start-input" type="number" min="0" max="0" step="0.001" value="0" disabled>
-                    </label>
-                    <label>
-                        <span>{{ t('trim.end_time') }}</span>
+                    </div>
+                    <button id="trim-prev-iframe" type="button" class="trim-iframe-nudge" disabled title="{{ t('trim.jump_to_prev_iframe') }}" aria-label="{{ t('trim.jump_to_prev_iframe') }}">
+                        <span class="material-symbols-outlined">skip_previous</span>
+                    </button>
+                    <button id="trim-next-iframe" type="button" class="trim-iframe-nudge" disabled title="{{ t('trim.jump_to_next_iframe') }}" aria-label="{{ t('trim.jump_to_next_iframe') }}">
+                        <span class="material-symbols-outlined">skip_next</span>
+                    </button>
+                    <div class="trim-time-field trim-time-field-end">
+                        <label for="trim-end-input">
+                            <span>{{ t('trim.end_time') }}</span>
+                        </label>
                         <input id="trim-end-input" type="number" min="0" max="0" step="0.001" value="0" disabled>
-                    </label>
+                    </div>
                     <div class="trim-action-rail">
                         <button id="trim-set-start" type="button" disabled title="{{ t('trim.set_start_from_playhead') }}" aria-label="{{ t('trim.set_start_from_playhead') }}">
                             <span class="material-symbols-outlined">first_page</span>
