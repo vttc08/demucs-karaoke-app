@@ -170,7 +170,7 @@ class FFmpegAdapter:
             "-v",
             "error",
             "-show_entries",
-            "format=duration,start_time:stream=codec_type",
+            "format=duration,start_time:stream=codec_type,avg_frame_rate,r_frame_rate",
             "-of",
             "json",
             str(source_path),
@@ -194,11 +194,18 @@ class FFmpegAdapter:
             for stream in streams
             if isinstance(stream, dict) and stream.get("codec_type")
         }
+        frame_rates = [
+            self._parse_frame_rate(stream)
+            for stream in streams
+            if isinstance(stream, dict) and str(stream.get("codec_type")) == "video"
+        ]
+        frame_rate = next((rate for rate in frame_rates if rate is not None), None)
         return {
             "duration": duration,
             "start_time": start_time,
             "has_video": "video" in stream_types,
             "has_audio": "audio" in stream_types,
+            "frame_rate": frame_rate,
         }
 
     def get_video_keyframes(self, source_path: Path) -> list[float]:
@@ -338,6 +345,27 @@ class FFmpegAdapter:
         except (TypeError, ValueError):
             return None
         return parsed if math.isfinite(parsed) else None
+
+    @staticmethod
+    def _parse_frame_rate(stream: object) -> float | None:
+        if not isinstance(stream, dict):
+            return None
+        for key in ("avg_frame_rate", "r_frame_rate"):
+            raw = stream.get(key)
+            if not isinstance(raw, str) or not raw.strip() or raw == "0/0":
+                continue
+            if "/" in raw:
+                numerator_raw, denominator_raw = raw.split("/", 1)
+                numerator = FFmpegAdapter._finite_float(numerator_raw)
+                denominator = FFmpegAdapter._finite_float(denominator_raw)
+                if numerator is None or denominator in (None, 0):
+                    continue
+                frame_rate = numerator / denominator
+            else:
+                frame_rate = FFmpegAdapter._finite_float(raw)
+            if frame_rate is not None and math.isfinite(frame_rate) and frame_rate > 0:
+                return frame_rate
+        return None
 
     @staticmethod
     def _terminate_process(process: subprocess.Popen) -> None:

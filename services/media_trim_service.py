@@ -78,6 +78,11 @@ class MediaTrimService:
             "duration": round(float(probe["duration"]), 6),
             "has_video": bool(probe["has_video"]),
             "has_audio": bool(probe["has_audio"]),
+            "frame_rate": (
+                round(float(probe["frame_rate"]), 6)
+                if isinstance(probe.get("frame_rate"), (int, float))
+                else None
+            ),
             "keyframes": keyframes,
             "vocals_path": media_item.vocals_path,
             "lyrics_path": media_item.lyrics_path,

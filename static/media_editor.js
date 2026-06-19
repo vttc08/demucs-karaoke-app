@@ -33,8 +33,10 @@
 
     const mediaId = Number(root.dataset.mediaId);
     const SNAP_EPSILON = 0.000001;
+    const DEFAULT_FRAME_RATE = 30;
     let duration = 0;
     let hasVideo = root.dataset.hasVideo === "true";
+    let frameRate = DEFAULT_FRAME_RATE;
     let keyframes = [];
     let snapPoints = [0];
     let start = 0;
@@ -204,6 +206,18 @@
         seekPlayer(target);
     }
 
+    function getFrameStepSeconds() {
+        return frameRate > 0 ? 1 / frameRate : 1 / DEFAULT_FRAME_RATE;
+    }
+
+    function stepFrame(direction) {
+        if (!editorReady) return;
+        if (!player.paused) {
+            player.pause();
+        }
+        seekPlayer(player.currentTime + (direction * getFrameStepSeconds()));
+    }
+
     function startPlayheadDrag(event) {
         if (!editorReady || event.button !== 0) return;
         event.preventDefault();
@@ -231,6 +245,61 @@
     function shouldAllowTextInputShortcut(target) {
         if (!(target instanceof Element)) return false;
         return Boolean(target.closest("input, textarea, [contenteditable='true']"));
+    }
+
+    function handleEditorShortcut(event) {
+        if (
+            !editorReady
+            || event.defaultPrevented
+            || event.repeat
+            || event.altKey
+            || event.ctrlKey
+            || event.metaKey
+            || shouldAllowTextInputShortcut(event.target)
+        ) {
+            return;
+        }
+
+        switch (event.code) {
+        case "KeyI":
+            event.preventDefault();
+            setStart(player.currentTime);
+            break;
+        case "KeyO":
+            event.preventDefault();
+            setEnd(player.currentTime);
+            break;
+        case "BracketLeft":
+            event.preventDefault();
+            seekAdjacentIframe(-1);
+            break;
+        case "BracketRight":
+            event.preventDefault();
+            seekAdjacentIframe(1);
+            break;
+        case "Home":
+            event.preventDefault();
+            seekPlayer(0);
+            break;
+        case "End":
+            event.preventDefault();
+            seekPlayer(duration);
+            break;
+        case "Space":
+            event.preventDefault();
+            togglePlayback();
+            break;
+        case "Comma":
+            event.preventDefault();
+            stepFrame(-1);
+            break;
+        case "Period":
+            event.preventDefault();
+            stepFrame(1);
+            break;
+        default:
+            break;
+        }
     }
 
     function setStart(value, seek = false) {
@@ -295,6 +364,10 @@
             if (!Number.isFinite(duration) || duration <= 0) {
                 throw new Error(t("trim.loading_failed_detail"));
             }
+            frameRate = Number(payload.frame_rate);
+            if (!Number.isFinite(frameRate) || frameRate <= 0) {
+                frameRate = DEFAULT_FRAME_RATE;
+            }
             hasVideo = Boolean(payload.has_video);
             keyframes = Array.isArray(payload.keyframes)
                 ? payload.keyframes.map(Number).filter(Number.isFinite)
@@ -304,6 +377,7 @@
             end = duration;
             root.dataset.duration = String(duration);
             root.dataset.hasVideo = hasVideo ? "true" : "false";
+            root.dataset.frameRate = String(frameRate);
             root.dataset.keyframes = JSON.stringify(keyframes);
             setTimelineBounds();
             editorReady = true;
@@ -361,13 +435,7 @@
             seekPlayer(duration);
         }
     });
-    document.addEventListener("keydown", (event) => {
-        if (!editorReady || event.code !== "Space" || event.repeat || shouldAllowTextInputShortcut(event.target)) {
-            return;
-        }
-        event.preventDefault();
-        togglePlayback();
-    }, true);
+    document.addEventListener("keydown", handleEditorShortcut, true);
 
     if (loadingRetry) {
         loadingRetry.addEventListener("click", () => {

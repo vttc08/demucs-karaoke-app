@@ -16,6 +16,7 @@ class FakeFFmpeg:
             "start_time": 0.0,
             "has_video": path.suffix == ".mp4",
             "has_audio": True,
+            "frame_rate": 25.0,
         }
 
     def get_video_keyframes(self, _path):
@@ -34,6 +35,28 @@ def test_resolve_video_bounds_snaps_outward_to_keyframes():
         [0.0, 5.0, 10.0, 20.0],
         has_video=True,
     ) == (5.0, 20.0)
+
+
+def test_get_trim_info_includes_frame_rate(db_session, tmp_path, monkeypatch):
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+
+    media_file = media_root / "song.mp4"
+    media_file.write_bytes(b"video")
+    media = MediaItem(
+        title="Song",
+        artist="Artist",
+        media_path="/media/song.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    result = MediaTrimService(ffmpeg=FakeFFmpeg()).get_trim_info(db_session, media.id)
+
+    assert result["frame_rate"] == 25.0
 
 
 def test_shift_timed_lyrics_formats():

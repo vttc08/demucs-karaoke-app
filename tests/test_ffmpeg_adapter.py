@@ -133,7 +133,8 @@ def test_probe_media_reads_duration_and_stream_types(monkeypatch, tmp_path):
             args=cmd,
             returncode=0,
             stdout='{"format":{"duration":"12.5","start_time":"1.0"},'
-            '"streams":[{"codec_type":"video"},{"codec_type":"audio"}]}',
+            '"streams":[{"codec_type":"video","avg_frame_rate":"30000/1001"},'
+            '{"codec_type":"audio"}]}',
         )
 
     monkeypatch.setattr(subprocess, "run", fake_run)
@@ -145,6 +146,7 @@ def test_probe_media_reads_duration_and_stream_types(monkeypatch, tmp_path):
         "start_time": 1.0,
         "has_video": True,
         "has_audio": True,
+        "frame_rate": pytest.approx(30000 / 1001),
     }
 
 
