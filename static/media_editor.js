@@ -171,6 +171,15 @@
         syncPlayheadPosition(player.currentTime);
     }
 
+    function togglePlayback() {
+        if (!player || !editorReady) return;
+        if (player.paused) {
+            player.play().catch(() => {});
+        } else {
+            player.pause();
+        }
+    }
+
     function updatePlayheadA11y() {
         playhead.setAttribute("aria-valuemax", duration.toFixed(3));
         playhead.setAttribute("aria-valuenow", clamp(player.currentTime).toFixed(3));
@@ -217,6 +226,11 @@
         if (playhead.hasPointerCapture(event.pointerId)) {
             playhead.releasePointerCapture(event.pointerId);
         }
+    }
+
+    function shouldAllowTextInputShortcut(target) {
+        if (!(target instanceof Element)) return false;
+        return Boolean(target.closest("input, textarea, [contenteditable='true']"));
     }
 
     function setStart(value, seek = false) {
@@ -347,6 +361,13 @@
             seekPlayer(duration);
         }
     });
+    document.addEventListener("keydown", (event) => {
+        if (!editorReady || event.code !== "Space" || event.repeat || shouldAllowTextInputShortcut(event.target)) {
+            return;
+        }
+        event.preventDefault();
+        togglePlayback();
+    }, true);
 
     if (loadingRetry) {
         loadingRetry.addEventListener("click", () => {
