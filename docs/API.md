@@ -221,7 +221,7 @@ Queue payload can identify the target with either:
 - `queue_as_name` is optional and admin-only. When provided by an authenticated admin session, it overrides the displayed requester label for that queued item.
 
 If the `youtube_id` already exists in `media_items` with a usable local media file, the queue item is created against that existing media row and processing reuses the stored file instead of re-downloading the video again.
-When `lyrics_text` is supplied for karaoke items, the app persists it as a reusable lyrics sidecar under the cache directory so karaoke processing can skip a second lookup. `lyrics_format` is optional; if omitted, the app infers `.lrc` when timestamped lines are present and `.txt` otherwise.
+When `lyrics_text` is supplied for karaoke items, the app persists it as a reusable lyrics sidecar under the cache directory so karaoke processing can skip a second lookup. `lyrics_format` is optional; if omitted, the app infers `.lrc` when timestamped lines are present, `.json` for WhisperX-style aligned payloads, and `.txt` otherwise.
 
 **Response:**
 ```json
@@ -394,7 +394,7 @@ Uploads a local media file into the library. The request is multipart form data.
 - `add_to_queue` (optional, default `true`): queue the uploaded media after saving
 - `is_karaoke` (optional, default `false`): request karaoke processing for the uploaded media
 - `lyrics_text` (optional): lyrics text to persist as a reusable sidecar
-- `lyrics_format` (optional): `lrc` or `txt`; inferred from text when omitted by queue/service paths
+- `lyrics_format` (optional): `lrc`, `txt`, or `json`; inferred from text when omitted by queue/service paths
 
 **Response:**
 ```json
@@ -747,7 +747,7 @@ I-frame timestamps for the first video stream.
   "keyframes": [0.0, 2.002, 4.004],
   "vocals_path": "/media/song.vocals.wav",
   "lyrics_path": "/media/song.lrc",
-  "lyrics_format": "lrc"
+  "lyrics_format": "json"
 }
 ```
 

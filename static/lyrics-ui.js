@@ -163,7 +163,7 @@ class LyricsUIAdapter {
     const state = this.manager.getState();
 
     this.updateStateLabel(state.lyricsState, state.isSynced);
-    this.updateProviderLabel(state.provider, state.isSynced);
+    this.updateProviderLabel(state.provider, state.format);
     this.updateHelpText(state.lyricsState, state.isSynced);
     this.updateSearchButton(state);
     this.updateUploadButton(state);
@@ -190,11 +190,11 @@ class LyricsUIAdapter {
   /**
    * Update provider label
    */
-  updateProviderLabel(provider, isSynced) {
+  updateProviderLabel(provider, format) {
     if (!this.elements.providerLabel) return;
 
     if (provider) {
-      const mode = isSynced ? this.t('lyrics.timed') : this.t('lyrics.plain');
+      const mode = LyricsManager.getFormatLabel(format);
       this.elements.providerLabel.textContent = `${provider} • ${mode}`;
     } else {
       this.elements.providerLabel.textContent = '';

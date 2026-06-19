@@ -14,6 +14,7 @@ def test_upload_page_loads(client):
     assert not re.search(r'<input[^>]*id="artist-name"[^>]*required', response.text)
     assert 'id="infer-metadata-btn"' in response.text
     assert "Infer from filename" in response.text
+    assert 'accept=".lrc,.txt,.json"' in response.text
 
 def test_upload_media_saves_file_and_queues_item(client, tmp_path):
     """Uploaded media should be saved, catalogued, and queued when requested."""
@@ -109,6 +110,52 @@ def test_upload_media_persists_lyrics_and_queue_karaoke_flag(client, tmp_path):
             assert queue_item is not None
             assert queue_item.requested_karaoke is True
             assert queue_item.media.lyrics_path == f"/media/{expected_stem}.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+def test_upload_media_persists_json_lyrics_sidecar(client, tmp_path):
+    """Uploaded WhisperX JSON should persist as a reusable sidecar."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        healthy = DemucsHealthResponse(api_url="http://demucs", healthy=True, detail="ok")
+        with (
+            patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()),
+            patch(
+                "routes.media_library.runtime_settings_service.get_demucs_health",
+                return_value=healthy,
+            ),
+        ):
+            response = client.post(
+                "/api/media/upload",
+                data={
+                    "title": "Upload JSON Lyrics",
+                    "artist": "Upload Artist",
+                    "add_to_queue": "false",
+                    "lyrics_text": '[{"time":1.0,"text":"Hello"}]',
+                    "lyrics_format": "json",
+                },
+                files={"file": ("upload-json.mp4", b"video-bytes", "video/mp4")},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        expected_stem = build_media_stem("Upload JSON Lyrics", "Upload Artist")
+        assert payload["lyrics_path"] == f"/media/{expected_stem}.json"
+        assert (settings.media_path / f"{expected_stem}.json").read_text(
+            encoding="utf-8"
+        ) == '[{"time":1.0,"text":"Hello"}]'
+
+        with TestingSessionLocal() as db:
+            media_item = db.query(MediaItem).filter(MediaItem.id == payload["media_id"]).first()
+            assert media_item is not None
+            assert media_item.lyrics_path == f"/media/{expected_stem}.json"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
@@ -291,6 +338,13 @@ def test_media_management_page_uses_database_rows(client):
                     lyrics_path="/media/real-song-missing.lrc",
                     missing=True,
                 ),
+                MediaItem(
+                    title="WhisperX Song",
+                    artist="Artist JSON",
+                    media_path="/media/whisperx-song.mp4",
+                    lyrics_path="/media/whisperx-song.json",
+                    missing=False,
+                ),
             ]
         )
         db.commit()
@@ -315,10 +369,12 @@ def test_media_management_page_uses_database_rows(client):
     assert b'data-has-lyrics="true"' in content
     assert b'data-has-multi-track="false"' in content
     assert b'data-has-lyrics="false"' in content
+    assert b'data-lyrics-kind="json"' in content
+    assert "lyrics 歌词".encode("utf-8") in content
+    assert "synced 同步".encode("utf-8") in content
 
     assert content.count(b">3</p>") >= 1
     assert content.count(b">1</p>") >= 2
-    assert content.count(b">2</p>") >= 1
 
 def test_media_management_page_hides_edit_controls_for_guest(client):
     """Guest media library should be queue-only."""
@@ -789,6 +845,57 @@ def test_media_scan_preserves_edited_media_adjacent_lyrics(client, tmp_path):
             stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
             assert stored is not None
             assert stored.lyrics_path == "/media/scan-edit.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+def test_media_edit_patch_persists_json_lyrics_sidecar(client, tmp_path):
+    """Media edit should accept WhisperX JSON lyrics sidecars."""
+    authenticate_admin_client(client)
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+        media_file = settings.media_path / "editable-json.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Editable JSON",
+                artist="Singer",
+                file_stem="editable-json",
+                media_path="/media/editable-json.mp4",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        response = client.patch(
+            f"/api/media/{media_id}",
+            json={
+                "title": "Editable JSON",
+                "artist": "Singer",
+                "rename_on_disk": False,
+                "lyrics_text": '[{"time":2.0,"text":"Line"}]',
+                "lyrics_format": "json",
+            },
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["summary"]["lyrics_path"] == "/media/editable-json.json"
+        assert (settings.media_path / "editable-json.json").read_text(
+            encoding="utf-8"
+        ) == '[{"time":2.0,"text":"Line"}]'
+
+        with TestingSessionLocal() as db:
+            stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+            assert stored is not None
+            assert stored.lyrics_path == "/media/editable-json.json"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache

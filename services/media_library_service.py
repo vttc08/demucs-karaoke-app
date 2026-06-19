@@ -1,4 +1,5 @@
 """Media library query helpers for the media management page."""
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func
@@ -48,6 +49,9 @@ class MediaLibraryService:
 
     @staticmethod
     def _to_page_item(db: Session, item: MediaItem) -> dict[str, Any]:
+        lyrics_kind = None
+        if item.lyrics_path and item.lyrics_path.strip():
+            lyrics_kind = Path(item.lyrics_path).suffix.lower().lstrip(".") or None
         task = (
             db.query(ProcessingTask)
             .filter(
@@ -68,6 +72,7 @@ class MediaLibraryService:
             "thumbnail": MediaLibraryService._thumbnail_for(item),
             "has_multi_track": bool(item.vocals_path and item.vocals_path.strip()),
             "has_lyrics": bool(item.lyrics_path and item.lyrics_path.strip()),
+            "lyrics_kind": lyrics_kind,
             "task_id": task.id if task else None,
             "task_status": task.status if task else None,
             "task_stage": task.stage if task else None,

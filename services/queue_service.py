@@ -1,4 +1,5 @@
 """Queue service for managing the karaoke queue."""
+import json
 import logging
 import re
 import shutil
@@ -525,12 +526,22 @@ class QueueService:
 
     @staticmethod
     def _lyrics_suffix(lyrics_text: str, requested_format: str | None) -> str:
+        if requested_format == "json":
+            return ".json"
         if requested_format == "lrc":
             return ".lrc"
         if requested_format == "txt":
             return ".txt"
         if re.search(r"^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]", lyrics_text, re.MULTILINE):
             return ".lrc"
+        trimmed = lyrics_text.lstrip()
+        if trimmed[:1] in {"{", "["}:
+            try:
+                json.loads(trimmed)
+            except json.JSONDecodeError:
+                pass
+            else:
+                return ".json"
         return ".txt"
 
     @staticmethod
@@ -974,7 +985,7 @@ class QueueService:
                     break
 
         if not lyrics_path:
-            for ext in (".lrc", ".srt", ".txt"):
+            for ext in (".json", ".lrc", ".srt", ".txt"):
                 candidate = media_file.with_suffix(ext)
                 if candidate.exists():
                     try:

@@ -454,6 +454,36 @@ def test_queue_service_persists_lyrics_sidecar_for_existing_media(db_session, tm
     finally:
         settings.cache_path = original_cache
 
+def test_queue_service_persists_json_lyrics_sidecar(db_session, tmp_path):
+    """WhisperX JSON lyrics should persist with a JSON suffix."""
+    original_cache = settings.cache_path
+    try:
+        settings.cache_path = tmp_path / "cache"
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        media = MediaItem(
+            title="JSON Lyrics",
+            artist="Singer",
+            file_stem="json-lyrics",
+            media_path="/media/json-lyrics.mp4",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.flush()
+
+        service = QueueService()
+        service.store_lyrics_sidecar(
+            media,
+            '[{"time":1.0,"text":"Hello"}]',
+            lyrics_format="json",
+        )
+
+        assert media.lyrics_path == "/cache/lyrics/json-lyrics.json"
+        lyrics_file = settings.cache_path / "lyrics" / "json-lyrics.json"
+        assert lyrics_file.read_text(encoding="utf-8") == '[{"time":1.0,"text":"Hello"}]'
+    finally:
+        settings.cache_path = original_cache
+
 def test_queue_service_can_persist_media_adjacent_lyrics_sidecar(db_session, tmp_path):
     """Media-library lyrics should be saved next to the media file for scan discovery."""
     original_media = settings.media_path

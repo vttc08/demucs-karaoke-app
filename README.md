@@ -179,6 +179,7 @@ and `/static/...`.
           - The edit modal can enable **AI Karaoke** for single-track media when Demucs is online; saving creates a monitored media-processing task
           - Existing multi-track items show AI Karaoke as enabled but locked, preventing duplicate separation work
           - Admin users can use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
+          - Lyrics sidecars are classified by suffix: `.lrc` and `.txt` stay under the normal lyrics badge, while WhisperX word-aligned `.json` sidecars get a separate badge
           - Admin users can open **Lossless Trim** from the edit modal to retain an intro/outro interval without re-encoding; video boundaries snap outward to I-frames and attached vocals/lyrics are shifted to the same interval
           - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
           - Admin users can trigger **Scan Library** to reconcile DB with filesystem on demand
@@ -189,7 +190,7 @@ sidecars, FFmpeg behavior, and the destructive replacement contract.
 
 6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
         - Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files into the media library with title and artist metadata
-        - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use
+        - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use, and the lyrics file picker accepts `.lrc`, `.txt`, or WhisperX `.json`
         - **AI Karaoke** is available only while Demucs is online and can process uploads whether or not **Add to queue** is enabled
         - Queued AI uploads use the queue preparation task; non-queued AI uploads create a media-library karaoke task
         - If Demucs becomes unavailable during submission, the upload is still saved and optionally queued without karaoke processing

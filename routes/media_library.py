@@ -155,8 +155,9 @@ async def upload_media(
         db.flush()
         media_thumbnail_service.ensure_thumbnail_for_media_file(target_path)
         if lyrics_text:
-            if lyrics_format not in (None, "lrc", "txt"):
-                raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc' or 'txt'")
+            lyrics_format = (lyrics_format or "").strip().lower() or None
+            if lyrics_format not in (None, "lrc", "txt", "json"):
+                raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc', 'txt', or 'json'")
             queue_service.store_lyrics_sidecar(
                 media_item,
                 lyrics_text,
@@ -332,8 +333,9 @@ def rename_media_item(
     if lyrics_text is not None and not isinstance(lyrics_text, str):
         raise HTTPException(status_code=400, detail="lyrics_text must be a string or null")
     lyrics_format = payload.get("lyrics_format")
-    if lyrics_format not in (None, "lrc", "txt"):
-        raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc' or 'txt'")
+    lyrics_format = (lyrics_format or "").strip().lower() or None
+    if lyrics_format not in (None, "lrc", "txt", "json"):
+        raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc', 'txt', or 'json'")
     is_karaoke = payload.get("is_karaoke", False)
     if not isinstance(is_karaoke, bool):
         raise HTTPException(status_code=400, detail="is_karaoke must be a boolean")

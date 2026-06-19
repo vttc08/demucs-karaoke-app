@@ -294,28 +294,44 @@ function setItemFieldText(itemNode, field, value) {
     }
 }
 
-function updateMediaItemDisplay(itemId, title, artist, hasMulti, hasLyrics) {
+function updateMediaItemDisplay(itemId, title, artist, hasMulti, hasLyrics, lyricsKind = "") {
     const normalizedTitle = title.trim();
     const normalizedArtist = normalizeArtistValue(artist);
+    const normalizedLyricsKind = String(lyricsKind || "").trim().toLowerCase();
+    const hasSyncedLyrics = normalizedLyricsKind === "json";
     const nodes = getMediaItemNodes(itemId);
     nodes.forEach((node) => {
         node.dataset.title = normalizedTitle.toLowerCase();
         node.dataset.artist = normalizedArtist.toLowerCase();
         node.dataset.hasMultiTrack = String(hasMulti);
         node.dataset.hasLyrics = String(hasLyrics);
+        node.dataset.lyricsKind = normalizedLyricsKind;
 
         setItemFieldText(node, "title", normalizedTitle);
         setItemFieldText(node, "artist", normalizedArtist || t("common.unknown_artist"));
         
-        // Update Chips (using escaping for the slash in class selector)
         const multiChip = node.querySelector('.rounded-full.bg-secondary\\/10');
-        const lyricsChip = node.querySelector('.rounded-full.bg-primary\\/10');
+        const lyricsChip = node.querySelector('[data-lyrics-chip="media"]');
         
         if (multiChip) {
             multiChip.classList.toggle("hidden", !hasMulti);
         }
         if (lyricsChip) {
             lyricsChip.classList.toggle("hidden", !hasLyrics);
+            lyricsChip.className = [
+                "rounded-full",
+                "px-2",
+                "py-0.5",
+                "text-[10px]",
+                "font-bold",
+                "uppercase",
+                "tracking-widest",
+                hasSyncedLyrics
+                    ? "border border-tertiary/30 bg-tertiary/10 text-tertiary"
+                    : "border border-primary/30 bg-primary/10 text-primary",
+                hasLyrics ? "" : "hidden",
+            ].filter(Boolean).join(" ");
+            lyricsChip.textContent = hasSyncedLyrics ? t("media.lyrics_synced") : t("media.lyrics_plain");
         }
 
         const titleImage = node.querySelector("img[alt]");
