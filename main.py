@@ -16,6 +16,7 @@ from logging_config import configure_logging
 from routes import (
     media_files,
     lyrics,
+    lyrics_presets,
     media_library,
     pages,
     queue,
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
     created_app.include_router(media_library.router, prefix=base_path)
     created_app.include_router(pages.router, prefix=base_path)
     created_app.include_router(lyrics.router, prefix=base_path)
+    created_app.include_router(lyrics_presets.router, prefix=base_path)
     created_app.include_router(queue.router, prefix=base_path)
     created_app.include_router(qr_routes.router, prefix=base_path)
     created_app.include_router(search.router, prefix=base_path)

@@ -94,6 +94,8 @@ The stage page uses a websocket-first model:
 - WebSocket clients now register a page role after connect (`queue`, `stage`, `lyrics_viewer`) so the
   server can target event delivery instead of broadcasting every event to every page.
 - `services/websocket_manager.py` also tracks in-memory queue presence keyed by guest id and deduplicates multiple browser tabs for the same guest.
+- `services/websocket_manager.py` also tracks connected stage displays by browser-local `stage_id`;
+  multiple tabs for the same display id are grouped into one target with a connection count.
 - `routes/queue.py` also accepts client `stage_command` messages (`play`, `pause`, `skip`).
 - `routes/queue.py` also accepts queue-page presence messages:
   - `presence_hello` for initial roster registration
@@ -107,6 +109,12 @@ The stage page uses a websocket-first model:
 - `routes/queue.py` also accepts stage mix commands (`set_vocals_enabled`, `set_vocals_volume`)
   for runtime-only vocal assist control.
 - `routes/queue.py` also accepts `set_lyrics_enabled` for runtime-only lyrics overlay visibility.
+- `routes/queue.py` also accepts stage display discovery and targeted lyrics settings messages:
+  - `stage_presence_hello` from `/stage` registers browser-local `stage_id` and display name.
+  - `stage_presence_request` from `/queue` returns connected stage displays for manual targeting.
+  - `apply_lyrics_settings` is admin-only and sends one targeted command containing target stage id,
+    optional shared preset id, lyrics visibility, text size, and max width.
+  - `lyrics_settings_ack` lets the target stage confirm success or failure back to queue clients.
 - Stage control commands are authorized server-side. Admin sessions may control any current item.
   Guest websocket/REST skip commands are accepted only when the currently playing item is owned by
   that guest's persistent `karaoke_guest_id`.
@@ -169,13 +177,20 @@ The stage page uses a websocket-first model:
   `can_control_stage` for that viewer.
 - Queue page includes stage vocal-assist controls (toggle + volume slider) that send websocket
   mix commands and mirror live `stage_state_update` broadcasts.
-- Queue page includes a lyrics overlay toggle that mirrors the stage lyrics visibility state.
+- Queue page includes a lyrics settings control. Admins can target one connected stage display,
+  select a shared lyric preset, adjust text size/max width, and apply that display-local style over
+  websocket; guests with stage-control permission still get the basic lyrics visibility toggle.
 - Queue page also renders a live "Here Now" roster from presence events and shows requester labels on queue items.
 - Queue page updates live download/processing progress from `queue_item_progress` without waiting for a full queue refresh.
 - The queue lyrics viewer subscribes as `lyrics_viewer` and follows the authoritative playback clock
   from websocket `stage_time_update` events.
 - Stage page subscribes as `stage`, consumes websocket queue events and stage-control events, and
   publishes authoritative playback clock updates at a throttled cadence for lyrics sync.
+- Stage page stores its display id/name and lyric appearance in `localStorage`. When it receives a
+  targeted lyrics settings command, it fetches the named shared preset itself, merges the quick
+  overrides, persists the result locally, and acknowledges the queue client.
+- If a stage browser has no custom display name, it derives a default label from platform, screen
+  size, and a short local id suffix so `/queue` can distinguish untouched displays.
 - Stage page also exposes desktop keyboard shortcuts for seek/resync/vocals/lyrics/QR and a desktop-only help popover. The help panel stays open until explicitly dismissed, and keyboard or remote-control actions do not auto-reveal the stage chrome.
 - Stage page refreshes queue/current state over API and applies source changes to existing media
   elements instead of reloading the page.

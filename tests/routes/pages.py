@@ -63,7 +63,10 @@ def test_queue_page_loads(client):
     assert 'id="stage-remote-vocals-toggle-btn"' in response.text
     assert 'id="stage-remote-vocals-volume-slider"' in response.text
     assert 'id="stage-remote-vocals-volume-label"' in response.text
-    assert 'id="stage-remote-lyrics-toggle-btn"' in response.text
+    assert 'id="stage-remote-lyrics-settings-btn"' in response.text
+    assert 'id="stage-remote-lyrics-settings-panel"' in response.text
+    assert 'id="stage-remote-stage-select"' in response.text
+    assert 'id="stage-remote-lyrics-preset-select"' in response.text
     assert 'id="stage-remote-seek-forward-btn"' in response.text
     assert 'id="qr-toggle-btn"' not in response.text
     assert 'id="queue-library-shortcuts"' in response.text
@@ -261,6 +264,13 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-shortcuts-panel"' in response.content
     assert b'id="stage-lyrics-settings-btn"' in response.content
     assert b'id="stage-lyrics-settings-panel"' in response.content
+    assert b'id="stage-display-name"' in response.content
+    assert b'id="stage-lyrics-preset-select"' in response.content
+    assert b'id="stage-lyrics-preset-name"' in response.content
+    assert b'id="stage-lyrics-preset-apply"' in response.content
+    assert b'id="stage-lyrics-preset-create"' in response.content
+    assert b'id="stage-lyrics-preset-update"' in response.content
+    assert b'id="stage-lyrics-preset-delete"' in response.content
     assert b'id="stage-lyrics-settings-file"' in response.content
     assert b'id="stage-lyrics-export-btn"' in response.content
     assert b'id="stage-lyrics-import-btn"' in response.content

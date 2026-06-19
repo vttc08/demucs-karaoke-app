@@ -440,6 +440,53 @@
         gap: 0.75rem;
     }
 
+    .stage-lyrics-settings-row {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .stage-lyrics-settings-row--two-up {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .stage-lyrics-presets {
+        display: grid;
+        gap: 0.7rem;
+        margin-top: 0.8rem;
+        padding-top: 0.8rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .stage-lyrics-presets-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    .stage-lyrics-presets-title {
+        display: grid;
+        gap: 0.18rem;
+        min-width: 0;
+    }
+
+    .stage-lyrics-presets-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 0.45rem;
+        align-items: center;
+    }
+
+    .stage-lyrics-presets-row--name {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+
+    .stage-lyrics-presets-row .stage-lyrics-settings-action {
+        min-height: 2.35rem;
+        padding-inline: 0.7rem;
+        white-space: nowrap;
+    }
+
     .stage-lyrics-settings-field {
         display: grid;
         gap: 0.35rem;
@@ -448,6 +495,10 @@
 
     .stage-lyrics-settings-field--wide {
         grid-column: 1 / -1;
+    }
+
+    .stage-lyrics-settings-field--half {
+        grid-column: auto;
     }
 
     .stage-lyrics-settings-label {
@@ -576,6 +627,16 @@
 
     .stage-lyrics-settings-save:hover {
         background: rgba(255, 216, 79, 0.22);
+    }
+
+    @media (max-width: 639px) {
+        .stage-lyrics-presets-row {
+            grid-template-columns: 1fr;
+        }
+
+        .stage-lyrics-presets-row .stage-lyrics-settings-action {
+            width: 100%;
+        }
     }
 
     .stage-lyrics-overlay {
@@ -1141,8 +1202,46 @@
                                         <span class="material-symbols-outlined text-base">close</span>
                                     </button>
                                 </div>
-                                <div class="stage-lyrics-settings-grid">
-                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                <div class="stage-lyrics-presets">
+                                    <div class="stage-lyrics-presets-head">
+                                        <div class="stage-lyrics-presets-title">
+                                            <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_presets_title') }}</span>
+                                            <p class="text-xs leading-tight text-on-surface-variant">{{ t('stage.lyrics_presets_detail') }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="stage-lyrics-presets-row">
+                                        <label class="sr-only" for="stage-lyrics-preset-select">{{ t('stage.lyrics_presets_select') }}</label>
+                                        <select id="stage-lyrics-preset-select" class="stage-lyrics-settings-select">
+                                            <option value="">{{ t('stage.lyrics_presets_empty') }}</option>
+                                        </select>
+                                        <button id="stage-lyrics-preset-apply" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">play_arrow</span>
+                                            <span>{{ t('stage.lyrics_preset_apply') }}</span>
+                                        </button>
+                                        <button id="stage-lyrics-preset-delete" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">delete</span>
+                                            <span>{{ t('common.delete') }}</span>
+                                        </button>
+                                    </div>
+                                    <div class="stage-lyrics-presets-row stage-lyrics-presets-row--name">
+                                        <label class="sr-only" for="stage-lyrics-preset-name">{{ t('stage.lyrics_preset_name') }}</label>
+                                        <input id="stage-lyrics-preset-name" class="stage-lyrics-settings-input" type="text" maxlength="80" placeholder="{{ t('stage.lyrics_preset_name_placeholder') }}" />
+                                        <button id="stage-lyrics-preset-create" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">add</span>
+                                            <span>{{ t('stage.lyrics_preset_create') }}</span>
+                                        </button>
+                                        <button id="stage-lyrics-preset-update" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">save</span>
+                                            <span>{{ t('stage.lyrics_preset_update') }}</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                    <span class="stage-lyrics-settings-label">{{ t('stage.display_name') }}</span>
+                                    <input id="stage-display-name" class="stage-lyrics-settings-input" type="text" maxlength="80" placeholder="{{ t('stage.display_name_placeholder') }}" />
+                                </label>
+                                <div class="stage-lyrics-settings-row stage-lyrics-settings-row--two-up">
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--half">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_font') }}</span>
                                         <select id="stage-lyrics-font-preset" class="stage-lyrics-settings-select">
                                             <option value="karaoke_cjk">{{ t('stage.lyrics_font_karaoke') }}</option>
@@ -1152,10 +1251,12 @@
                                             <option value="custom">{{ t('stage.lyrics_font_custom') }}</option>
                                         </select>
                                     </label>
-                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--half">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_custom_font') }}</span>
                                         <input id="stage-lyrics-custom-font" class="stage-lyrics-settings-input" type="text" placeholder='"Noto Sans SC", sans-serif' />
                                     </label>
+                                </div>
+                                <div class="stage-lyrics-settings-grid">
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">
                                             {{ t('stage.lyrics_text_size') }}
@@ -1220,11 +1321,11 @@
                                             <option value="none">{{ t('stage.lyrics_animation_none') }}</option>
                                         </select>
                                     </label>
-                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                </div>
+                                <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_settings_json') }}</span>
                                         <textarea id="stage-lyrics-settings-json" class="stage-lyrics-settings-textarea" spellcheck="false"></textarea>
                                     </label>
-                                </div>
                                 <div class="stage-lyrics-settings-actions">
                                     <button id="stage-lyrics-export-btn" type="button" class="stage-lyrics-settings-action">
                                         <span class="material-symbols-outlined text-sm">download</span>
@@ -1363,6 +1464,8 @@ const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {})
 const SERVER_STAGE_QR_URL = {{ (stage_qr_url or "") | tojson }};
 const STAGE_LOBBY_MEDIA_URL = {{ stage_lobby_media_url|public_url|tojson }};
 const STAGE_QR_STORAGE_KEY = "karaoke.stage.qrDisplay";
+const STAGE_DISPLAY_ID_STORAGE_KEY = "karaoke.stage.displayId";
+const STAGE_DISPLAY_NAME_STORAGE_KEY = "karaoke.stage.displayName";
 const STAGE_QR_DEFAULT_SIZE = 320;
 const STAGE_QR_MIN_SIZE = 128;
 const STAGE_QR_MAX_SIZE = 640;
@@ -1416,6 +1519,13 @@ const lyricsSettingsBtn = document.getElementById("stage-lyrics-settings-btn");
 const lyricsSettingsPanel = document.getElementById("stage-lyrics-settings-panel");
 const lyricsSettingsClose = document.getElementById("stage-lyrics-settings-close");
 const lyricsSettingsSave = document.getElementById("stage-lyrics-settings-save");
+const lyricsPresetSelect = document.getElementById("stage-lyrics-preset-select");
+const lyricsPresetName = document.getElementById("stage-lyrics-preset-name");
+const lyricsPresetApply = document.getElementById("stage-lyrics-preset-apply");
+const lyricsPresetCreate = document.getElementById("stage-lyrics-preset-create");
+const lyricsPresetUpdate = document.getElementById("stage-lyrics-preset-update");
+const lyricsPresetDelete = document.getElementById("stage-lyrics-preset-delete");
+const stageDisplayNameInput = document.getElementById("stage-display-name");
 const fullscreenBtn = document.getElementById("fullscreen-btn");
 const fullscreenIcon = document.getElementById("fullscreen-icon");
 const qrOverlay = document.getElementById("stage-qr-overlay");
@@ -1474,6 +1584,306 @@ if (lyricsSettingsSave) {
         stageLyrics.setSettingsPanelVisible(false);
     });
 }
+const LYRICS_PRESETS_API = window.KaraokeURLs.appUrl("/api/lyrics-presets/");
+let lyricsPresets = [];
+
+function getSelectedLyricsPreset() {
+    return lyricsPresets.find((preset) => String(preset.id) === String(lyricsPresetSelect?.value || "")) || null;
+}
+
+function setLyricsPresetControlsState() {
+    const hasSelection = Boolean(getSelectedLyricsPreset());
+    const hasName = Boolean(lyricsPresetName?.value.trim());
+
+    if (lyricsPresetApply) {
+        lyricsPresetApply.disabled = !hasSelection;
+    }
+    if (lyricsPresetDelete) {
+        lyricsPresetDelete.disabled = !hasSelection;
+    }
+    if (lyricsPresetUpdate) {
+        lyricsPresetUpdate.disabled = !hasSelection;
+    }
+    if (lyricsPresetCreate) {
+        lyricsPresetCreate.disabled = !hasName;
+    }
+}
+
+function renderLyricsPresetOptions(selectedId = "") {
+    if (!lyricsPresetSelect) {
+        return;
+    }
+
+    const currentValue = selectedId || lyricsPresetSelect.value || "";
+    lyricsPresetSelect.innerHTML = "";
+
+    const emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = t("stage.lyrics_presets_empty");
+    lyricsPresetSelect.appendChild(emptyOption);
+
+    lyricsPresets.forEach((preset) => {
+        const option = document.createElement("option");
+        option.value = String(preset.id);
+        option.textContent = preset.name;
+        lyricsPresetSelect.appendChild(option);
+    });
+
+    lyricsPresetSelect.value = currentValue;
+    if (!lyricsPresetSelect.value) {
+        lyricsPresetSelect.selectedIndex = 0;
+    }
+    setLyricsPresetControlsState();
+}
+
+async function loadLyricsPresets(selectedId = "") {
+    if (!lyricsPresetSelect) {
+        return;
+    }
+
+    try {
+        const response = await fetch(LYRICS_PRESETS_API, { credentials: "same-origin" });
+        if (!response.ok) {
+            throw new Error(`Failed to load presets (${response.status})`);
+        }
+        lyricsPresets = await response.json();
+        renderLyricsPresetOptions(selectedId);
+    } catch (error) {
+        lyricsPresets = [];
+        renderLyricsPresetOptions();
+        stageLyrics.setStatus(t("stage.lyrics_presets_load_failed"));
+    }
+}
+
+function syncPresetNameFromSelection() {
+    const selected = getSelectedLyricsPreset();
+    if (lyricsPresetName && selected) {
+        lyricsPresetName.value = selected.name;
+    }
+    setLyricsPresetControlsState();
+}
+
+async function applySelectedLyricsPreset() {
+    const selected = getSelectedLyricsPreset();
+    if (!selected) {
+        return;
+    }
+
+    try {
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/lyrics-presets/${selected.id}`), {
+            credentials: "same-origin",
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to load preset (${response.status})`);
+        }
+        const preset = await response.json();
+        stageLyrics.applySettingsObject(preset.settings, { persist: true });
+        if (lyricsPresetName) {
+            lyricsPresetName.value = preset.name;
+        }
+        stageLyrics.setStatus(t("stage.lyrics_presets_applied", { name: preset.name }));
+    } catch (error) {
+        stageLyrics.setStatus(t("stage.lyrics_presets_apply_failed"));
+    }
+}
+
+function sendLyricsSettingsAck(ok, payload = {}) {
+    sendStageCommandRaw({
+        type: "lyrics_settings_ack",
+        data: {
+            stage_id: getStageDisplayId(),
+            ok: Boolean(ok),
+            ...payload,
+        },
+        timestamp: Date.now(),
+    });
+}
+
+async function applyRemoteLyricsSettings(payload) {
+    const presetId = Number.isInteger(payload?.preset_id) ? payload.preset_id : null;
+    const allowOverride = payload?.override !== false;
+    try {
+        if (typeof payload?.lyrics_enabled === "boolean") {
+            setLyricsEnabled(payload.lyrics_enabled);
+        }
+
+        let nextSettings = null;
+        if (presetId) {
+            const response = await fetch(window.KaraokeURLs.appUrl(`/api/lyrics-presets/${presetId}`), {
+                credentials: "same-origin",
+            });
+            if (!response.ok) {
+                throw new Error(`Failed to load preset (${response.status})`);
+            }
+            const preset = await response.json();
+            nextSettings = allowOverride
+                ? {
+                    ...stageLyrics.getSettingsSnapshot(),
+                    ...preset.settings,
+                }
+                : {
+                    ...preset.settings,
+                };
+        }
+
+        if (allowOverride) {
+            if (typeof payload?.size_vw === "number" && Number.isFinite(payload.size_vw)) {
+                nextSettings = nextSettings || stageLyrics.getSettingsSnapshot();
+                nextSettings.sizeVw = payload.size_vw;
+            }
+            if (typeof payload?.line_width_pct === "number" && Number.isFinite(payload.line_width_pct)) {
+                nextSettings = nextSettings || stageLyrics.getSettingsSnapshot();
+                nextSettings.lineWidthPct = payload.line_width_pct;
+            }
+        }
+
+        if (nextSettings) {
+            stageLyrics.applySettingsObject(nextSettings, { persist: true });
+        }
+        sendLyricsSettingsAck(true, {
+            preset_id: presetId,
+            override: allowOverride,
+            size_vw: nextSettings?.sizeVw,
+            line_width_pct: nextSettings?.lineWidthPct,
+            applied_settings: nextSettings ? {
+                sizeVw: nextSettings.sizeVw,
+                lineWidthPct: nextSettings.lineWidthPct,
+            } : null,
+        });
+        stageLyrics.setStatus(t("stage.lyrics_remote_settings_applied"));
+    } catch (error) {
+        console.warn("Failed to apply remote lyrics settings:", error);
+        sendLyricsSettingsAck(false, {
+            preset_id: presetId,
+            override: allowOverride,
+            error: t("stage.lyrics_remote_settings_failed"),
+        });
+        stageLyrics.setStatus(t("stage.lyrics_remote_settings_failed"));
+    }
+}
+
+async function createLyricsPreset() {
+    const name = lyricsPresetName?.value.trim();
+    if (!name) {
+        stageLyrics.setStatus(t("stage.lyrics_preset_name_required"));
+        return;
+    }
+
+    try {
+        const response = await fetch(LYRICS_PRESETS_API, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                name,
+                settings: stageLyrics.getSettingsSnapshot(),
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to create preset (${response.status})`);
+        }
+        const preset = await response.json();
+        lyricsPresets = lyricsPresets.filter((item) => String(item.id) !== String(preset.id));
+        lyricsPresets.push(preset);
+        lyricsPresets.sort((a, b) => a.name.localeCompare(b.name));
+        renderLyricsPresetOptions(String(preset.id));
+        if (lyricsPresetName) {
+            lyricsPresetName.value = preset.name;
+        }
+        stageLyrics.setStatus(t("stage.lyrics_preset_created", { name: preset.name }));
+    } catch (error) {
+        stageLyrics.setStatus(t("stage.lyrics_preset_create_failed"));
+    }
+}
+
+async function updateSelectedLyricsPreset() {
+    const selected = getSelectedLyricsPreset();
+    if (!selected) {
+        return;
+    }
+
+    const name = lyricsPresetName?.value.trim() || selected.name;
+    try {
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/lyrics-presets/${selected.id}`), {
+            method: "PATCH",
+            credentials: "same-origin",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                name,
+                settings: stageLyrics.getSettingsSnapshot(),
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to update preset (${response.status})`);
+        }
+        const preset = await response.json();
+        lyricsPresets = lyricsPresets.filter((item) => String(item.id) !== String(preset.id));
+        lyricsPresets.push(preset);
+        lyricsPresets.sort((a, b) => a.name.localeCompare(b.name));
+        renderLyricsPresetOptions(String(preset.id));
+        if (lyricsPresetName) {
+            lyricsPresetName.value = preset.name;
+        }
+        stageLyrics.setStatus(t("stage.lyrics_preset_updated", { name: preset.name }));
+    } catch (error) {
+        stageLyrics.setStatus(t("stage.lyrics_preset_update_failed"));
+    }
+}
+
+async function deleteSelectedLyricsPreset() {
+    const selected = getSelectedLyricsPreset();
+    if (!selected) {
+        return;
+    }
+    const confirmed = window.confirm(t("stage.lyrics_preset_delete_confirm", { name: selected.name }));
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/lyrics-presets/${selected.id}`), {
+            method: "DELETE",
+            credentials: "same-origin",
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to delete preset (${response.status})`);
+        }
+        lyricsPresets = lyricsPresets.filter((item) => String(item.id) !== String(selected.id));
+        renderLyricsPresetOptions("");
+        if (lyricsPresetName) {
+            lyricsPresetName.value = "";
+        }
+        stageLyrics.setStatus(t("stage.lyrics_preset_deleted", { name: selected.name }));
+    } catch (error) {
+        stageLyrics.setStatus(t("stage.lyrics_preset_delete_failed"));
+    }
+}
+
+lyricsPresetSelect?.addEventListener("change", syncPresetNameFromSelection);
+lyricsPresetName?.addEventListener("input", setLyricsPresetControlsState);
+lyricsPresetApply?.addEventListener("click", () => {
+    void applySelectedLyricsPreset();
+});
+lyricsPresetCreate?.addEventListener("click", () => {
+    void createLyricsPreset();
+});
+lyricsPresetUpdate?.addEventListener("click", () => {
+    void updateSelectedLyricsPreset();
+});
+lyricsPresetDelete?.addEventListener("click", () => {
+    void deleteSelectedLyricsPreset();
+});
+if (stageDisplayNameInput) {
+    syncStageDisplayNameInput();
+    stageDisplayNameInput.addEventListener("input", scheduleStageDisplayNameUpdate);
+    stageDisplayNameInput.addEventListener("blur", () => {
+        window.clearTimeout(stageDisplayNameUpdateTimer);
+        const normalized = persistStageDisplayName(stageDisplayNameInput.value);
+        stageDisplayNameInput.value = normalized;
+        sendStagePresenceHello();
+    });
+}
+void loadLyricsPresets();
 const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
 let controlsHideTimer = null;
 let isQrVisible = false;
@@ -1506,6 +1916,7 @@ let currentPrimarySrc = null;
 let lastPlaybackStateBroadcastAt = 0;
 let isPlaybarScrubbing = false;
 let playbarPreviewTime = 0;
+let stageDisplayNameUpdateTimer = null;
 const SOFT_DRIFT_THRESHOLD_SECONDS = 0.12;
 const MEDIA_SEEK_TIMEOUT_MS = 1200;
 const MEDIA_READY_TIMEOUT_MS = 1200;
@@ -1521,6 +1932,142 @@ function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text || "";
     return div.innerHTML;
+}
+
+function normalizeStageDisplayName(value) {
+    return String(value || "").replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+const LEGACY_STAGE_DISPLAY_DEFAULTS = new Set([
+    "Stage Display",
+    "舞台显示",
+]);
+
+function ensureStageDisplayId() {
+    try {
+        const stored = window.localStorage?.getItem(STAGE_DISPLAY_ID_STORAGE_KEY);
+        if (stored && /^[a-zA-Z0-9._:-]{8,120}$/.test(stored)) {
+            return stored;
+        }
+        const nextId = window.crypto?.randomUUID
+            ? window.crypto.randomUUID()
+            : `stage-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+        window.localStorage?.setItem(STAGE_DISPLAY_ID_STORAGE_KEY, nextId);
+        return nextId;
+    } catch (_) {
+        return `stage-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+}
+
+function getStageDisplayId() {
+    return ensureStageDisplayId();
+}
+
+function getStageDisplayIdSuffix() {
+    const compact = String(getStageDisplayId() || "").replace(/[^a-zA-Z0-9]/g, "");
+    return compact.slice(-4) || "0000";
+}
+
+function getStageScreenLabel() {
+    const width = Number(window.screen?.width);
+    const height = Number(window.screen?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        return "";
+    }
+    const shortSide = Math.min(width, height);
+    const longSide = Math.max(width, height);
+    return `${shortSide}x${longSide}`;
+}
+
+function getStagePlatformLabel() {
+    const platformSource = String(
+        window.navigator?.userAgentData?.platform
+        || window.navigator?.platform
+        || window.navigator?.userAgent
+        || ""
+    ).toLowerCase();
+    const userAgent = String(window.navigator?.userAgent || "").toLowerCase();
+
+    if (userAgent.includes("iphone")) return "iPhone";
+    if (userAgent.includes("ipad")) return "iPad";
+    if (userAgent.includes("android")) {
+        return userAgent.includes("mobile") ? "Android Phone" : "Android Tablet";
+    }
+    if (platformSource.includes("mac")) return "Mac";
+    if (platformSource.includes("win")) return "Windows";
+    if (platformSource.includes("cros")) return "ChromeOS";
+    if (platformSource.includes("linux")) return "Linux";
+    if (userAgent.includes("smart-tv") || userAgent.includes("smarttv") || userAgent.includes("hbbtv")) return "TV";
+    return "Stage";
+}
+
+function getDefaultStageDisplayName() {
+    const parts = [getStagePlatformLabel()];
+    const screenLabel = getStageScreenLabel();
+    if (screenLabel) {
+        parts.push(screenLabel);
+    }
+    parts.push(getStageDisplayIdSuffix());
+    return normalizeStageDisplayName(parts.join(" "));
+}
+
+function getStoredCustomStageDisplayName() {
+    try {
+        const normalized = normalizeStageDisplayName(window.localStorage?.getItem(STAGE_DISPLAY_NAME_STORAGE_KEY));
+        if (!normalized || LEGACY_STAGE_DISPLAY_DEFAULTS.has(normalized)) {
+            return null;
+        }
+        return normalized;
+    } catch (_) {
+        return null;
+    }
+}
+
+function getStageDisplayName() {
+    return getStoredCustomStageDisplayName() || getDefaultStageDisplayName();
+}
+
+function persistStageDisplayName(name) {
+    const normalized = normalizeStageDisplayName(name);
+    try {
+        if (!normalized || LEGACY_STAGE_DISPLAY_DEFAULTS.has(normalized)) {
+            window.localStorage?.removeItem(STAGE_DISPLAY_NAME_STORAGE_KEY);
+            return getDefaultStageDisplayName();
+        }
+        window.localStorage?.setItem(STAGE_DISPLAY_NAME_STORAGE_KEY, normalized);
+    } catch (_) {
+        // Local display names are best-effort only.
+    }
+    return normalized || getDefaultStageDisplayName();
+}
+
+function syncStageDisplayNameInput() {
+    if (stageDisplayNameInput) {
+        stageDisplayNameInput.value = getStageDisplayName();
+    }
+}
+
+function sendStagePresenceHello() {
+    return sendStageCommandRaw({
+        type: "stage_presence_hello",
+        data: {
+            stage_id: getStageDisplayId(),
+            stage_name: getStageDisplayName(),
+        },
+        timestamp: Date.now(),
+    });
+}
+
+function scheduleStageDisplayNameUpdate() {
+    if (!stageDisplayNameInput) {
+        return;
+    }
+    window.clearTimeout(stageDisplayNameUpdateTimer);
+    stageDisplayNameUpdateTimer = window.setTimeout(() => {
+        const normalized = persistStageDisplayName(stageDisplayNameInput.value);
+        stageDisplayNameInput.value = normalized;
+        sendStagePresenceHello();
+    }, 350);
 }
 
 function mediaExtensionFromSrc(src) {
@@ -2667,6 +3214,7 @@ function connectStageWebSocket() {
             data: { page: "stage" },
             timestamp: Date.now(),
         });
+        sendStagePresenceHello();
     };
 
     stageSocket.onmessage = async (event) => {
@@ -2704,6 +3252,10 @@ function connectStageWebSocket() {
             }
             if (messageType === "stage_control_command") {
                 const command = message?.data?.command;
+                if (command === "apply_lyrics_settings") {
+                    await applyRemoteLyricsSettings(message?.data || {});
+                    return;
+                }
                 const primary = getPrimaryPlayer();
                 if (!primary) return;
                 if (command === "resync") {

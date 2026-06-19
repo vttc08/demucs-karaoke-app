@@ -2,6 +2,7 @@ from tests.routes.search_queue import *  # noqa: F401,F403
 from tests.routes.pages import *  # noqa: F401,F403
 from tests.routes.upload_media import *  # noqa: F401,F403
 from tests.routes.settings_api import *  # noqa: F401,F403
+from tests.routes.lyrics_presets import *  # noqa: F401,F403
 from tests.routes.queue_state import *  # noqa: F401,F403
 from tests.routes.lyrics_files import *  # noqa: F401,F403
 from tests.routes.websocket import *  # noqa: F401,F403
