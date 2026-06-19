@@ -440,6 +440,15 @@
         gap: 0.75rem;
     }
 
+    .stage-lyrics-settings-row {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .stage-lyrics-settings-row--two-up {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .stage-lyrics-presets {
         display: grid;
         gap: 0.7rem;
@@ -486,6 +495,10 @@
 
     .stage-lyrics-settings-field--wide {
         grid-column: 1 / -1;
+    }
+
+    .stage-lyrics-settings-field--half {
+        grid-column: auto;
     }
 
     .stage-lyrics-settings-label {
@@ -1189,12 +1202,46 @@
                                         <span class="material-symbols-outlined text-base">close</span>
                                     </button>
                                 </div>
+                                <div class="stage-lyrics-presets">
+                                    <div class="stage-lyrics-presets-head">
+                                        <div class="stage-lyrics-presets-title">
+                                            <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_presets_title') }}</span>
+                                            <p class="text-xs leading-tight text-on-surface-variant">{{ t('stage.lyrics_presets_detail') }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="stage-lyrics-presets-row">
+                                        <label class="sr-only" for="stage-lyrics-preset-select">{{ t('stage.lyrics_presets_select') }}</label>
+                                        <select id="stage-lyrics-preset-select" class="stage-lyrics-settings-select">
+                                            <option value="">{{ t('stage.lyrics_presets_empty') }}</option>
+                                        </select>
+                                        <button id="stage-lyrics-preset-apply" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">play_arrow</span>
+                                            <span>{{ t('stage.lyrics_preset_apply') }}</span>
+                                        </button>
+                                        <button id="stage-lyrics-preset-delete" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">delete</span>
+                                            <span>{{ t('common.delete') }}</span>
+                                        </button>
+                                    </div>
+                                    <div class="stage-lyrics-presets-row stage-lyrics-presets-row--name">
+                                        <label class="sr-only" for="stage-lyrics-preset-name">{{ t('stage.lyrics_preset_name') }}</label>
+                                        <input id="stage-lyrics-preset-name" class="stage-lyrics-settings-input" type="text" maxlength="80" placeholder="{{ t('stage.lyrics_preset_name_placeholder') }}" />
+                                        <button id="stage-lyrics-preset-create" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">add</span>
+                                            <span>{{ t('stage.lyrics_preset_create') }}</span>
+                                        </button>
+                                        <button id="stage-lyrics-preset-update" type="button" class="stage-lyrics-settings-action">
+                                            <span class="material-symbols-outlined text-sm">save</span>
+                                            <span>{{ t('stage.lyrics_preset_update') }}</span>
+                                        </button>
+                                    </div>
+                                </div>
                                 <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                     <span class="stage-lyrics-settings-label">{{ t('stage.display_name') }}</span>
                                     <input id="stage-display-name" class="stage-lyrics-settings-input" type="text" maxlength="80" placeholder="{{ t('stage.display_name_placeholder') }}" />
                                 </label>
-                                <div class="stage-lyrics-settings-grid">
-                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                <div class="stage-lyrics-settings-row stage-lyrics-settings-row--two-up">
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--half">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_font') }}</span>
                                         <select id="stage-lyrics-font-preset" class="stage-lyrics-settings-select">
                                             <option value="karaoke_cjk">{{ t('stage.lyrics_font_karaoke') }}</option>
@@ -1204,10 +1251,12 @@
                                             <option value="custom">{{ t('stage.lyrics_font_custom') }}</option>
                                         </select>
                                     </label>
-                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--half">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_custom_font') }}</span>
                                         <input id="stage-lyrics-custom-font" class="stage-lyrics-settings-input" type="text" placeholder='"Noto Sans SC", sans-serif' />
                                     </label>
+                                </div>
+                                <div class="stage-lyrics-settings-grid">
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">
                                             {{ t('stage.lyrics_text_size') }}
@@ -1272,41 +1321,6 @@
                                             <option value="none">{{ t('stage.lyrics_animation_none') }}</option>
                                         </select>
                                     </label>
-                                </div>
-
-                                <div class="stage-lyrics-presets">
-                                    <div class="stage-lyrics-presets-head">
-                                        <div class="stage-lyrics-presets-title">
-                                            <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_presets_title') }}</span>
-                                            <p class="text-xs leading-tight text-on-surface-variant">{{ t('stage.lyrics_presets_detail') }}</p>
-                                        </div>
-                                    </div>
-                                    <div class="stage-lyrics-presets-row">
-                                        <label class="sr-only" for="stage-lyrics-preset-select">{{ t('stage.lyrics_presets_select') }}</label>
-                                        <select id="stage-lyrics-preset-select" class="stage-lyrics-settings-select">
-                                            <option value="">{{ t('stage.lyrics_presets_empty') }}</option>
-                                        </select>
-                                        <button id="stage-lyrics-preset-apply" type="button" class="stage-lyrics-settings-action">
-                                            <span class="material-symbols-outlined text-sm">play_arrow</span>
-                                            <span>{{ t('stage.lyrics_preset_apply') }}</span>
-                                        </button>
-                                        <button id="stage-lyrics-preset-delete" type="button" class="stage-lyrics-settings-action">
-                                            <span class="material-symbols-outlined text-sm">delete</span>
-                                            <span>{{ t('common.delete') }}</span>
-                                        </button>
-                                    </div>
-                                    <div class="stage-lyrics-presets-row stage-lyrics-presets-row--name">
-                                        <label class="sr-only" for="stage-lyrics-preset-name">{{ t('stage.lyrics_preset_name') }}</label>
-                                        <input id="stage-lyrics-preset-name" class="stage-lyrics-settings-input" type="text" maxlength="80" placeholder="{{ t('stage.lyrics_preset_name_placeholder') }}" />
-                                        <button id="stage-lyrics-preset-create" type="button" class="stage-lyrics-settings-action">
-                                            <span class="material-symbols-outlined text-sm">add</span>
-                                            <span>{{ t('stage.lyrics_preset_create') }}</span>
-                                        </button>
-                                        <button id="stage-lyrics-preset-update" type="button" class="stage-lyrics-settings-action">
-                                            <span class="material-symbols-outlined text-sm">save</span>
-                                            <span>{{ t('stage.lyrics_preset_update') }}</span>
-                                        </button>
-                                    </div>
                                 </div>
                                 <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_settings_json') }}</span>
