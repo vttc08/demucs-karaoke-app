@@ -1,6 +1,37 @@
 from .common import *
 
 
+def receive_non_ping(websocket):
+    """Receive the next non-heartbeat websocket message."""
+    message = websocket.receive_json()
+    while message["type"] == "ping":
+        websocket.send_json({"type": "pong"})
+        message = websocket.receive_json()
+    return message
+
+
+def register_stage_websocket(websocket, stage_id: str, stage_name: str = "Projector"):
+    """Subscribe and register a stage display websocket."""
+    subscribe_websocket(websocket, "stage")
+    websocket.send_json(
+        {
+            "type": "stage_presence_hello",
+            "data": {"stage_id": stage_id, "stage_name": stage_name},
+            "timestamp": 123,
+        }
+    )
+
+
+def create_lyrics_preset(client, name: str = "TV Pink") -> int:
+    """Create a shared lyrics preset and return its id."""
+    response = client.post(
+        "/api/lyrics-presets/",
+        json={"name": name, "settings": {"sizeVw": 4.5, "lineWidthPct": 85}},
+    )
+    assert response.status_code == 200
+    return response.json()["id"]
+
+
 
 def test_websocket_connect_and_receive_connected_message(client):
     """WebSocket endpoint should accept connections and send initial connected payload."""
@@ -33,6 +64,250 @@ def test_websocket_presence_hello_returns_snapshot(client):
         snapshot = websocket.receive_json()
         assert snapshot["type"] == "presence_snapshot"
         assert snapshot["data"]["users"][0]["display_name"] == "Alex"
+
+
+def test_websocket_stage_presence_registers_and_queue_can_refresh(client):
+    """Stage displays should be discoverable by queue clients."""
+    with client.websocket_connect("/api/queue/ws") as queue_socket:
+        assert queue_socket.receive_json()["type"] == "connected"
+        subscribe_websocket(queue_socket, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            register_stage_websocket(stage_socket, "stage-tv", "TV")
+
+            snapshot = receive_non_ping(queue_socket)
+            assert snapshot["type"] == "stage_presence_snapshot"
+            assert snapshot["data"]["stages"][0]["stage_id"] == "stage-tv"
+            assert snapshot["data"]["stages"][0]["stage_name"] == "TV"
+
+            queue_socket.send_json({"type": "stage_presence_request", "data": {}, "timestamp": 124})
+            refreshed = receive_non_ping(queue_socket)
+            assert refreshed["type"] == "stage_presence_snapshot"
+            assert refreshed["data"]["stages"][0]["connection_count"] == 1
+
+
+def test_websocket_stage_presence_falls_back_to_stage_id_label(client):
+    """Unnamed stage displays should still expose a distinguishable fallback label."""
+    with client.websocket_connect("/api/queue/ws") as queue_socket:
+        assert queue_socket.receive_json()["type"] == "connected"
+        subscribe_websocket(queue_socket, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            subscribe_websocket(stage_socket, "stage")
+            stage_socket.send_json(
+                {
+                    "type": "stage_presence_hello",
+                    "data": {"stage_id": "stage-tv-4f2a", "stage_name": "   "},
+                    "timestamp": 123,
+                }
+            )
+
+            snapshot = receive_non_ping(queue_socket)
+            assert snapshot["type"] == "stage_presence_snapshot"
+            assert snapshot["data"]["stages"][0]["stage_name"] == "Stage 4F2A"
+
+
+def test_websocket_targeted_lyrics_settings_requires_admin(client):
+    """Remote lyrics style application should be admin-only."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        assert sender.receive_json()["type"] == "connected"
+        subscribe_websocket(sender, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            register_stage_websocket(stage_socket, "stage-tv", "TV")
+            receive_non_ping(sender)
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "apply_lyrics_settings",
+                        "source": "queue",
+                        "target_stage_id": "stage-tv",
+                        "lyrics_enabled": True,
+                        "size_vw": 4.5,
+                        "line_width_pct": 85,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            error = receive_non_ping(sender)
+            assert error["type"] == "error"
+            assert error["data"]["detail"] == "Admin session required for lyrics settings"
+
+
+def test_websocket_targeted_lyrics_settings_auto_targets_single_stage(client):
+    """A single connected stage can receive lyrics settings without explicit target id."""
+    authenticate_admin_client(client)
+    preset_id = create_lyrics_preset(client)
+    with client.websocket_connect("/api/queue/ws") as sender:
+        assert sender.receive_json()["type"] == "connected"
+        subscribe_websocket(sender, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            register_stage_websocket(stage_socket, "stage-tv", "TV")
+            receive_non_ping(sender)
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "apply_lyrics_settings",
+                        "source": "queue",
+                        "lyrics_enabled": False,
+                        "preset_id": preset_id,
+                        "override": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            command = receive_non_ping(stage_socket)
+            assert command["type"] == "stage_control_command"
+            assert command["data"]["command"] == "apply_lyrics_settings"
+            assert command["data"]["target_stage_id"] == "stage-tv"
+            assert command["data"]["lyrics_enabled"] is False
+            assert command["data"]["preset_id"] == preset_id
+            assert command["data"]["override"] is False
+
+
+def test_websocket_targeted_lyrics_settings_override_keeps_manual_values(client):
+    """Override mode should forward the manual lyric sizing values."""
+    authenticate_admin_client(client)
+    preset_id = create_lyrics_preset(client)
+    with client.websocket_connect("/api/queue/ws") as sender:
+        assert sender.receive_json()["type"] == "connected"
+        subscribe_websocket(sender, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            register_stage_websocket(stage_socket, "stage-tv", "TV")
+            receive_non_ping(sender)
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "apply_lyrics_settings",
+                        "source": "queue",
+                        "lyrics_enabled": True,
+                        "preset_id": preset_id,
+                        "override": True,
+                        "size_vw": 5.2,
+                        "line_width_pct": 90,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            command = receive_non_ping(stage_socket)
+            assert command["type"] == "stage_control_command"
+            assert command["data"]["command"] == "apply_lyrics_settings"
+            assert command["data"]["target_stage_id"] == "stage-tv"
+            assert command["data"]["override"] is True
+            assert command["data"]["size_vw"] == 5.2
+            assert command["data"]["line_width_pct"] == 90
+
+
+def test_websocket_targeted_lyrics_settings_requires_target_for_multiple_stages(client):
+    """Multiple connected stages should force explicit target selection."""
+    authenticate_admin_client(client)
+    with client.websocket_connect("/api/queue/ws") as sender:
+        assert sender.receive_json()["type"] == "connected"
+        subscribe_websocket(sender, "queue")
+        with client.websocket_connect("/api/queue/ws") as first_stage:
+            assert first_stage.receive_json()["type"] == "connected"
+            register_stage_websocket(first_stage, "stage-tv", "TV")
+            receive_non_ping(sender)
+            with client.websocket_connect("/api/queue/ws") as second_stage:
+                assert second_stage.receive_json()["type"] == "connected"
+                register_stage_websocket(second_stage, "stage-phone", "Phone")
+                receive_non_ping(sender)
+
+                sender.send_json(
+                    {
+                        "type": "stage_command",
+                        "data": {
+                            "command": "apply_lyrics_settings",
+                            "source": "queue",
+                            "lyrics_enabled": True,
+                        },
+                        "timestamp": 123,
+                    }
+                )
+
+                error = receive_non_ping(sender)
+                assert error["type"] == "error"
+                assert error["data"]["detail"] == "Lyrics settings require a target stage"
+
+
+def test_websocket_targeted_lyrics_settings_validates_payload(client):
+    """Remote lyrics settings should reject invalid preset and sizing payloads."""
+    authenticate_admin_client(client)
+    with client.websocket_connect("/api/queue/ws") as sender:
+        assert sender.receive_json()["type"] == "connected"
+        subscribe_websocket(sender, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            register_stage_websocket(stage_socket, "stage-tv", "TV")
+            receive_non_ping(sender)
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "apply_lyrics_settings",
+                        "source": "queue",
+                        "target_stage_id": "stage-tv",
+                        "preset_id": 9999,
+                    },
+                    "timestamp": 123,
+                }
+            )
+            missing = receive_non_ping(sender)
+            assert missing["type"] == "error"
+            assert missing["data"]["detail"] == "Lyrics preset not found"
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "apply_lyrics_settings",
+                        "source": "queue",
+                        "target_stage_id": "stage-tv",
+                        "size_vw": 99,
+                    },
+                    "timestamp": 124,
+                }
+            )
+            bad_size = receive_non_ping(sender)
+            assert bad_size["type"] == "error"
+            assert bad_size["data"]["detail"] == "size_vw must be between 3.2 and 8.8"
+
+
+def test_websocket_lyrics_settings_ack_forwards_to_queue_clients(client):
+    """Stage acknowledgements should be forwarded to queue clients."""
+    with client.websocket_connect("/api/queue/ws") as queue_socket:
+        assert queue_socket.receive_json()["type"] == "connected"
+        subscribe_websocket(queue_socket, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            register_stage_websocket(stage_socket, "stage-tv", "TV")
+            receive_non_ping(queue_socket)
+
+            stage_socket.send_json(
+                {
+                    "type": "lyrics_settings_ack",
+                    "data": {"stage_id": "stage-tv", "ok": True, "preset_id": 1},
+                    "timestamp": 123,
+                }
+            )
+
+            ack = receive_non_ping(queue_socket)
+            assert ack["type"] == "lyrics_settings_ack"
+            assert ack["data"]["stage_id"] == "stage-tv"
+            assert ack["data"]["ok"] is True
+            assert ack["data"]["preset_id"] == 1
 
 def test_websocket_presence_join_update_and_leave(client):
     """Presence lifecycle events should broadcast to other queue viewers."""

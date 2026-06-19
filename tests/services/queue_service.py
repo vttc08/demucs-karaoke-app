@@ -81,6 +81,26 @@ def test_queue_service_add_to_queue_stores_requester_metadata(db_session):
     assert stored.requester_name == "Alex"
     assert result.requested_by_name == "Alex"
 
+def test_queue_service_add_to_queue_stores_whisperx_language_override(db_session):
+    """Queue items should persist a per-item WhisperX language override."""
+    service = QueueService()
+
+    result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="language-override",
+            title="Language Override Song",
+            artist="Artist",
+            is_karaoke=True,
+            whisperx_align_language_override="ZH",
+        ),
+    )
+
+    stored = db_session.query(QueueItem).filter(QueueItem.id == result.id).first()
+    assert stored is not None
+    assert stored.whisperx_align_language_override == "zh"
+    assert result.whisperx_align_language_override == "zh"
+
 def test_queue_service_get_queue_sets_can_remove_for_owner_and_admin(db_session):
     """Queue responses should expose remove permissions for the current viewer."""
     service = QueueService()

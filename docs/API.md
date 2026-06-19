@@ -895,7 +895,9 @@ endpoint reflects the latest saved UI configuration after the app has booted.
   "ytdlp_path": "/home/user/.venv/bin/yt-dlp",
   "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
   "ytdlp_video_resolution": "default",
-  "ffmpeg_path": "/usr/bin/ffmpeg"
+  "ffmpeg_path": "/usr/bin/ffmpeg",
+  "stage_qr_url": "https://karaoke.example/queue",
+  "stage_lobby_media_path": "/media/stage-lobby.mp4"
 }
 ```
 
@@ -935,7 +937,9 @@ and restarts when no explicit `.env` override is present.
   "ytdlp_path": "yt-dlp",
   "ytdlp_proxy_url": "",
   "ytdlp_video_resolution": "default",
-  "ffmpeg_path": "ffmpeg"
+  "ffmpeg_path": "ffmpeg",
+  "stage_qr_url": "https://karaoke.example/queue",
+  "stage_lobby_media_path": "/media/stage-lobby.mp4"
 }
 ```
 

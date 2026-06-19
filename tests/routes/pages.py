@@ -63,7 +63,10 @@ def test_queue_page_loads(client):
     assert 'id="stage-remote-vocals-toggle-btn"' in response.text
     assert 'id="stage-remote-vocals-volume-slider"' in response.text
     assert 'id="stage-remote-vocals-volume-label"' in response.text
-    assert 'id="stage-remote-lyrics-toggle-btn"' in response.text
+    assert 'id="stage-remote-lyrics-settings-btn"' in response.text
+    assert 'id="stage-remote-lyrics-settings-panel"' in response.text
+    assert 'id="stage-remote-stage-select"' in response.text
+    assert 'id="stage-remote-lyrics-preset-select"' in response.text
     assert 'id="stage-remote-seek-forward-btn"' in response.text
     assert 'id="qr-toggle-btn"' not in response.text
     assert 'id="queue-library-shortcuts"' in response.text
@@ -259,10 +262,39 @@ def test_stage_page_loads_for_admin(client):
     assert b'stage-fullscreen-button' in response.content
     assert b'id="stage-shortcuts-btn"' in response.content
     assert b'id="stage-shortcuts-panel"' in response.content
+    assert b'id="stage-lyrics-settings-btn"' in response.content
+    assert b'id="stage-lyrics-settings-panel"' in response.content
+    assert b'id="stage-display-name"' in response.content
+    assert b'id="stage-lyrics-preset-select"' in response.content
+    assert b'id="stage-lyrics-preset-name"' in response.content
+    assert b'id="stage-lyrics-preset-apply"' in response.content
+    assert b'id="stage-lyrics-preset-create"' in response.content
+    assert b'id="stage-lyrics-preset-update"' in response.content
+    assert b'id="stage-lyrics-preset-delete"' in response.content
+    assert b'id="stage-lyrics-settings-file"' in response.content
+    assert b'id="stage-lyrics-export-btn"' in response.content
+    assert b'id="stage-lyrics-import-btn"' in response.content
     assert re.search(rb'id="stage-lyrics-overlay"[^>]*class="[^"]*\bhidden\b', response.content)
     assert b"stage-lyric-word--highlighted" in response.content
-    assert b"findActiveLyricWordIndex" in response.content
+    assert b"/static/stage-lyrics.js" in response.content
     assert b'aria-label="Fullscreen"' in response.content
+
+
+def test_stage_page_renders_client_qr_controls(client):
+    """Stage page should render client-side QR customization controls."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.pages.stage_lobby_service.resolve_lobby_media_url",
+        return_value="/media/stage-lobby-fallback.mp4",
+    ):
+        response = client.get("/stage")
+    assert response.status_code == 200
+    assert b'id="stage-qr-close-btn"' in response.content
+    assert b'id="stage-qr-size-decrease-btn"' in response.content
+    assert b'id="stage-qr-size-increase-btn"' in response.content
+    assert b"karaoke.stage.qrDisplay" in response.content
+    assert b"SERVER_STAGE_QR_SIZE" not in response.content
+    assert b"SERVER_STAGE_QR_POSITION" not in response.content
 
 def test_stage_page_renders_audio_mode_for_current_mp3(client, tmp_path):
     """Stage page should bootstrap audio-mode playback for current MP3 items."""

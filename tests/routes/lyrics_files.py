@@ -152,6 +152,7 @@ def test_get_queue_item_lyrics_cues_from_aligned_json_segments(client):
         assert payload["cues"] == [
             {
                 "time": 2.5,
+                "end": 4.0,
                 "text": "Hello world",
                 "words": [
                     {"word": "Hello", "start": 2.5, "end": 3.0},
@@ -160,6 +161,7 @@ def test_get_queue_item_lyrics_cues_from_aligned_json_segments(client):
             },
             {
                 "time": 5.25,
+                "end": 6.25,
                 "text": "Second line",
                 "words": [
                     {"word": "Second", "start": 5.25, "end": 5.75},

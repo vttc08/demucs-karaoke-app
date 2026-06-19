@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     UniqueConstraint,
+    Text,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -63,6 +64,7 @@ class QueueItem(Base):
     user_id = Column(String, nullable=True)
     session_id = Column(String, nullable=True)
     requester_name = Column(String, nullable=True)
+    whisperx_align_language_override = Column(String, nullable=True)
     status = Column(String, default=QueueStatus.PENDING)
     error = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -105,6 +107,18 @@ class RuntimeSetting(Base):
     key = Column(String, primary_key=True, index=True)
     value = Column(String, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class LyricsPreset(Base):
+    """Persisted stage lyric settings preset."""
+
+    __tablename__ = "lyrics_presets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True, index=True)
+    settings_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class ProcessingTask(Base):
@@ -204,6 +218,7 @@ class QueueItemCreate(BaseModel):
     is_karaoke: bool = False
     lyrics_text: Optional[str] = None
     lyrics_format: Optional[Literal["lrc", "txt"]] = None
+    whisperx_align_language_override: Optional[str] = None
     queue_as_name: Optional[str] = None
     queue_as_guest_id: Optional[str] = None
 
@@ -214,6 +229,9 @@ class QueueItemCreate(BaseModel):
             self.youtube_id = self.youtube_id.strip() or None
         if isinstance(self.lyrics_text, str):
             self.lyrics_text = self.lyrics_text.strip() or None
+        if isinstance(self.whisperx_align_language_override, str):
+            override = " ".join(self.whisperx_align_language_override.split()).strip().lower()
+            self.whisperx_align_language_override = override if override not in {"", "auto", "default"} else None
         if isinstance(self.queue_as_name, str):
             normalized_queue_as = " ".join(self.queue_as_name.split()).strip()
             self.queue_as_name = normalized_queue_as[:40] or None
@@ -295,6 +313,7 @@ class QueueItemResponse(BaseModel):
     media_path: Optional[str] = None
     lyrics_path: Optional[str] = None
     vocals_path: Optional[str] = None
+    whisperx_align_language_override: Optional[str] = None
     error: Optional[str] = None
     task_id: Optional[int] = None
     processing_stage: Optional[str] = None
@@ -441,6 +460,32 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     cache_path: Optional[str] = None
     stage_qr_url: Optional[str] = None
     stage_lobby_media_path: Optional[str] = None
+
+
+class LyricsPresetCreateRequest(BaseModel):
+    """Request to create a stage lyric preset."""
+
+    name: str
+    settings: dict[str, Any]
+
+
+class LyricsPresetUpdateRequest(BaseModel):
+    """Request to update a stage lyric preset."""
+
+    name: Optional[str] = None
+    settings: Optional[dict[str, Any]] = None
+
+
+class LyricsPresetResponse(BaseModel):
+    """Persisted stage lyric preset."""
+
+    model_config = {"from_attributes": True}
+
+    id: int
+    name: str
+    settings: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
 
 
 class WhisperXPreloadRequest(BaseModel):

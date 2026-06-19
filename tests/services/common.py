@@ -38,6 +38,9 @@ from models import (
     Base,
     DemucsHealthResponse,
     DemucsResponse,
+    LyricsPreset,
+    LyricsPresetCreateRequest,
+    LyricsPresetUpdateRequest,
     MediaItem,
     ProcessingTask,
     ProcessingTaskStatus,
@@ -86,4 +89,3 @@ def mock_ytdlp():
     """Patch the YouTube service's yt-dlp adapter constructor for focused tests."""
     with patch("services.youtube_service.YtDlpAdapter") as mock_adapter:
         yield mock_adapter
-

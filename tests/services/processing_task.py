@@ -283,3 +283,19 @@ def test_karaoke_progress_callback_throttles_to_about_once_per_second():
 
     assert mock_run.call_count == 3
     assert len(emitted) == 3
+
+def test_karaoke_service_resolves_whisperx_alignment_settings_override():
+    """Per-queue-item WhisperX overrides should bypass auto-detect."""
+    service = KaraokeService()
+    original_align_language = settings.whisperx_align_language
+    original_detect_language = settings.whisperx_detect_language
+    try:
+        settings.whisperx_align_language = "en"
+        settings.whisperx_detect_language = True
+
+        override_item = QueueItem(whisperx_align_language_override="JA")
+        assert service._resolve_whisperx_alignment_settings(override_item) == ("ja", False)
+        assert service._resolve_whisperx_alignment_settings(None) == ("en", True)
+    finally:
+        settings.whisperx_align_language = original_align_language
+        settings.whisperx_detect_language = original_detect_language
