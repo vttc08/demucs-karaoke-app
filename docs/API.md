@@ -1007,6 +1007,10 @@ The remote Demucs service also exposes:
   - `adaptive` avoids full model unload while jobs are still running
   - `partial`, `cuda`, and `full` are available for operator use
 
+At startup the service logs a healthy or degraded readiness summary, and WhisperX preload
+failures are logged with the exception details so missing Demucs dependencies are visible in the
+terminal immediately.
+
 The admin settings page proxies a manual Demucs GC action through `/api/settings/demucs/gc`.
 
 ---

@@ -190,6 +190,36 @@ def _current_gc_state() -> dict[str, str | None]:
         return dict(_gc_state)
 
 
+def _health_snapshot() -> dict[str, object]:
+    checks = {
+        "incoming_writable": INCOMING_ROOT.exists() and INCOMING_ROOT.is_dir(),
+        "output_writable": OUTPUT_ROOT.exists() and OUTPUT_ROOT.is_dir(),
+    }
+
+    try:
+        probe = subprocess.run(
+            [sys.executable, "-m", "demucs.separate", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        checks["demucs_cli_available"] = probe.returncode == 0
+    except Exception:
+        checks["demucs_cli_available"] = False
+
+    healthy = all(checks.values())
+    return {
+        "status": "ok" if healthy else "degraded",
+        "service": "demucs",
+        "model": DEFAULT_DEMUCS_MODEL,
+        "device": DEFAULT_DEMUCS_DEVICE,
+        "detail": "ready" if healthy else "One or more readiness checks failed",
+        "checks": checks,
+        "active_jobs": sum(1 for job in job_store.all() if job.status in {"queued", "running"}),
+        "running_jobs": sum(1 for job in job_store.all() if job.status == "running"),
+    }
+
+
 def _build_stems_zip(result) -> bytes:
     stem_ext = "mp3" if result.output_format == "mp3" else "wav"
     metadata = {
@@ -601,8 +631,28 @@ def _startup_preload_whisperx_models() -> None:
     try:
         preload_models(DEFAULT_WHISPERX_PRELOAD_MODELS, device=DEFAULT_DEMUCS_DEVICE)
     except Exception:
-        # Keep no-lyrics separation available if WhisperX warmup is unavailable.
-        pass
+        logger.exception(
+            "WhisperX preload failed during Demucs startup model=%s device=%s",
+            DEFAULT_WHISPERX_PRELOAD_MODELS,
+            DEFAULT_DEMUCS_DEVICE,
+        )
+    startup_health = _health_snapshot()
+    if startup_health["status"] == "ok":
+        logger.info(
+            "Demucs startup healthy model=%s device=%s detail=%s checks=%s",
+            startup_health["model"],
+            startup_health["device"],
+            startup_health["detail"],
+            startup_health["checks"],
+        )
+    else:
+        logger.error(
+            "Demucs startup degraded model=%s device=%s detail=%s checks=%s",
+            startup_health["model"],
+            startup_health["device"],
+            startup_health["detail"],
+            startup_health["checks"],
+        )
     _ensure_gc_scheduler_started()
 
 
@@ -663,35 +713,7 @@ def _wait_for_terminal_job(job_id: str, *, timeout_seconds: float = 600.0) -> De
 
 @app.get("/health")
 def health():
-    checks = {}
-
-    checks["incoming_writable"] = INCOMING_ROOT.exists() and INCOMING_ROOT.is_dir()
-    checks["output_writable"] = OUTPUT_ROOT.exists() and OUTPUT_ROOT.is_dir()
-
-    try:
-        probe = subprocess.run(
-            [sys.executable, "-m", "demucs.separate", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        checks["demucs_cli_available"] = probe.returncode == 0
-    except Exception:
-        checks["demucs_cli_available"] = False
-
-    healthy = all(checks.values())
-    detail = "ready" if healthy else "One or more readiness checks failed"
-
-    return {
-        "status": "ok" if healthy else "degraded",
-        "service": "demucs",
-        "model": DEFAULT_DEMUCS_MODEL,
-        "device": DEFAULT_DEMUCS_DEVICE,
-        "detail": detail,
-        "checks": checks,
-        "active_jobs": sum(1 for job in job_store.all() if job.status in {"queued", "running"}),
-        "running_jobs": sum(1 for job in job_store.all() if job.status == "running"),
-    }
+    return _health_snapshot()
 
 
 @app.get("/metrics", response_model=DemucsMetricsResponse)

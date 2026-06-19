@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import importlib
+import logging
 import time
 import zipfile
 from io import BytesIO
@@ -169,6 +170,42 @@ def test_whisperx_preload_endpoint_uses_remote_models(monkeypatch):
         "device": "cpu",
         "compute_type": None,
     }
+
+
+def test_startup_logs_degraded_health_when_demucs_cli_unavailable(monkeypatch, caplog):
+    monkeypatch.setattr(demucs_app, "preload_models", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        demucs_app.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1),
+    )
+    caplog.set_level(logging.INFO, logger=demucs_app.logger.name)
+
+    with TestClient(demucs_app.app):
+        pass
+
+    assert "Demucs startup degraded" in caplog.text
+    assert "demucs_cli_available" in caplog.text
+
+
+def test_startup_logs_whisperx_preload_failure(monkeypatch, caplog):
+    def fail_preload(*args, **kwargs):
+        raise RuntimeError("No Demucs in this virtualenv")
+
+    monkeypatch.setattr(demucs_app, "preload_models", fail_preload)
+    monkeypatch.setattr(
+        demucs_app.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0),
+    )
+    caplog.set_level(logging.INFO, logger=demucs_app.logger.name)
+
+    with TestClient(demucs_app.app):
+        pass
+
+    assert "WhisperX preload failed during Demucs startup" in caplog.text
+    assert "No Demucs in this virtualenv" in caplog.text
+    assert "Demucs startup healthy" in caplog.text
 
 
 def test_align_lyrics_supports_srt_format(monkeypatch):
