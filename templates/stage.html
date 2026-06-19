@@ -1687,12 +1687,13 @@ function sendLyricsSettingsAck(ok, payload = {}) {
 
 async function applyRemoteLyricsSettings(payload) {
     const presetId = Number.isInteger(payload?.preset_id) ? payload.preset_id : null;
+    const allowOverride = payload?.override !== false;
     try {
         if (typeof payload?.lyrics_enabled === "boolean") {
             setLyricsEnabled(payload.lyrics_enabled);
         }
 
-        let nextSettings = stageLyrics.getSettingsSnapshot();
+        let nextSettings = null;
         if (presetId) {
             const response = await fetch(window.KaraokeURLs.appUrl(`/api/lyrics-presets/${presetId}`), {
                 credentials: "same-origin",
@@ -1701,26 +1702,46 @@ async function applyRemoteLyricsSettings(payload) {
                 throw new Error(`Failed to load preset (${response.status})`);
             }
             const preset = await response.json();
-            nextSettings = {
-                ...nextSettings,
-                ...preset.settings,
-            };
+            nextSettings = allowOverride
+                ? {
+                    ...stageLyrics.getSettingsSnapshot(),
+                    ...preset.settings,
+                }
+                : {
+                    ...preset.settings,
+                };
         }
 
-        if (typeof payload?.size_vw === "number" && Number.isFinite(payload.size_vw)) {
-            nextSettings.sizeVw = payload.size_vw;
-        }
-        if (typeof payload?.line_width_pct === "number" && Number.isFinite(payload.line_width_pct)) {
-            nextSettings.lineWidthPct = payload.line_width_pct;
+        if (allowOverride) {
+            if (typeof payload?.size_vw === "number" && Number.isFinite(payload.size_vw)) {
+                nextSettings = nextSettings || stageLyrics.getSettingsSnapshot();
+                nextSettings.sizeVw = payload.size_vw;
+            }
+            if (typeof payload?.line_width_pct === "number" && Number.isFinite(payload.line_width_pct)) {
+                nextSettings = nextSettings || stageLyrics.getSettingsSnapshot();
+                nextSettings.lineWidthPct = payload.line_width_pct;
+            }
         }
 
-        stageLyrics.applySettingsObject(nextSettings, { persist: true });
-        sendLyricsSettingsAck(true, { preset_id: presetId });
+        if (nextSettings) {
+            stageLyrics.applySettingsObject(nextSettings, { persist: true });
+        }
+        sendLyricsSettingsAck(true, {
+            preset_id: presetId,
+            override: allowOverride,
+            size_vw: nextSettings?.sizeVw,
+            line_width_pct: nextSettings?.lineWidthPct,
+            applied_settings: nextSettings ? {
+                sizeVw: nextSettings.sizeVw,
+                lineWidthPct: nextSettings.lineWidthPct,
+            } : null,
+        });
         stageLyrics.setStatus(t("stage.lyrics_remote_settings_applied"));
     } catch (error) {
         console.warn("Failed to apply remote lyrics settings:", error);
         sendLyricsSettingsAck(false, {
             preset_id: presetId,
+            override: allowOverride,
             error: t("stage.lyrics_remote_settings_failed"),
         });
         stageLyrics.setStatus(t("stage.lyrics_remote_settings_failed"));

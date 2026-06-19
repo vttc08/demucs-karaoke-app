@@ -635,6 +635,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         "target_stage_id": target_stage_id,
                         "lyrics_enabled": lyrics_enabled,
                         "preset_id": preset_id,
+                        "override": payload.get("override") if isinstance(payload.get("override"), bool) else None,
                         "size_vw": size_vw,
                         "line_width_pct": line_width_pct,
                     }

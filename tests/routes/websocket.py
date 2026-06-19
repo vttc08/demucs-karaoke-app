@@ -157,8 +157,7 @@ def test_websocket_targeted_lyrics_settings_auto_targets_single_stage(client):
                         "source": "queue",
                         "lyrics_enabled": False,
                         "preset_id": preset_id,
-                        "size_vw": 5.2,
-                        "line_width_pct": 90,
+                        "override": False,
                     },
                     "timestamp": 123,
                 }
@@ -170,6 +169,42 @@ def test_websocket_targeted_lyrics_settings_auto_targets_single_stage(client):
             assert command["data"]["target_stage_id"] == "stage-tv"
             assert command["data"]["lyrics_enabled"] is False
             assert command["data"]["preset_id"] == preset_id
+            assert command["data"]["override"] is False
+
+
+def test_websocket_targeted_lyrics_settings_override_keeps_manual_values(client):
+    """Override mode should forward the manual lyric sizing values."""
+    authenticate_admin_client(client)
+    preset_id = create_lyrics_preset(client)
+    with client.websocket_connect("/api/queue/ws") as sender:
+        assert sender.receive_json()["type"] == "connected"
+        subscribe_websocket(sender, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            register_stage_websocket(stage_socket, "stage-tv", "TV")
+            receive_non_ping(sender)
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "apply_lyrics_settings",
+                        "source": "queue",
+                        "lyrics_enabled": True,
+                        "preset_id": preset_id,
+                        "override": True,
+                        "size_vw": 5.2,
+                        "line_width_pct": 90,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            command = receive_non_ping(stage_socket)
+            assert command["type"] == "stage_control_command"
+            assert command["data"]["command"] == "apply_lyrics_settings"
+            assert command["data"]["target_stage_id"] == "stage-tv"
+            assert command["data"]["override"] is True
             assert command["data"]["size_vw"] == 5.2
             assert command["data"]["line_width_pct"] == 90
 
