@@ -61,6 +61,7 @@ def test_media_library_service_marks_json_lyrics_kind(db_session, tmp_path):
 
         assert len(items) == 1
         assert items[0]["has_lyrics"] is True
+        assert items[0]["lyrics_path"] == "/media/json-song.json"
         assert items[0]["lyrics_kind"] == "json"
     finally:
         settings.media_path = original_media

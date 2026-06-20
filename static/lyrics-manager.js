@@ -134,7 +134,7 @@ class LyricsManager {
   static getFormatLabel(format) {
     switch (format) {
       case 'json':
-        return LyricsManager.t('lyrics.whisperx_json');
+        return LyricsManager.t('lyrics.synced');
       case 'lrc':
         return LyricsManager.t('lyrics.timed');
       case 'txt':

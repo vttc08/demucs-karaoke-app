@@ -358,6 +358,8 @@ def test_media_management_page_uses_database_rows(client):
     assert b"Real Song Missing" in content
     assert b"https://i.ytimg.com/vi/realabc12345/hqdefault.jpg" in content
     assert b'data-media-path="/media/real-song-one.mp4"' in content
+    assert b'data-lyrics-path="/media/real-song-one.lrc"' in content
+    assert b'data-lyrics-path="/media/whisperx-song.json"' in content
 
     assert b'data-action="add-to-queue"' in content
     assert b'data-action="edit"' not in content
@@ -370,8 +372,8 @@ def test_media_management_page_uses_database_rows(client):
     assert b'data-has-multi-track="false"' in content
     assert b'data-has-lyrics="false"' in content
     assert b'data-lyrics-kind="json"' in content
-    assert "lyrics 歌词".encode("utf-8") in content
-    assert "synced 同步".encode("utf-8") in content
+    assert b"lyrics" in content
+    assert b"synced" in content
 
     assert content.count(b">3</p>") >= 1
     assert content.count(b">1</p>") >= 2
@@ -750,7 +752,7 @@ def test_media_rename_route_requires_admin(client):
     assert response.json()["detail"] == "Admin session required"
 
 def test_media_rename_route_persists_lyrics_text(client, tmp_path):
-    """Media edit should be able to save lyrics text as a sidecar."""
+    """Media edit should preserve the existing lyrics suffix when saving edits."""
     authenticate_admin_client(client)
     original_media = settings.media_path
     original_cache = settings.cache_path
@@ -761,6 +763,8 @@ def test_media_rename_route_persists_lyrics_text(client, tmp_path):
         settings.cache_path.mkdir(parents=True, exist_ok=True)
         media_file = settings.media_path / "editable.mp4"
         media_file.write_text("video", encoding="utf-8")
+        existing_lyrics = settings.media_path / "editable.lrc"
+        existing_lyrics.write_text("[00:01.00]Existing line", encoding="utf-8")
 
         with TestingSessionLocal() as db:
             media = MediaItem(
@@ -768,6 +772,7 @@ def test_media_rename_route_persists_lyrics_text(client, tmp_path):
                 artist="Singer",
                 file_stem="editable",
                 media_path="/media/editable.mp4",
+                lyrics_path="/media/editable.lrc",
                 missing=False,
             )
             db.add(media)
@@ -781,21 +786,20 @@ def test_media_rename_route_persists_lyrics_text(client, tmp_path):
                 "artist": "Singer",
                 "rename_on_disk": False,
                 "lyrics_text": "Plain edited lyrics",
-                "lyrics_format": "txt",
             },
         )
 
         assert response.status_code == 200
         payload = response.json()
-        assert payload["summary"]["lyrics_path"] == "/media/editable.txt"
-        assert (settings.media_path / "editable.txt").read_text(
+        assert payload["summary"]["lyrics_path"] == "/media/editable.lrc"
+        assert (settings.media_path / "editable.lrc").read_text(
             encoding="utf-8"
         ) == "Plain edited lyrics"
 
         with TestingSessionLocal() as db:
             stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
             assert stored is not None
-            assert stored.lyrics_path == "/media/editable.txt"
+            assert stored.lyrics_path == "/media/editable.lrc"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache

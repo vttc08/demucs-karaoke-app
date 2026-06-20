@@ -357,6 +357,10 @@ def rename_media_item(
             media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
             if media_item is None:
                 raise MediaItemNotFoundError(f"Media item not found: {item_id}")
+            if lyrics_format is None and media_item.lyrics_path:
+                existing_suffix = Path(media_item.lyrics_path).suffix.lower().lstrip(".") or None
+                if existing_suffix in {"lrc", "txt", "json"}:
+                    lyrics_format = existing_suffix
             queue_service.store_lyrics_sidecar(
                 media_item,
                 lyrics_text,

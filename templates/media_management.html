@@ -268,6 +268,7 @@
                     data-title="{{ item.title|lower }}"
                     data-artist="{{ (item.artist or '')|lower }}"
                     data-media-path="{{ item.media_path }}"
+                    data-lyrics-path="{{ item.lyrics_path or '' }}"
                     data-thumbnail="{{ item.thumbnail|public_url if item.thumbnail else app_url('/static/placeholder.png') }}"
                     data-has-multi-track="{{ 'true' if item.has_multi_track else 'false' }}"
                     data-has-lyrics="{{ 'true' if item.has_lyrics else 'false' }}"
@@ -348,6 +349,7 @@
                                 data-title="{{ item.title|lower }}"
                                 data-artist="{{ (item.artist or '')|lower }}"
                                 data-media-path="{{ item.media_path }}"
+                                data-lyrics-path="{{ item.lyrics_path or '' }}"
                                 data-thumbnail="{{ item.thumbnail|public_url if item.thumbnail else app_url('/static/placeholder.png') }}"
                                 data-has-multi-track="{{ 'true' if item.has_multi_track else 'false' }}"
                                 data-has-lyrics="{{ 'true' if item.has_lyrics else 'false' }}"
@@ -633,6 +635,7 @@
                                             </label>
                                         </div>
                                         <span class="text-[11px] font-bold uppercase tracking-wider">{{ t('lyrics.sync') }}</span>
+                                        <span id="media-edit-lyrics-status" class="text-[10px] leading-tight text-on-surface-variant"></span>
                                     </div>
                                 </div>
                             </div>
@@ -681,9 +684,6 @@
                                         </button>
                                         <input type="file" id="media-edit-lyrics-file" class="hidden" accept=".lrc,.txt,.json" />
                                     </div>
-
-                                    <!-- Status Badge -->
-                                    <div id="media-edit-lyrics-status" class="text-[10px] font-semibold text-on-surface-variant"></div>
 
                                     <!-- Lyrics Textarea -->
                                     <div class="space-y-1.5">

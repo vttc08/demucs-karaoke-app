@@ -16,6 +16,13 @@ const editRenameDiskCheckbox = document.getElementById("media-edit-rename-disk")
 const editAiToggle = document.getElementById("media-edit-ai-toggle");
 const editAiStatus = document.getElementById("media-edit-ai-status");
 const editLyricsToggle = document.getElementById("media-edit-lyrics-toggle");
+const editLyricsStatus = document.getElementById("media-edit-lyrics-status");
+const editLyricsProvider = document.getElementById("media-edit-lyrics-provider");
+const editLyricsTextarea = document.getElementById("media-edit-lyrics-textarea");
+const editLyricsSearchBtn = document.getElementById("media-edit-lyrics-search-btn");
+const editLyricsGoogleBtn = document.getElementById("media-edit-lyrics-google-btn");
+const editLyricsUploadBtn = document.getElementById("media-edit-lyrics-upload-btn");
+const editLyricsFileInput = document.getElementById("media-edit-lyrics-file");
 const editFilenamePreview = document.getElementById("media-edit-filename-preview");
 const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
 const isAdmin = document.querySelector('main[data-is-admin]')?.dataset.isAdmin === "true";
@@ -49,6 +56,7 @@ function initializeMediaEditLyricsManager() {
         panel: '#media-edit-lyrics-form-section'
     });
     lyricsUIAdapter.initialize();
+    lyricsManager.on(() => updateMediaEditLyricsControls());
 }
 
 function syncMediaEditLyricsMetadata() {
@@ -76,6 +84,13 @@ function applyEditAiAvailability() {
             ? t("karaoke.available")
             : t("karaoke.unavailable_detail", { detail: demucsHealth.detail });
     }
+}
+
+function isSyncedJsonLyrics(lyricsPath, lyricsKind = "") {
+    if (String(lyricsKind || "").trim().toLowerCase() === "json") {
+        return true;
+    }
+    return String(lyricsPath || "").trim().toLowerCase().endsWith(".json");
 }
 
 async function refreshEditDemucsHealth() {
@@ -118,6 +133,17 @@ const activeCapabilityFilters = new Set();
 let toastTimer = null;
 let activeEditItemId = null;
 let activeEditMediaPath = "";
+const mediaLyricsCache = new Map();
+let activeEditLyricsPath = "";
+let activeEditLyricsBaselineHash = "";
+let activeEditLyricsBaselineFormat = "";
+let activeEditLyricsBaselineProvider = "";
+let activeEditLyricsLoadToken = 0;
+let activeEditLyricsLoadPromise = null;
+let activeEditInitialTitle = "";
+let activeEditInitialArtist = "";
+let activeEditInitialRenameOnDisk = true;
+let activeEditInitialAiChecked = false;
 let activeEditHasMulti = false;
 let demucsHealth = { healthy: false, detail: t("karaoke.checking_availability") };
 let activeTaskId = null;
@@ -144,6 +170,190 @@ function getFilenameFromPath(mediaPath) {
     const cleanPath = String(mediaPath || "").split("?")[0];
     const parts = cleanPath.split("/").filter(Boolean);
     return parts.length > 0 ? decodeURIComponent(parts[parts.length - 1]) : "";
+}
+
+function inferLyricsFormatFromPath(lyricsPath) {
+    const suffix = getFilenameFromPath(lyricsPath).toLowerCase().split(".").pop();
+    if (lyricsPath && String(lyricsPath).toLowerCase().endsWith(".json")) {
+        return "json";
+    }
+    if (lyricsPath && String(lyricsPath).toLowerCase().endsWith(".lrc")) {
+        return "lrc";
+    }
+    if (suffix === "txt") {
+        return "txt";
+    }
+    return "";
+}
+
+function hashLyricsText(text) {
+    let hash = 0x811c9dc5;
+    const normalized = String(text || "").replace(/\r\n/g, "\n");
+    for (let index = 0; index < normalized.length; index += 1) {
+        hash ^= normalized.charCodeAt(index);
+        hash = Math.imul(hash, 0x01000193);
+    }
+    return (`0000000${(hash >>> 0).toString(16)}`).slice(-8);
+}
+
+function resetMediaEditLyricsState() {
+    activeEditLyricsPath = "";
+    activeEditLyricsBaselineHash = "";
+    activeEditLyricsBaselineFormat = "";
+    activeEditLyricsBaselineProvider = "";
+    activeEditLyricsLoadToken += 1;
+    activeEditLyricsLoadPromise = null;
+}
+
+function resetMediaEditInitialState() {
+    activeEditInitialTitle = "";
+    activeEditInitialArtist = "";
+    activeEditInitialRenameOnDisk = true;
+    activeEditInitialAiChecked = false;
+}
+
+function updateMediaEditLyricsControls() {
+    if (!lyricsManager) return;
+    const state = lyricsManager.getState();
+    const isEnabled = Boolean(state.lyricsEnabled);
+    const isSynced = Boolean(isEnabled && state.format === "json");
+    const isLocked = Boolean(isSynced);
+
+    if (editLyricsToggle) {
+        editLyricsToggle.checked = isEnabled;
+        editLyricsToggle.disabled = isLocked;
+    }
+
+    if (editLyricsFormSection) {
+        editLyricsFormSection.classList.toggle("hidden", isLocked);
+    }
+
+    if (editLyricsTextarea) {
+        editLyricsTextarea.readOnly = isLocked;
+        editLyricsTextarea.classList.toggle("cursor-not-allowed", isLocked);
+    }
+
+    [editLyricsSearchBtn, editLyricsUploadBtn, editLyricsFileInput].forEach((control) => {
+        if (!control) return;
+        control.disabled = !isEnabled || isLocked;
+        control.classList.toggle("opacity-50", control.disabled);
+        control.classList.toggle("cursor-not-allowed", control.disabled);
+    });
+
+    if (editLyricsGoogleBtn) {
+        editLyricsGoogleBtn.setAttribute("aria-disabled", String(!isEnabled || isLocked));
+        editLyricsGoogleBtn.tabIndex = !isEnabled || isLocked ? -1 : 0;
+        editLyricsGoogleBtn.classList.toggle("pointer-events-none", !isEnabled || isLocked);
+        editLyricsGoogleBtn.classList.toggle("opacity-50", !isEnabled || isLocked);
+    }
+
+    if (editLyricsStatus) {
+        if (isLocked) {
+            editLyricsStatus.textContent = t("media.already_synced_lyrics");
+            editLyricsStatus.className = "text-[10px] leading-tight text-on-surface-variant";
+        } else {
+            editLyricsStatus.textContent = "";
+            editLyricsStatus.className = "text-[10px] leading-tight text-on-surface-variant";
+        }
+    }
+}
+
+function setLoadedLyricsState(text, format, providerLabel) {
+    if (!lyricsManager) return;
+    const normalizedText = String(text || "").trim();
+    const normalizedFormat = format || "txt";
+    lyricsManager.setEnabled(true);
+    lyricsManager.setMetadata(editTitleInput?.value || "", editArtistInput?.value || "", editTitleInput?.value || "");
+    lyricsManager.setLyricsDraft(normalizedText, providerLabel, {
+        format: normalizedFormat,
+        isSynced: normalizedFormat === "json" || normalizedFormat === "lrc",
+        lyricsState: "manual",
+    });
+    activeEditLyricsBaselineHash = hashLyricsText(normalizedText);
+    activeEditLyricsBaselineFormat = normalizedFormat;
+    activeEditLyricsBaselineProvider = providerLabel;
+    updateMediaEditLyricsControls();
+}
+
+function setLockedSyncedLyricsState() {
+    if (!lyricsManager) return;
+    lyricsManager.reset();
+    lyricsManager.setEnabled(true);
+    lyricsManager.setMetadata(editTitleInput?.value || "", editArtistInput?.value || "", editTitleInput?.value || "");
+    lyricsManager.setLyricsDraft("", "", {
+        format: "json",
+        isSynced: true,
+        lyricsState: "manual",
+    });
+    activeEditLyricsBaselineHash = "";
+    activeEditLyricsBaselineFormat = "json";
+    activeEditLyricsBaselineProvider = "";
+    updateMediaEditLyricsControls();
+}
+
+async function loadCurrentLyricsForEdit(itemNode) {
+    const lyricsPath = String(itemNode?.dataset?.lyricsPath || "").trim();
+    const hasLyrics = itemNode?.dataset?.hasLyrics === "true";
+    const loadToken = ++activeEditLyricsLoadToken;
+    activeEditLyricsPath = lyricsPath;
+
+    if (!hasLyrics || !lyricsPath) {
+        activeEditLyricsBaselineHash = "";
+        activeEditLyricsBaselineFormat = "";
+        activeEditLyricsBaselineProvider = "";
+        if (lyricsManager) {
+            lyricsManager.reset();
+            lyricsManager.setMetadata(editTitleInput?.value || "", editArtistInput?.value || "", editTitleInput?.value || "");
+            lyricsManager.setEnabled(false);
+        }
+        updateMediaEditLyricsControls();
+        return;
+    }
+
+    const cached = mediaLyricsCache.get(lyricsPath);
+    const normalizedPath = appUrl(lyricsPath);
+    const format = inferLyricsFormatFromPath(lyricsPath) || (String(itemNode?.dataset?.lyricsKind || "").toLowerCase() === "json" ? "json" : "txt");
+
+    if (isSyncedJsonLyrics(lyricsPath, itemNode?.dataset?.lyricsKind)) {
+        if (loadToken !== activeEditLyricsLoadToken) {
+            return;
+        }
+        setLockedSyncedLyricsState();
+        return;
+    }
+
+    try {
+        let text = cached?.text;
+        if (text === undefined) {
+            const response = await fetch(normalizedPath, { cache: "no-store" });
+            if (!response.ok) {
+                throw new Error(`lyrics ${response.status}`);
+            }
+            text = (await response.text()).trim();
+            mediaLyricsCache.set(lyricsPath, {
+                text,
+                format,
+                hash: hashLyricsText(text),
+            });
+        }
+        if (loadToken !== activeEditLyricsLoadToken) {
+            return;
+        }
+        setLoadedLyricsState(text, cached?.format || format, t("media.current_sidecar"));
+    } catch (error) {
+        if (loadToken !== activeEditLyricsLoadToken) {
+            return;
+        }
+        console.warn("Failed to load media lyrics sidecar:", error);
+        if (lyricsManager) {
+            lyricsManager.reset();
+            lyricsManager.setEnabled(false);
+        }
+        activeEditLyricsBaselineHash = "";
+        activeEditLyricsBaselineFormat = "";
+        activeEditLyricsBaselineProvider = "";
+        updateMediaEditLyricsControls();
+    }
 }
 
 function buildRenamedFilename(nextTitle, nextArtist) {
@@ -834,6 +1044,7 @@ function openEditModal(itemNode) {
     const placeholderThumbnail = appUrl("/static/placeholder.png");
     const currentThumbnail = itemNode.dataset.thumbnail || placeholderThumbnail;
     activeEditMediaPath = itemNode.dataset.mediaPath || "";
+    const lyricsPath = itemNode.dataset.lyricsPath || "";
     const hasMulti = itemNode.dataset.hasMultiTrack === "true";
     const hasLyrics = itemNode.dataset.hasLyrics === "true";
 
@@ -842,6 +1053,13 @@ function openEditModal(itemNode) {
     }
     activeEditItemId = itemId;
     activeEditHasMulti = hasMulti;
+    resetMediaEditLyricsState();
+    resetMediaEditInitialState();
+    activeEditLyricsPath = lyricsPath;
+    activeEditInitialTitle = currentTitle;
+    activeEditInitialArtist = currentArtist;
+    activeEditInitialRenameOnDisk = true;
+    activeEditInitialAiChecked = false;
     if (editItemIdInput) {
         editItemIdInput.value = itemId;
     }
@@ -880,8 +1098,8 @@ function openEditModal(itemNode) {
     if (editAiToggle) editAiToggle.checked = false;
     applyEditAiAvailability();
     refreshEditDemucsHealth();
-    if (editLyricsToggle) editLyricsToggle.checked = hasLyrics;
     if (editRenameDiskCheckbox) editRenameDiskCheckbox.checked = true;
+    activeEditInitialAiChecked = Boolean(editAiToggle?.checked && !activeEditHasMulti);
     updateFilenamePreview();
 
     // Initialize lyrics manager with current metadata
@@ -889,7 +1107,13 @@ function openEditModal(itemNode) {
     if (lyricsManager) {
         lyricsManager.reset();
         lyricsManager.setMetadata(currentTitle, currentArtist, currentTitle);
-        lyricsManager.setEnabled(hasLyrics);
+        if (hasLyrics) {
+            activeEditLyricsLoadPromise = loadCurrentLyricsForEdit(itemNode);
+        } else {
+            lyricsManager.setEnabled(false);
+            lyricsManager.setMetadata(currentTitle, currentArtist, currentTitle);
+            updateMediaEditLyricsControls();
+        }
     }
 
     if (editModal) {
@@ -908,6 +1132,11 @@ function openEditModal(itemNode) {
 function closeEditModal() {
     activeEditItemId = null;
     activeEditHasMulti = false;
+    resetMediaEditLyricsState();
+    if (editLyricsStatus) {
+        editLyricsStatus.textContent = "";
+        editLyricsStatus.className = "text-[10px] font-semibold text-on-surface-variant";
+    }
     if (editModal) {
         editModal.classList.add("hidden");
         editModal.setAttribute("aria-hidden", "true");
@@ -919,6 +1148,13 @@ async function saveEditModal(event) {
     if (!isAdmin || !activeEditItemId || !editTitleInput) {
         return;
     }
+    if (activeEditLyricsLoadPromise) {
+        try {
+            await activeEditLyricsLoadPromise;
+        } catch (_error) {
+            // The modal can still save metadata changes without lyrics content.
+        }
+    }
     const nextTitle = editTitleInput.value.trim();
     if (!nextTitle) {
         showToast(t("media.title_empty"));
@@ -926,8 +1162,39 @@ async function saveEditModal(event) {
     }
     const nextArtist = editArtistInput?.value.trim() || "";
     const renameOnDisk = editRenameDiskCheckbox?.checked ?? true;
+    const currentLyricsState = lyricsManager?.getState?.();
+    const currentLyricsText = lyricsManager?.getSubmissionText?.() || "";
+    const currentLyricsHash = currentLyricsText ? hashLyricsText(currentLyricsText) : "";
+    const preserveLoadedFormat =
+        Boolean(activeEditLyricsBaselineProvider) &&
+        currentLyricsState?.provider === activeEditLyricsBaselineProvider;
+    const currentLyricsFormat = preserveLoadedFormat
+        ? activeEditLyricsBaselineFormat
+        : (currentLyricsState?.format || "txt");
     const submitButton = editForm?.querySelector('button[type="submit"]');
     const originalButtonLabel = submitButton?.textContent || "";
+
+    const aiRequested = Boolean(editAiToggle?.checked && !activeEditHasMulti);
+    const lyricsChanged = Boolean(currentLyricsText) && currentLyricsHash !== activeEditLyricsBaselineHash;
+    const titleChanged = nextTitle !== activeEditInitialTitle;
+    const artistChanged = nextArtist !== activeEditInitialArtist;
+    const renameChanged = renameOnDisk !== activeEditInitialRenameOnDisk;
+    const aiChanged = aiRequested !== activeEditInitialAiChecked;
+    const lyricsPayloadChanged = Boolean(currentLyricsText) && (
+        !activeEditLyricsBaselineHash ||
+        lyricsChanged ||
+        currentLyricsFormat !== activeEditLyricsBaselineFormat
+    );
+    const noChanges =
+        !titleChanged &&
+        !artistChanged &&
+        !renameChanged &&
+        !aiChanged &&
+        !lyricsPayloadChanged;
+    if (noChanges) {
+        closeEditModal();
+        return;
+    }
 
     if (submitButton) {
         submitButton.disabled = true;
@@ -939,17 +1206,13 @@ async function saveEditModal(event) {
             title: nextTitle,
             artist: nextArtist || null,
             rename_on_disk: renameOnDisk,
-            is_karaoke: Boolean(editAiToggle?.checked && !activeEditHasMulti),
+            is_karaoke: aiRequested,
         };
 
         // Add lyrics if available
-        if (lyricsManager && lyricsManager.state.lyricsEnabled) {
-            syncMediaEditLyricsMetadata();
-            const lyricsPayload = lyricsManager.getLyricsSubmissionPayload();
-            if (lyricsPayload) {
-                requestBody.lyrics_text = lyricsPayload.lyrics_text;
-                requestBody.lyrics_format = lyricsPayload.lyrics_format;
-            }
+        if (lyricsPayloadChanged && currentLyricsState?.lyricsEnabled && currentLyricsText) {
+            requestBody.lyrics_text = currentLyricsText;
+            requestBody.lyrics_format = currentLyricsFormat;
         }
 
         const response = await fetch(appUrl(`/api/media/${Number(activeEditItemId)}`), {
@@ -1338,8 +1601,9 @@ if (editLyricsToggle) {
     editLyricsToggle.addEventListener('change', () => {
         initializeMediaEditLyricsManager();
         if (lyricsManager) {
+            const nextEnabled = editLyricsToggle.checked;
             syncMediaEditLyricsMetadata();
-            lyricsManager.setEnabled(editLyricsToggle.checked);
+            lyricsManager.setEnabled(nextEnabled);
         }
     });
 }

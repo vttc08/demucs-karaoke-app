@@ -68,6 +68,7 @@ class MediaLibraryService:
             "title": item.title,
             "artist": item.artist,
             "media_path": item.media_path,
+            "lyrics_path": item.lyrics_path,
             "status": "missing" if item.missing else "synced",
             "thumbnail": MediaLibraryService._thumbnail_for(item),
             "has_multi_track": bool(item.vocals_path and item.vocals_path.strip()),
