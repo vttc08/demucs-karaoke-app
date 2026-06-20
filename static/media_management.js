@@ -23,6 +23,8 @@ const editLyricsSearchBtn = document.getElementById("media-edit-lyrics-search-bt
 const editLyricsGoogleBtn = document.getElementById("media-edit-lyrics-google-btn");
 const editLyricsUploadBtn = document.getElementById("media-edit-lyrics-upload-btn");
 const editLyricsFileInput = document.getElementById("media-edit-lyrics-file");
+const editLyricsAlignToggle = document.getElementById("media-edit-lyrics-align-toggle");
+const editLyricsAlignStatus = document.getElementById("media-edit-lyrics-align-status");
 const editFilenamePreview = document.getElementById("media-edit-filename-preview");
 const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
 const isAdmin = document.querySelector('main[data-is-admin]')?.dataset.isAdmin === "true";
@@ -72,6 +74,7 @@ function applyEditAiAvailability() {
         if (editAiStatus) {
             editAiStatus.textContent = t("karaoke.already_multi_track");
         }
+        updateMediaEditLyricsControls();
         return;
     }
 
@@ -84,6 +87,7 @@ function applyEditAiAvailability() {
             ? t("karaoke.available")
             : t("karaoke.unavailable_detail", { detail: demucsHealth.detail });
     }
+    updateMediaEditLyricsControls();
 }
 
 function isSyncedJsonLyrics(lyricsPath, lyricsKind = "") {
@@ -94,10 +98,6 @@ function isSyncedJsonLyrics(lyricsPath, lyricsKind = "") {
 }
 
 async function refreshEditDemucsHealth() {
-    if (activeEditHasMulti) {
-        applyEditAiAvailability();
-        return;
-    }
     if (editAiToggle) {
         editAiToggle.disabled = true;
     }
@@ -218,6 +218,8 @@ function updateMediaEditLyricsControls() {
     const isEnabled = Boolean(state.lyricsEnabled);
     const isSynced = Boolean(isEnabled && state.format === "json");
     const isLocked = Boolean(isSynced);
+    const hasText = Boolean((state.text || "").trim());
+    const canAlign = Boolean(isEnabled && hasText && !isLocked && demucsHealth.healthy);
 
     if (editLyricsToggle) {
         editLyricsToggle.checked = isEnabled;
@@ -254,6 +256,25 @@ function updateMediaEditLyricsControls() {
         } else {
             editLyricsStatus.textContent = "";
             editLyricsStatus.className = "text-[10px] leading-tight text-on-surface-variant";
+        }
+    }
+
+    if (editLyricsAlignToggle) {
+        editLyricsAlignToggle.disabled = !canAlign;
+        if (!canAlign && editLyricsAlignToggle.checked) {
+            editLyricsAlignToggle.checked = false;
+            lyricsManager.setAlignLyricsRequested(false);
+        }
+    }
+    if (editLyricsAlignStatus) {
+        if (isLocked) {
+            editLyricsAlignStatus.textContent = t("lyrics.align_json_unsupported");
+        } else if (!demucsHealth.healthy) {
+            editLyricsAlignStatus.textContent = t("lyrics.align_demucs_unavailable");
+        } else if (!hasText) {
+            editLyricsAlignStatus.textContent = t("lyrics.align_requires_text");
+        } else {
+            editLyricsAlignStatus.textContent = t("lyrics.align_available");
         }
     }
 }
@@ -1175,11 +1196,18 @@ async function saveEditModal(event) {
     const originalButtonLabel = submitButton?.textContent || "";
 
     const aiRequested = Boolean(editAiToggle?.checked && !activeEditHasMulti);
+    const alignRequested = Boolean(
+        currentLyricsState?.alignLyricsRequested &&
+        currentLyricsState?.lyricsEnabled &&
+        currentLyricsText &&
+        currentLyricsFormat !== "json"
+    );
     const lyricsChanged = Boolean(currentLyricsText) && currentLyricsHash !== activeEditLyricsBaselineHash;
     const titleChanged = nextTitle !== activeEditInitialTitle;
     const artistChanged = nextArtist !== activeEditInitialArtist;
     const renameChanged = renameOnDisk !== activeEditInitialRenameOnDisk;
     const aiChanged = aiRequested !== activeEditInitialAiChecked;
+    const alignChanged = alignRequested;
     const lyricsPayloadChanged = Boolean(currentLyricsText) && (
         !activeEditLyricsBaselineHash ||
         lyricsChanged ||
@@ -1190,6 +1218,7 @@ async function saveEditModal(event) {
         !artistChanged &&
         !renameChanged &&
         !aiChanged &&
+        !alignChanged &&
         !lyricsPayloadChanged;
     if (noChanges) {
         closeEditModal();
@@ -1207,10 +1236,11 @@ async function saveEditModal(event) {
             artist: nextArtist || null,
             rename_on_disk: renameOnDisk,
             is_karaoke: aiRequested,
+            align_lyrics: alignRequested,
         };
 
         // Add lyrics if available
-        if (lyricsPayloadChanged && currentLyricsState?.lyricsEnabled && currentLyricsText) {
+        if ((lyricsPayloadChanged || alignRequested) && currentLyricsState?.lyricsEnabled && currentLyricsText) {
             requestBody.lyrics_text = currentLyricsText;
             requestBody.lyrics_format = currentLyricsFormat;
         }
@@ -1604,6 +1634,14 @@ if (editLyricsToggle) {
             const nextEnabled = editLyricsToggle.checked;
             syncMediaEditLyricsMetadata();
             lyricsManager.setEnabled(nextEnabled);
+        }
+    });
+}
+if (editLyricsAlignToggle) {
+    editLyricsAlignToggle.addEventListener("change", () => {
+        initializeMediaEditLyricsManager();
+        if (lyricsManager) {
+            lyricsManager.setAlignLyricsRequested(editLyricsAlignToggle.checked);
         }
     });
 }

@@ -83,6 +83,7 @@ def _migrate_legacy_queue_items_if_needed():
                     media_id INTEGER NOT NULL REFERENCES media_items(id) ON DELETE RESTRICT,
                     position INTEGER NOT NULL,
                     requested_karaoke BOOLEAN NOT NULL DEFAULT 0,
+                    requested_lyrics_alignment BOOLEAN NOT NULL DEFAULT 0,
                     user_id TEXT,
                     session_id TEXT,
                     whisperx_align_language_override TEXT,
@@ -98,7 +99,7 @@ def _migrate_legacy_queue_items_if_needed():
             text(
                 """
                 INSERT INTO queue_items_new (
-                    id, media_id, position, requested_karaoke,
+                    id, media_id, position, requested_karaoke, requested_lyrics_alignment,
                     user_id, session_id, status, error, created_at, updated_at
                 )
                 SELECT
@@ -106,6 +107,7 @@ def _migrate_legacy_queue_items_if_needed():
                     m.id AS media_id,
                     q.id * 1000 AS position,
                     COALESCE(q.is_karaoke, 0) AS requested_karaoke,
+                    0 AS requested_lyrics_alignment,
                     NULL AS user_id,
                     NULL AS session_id,
                     COALESCE(q.status, 'pending') AS status,
@@ -173,6 +175,10 @@ def _ensure_queue_items_columns(bind_engine=None):
         statements.append("ALTER TABLE queue_items ADD COLUMN whisperx_align_language_override TEXT")
     if "requester_name" not in columns:
         statements.append("ALTER TABLE queue_items ADD COLUMN requester_name TEXT")
+    if "requested_lyrics_alignment" not in columns:
+        statements.append(
+            "ALTER TABLE queue_items ADD COLUMN requested_lyrics_alignment BOOLEAN NOT NULL DEFAULT 0"
+        )
 
     if not statements:
         return

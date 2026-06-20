@@ -112,7 +112,7 @@ class QueueService:
                 media_item.youtube_id,
                 media_item.id,
             )
-        if item.is_karaoke and item.lyrics_text:
+        if (item.is_karaoke or item.align_lyrics) and item.lyrics_text:
             self.store_lyrics_sidecar(
                 media_item,
                 item.lyrics_text,
@@ -126,6 +126,7 @@ class QueueService:
             media_id=media_item.id,
             position=self.append_to_end(db),
             requested_karaoke=item.is_karaoke,
+            requested_lyrics_alignment=item.align_lyrics,
             user_id=normalized_owner_guest_id or normalized_requester_id,
             session_id=self._normalize_optional_metadata(requester_session_id),
             requester_name=self._normalize_optional_metadata(requester_name),

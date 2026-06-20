@@ -626,6 +626,81 @@ def _start_job(payload: bytes, original_filename: str, config: SeparateConfig) -
     return job
 
 
+def _run_alignment_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
+    start = time.time()
+    output_dir = OUTPUT_ROOT / job_id
+    try:
+        _preload_whisperx_models(config)
+        job_store.update(
+            job_id,
+            status="running",
+            started_at=utc_now(),
+            progress_percent=5,
+            progress_message="Aligning lyrics",
+        )
+        if not config.lyrics_text:
+            raise RuntimeError("lyrics_text is required for alignment")
+        aligned_lyrics_path = _align_lyrics(
+            config=config,
+            vocals_path=input_path,
+            output_dir=output_dir,
+        )
+        if aligned_lyrics_path is None or not aligned_lyrics_path.exists():
+            raise RuntimeError("Aligned lyrics were not created")
+        duration_ms = int((time.time() - start) * 1000)
+        job_store.update(
+            job_id,
+            status="completed",
+            finished_at=utc_now(),
+            duration_ms=duration_ms,
+            progress_percent=100,
+            progress_message="Completed",
+            aligned_lyrics_path=str(aligned_lyrics_path),
+        )
+    except Exception as error:
+        duration_ms = int((time.time() - start) * 1000)
+        job_store.update(
+            job_id,
+            status="failed",
+            finished_at=utc_now(),
+            duration_ms=duration_ms,
+            error_detail=str(error),
+            progress_message="Failed",
+        )
+    finally:
+        try:
+            _run_garbage_collection(requested_mode="adaptive", triggered_by="job_completion")
+        except HTTPException:
+            pass
+        except Exception:
+            logger.exception("Post-alignment Demucs garbage collection failed")
+        _cleanup_expired_jobs()
+
+
+def _start_alignment_job(payload: bytes, original_filename: str, config: SeparateConfig) -> DemucsJobState:
+    _cleanup_expired_jobs()
+    job_id, _incoming_dir, _output_dir, input_path = prepare_job_input(payload, original_filename)
+    job = job_store.create(
+        DemucsJobState(
+            job_id=job_id,
+            model=config.model,
+            device=config.device,
+            output_format=config.output_format,
+            mp3_bitrate=config.mp3_bitrate,
+            original_filename=original_filename,
+            job_kind="lyrics_alignment",
+        )
+    )
+    worker = threading.Thread(
+        target=_run_alignment_job,
+        args=(job_id, input_path, config),
+        daemon=True,
+        name=f"demucs-align-job-{job_id}",
+    )
+    worker.start()
+    return job
+
+
 @app.on_event("startup")
 def _startup_preload_whisperx_models() -> None:
     try:
@@ -792,6 +867,53 @@ async def create_job(
     )
 
 
+@app.post("/align-jobs", response_model=DemucsJobCreateResponse, status_code=202)
+async def create_alignment_job(
+    request: Request,
+    file: UploadFile = File(...),
+    model: str = Form(DEFAULT_DEMUCS_MODEL),
+    device: Literal["cuda", "cpu"] = Form(DEFAULT_DEMUCS_DEVICE),
+    output_format: Literal["wav", "mp3"] = Form(DEFAULT_OUTPUT_FORMAT),
+    mp3_bitrate: int | None = Form(None),
+    lyrics_text: str | None = Form(None),
+    lyrics_format: str | None = Form(None),
+    transcription_model: str = Form(DEFAULT_WHISPERX_TRANSCRIPTION_MODEL),
+    align_language: str | None = Form(DEFAULT_WHISPERX_ALIGN_LANGUAGE),
+    detect_language: bool = Form(DEFAULT_WHISPERX_DETECT_LANGUAGE),
+    use_synced_lyrics: bool = Form(DEFAULT_WHISPERX_USE_SYNCED_LYRICS),
+    whisperx_preload_models: str | None = Form(DEFAULT_WHISPERX_PRELOAD_MODELS),
+    compute_type: str | None = Form(None),
+):
+    config = _validated_config(
+        model,
+        device,
+        output_format,
+        mp3_bitrate,
+        lyrics_text=lyrics_text,
+        lyrics_format=lyrics_format,
+        transcription_model=transcription_model,
+        align_language=align_language,
+        detect_language=detect_language,
+        use_synced_lyrics=use_synced_lyrics,
+        whisperx_preload_models=whisperx_preload_models,
+        compute_type=compute_type,
+    )
+    if not config.lyrics_text:
+        raise HTTPException(status_code=422, detail="lyrics_text is required for alignment")
+    payload = await file.read()
+    job = _start_alignment_job(payload, file.filename or "vocals.wav", config)
+    base = str(request.base_url).rstrip("/")
+    return DemucsJobCreateResponse(
+        job_id=job.job_id,
+        status=job.status,
+        progress_percent=job.progress_percent,
+        progress_message=job.progress_message,
+        status_url=f"{base}/jobs/{job.job_id}",
+        result_url=f"{base}/align-jobs/{job.job_id}/result",
+        cancel_url=f"{base}/jobs/{job.job_id}",
+    )
+
+
 @app.get("/jobs/{job_id}", response_model=DemucsJobStatusResponse)
 def get_job(job_id: str):
     try:
@@ -848,6 +970,38 @@ def get_job_result(job_id: str):
     if job.mp3_bitrate is not None:
         headers["X-Mp3-Bitrate"] = str(job.mp3_bitrate)
     return Response(content=zip_payload, media_type="application/zip", headers=headers)
+
+
+@app.get("/align-jobs/{job_id}/result")
+def get_alignment_job_result(job_id: str):
+    try:
+        job = job_store.require(job_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Job not found") from error
+
+    if job.status == "failed":
+        raise HTTPException(status_code=409, detail=job.error_detail or "Job failed")
+    if job.status == "canceled":
+        raise HTTPException(status_code=409, detail="Job was canceled")
+    if job.status != "completed":
+        raise HTTPException(status_code=409, detail="Job is not complete")
+    if job.job_kind != "lyrics_alignment":
+        raise HTTPException(status_code=409, detail="Job is not a lyrics alignment job")
+
+    aligned_lyrics_path = Path(job.aligned_lyrics_path or "")
+    if not aligned_lyrics_path.exists():
+        raise HTTPException(status_code=500, detail="Aligned lyrics output is unavailable")
+    headers = {
+        "X-Job-Id": job.job_id,
+        "X-Model": job.model,
+        "X-Device": job.device,
+        "X-Duration-Ms": str(job.duration_ms or 0),
+    }
+    return Response(
+        content=aligned_lyrics_path.read_bytes(),
+        media_type="application/json",
+        headers=headers,
+    )
 
 
 @app.delete("/jobs/{job_id}", status_code=202)

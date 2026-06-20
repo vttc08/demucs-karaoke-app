@@ -299,3 +299,137 @@ def test_karaoke_service_resolves_whisperx_alignment_settings_override():
     finally:
         settings.whisperx_align_language = original_align_language
         settings.whisperx_detect_language = original_detect_language
+
+
+def test_karaoke_alignment_requires_json_before_replacing_media(db_session, tmp_path, monkeypatch):
+    """Old Demucs services that return stems without aligned JSON must not replace media."""
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    original_media = media_root / "original.mp3"
+    original_media.write_bytes(b"original")
+    lyrics_file = media_root / "align-song.lrc"
+    lyrics_file.write_text("[00:01.00]Line", encoding="utf-8")
+    no_vocals = cache_root / "demucs_outputs" / "no_vocals.wav"
+    vocals = cache_root / "demucs_outputs" / "vocals.wav"
+    no_vocals.parent.mkdir(parents=True, exist_ok=True)
+    no_vocals.write_bytes(b"no vocals")
+    vocals.write_bytes(b"vocals")
+
+    media = MediaItem(
+        title="Align Song",
+        artist="Singer",
+        file_stem="align-song",
+        media_path="/media/original.mp3",
+        lyrics_path="/media/align-song.lrc",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    task = ProcessingTask(
+        task_type="media_karaoke_align",
+        source_kind="library_media",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PENDING.value,
+        stage="queued",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    service = KaraokeService()
+    service.demucs_client.separate_vocals = AsyncMock(
+        return_value=DemucsResponse(
+            no_vocals_path=str(no_vocals),
+            vocals_path=str(vocals),
+            aligned_lyrics_path=None,
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="missing aligned lyrics"):
+        asyncio.run(
+            service._process_karaoke(
+                db_session,
+                task,
+                queue_item=None,
+                media_item=media,
+                video_path=original_media,
+                audio_path=original_media,
+                align_lyrics=True,
+            )
+        )
+
+    db_session.refresh(media)
+    assert original_media.exists()
+    assert media.media_path == "/media/original.mp3"
+    assert media.lyrics_path == "/media/align-song.lrc"
+    assert not (media_root / "align-song.wav").exists()
+    assert not (media_root / "align-song.vocals.wav").exists()
+    assert not (media_root / "align-song.json").exists()
+
+
+def test_alignment_cancel_cleanup_preserves_durable_media(db_session, tmp_path, monkeypatch):
+    """Alignment task cleanup should remove scratch files only, not library media."""
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media_file = media_root / "align-song.mp3"
+    vocals_file = media_root / "align-song.vocals.wav"
+    lyrics_file = media_root / "align-song.lrc"
+    media_file.write_bytes(b"media")
+    vocals_file.write_bytes(b"vocals")
+    lyrics_file.write_text("[00:01.00]Line", encoding="utf-8")
+
+    media = MediaItem(
+        title="Align Song",
+        artist="Singer",
+        file_stem="align-song",
+        media_path="/media/align-song.mp3",
+        vocals_path="/media/align-song.vocals.wav",
+        lyrics_path="/media/align-song.lrc",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    task = ProcessingTask(
+        task_type="media_karaoke_align",
+        source_kind="uploaded_media",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PROCESSING.value,
+        stage="demucs",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    for root_name in ("ytdlp", "audio", "processed", "demucs_outputs"):
+        artifact_root = cache_root / root_name
+        artifact_root.mkdir(parents=True, exist_ok=True)
+        (artifact_root / "align-song.partial").write_bytes(b"partial")
+
+    temp_output = media_root / f".align-song.{task.id}.primary.tmp.wav"
+    temp_output.write_bytes(b"temp")
+
+    KaraokeService().cleanup_canceled_task(db_session, task)
+    db_session.refresh(media)
+
+    assert media_file.exists()
+    assert vocals_file.exists()
+    assert lyrics_file.exists()
+    assert media.missing is False
+    assert media.vocals_path == "/media/align-song.vocals.wav"
+    assert not temp_output.exists()
+    for root_name in ("ytdlp", "audio", "processed", "demucs_outputs"):
+        assert not (cache_root / root_name / "align-song.partial").exists()

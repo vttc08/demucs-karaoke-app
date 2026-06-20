@@ -26,6 +26,7 @@ class LyricsManager {
       title: '',
       artist: '',
       youtubeTitle: '',
+      alignLyricsRequested: false,
     };
     
     this.listeners = [];
@@ -79,6 +80,7 @@ class LyricsManager {
     this.state.title = '';
     this.state.artist = '';
     this.state.youtubeTitle = '';
+    this.state.alignLyricsRequested = false;
     this.notifyListeners();
   }
 
@@ -187,6 +189,14 @@ class LyricsManager {
     this.state.title = (title || '').trim();
     this.state.artist = (artist || '').trim();
     this.state.youtubeTitle = (youtubeTitle || '').trim();
+    this.notifyListeners();
+  }
+
+  /**
+   * Request WhisperX word-level alignment for the current lyrics draft.
+   */
+  setAlignLyricsRequested(requested) {
+    this.state.alignLyricsRequested = Boolean(requested);
     this.notifyListeners();
   }
 
@@ -367,6 +377,7 @@ class LyricsManager {
     return {
       lyrics_text: lyricsText,
       lyrics_format: this.state.format,
+      align_lyrics: Boolean(this.state.alignLyricsRequested),
     };
   }
 

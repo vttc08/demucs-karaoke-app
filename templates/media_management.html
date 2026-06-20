@@ -685,6 +685,14 @@
                                         <input type="file" id="media-edit-lyrics-file" class="hidden" accept=".lrc,.txt,.json" />
                                     </div>
 
+                                    <label class="flex cursor-pointer items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+                                        <span class="flex min-w-0 flex-col">
+                                            <span class="text-[10px] font-bold uppercase tracking-wider text-primary">{{ t('lyrics.whisperx_align') }}</span>
+                                            <span id="media-edit-lyrics-align-status" class="text-[10px] leading-tight text-on-surface-variant">{{ t('lyrics.align_requires_text') }}</span>
+                                        </span>
+                                        <input id="media-edit-lyrics-align-toggle" type="checkbox" class="h-5 w-5 accent-primary disabled:cursor-not-allowed disabled:opacity-50" disabled />
+                                    </label>
+
                                     <!-- Lyrics Textarea -->
                                     <div class="space-y-1.5">
                                         <div class="flex items-center justify-between">

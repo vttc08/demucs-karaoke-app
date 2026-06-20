@@ -105,7 +105,7 @@ class DemucsJobStatusResponse(BaseModel):
     output_format: str
     mp3_bitrate: int | None = None
     original_filename: str
-    job_kind: Literal["separation", "separation_with_lyrics"]
+    job_kind: Literal["separation", "separation_with_lyrics", "lyrics_alignment"]
     created_at: str
     started_at: str | None = None
     finished_at: str | None = None
@@ -116,7 +116,7 @@ class DemucsJobStatusResponse(BaseModel):
 class DemucsMetricsJobResponse(BaseModel):
     job_id: str
     status: Literal["queued", "running"]
-    job_kind: Literal["separation", "separation_with_lyrics"]
+    job_kind: Literal["separation", "separation_with_lyrics", "lyrics_alignment"]
     progress_percent: int
     progress_message: str
     model: str

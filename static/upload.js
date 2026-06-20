@@ -34,6 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const uploadAiToggle = document.getElementById('upload-ai-toggle');
     const uploadAiStatus = document.getElementById('upload-ai-status');
     const uploadLyricsToggle = document.getElementById('upload-lyrics-toggle');
+    const uploadLyricsAlignToggle = document.getElementById('upload-lyrics-align-toggle');
+    const uploadLyricsAlignStatus = document.getElementById('upload-lyrics-align-status');
     let demucsHealth = { healthy: false, detail: t('karaoke.checking_availability') };
 
     function applyDemucsAvailability() {
@@ -47,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? t('karaoke.available')
                 : t('karaoke.unavailable_detail', { detail: demucsHealth.detail });
         }
+        updateUploadLyricsAlignmentControls();
     }
 
     async function refreshDemucsHealth() {
@@ -88,7 +91,32 @@ document.addEventListener('DOMContentLoaded', () => {
             panel: '#upload-lyrics-form-section'
         });
         lyricsUIAdapter.initialize();
+        lyricsManager.on(() => updateUploadLyricsAlignmentControls());
         syncUploadLyricsMetadata();
+    }
+
+    function updateUploadLyricsAlignmentControls() {
+        if (!uploadLyricsAlignToggle || !lyricsManager) return;
+        const state = lyricsManager.getState();
+        const hasText = Boolean((state.text || '').trim());
+        const jsonLyrics = state.format === 'json';
+        const canAlign = Boolean(state.lyricsEnabled && hasText && !jsonLyrics && demucsHealth.healthy);
+        uploadLyricsAlignToggle.disabled = !canAlign;
+        if (!canAlign && uploadLyricsAlignToggle.checked) {
+            uploadLyricsAlignToggle.checked = false;
+            lyricsManager.setAlignLyricsRequested(false);
+        }
+        if (uploadLyricsAlignStatus) {
+            if (!demucsHealth.healthy) {
+                uploadLyricsAlignStatus.textContent = t('lyrics.align_demucs_unavailable');
+            } else if (jsonLyrics) {
+                uploadLyricsAlignStatus.textContent = t('lyrics.align_json_unsupported');
+            } else if (!hasText) {
+                uploadLyricsAlignStatus.textContent = t('lyrics.align_requires_text');
+            } else {
+                uploadLyricsAlignStatus.textContent = t('lyrics.align_available');
+            }
+        }
     }
 
     function syncUploadLyricsMetadata() {
@@ -151,6 +179,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lyricsManager) {
                 syncUploadLyricsMetadata();
                 lyricsManager.setEnabled(uploadLyricsToggle.checked);
+            }
+        });
+    }
+    if (uploadLyricsAlignToggle) {
+        uploadLyricsAlignToggle.addEventListener('change', () => {
+            initializeUploadLyricsManager();
+            if (lyricsManager) {
+                lyricsManager.setAlignLyricsRequested(uploadLyricsAlignToggle.checked);
             }
         });
     }
@@ -262,6 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lyricsPayload) {
                 formData.append('lyrics_text', lyricsPayload.lyrics_text);
                 formData.append('lyrics_format', lyricsPayload.lyrics_format);
+                formData.append('align_lyrics', Boolean(lyricsPayload.align_lyrics));
             }
         }
 
