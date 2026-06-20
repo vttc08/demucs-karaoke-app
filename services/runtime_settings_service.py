@@ -4,10 +4,13 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
+import httpx
+
 from config import EXPLICIT_SETTINGS_FIELDS, find_executable, settings
 from models import (
     DemucsGarbageCollectionResponse,
     DemucsHealthResponse,
+    ProxyInfoResponse,
     RuntimeSetting,
     RuntimeSettingsResponse,
     RuntimeSettingsUpdateRequest,
@@ -39,6 +42,7 @@ class RuntimeSettingsService:
     ALLOWED_YTDLP_VIDEO_RESOLUTIONS = {"default", "360", "480", "720", "1080", "2160"}
     DEMUCS_DIRECT_MEDIA_MAX_MB_RANGE = (0, 5000)
     DEMUCS_POLL_INTERVAL_SECONDS_RANGE = (0.25, 10.0)
+    PROXY_INFO_TIMEOUT_SECONDS = 10.0
     PERSISTED_SETTING_FIELDS = (
         "demucs_api_url",
         "demucs_model",
@@ -88,6 +92,41 @@ class RuntimeSettingsService:
         """Trigger remote Demucs garbage collection."""
         return DemucsClient(api_url=settings.demucs_api_url).trigger_garbage_collection(
             mode=mode
+        )
+
+    def get_proxy_info(self, proxy_url: str | None = None) -> ProxyInfoResponse:
+        """Resolve public egress details through the configured proxy."""
+        proxy = self._validate_proxy_url(proxy_url if proxy_url is not None else settings.ytdlp_proxy_url)
+        if not proxy:
+            raise RuntimeError("ytdlp_proxy_url is required to check proxy info")
+
+        try:
+            response = httpx.get(
+                "https://ipinfo.io/json",
+                timeout=self.PROXY_INFO_TIMEOUT_SECONDS,
+                proxy=proxy,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except httpx.HTTPError as error:
+            raise RuntimeError(f"Proxy info lookup failed: {error}") from error
+        except ValueError as error:
+            raise RuntimeError("Proxy info lookup returned invalid JSON") from error
+
+        ip = str(payload.get("ip", "") or "").strip()
+        org = str(payload.get("org", "") or "").strip()
+        city = str(payload.get("city", "") or "").strip()
+        country = str(payload.get("country", "") or "").strip()
+        if not ip:
+            raise RuntimeError("Proxy info lookup returned no IP address")
+
+        detail = "Proxy info lookup completed"
+        return ProxyInfoResponse(
+            ip=ip,
+            org=org,
+            city=city,
+            country=country,
+            detail=detail,
         )
 
     def _build_settings_response(
@@ -297,18 +336,7 @@ class RuntimeSettingsService:
             updated_fields.append("ytdlp_path")
 
         if payload.ytdlp_proxy_url is not None:
-            proxy = payload.ytdlp_proxy_url.strip()
-            if proxy:
-                parsed = urlparse(proxy)
-                if (
-                    not parsed.scheme
-                    or parsed.scheme.lower() not in self.ALLOWED_PROXY_SCHEMES
-                    or not parsed.netloc
-                ):
-                    raise ValueError(
-                        "ytdlp_proxy_url must be empty or a valid proxy URL with scheme "
-                        + ", ".join(sorted(self.ALLOWED_PROXY_SCHEMES))
-                    )
+            proxy = self._validate_proxy_url(payload.ytdlp_proxy_url)
             snapshot.setdefault("ytdlp_proxy_url", settings.ytdlp_proxy_url)
             settings.ytdlp_proxy_url = proxy
             updated_fields.append("ytdlp_proxy_url")
@@ -506,6 +534,22 @@ class RuntimeSettingsService:
         if candidate.exists():
             return str(candidate)
         return find_executable(value.split("/")[-1])
+
+    def _validate_proxy_url(self, value: str) -> str:
+        """Validate a proxy URL or normalize it to an empty string."""
+        proxy = value.strip()
+        if proxy:
+            parsed = urlparse(proxy)
+            if (
+                not parsed.scheme
+                or parsed.scheme.lower() not in self.ALLOWED_PROXY_SCHEMES
+                or not parsed.netloc
+            ):
+                raise ValueError(
+                    "ytdlp_proxy_url must be empty or a valid proxy URL with scheme "
+                    + ", ".join(sorted(self.ALLOWED_PROXY_SCHEMES))
+                )
+        return proxy
 
     @classmethod
     def _is_valid_demucs_direct_media_max_mb(cls, value: int) -> bool:

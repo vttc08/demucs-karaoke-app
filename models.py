@@ -522,6 +522,22 @@ class YtDlpUpdateResponse(BaseModel):
     detail: str
 
 
+class ProxyInfoRequest(BaseModel):
+    """Request to resolve proxy egress information."""
+
+    proxy_url: Optional[str] = None
+
+
+class ProxyInfoResponse(BaseModel):
+    """Public egress information returned through a proxy."""
+
+    ip: str
+    org: str
+    city: str
+    country: str
+    detail: str
+
+
 class DemucsRequest(BaseModel):
     """Request to Demucs service."""
 

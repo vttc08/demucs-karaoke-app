@@ -210,6 +210,39 @@ def test_get_demucs_health(client):
         assert "healthy" in data
         assert "detail" in data
 
+def test_get_proxy_info(client):
+    """Proxy info endpoint should return proxy egress details."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.settings.runtime_settings_service.get_proxy_info",
+        return_value={
+            "ip": "192.168.0.1",
+            "org": "AS123 Home Communications Inc.",
+            "city": "Home",
+            "country": "CA",
+            "detail": "Proxy info lookup completed",
+        },
+    ):
+        response = client.post(
+            "/api/settings/proxy-info",
+            json={"proxy_url": "socks5://127.0.0.1:1080"},
+        )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ip"] == "192.168.0.1"
+    assert data["org"] == "AS123 Home Communications Inc."
+    assert data["city"] == "Home"
+    assert data["country"] == "CA"
+
+def test_get_proxy_info_requires_admin(client):
+    """Proxy info endpoint should reject guests."""
+    response = client.post(
+        "/api/settings/proxy-info",
+        json={"proxy_url": "socks5://127.0.0.1:1080"},
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
+
 def test_get_ytdlp_version(client):
     """yt-dlp version endpoint should return current version."""
     authenticate_admin_client(client)

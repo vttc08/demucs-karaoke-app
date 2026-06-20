@@ -197,6 +197,48 @@ def test_runtime_settings_preload_whisperx_models_uses_current_settings():
         settings.demucs_device = original_demucs_device
         settings.demucs_api_url = original_demucs_api_url
 
+def test_runtime_settings_get_proxy_info_uses_configured_proxy():
+    """Proxy info lookup should route through the configured proxy URL."""
+    service = RuntimeSettingsService()
+    original_proxy = settings.ytdlp_proxy_url
+    try:
+        settings.ytdlp_proxy_url = "socks5://127.0.0.1:1080"
+
+        class FakeResponse:
+            @staticmethod
+            def raise_for_status():
+                return None
+
+            @staticmethod
+            def json():
+                return {
+                    "ip": "192.168.0.1",
+                    "org": "AS123 Home Communications Inc.",
+                    "city": "Home",
+                    "country": "CA",
+                }
+
+        seen = {}
+
+        def fake_get(url, timeout, proxy):
+            seen["url"] = url
+            seen["timeout"] = timeout
+            seen["proxy"] = proxy
+            return FakeResponse()
+
+        with patch("services.runtime_settings_service.httpx.get", side_effect=fake_get):
+            result = service.get_proxy_info()
+
+        assert seen["url"] == "https://ipinfo.io/json"
+        assert seen["timeout"] == service.PROXY_INFO_TIMEOUT_SECONDS
+        assert seen["proxy"] == "socks5://127.0.0.1:1080"
+        assert result.ip == "192.168.0.1"
+        assert result.org == "AS123 Home Communications Inc."
+        assert result.city == "Home"
+        assert result.country == "CA"
+    finally:
+        settings.ytdlp_proxy_url = original_proxy
+
 def test_runtime_settings_update_settings_accepts_media_and_cache_paths(tmp_path):
     """Updating runtime settings should accept configurable media/cache paths."""
     service = RuntimeSettingsService()

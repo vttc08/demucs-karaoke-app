@@ -7,6 +7,8 @@ from database import get_db
 from models import (
     DemucsGarbageCollectionResponse,
     DemucsHealthResponse,
+    ProxyInfoRequest,
+    ProxyInfoResponse,
     RuntimeSettingsResponse,
     RuntimeSettingsUpdateRequest,
     WhisperXPreloadRequest,
@@ -52,6 +54,19 @@ def trigger_demucs_gc(_admin=Depends(require_admin_user)):
     try:
         return runtime_settings_service.trigger_demucs_garbage_collection()
     except RuntimeError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@router.post("/proxy-info", response_model=ProxyInfoResponse)
+def get_proxy_info(
+    payload: ProxyInfoRequest | None = None,
+    _admin=Depends(require_admin_user),
+):
+    """Resolve public proxy egress details through ipinfo."""
+    try:
+        proxy_url = payload.proxy_url if payload else None
+        return runtime_settings_service.get_proxy_info(proxy_url)
+    except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error))
 
 

@@ -3,6 +3,7 @@ const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {})
 const SETTINGS_API = appUrl("/api/settings/");
 const DEMUCS_HEALTH_API = appUrl("/api/settings/demucs-health");
 const DEMUCS_GC_API = appUrl("/api/settings/demucs/gc");
+const PROXY_INFO_API = appUrl("/api/settings/proxy-info");
 const YTDLP_VERSION_API = appUrl("/api/settings/ytdlp/version");
 const YTDLP_UPDATE_API = appUrl("/api/settings/ytdlp/update");
 const WHISPERX_PRELOAD_API = appUrl("/api/settings/whisperx/preload");
@@ -16,9 +17,14 @@ const saveFeedbackText = document.getElementById("save-feedback-text");
 const refreshYtdlpVersionBtn = document.getElementById("refresh-ytdlp-version-btn");
 const updateYtdlpBtn = document.getElementById("update-ytdlp-btn");
 const preloadWhisperxBtn = document.getElementById("preload-whisperx-btn");
+const proxyInfoBtn = document.getElementById("check-proxy-info-btn");
 const ytdlpVersionText = document.getElementById("ytdlp-version-text");
 const ytdlpUpdateStatus = document.getElementById("ytdlp-update-status");
 const whisperxPreloadStatus = document.getElementById("whisperx-preload-status");
+const proxyInfoStatus = document.getElementById("proxy-info-status");
+const proxyInfoIpText = document.getElementById("proxy-info-ip-text");
+const proxyInfoOrgText = document.getElementById("proxy-info-org-text");
+const proxyInfoLocationText = document.getElementById("proxy-info-location-text");
 const whisperxAlignLanguageGroup = document.getElementById("whisperx-align-language-group");
 const engineStatusDot = document.getElementById("engine-status-dot");
 const engineStatusText = document.getElementById("engine-status-text");
@@ -153,6 +159,9 @@ function setFormState(disabled) {
     if (preloadWhisperxBtn) {
         preloadWhisperxBtn.disabled = disabled;
     }
+    if (proxyInfoBtn) {
+        proxyInfoBtn.disabled = disabled;
+    }
     if (demucsGcBtn) {
         demucsGcBtn.disabled = disabled;
     }
@@ -194,6 +203,15 @@ function setWhisperxPreloadStatus(message, isError = false) {
     whisperxPreloadStatus.classList.toggle("text-on-surface-variant", !isError);
 }
 
+function setProxyInfoStatus(message, isError = false) {
+    if (!proxyInfoStatus) {
+        return;
+    }
+    proxyInfoStatus.textContent = message;
+    proxyInfoStatus.classList.toggle("text-error", isError);
+    proxyInfoStatus.classList.toggle("text-on-surface-variant", !isError);
+}
+
 function setDemucsGcStatus(message, isError = false) {
     if (!demucsGcStatus) {
         return;
@@ -201,6 +219,27 @@ function setDemucsGcStatus(message, isError = false) {
     demucsGcStatus.textContent = message;
     demucsGcStatus.classList.toggle("text-error", isError);
     demucsGcStatus.classList.toggle("text-on-surface-variant", !isError);
+}
+
+function setProxyInfoValues(data) {
+    if (proxyInfoIpText) {
+        proxyInfoIpText.textContent = data?.ip || t("common.unknown");
+    }
+    if (proxyInfoOrgText) {
+        proxyInfoOrgText.textContent = data?.org || t("common.unknown");
+    }
+    if (proxyInfoLocationText) {
+        const city = data?.city || "";
+        const country = data?.country || "";
+        proxyInfoLocationText.textContent = city && country
+            ? `${city}, ${country}`
+            : city || country || t("common.unknown");
+    }
+}
+
+function resetProxyInfoDisplay() {
+    setProxyInfoValues({});
+    setProxyInfoStatus(t("settings.proxy_info_idle"));
 }
 
 function setWhisperxAlignLanguageState(disabled) {
@@ -347,6 +386,39 @@ async function triggerDemucsGarbageCollection() {
     }
 }
 
+async function checkProxyInfo() {
+    if (!proxyInfoBtn || !fields.ytdlp_proxy_url) {
+        return;
+    }
+
+    const proxyUrl = fields.ytdlp_proxy_url.value.trim();
+    if (!proxyUrl) {
+        setProxyInfoStatus(t("settings.proxy_info_requires_proxy"), true);
+        return;
+    }
+
+    proxyInfoBtn.disabled = true;
+    setProxyInfoStatus(t("settings.proxy_info_loading"));
+    try {
+        const response = await fetch(PROXY_INFO_API, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({proxy_url: proxyUrl}),
+        });
+        if (!response.ok) {
+            const errorPayload = await response.json();
+            throw new Error(errorPayload.detail || t("settings.proxy_info_failed"));
+        }
+        const data = await response.json();
+        setProxyInfoValues(data);
+        setProxyInfoStatus(data.detail || t("settings.proxy_info_loaded"));
+    } catch (error) {
+        setProxyInfoStatus(String(error.message || t("settings.proxy_info_failed")), true);
+    } finally {
+        proxyInfoBtn.disabled = false;
+    }
+}
+
 function applySettingsToForm(data) {
     fields.demucs_api_url.value = data.demucs_api_url || "";
     fields.demucs_model.value = data.demucs_model || "htdemucs";
@@ -379,6 +451,7 @@ function applySettingsToForm(data) {
     }
     updateWhisperxLanguageUi();
     updateDemucsOutputUi();
+    resetProxyInfoDisplay();
 }
 
 function updateDemucsOutputUi() {
@@ -529,6 +602,9 @@ if (updateYtdlpBtn) {
 }
 if (preloadWhisperxBtn) {
     preloadWhisperxBtn.addEventListener("click", preloadWhisperxModels);
+}
+if (proxyInfoBtn) {
+    proxyInfoBtn.addEventListener("click", checkProxyInfo);
 }
 if (demucsGcBtn) {
     demucsGcBtn.addEventListener("click", triggerDemucsGarbageCollection);
