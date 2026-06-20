@@ -102,6 +102,27 @@ def _karaoke_availability(media_item: MediaItem) -> tuple[bool, str | None, str 
     return True, None, None
 
 
+def _demucs_availability() -> tuple[bool, str | None, str | None]:
+    health = runtime_settings_service.get_demucs_health()
+    if not health.healthy:
+        return False, "demucs_offline", health.detail
+    return True, None, None
+
+
+def _validate_alignment_request(
+    *,
+    align_lyrics: bool,
+    lyrics_text: str | None,
+    lyrics_format: str | None,
+) -> None:
+    if not align_lyrics:
+        return
+    if not (lyrics_text or "").strip():
+        raise HTTPException(status_code=400, detail="lyrics_text is required for lyrics alignment")
+    if lyrics_format == "json":
+        raise HTTPException(status_code=400, detail="WhisperX alignment requires plain text or LRC lyrics")
+
+
 @router.post("/upload")
 async def upload_media(
     file: UploadFile = File(...),
@@ -111,6 +132,7 @@ async def upload_media(
     is_karaoke: bool = Form(False),
     lyrics_text: str | None = Form(None),
     lyrics_format: str | None = Form(None),
+    align_lyrics: bool = Form(False),
     db: Session = Depends(get_db),
 ):
     """Upload a new media file and create a library entry."""
@@ -135,6 +157,9 @@ async def upload_media(
     target_path = settings.media_path / filename
     queued_item = None
     karaoke_requested = bool(is_karaoke)
+    alignment_requested = bool(align_lyrics)
+    if alignment_requested:
+        karaoke_requested = True
     karaoke_started = False
     karaoke_task_id = None
     karaoke_warning = None
@@ -154,9 +179,17 @@ async def upload_media(
         db.add(media_item)
         db.flush()
         media_thumbnail_service.ensure_thumbnail_for_media_file(target_path)
+        lyrics_format = (lyrics_format or "").strip().lower() or None
+        if lyrics_format not in (None, "lrc", "txt", "json"):
+            raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc', 'txt', or 'json'")
+        _validate_alignment_request(
+            align_lyrics=alignment_requested,
+            lyrics_text=lyrics_text,
+            lyrics_format=lyrics_format,
+        )
         if lyrics_text:
-            if lyrics_format not in (None, "lrc", "txt"):
-                raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc' or 'txt'")
+            if lyrics_format not in (None, "lrc", "txt", "json"):
+                raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc', 'txt', or 'json'")
             queue_service.store_lyrics_sidecar(
                 media_item,
                 lyrics_text,
@@ -169,6 +202,8 @@ async def upload_media(
             karaoke_available, karaoke_warning, karaoke_warning_detail = _karaoke_availability(
                 media_item
             )
+            if not karaoke_available:
+                alignment_requested = False
 
         if add_to_queue:
             queued_item = queue_service.add_to_queue(
@@ -178,6 +213,7 @@ async def upload_media(
                     title=media_item.title,
                     artist=media_item.artist,
                     is_karaoke=karaoke_requested and karaoke_available,
+                    align_lyrics=alignment_requested and karaoke_available,
                 ),
             )
             await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
@@ -192,7 +228,11 @@ async def upload_media(
                 karaoke_task_id = task.id if karaoke_requested and karaoke_available else None
                 karaoke_started = bool(karaoke_task_id)
             elif karaoke_requested and karaoke_available:
-                task = processing_task_service.get_or_create_media_task(db, media_item.id)
+                task = (
+                    processing_task_service.get_or_create_media_karaoke_align_task(db, media_item.id)
+                    if alignment_requested
+                    else processing_task_service.get_or_create_media_task(db, media_item.id)
+                )
                 task_execution_coordinator.start(task.id)
                 karaoke_task_id = task.id
                 karaoke_started = True
@@ -332,11 +372,20 @@ def rename_media_item(
     if lyrics_text is not None and not isinstance(lyrics_text, str):
         raise HTTPException(status_code=400, detail="lyrics_text must be a string or null")
     lyrics_format = payload.get("lyrics_format")
-    if lyrics_format not in (None, "lrc", "txt"):
-        raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc' or 'txt'")
+    lyrics_format = (lyrics_format or "").strip().lower() or None
+    if lyrics_format not in (None, "lrc", "txt", "json"):
+        raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc', 'txt', or 'json'")
     is_karaoke = payload.get("is_karaoke", False)
     if not isinstance(is_karaoke, bool):
         raise HTTPException(status_code=400, detail="is_karaoke must be a boolean")
+    align_lyrics = payload.get("align_lyrics", False)
+    if not isinstance(align_lyrics, bool):
+        raise HTTPException(status_code=400, detail="align_lyrics must be a boolean")
+    _validate_alignment_request(
+        align_lyrics=align_lyrics,
+        lyrics_text=lyrics_text,
+        lyrics_format=lyrics_format,
+    )
 
     karaoke_started = False
     karaoke_task_id = None
@@ -355,6 +404,10 @@ def rename_media_item(
             media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
             if media_item is None:
                 raise MediaItemNotFoundError(f"Media item not found: {item_id}")
+            if lyrics_format is None and media_item.lyrics_path:
+                existing_suffix = Path(media_item.lyrics_path).suffix.lower().lstrip(".") or None
+                if existing_suffix in {"lrc", "txt", "json"}:
+                    lyrics_format = existing_suffix
             queue_service.store_lyrics_sidecar(
                 media_item,
                 lyrics_text,
@@ -367,13 +420,21 @@ def rename_media_item(
         media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
         if media_item is None:
             raise MediaItemNotFoundError(f"Media item not found: {item_id}")
-        if is_karaoke:
-            karaoke_available, karaoke_warning, karaoke_warning_detail = _karaoke_availability(
-                media_item
-            )
+        if is_karaoke or align_lyrics:
+            if align_lyrics and media_item.vocals_path and media_item.vocals_path.strip():
+                karaoke_available, karaoke_warning, karaoke_warning_detail = _demucs_availability()
+            else:
+                karaoke_available, karaoke_warning, karaoke_warning_detail = _karaoke_availability(
+                    media_item
+                )
             if karaoke_available:
                 try:
-                    task = processing_task_service.get_or_create_media_task(db, item_id)
+                    if align_lyrics and media_item.vocals_path and media_item.vocals_path.strip():
+                        task = processing_task_service.get_or_create_media_lyrics_align_task(db, item_id)
+                    elif align_lyrics:
+                        task = processing_task_service.get_or_create_media_karaoke_align_task(db, item_id)
+                    else:
+                        task = processing_task_service.get_or_create_media_task(db, item_id)
                     task_execution_coordinator.start(task.id)
                     karaoke_started = True
                     karaoke_task_id = task.id

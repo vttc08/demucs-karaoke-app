@@ -36,6 +36,36 @@ def test_media_library_service_uses_cached_local_thumbnail(db_session, tmp_path)
         settings.media_path = original_media
         settings.cache_path = original_cache
 
+def test_media_library_service_marks_json_lyrics_kind(db_session, tmp_path):
+    """Media page rows should expose WhisperX JSON as a distinct lyrics kind."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "json-song.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        db_session.add(
+            MediaItem(
+                title="JSON Song",
+                media_path="/media/json-song.mp4",
+                lyrics_path="/media/json-song.json",
+                missing=False,
+            )
+        )
+        db_session.commit()
+
+        service = MediaLibraryService()
+        items = service.list_media_items(db_session)
+
+        assert len(items) == 1
+        assert items[0]["has_lyrics"] is True
+        assert items[0]["lyrics_path"] == "/media/json-song.json"
+        assert items[0]["lyrics_kind"] == "json"
+    finally:
+        settings.media_path = original_media
+
 def test_media_thumbnail_service_uses_embedded_art_extraction_for_audio(tmp_path, monkeypatch):
     """Audio thumbnails should use embedded-art extraction instead of video frame capture."""
     original_cache = settings.cache_path

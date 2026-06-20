@@ -75,11 +75,16 @@ class KaraokeService:
                 if queue_item is None:
                     raise RuntimeError(f"Queue item not found for task {task.id}")
                 await self._process_queue_task(db, task, queue_item, cancel_event=cancel_event)
-            elif task.task_type == "media_karaoke":
+            elif task.task_type in {"media_karaoke", "media_karaoke_align"}:
                 media_item = db.query(MediaItem).filter(MediaItem.id == task.target_media_item_id).first()
                 if media_item is None:
                     raise RuntimeError(f"Media item not found for task {task.id}")
                 await self._process_media_task(db, task, media_item, cancel_event=cancel_event)
+            elif task.task_type == "media_lyrics_align":
+                media_item = db.query(MediaItem).filter(MediaItem.id == task.target_media_item_id).first()
+                if media_item is None:
+                    raise RuntimeError(f"Media item not found for task {task.id}")
+                await self._process_media_lyrics_align_task(db, task, media_item, cancel_event=cancel_event)
             else:
                 raise RuntimeError(f"Unsupported processing task type: {task.task_type}")
         except asyncio.CancelledError:
@@ -161,6 +166,7 @@ class KaraokeService:
                 media_item=item.media,
                 video_path=video_path,
                 audio_path=audio_path,
+                align_lyrics=bool(item.requested_lyrics_alignment),
                 cancel_event=cancel_event,
             )
             return
@@ -253,9 +259,13 @@ class KaraokeService:
     ):
         existing_media_path = self._existing_local_file(media_item.media_path)
         existing_vocals_path = self._existing_local_file(media_item.vocals_path)
+        align_lyrics = task.task_type == "media_karaoke_align"
         if existing_media_path is None:
             raise RuntimeError("Media item file is missing and cannot be processed")
         if existing_vocals_path is not None:
+            if align_lyrics:
+                await self._process_media_lyrics_align_task(db, task, media_item, cancel_event=cancel_event)
+                return
             await self._raise_if_canceled(cancel_event, task.id)
             await processing_task_service.set_status(
                 db,
@@ -288,7 +298,94 @@ class KaraokeService:
             media_item=media_item,
             video_path=video_path,
             audio_path=audio_path,
+            align_lyrics=align_lyrics,
             cancel_event=cancel_event,
+        )
+
+    async def _process_media_lyrics_align_task(
+        self,
+        db: Session,
+        task: ProcessingTask,
+        media_item: MediaItem,
+        *,
+        cancel_event: threading.Event | None = None,
+    ):
+        vocals_path = self._existing_local_file(media_item.vocals_path)
+        if vocals_path is None:
+            raise RuntimeError("Existing vocals sidecar is required for lyrics alignment")
+        lyrics_text, lyrics_format = self._alignment_lyrics_for_media(media_item)
+        if not lyrics_text:
+            raise RuntimeError("Plain or LRC lyrics are required for lyrics alignment")
+
+        demucs_health = self.demucs_client.health_check()
+        if not demucs_health.healthy:
+            raise RuntimeError(
+                f"Demucs unavailable at {demucs_health.api_url}: {demucs_health.detail}"
+            )
+
+        await self._raise_if_canceled(cancel_event, task.id)
+        await processing_task_service.set_stage(
+            db,
+            task.id,
+            status=ProcessingTaskStatus.PROCESSING,
+            stage="whisperx",
+            progress_label="Aligning lyrics",
+            progress_label_key="task.aligning_lyrics",
+            progress_percent=0,
+            progress_step_index=1,
+            progress_step_total=1,
+        )
+        loop = asyncio.get_running_loop()
+        progress_callback = self._demucs_progress_callback(
+            loop,
+            task.id,
+            step_index=1,
+            step_total=1,
+            status=ProcessingTaskStatus.PROCESSING.value,
+            stage="whisperx",
+            queue_item_id=None,
+            has_whisperx=True,
+        )
+        log_callback = self._log_callback(
+            loop,
+            task.id,
+            status=ProcessingTaskStatus.PROCESSING.value,
+            stage="whisperx",
+        )
+        aligned_lyrics_path = await self.demucs_client.align_lyrics(
+            vocals_path,
+            lyrics_text=lyrics_text,
+            lyrics_format=lyrics_format,
+            transcription_model=settings.whisperx_transcription_model,
+            align_language=settings.whisperx_align_language,
+            detect_language=settings.whisperx_detect_language,
+            use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+            whisperx_preload_models=settings.whisperx_preload_models,
+            cancel_event=cancel_event,
+            progress_callback=progress_callback,
+            log_callback=log_callback,
+        )
+        await self._raise_if_canceled(cancel_event, task.id)
+        media_stem = self._media_stem_for_media(
+            media_item,
+            fallback=media_item.youtube_id or f"media-{media_item.id}",
+        )
+        final_lyrics_path = await asyncio.to_thread(
+            self._install_aligned_lyrics_sidecar,
+            media_stem,
+            aligned_lyrics_path,
+        )
+        media_item.lyrics_path = QueueService.build_media_url(final_lyrics_path)
+        media_item.missing = False
+        db.commit()
+        await processing_task_service.set_status(
+            db,
+            task.id,
+            status=ProcessingTaskStatus.DONE,
+            stage="ready",
+            progress_label="Ready",
+            progress_label_key="task.ready",
+            progress_percent=100,
         )
 
     async def _prepare_karaoke_inputs(
@@ -467,6 +564,7 @@ class KaraokeService:
         media_item: MediaItem,
         video_path: Path,
         audio_path: Path,
+        align_lyrics: bool = False,
         cancel_event: threading.Event | None = None,
     ):
         await self._raise_if_canceled(cancel_event, task.id)
@@ -485,7 +583,7 @@ class KaraokeService:
             queue_item,
             media_item,
             audio_path,
-            has_whisperx=bool(self._alignment_lyrics_for_media(media_item)[0]),
+            align_lyrics=align_lyrics,
             task_id=task.id,
             progress_step_index=3,
             progress_step_total=4,
@@ -511,6 +609,8 @@ class KaraokeService:
                 aligned_lyrics_path,
             )
             aligned_lyrics_path = None
+        if align_lyrics and aligned_lyrics_path is None:
+            raise RuntimeError("Demucs response missing aligned lyrics output path")
         await self._raise_if_canceled(cancel_event, task.id)
         await processing_task_service.emit_progress(
             task.id,
@@ -753,14 +853,20 @@ class KaraokeService:
         media_item: MediaItem,
         audio_path: Path,
         *,
-        has_whisperx: bool,
+        align_lyrics: bool,
         task_id: int,
         progress_step_index: int,
         progress_step_total: int,
         cancel_event: threading.Event | None = None,
     ):
         """Run Demucs separation with one fallback retry for extracted local audio."""
-        lyrics_text, lyrics_format = self._alignment_lyrics_for_media(media_item)
+        lyrics_text, lyrics_format = (
+            self._alignment_lyrics_for_media(media_item)
+            if align_lyrics
+            else (None, None)
+        )
+        if align_lyrics and not lyrics_text:
+            raise RuntimeError("Plain or LRC lyrics are required for lyrics alignment")
         align_language, detect_language = self._resolve_whisperx_alignment_settings(queue_item)
 
         async def run_demucs(target_audio_path: Path):
@@ -790,7 +896,7 @@ class KaraokeService:
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
                 queue_item_id=queue_item.id if queue_item is not None else None,
-                has_whisperx=has_whisperx,
+                has_whisperx=bool(lyrics_text),
             )
             log_callback = self._log_callback(
                 loop,
@@ -848,7 +954,7 @@ class KaraokeService:
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
                 queue_item_id=queue_item.id if queue_item is not None else None,
-                has_whisperx=has_whisperx,
+                has_whisperx=bool(lyrics_text),
             )
             log_callback = self._log_callback(
                 loop,
@@ -900,7 +1006,7 @@ class KaraokeService:
         )
 
         preserve_durable_media = (
-            task.task_type == "media_karaoke"
+            task.task_type in {"media_karaoke", "media_karaoke_align", "media_lyrics_align"}
             or task.source_kind == "library_media"
         )
         paths_to_remove = self._cached_task_paths(media_stem)

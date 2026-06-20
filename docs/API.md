@@ -221,7 +221,7 @@ Queue payload can identify the target with either:
 - `queue_as_name` is optional and admin-only. When provided by an authenticated admin session, it overrides the displayed requester label for that queued item.
 
 If the `youtube_id` already exists in `media_items` with a usable local media file, the queue item is created against that existing media row and processing reuses the stored file instead of re-downloading the video again.
-When `lyrics_text` is supplied for karaoke items, the app persists it as a reusable lyrics sidecar under the cache directory so karaoke processing can skip a second lookup. `lyrics_format` is optional; if omitted, the app infers `.lrc` when timestamped lines are present and `.txt` otherwise.
+When `lyrics_text` is supplied for karaoke items, the app persists it as a reusable lyrics sidecar under the cache directory so karaoke processing can skip a second lookup. `lyrics_format` is optional; if omitted, the app infers `.lrc` when timestamped lines are present, `.json` for WhisperX-style aligned payloads, and `.txt` otherwise.
 
 **Response:**
 ```json
@@ -394,7 +394,8 @@ Uploads a local media file into the library. The request is multipart form data.
 - `add_to_queue` (optional, default `true`): queue the uploaded media after saving
 - `is_karaoke` (optional, default `false`): request karaoke processing for the uploaded media
 - `lyrics_text` (optional): lyrics text to persist as a reusable sidecar
-- `lyrics_format` (optional): `lrc` or `txt`; inferred from text when omitted by queue/service paths
+- `lyrics_format` (optional): `lrc`, `txt`, or `json`; inferred from text when omitted by queue/service paths
+- `align_lyrics` (optional, default `false`): request WhisperX word alignment from submitted plain/LRC lyrics. JSON lyrics are treated as already synced and are rejected for alignment.
 
 **Response:**
 ```json
@@ -414,6 +415,7 @@ Uploads a local media file into the library. The request is multipart form data.
 ```
 
 When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued. Upload and media-edit lyrics are saved beside the media file as `<filename>.lrc` or `<filename>.txt` so library scans can rediscover them.
+When `align_lyrics` is true, the upload must include non-empty plain/LRC lyrics. Missing-vocals uploads run separation plus WhisperX alignment and later replace `lyrics_path` with the aligned JSON sidecar.
 
 Queued uploads use a single queue preparation task. Non-queued AI karaoke uploads use a
 `media_karaoke` task. If Demucs is unavailable at submission time, the file and metadata remain
@@ -490,14 +492,17 @@ Updates the media row title and artist. When `rename_on_disk` is true, the serve
   "artist": "New Artist",
   "rename_on_disk": true,
   "is_karaoke": true,
+  "align_lyrics": true,
   "lyrics_text": "[00:01.00]Line 1",
   "lyrics_format": "lrc"
 }
 ```
 
-`lyrics_text`, `lyrics_format`, and `is_karaoke` are optional. When `is_karaoke` is true, the
+`lyrics_text`, `lyrics_format`, `is_karaoke`, and `align_lyrics` are optional. When `is_karaoke` is true, the
 server starts a `media_karaoke` task only when the item is not already multi-track and Demucs is
-online. Rename and lyrics changes remain saved if the health check fails.
+online. When `align_lyrics` is true, the server requires non-empty plain/LRC lyrics, saves them, then
+starts `media_lyrics_align` if `vocals_path` already exists or `media_karaoke_align` if separation is
+also needed. Rename and lyrics changes remain saved if the health check fails.
 
 **Response:**
 ```json
@@ -747,7 +752,7 @@ I-frame timestamps for the first video stream.
   "keyframes": [0.0, 2.002, 4.004],
   "vocals_path": "/media/song.vocals.wav",
   "lyrics_path": "/media/song.lrc",
-  "lyrics_format": "lrc"
+  "lyrics_format": "json"
 }
 ```
 
@@ -992,6 +997,13 @@ The Demucs service response ZIP still contains the standard `no_vocals` and `voc
 The main app polls `GET /jobs/{job_id}` about once per second while a remote Demucs job is running,
 then fetches `GET /jobs/{job_id}/result` after the job reaches `completed`. The interval is
 configurable through `demucs_poll_interval_seconds` in runtime settings.
+
+For existing guide vocals, the main app can use the Demucs align-only job API:
+
+- `POST /align-jobs` uploads a vocals/audio file plus `lyrics_text`, `lyrics_format`, and the same WhisperX settings fields.
+- `GET /jobs/{job_id}` returns the same status payload used by separation jobs.
+- `GET /align-jobs/{job_id}/result` returns `aligned_lyrics.json` directly.
+- `DELETE /jobs/{job_id}` cancels the alignment job when it is still active.
 
 ### Demucs Observability and Maintenance
 

@@ -1,4 +1,5 @@
 """Queue service for managing the karaoke queue."""
+import json
 import logging
 import re
 import shutil
@@ -111,7 +112,7 @@ class QueueService:
                 media_item.youtube_id,
                 media_item.id,
             )
-        if item.is_karaoke and item.lyrics_text:
+        if (item.is_karaoke or item.align_lyrics) and item.lyrics_text:
             self.store_lyrics_sidecar(
                 media_item,
                 item.lyrics_text,
@@ -125,6 +126,7 @@ class QueueService:
             media_id=media_item.id,
             position=self.append_to_end(db),
             requested_karaoke=item.is_karaoke,
+            requested_lyrics_alignment=item.align_lyrics,
             user_id=normalized_owner_guest_id or normalized_requester_id,
             session_id=self._normalize_optional_metadata(requester_session_id),
             requester_name=self._normalize_optional_metadata(requester_name),
@@ -525,12 +527,22 @@ class QueueService:
 
     @staticmethod
     def _lyrics_suffix(lyrics_text: str, requested_format: str | None) -> str:
+        if requested_format == "json":
+            return ".json"
         if requested_format == "lrc":
             return ".lrc"
         if requested_format == "txt":
             return ".txt"
         if re.search(r"^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]", lyrics_text, re.MULTILINE):
             return ".lrc"
+        trimmed = lyrics_text.lstrip()
+        if trimmed[:1] in {"{", "["}:
+            try:
+                json.loads(trimmed)
+            except json.JSONDecodeError:
+                pass
+            else:
+                return ".json"
         return ".txt"
 
     @staticmethod
@@ -974,7 +986,7 @@ class QueueService:
                     break
 
         if not lyrics_path:
-            for ext in (".lrc", ".srt", ".txt"):
+            for ext in (".json", ".lrc", ".srt", ".txt"):
                 candidate = media_file.with_suffix(ext)
                 if candidate.exists():
                     try:

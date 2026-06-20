@@ -216,12 +216,126 @@ class DemucsClient:
                         return DemucsResponse(
                             no_vocals_path=str(output_path),
                             vocals_path=str(vocals_output_path),
-                        aligned_lyrics_path=str(aligned_output_path) if aligned_output_path else None,
-                    )
+                            aligned_lyrics_path=str(aligned_output_path) if aligned_output_path else None,
+                        )
 
                     if status == "failed":
                         raise RuntimeError(
                             status_payload.get("error_detail") or "Demucs job failed"
+                        )
+                    if status == "canceled":
+                        raise asyncio.CancelledError()
+
+                    poll_interval = (
+                        self.poll_interval_seconds
+                        if self.poll_interval_seconds is not None
+                        else settings.demucs_poll_interval_seconds
+                    )
+                    await asyncio.sleep(poll_interval)
+            except Exception:
+                if cancel_event is not None and cancel_event.is_set():
+                    try:
+                        await client.delete(f"{self.api_url}/jobs/{job_id}")
+                    except Exception:
+                        pass
+                raise
+
+    async def align_lyrics(
+        self,
+        vocals_path: Path,
+        *,
+        lyrics_text: str,
+        lyrics_format: str | None = None,
+        transcription_model: str | None = None,
+        align_language: str | None = None,
+        detect_language: bool | None = None,
+        use_synced_lyrics: bool | None = None,
+        whisperx_preload_models: str | None = None,
+        compute_type: str | None = None,
+        cancel_event: threading.Event | None = None,
+        progress_callback: ProgressCallback | None = None,
+        log_callback: LogCallback | None = None,
+    ) -> Path:
+        """Run WhisperX alignment against an existing vocals sidecar."""
+        if not vocals_path.exists():
+            raise RuntimeError(f"Vocals path does not exist: {vocals_path}")
+        if not (lyrics_text or "").strip():
+            raise RuntimeError("lyrics_text is required for alignment")
+        if cancel_event is not None and cancel_event.is_set():
+            raise asyncio.CancelledError()
+
+        out_dir = settings.cache_path / "demucs_outputs"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        seen_output_lines: set[str] = set()
+
+        async with httpx.AsyncClient(timeout=self.REQUEST_TIMEOUT_SECONDS) as client:
+            with vocals_path.open("rb") as fh:
+                create_response = await client.post(
+                    f"{self.api_url}/align-jobs",
+                    files={"file": (vocals_path.name, fh, "audio/wav")},
+                    data=self._build_request_data(
+                        lyrics_text=lyrics_text,
+                        lyrics_format=lyrics_format,
+                        transcription_model=transcription_model,
+                        align_language=align_language,
+                        detect_language=detect_language,
+                        use_synced_lyrics=use_synced_lyrics,
+                        whisperx_preload_models=whisperx_preload_models,
+                        compute_type=compute_type,
+                    ),
+                )
+            create_response.raise_for_status()
+            payload = create_response.json()
+            job_id = payload["job_id"]
+            self._emit_progress(
+                progress_callback,
+                int(payload.get("progress_percent", 0)),
+                str(payload.get("progress_message") or "Queued"),
+                {"job_id": job_id, "status": payload.get("status")},
+            )
+
+            try:
+                while True:
+                    if cancel_event is not None and cancel_event.is_set():
+                        await client.delete(f"{self.api_url}/jobs/{job_id}")
+                        raise asyncio.CancelledError()
+
+                    status_response = await client.get(f"{self.api_url}/jobs/{job_id}")
+                    status_response.raise_for_status()
+                    status_payload = status_response.json()
+                    self._emit_remote_log_lines(
+                        log_callback,
+                        status_payload.get("output_tail") or [],
+                        seen_output_lines,
+                    )
+                    self._emit_progress(
+                        progress_callback,
+                        int(status_payload.get("progress_percent", 0)),
+                        str(status_payload.get("progress_message") or "Aligning lyrics"),
+                        {
+                            "job_id": job_id,
+                            "status": status_payload.get("status"),
+                            "error_detail": status_payload.get("error_detail"),
+                        },
+                    )
+
+                    status = str(status_payload.get("status"))
+                    if status == "completed":
+                        result_response = await client.get(f"{self.api_url}/align-jobs/{job_id}/result")
+                        result_response.raise_for_status()
+                        aligned_output_path = out_dir / f"{vocals_path.stem}_{job_id}_aligned_lyrics.json"
+                        aligned_output_path.write_bytes(result_response.content)
+                        self._emit_progress(
+                            progress_callback,
+                            100,
+                            str(status_payload.get("progress_message") or "Completed"),
+                            {"job_id": job_id, "status": status},
+                        )
+                        return aligned_output_path
+
+                    if status == "failed":
+                        raise RuntimeError(
+                            status_payload.get("error_detail") or "Lyrics alignment job failed"
                         )
                     if status == "canceled":
                         raise asyncio.CancelledError()

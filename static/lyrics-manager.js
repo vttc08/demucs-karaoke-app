@@ -26,6 +26,7 @@ class LyricsManager {
       title: '',
       artist: '',
       youtubeTitle: '',
+      alignLyricsRequested: false,
     };
     
     this.listeners = [];
@@ -79,6 +80,7 @@ class LyricsManager {
     this.state.title = '';
     this.state.artist = '';
     this.state.youtubeTitle = '';
+    this.state.alignLyricsRequested = false;
     this.notifyListeners();
   }
 
@@ -100,8 +102,48 @@ class LyricsManager {
    * Returns 'lrc' if synced (contains [MM:SS.mmm] timestamps), otherwise 'txt'
    */
   static inferFormat(text) {
-    if (!text) return 'txt';
-    return /^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/m.test(text) ? 'lrc' : 'txt';
+    const trimmed = (text || '').trim();
+    if (!trimmed) return 'txt';
+    if (/^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/m.test(trimmed)) {
+      return 'lrc';
+    }
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed) || (parsed && typeof parsed === 'object')) {
+          return 'json';
+        }
+      } catch (_error) {
+        // Fall back to plain text.
+      }
+    }
+    return 'txt';
+  }
+
+  /**
+   * Infer lyrics format from a filename.
+   */
+  static inferFormatFromFilename(filename) {
+    const lower = String(filename || '').toLowerCase();
+    if (lower.endsWith('.json')) return 'json';
+    if (lower.endsWith('.lrc')) return 'lrc';
+    return 'txt';
+  }
+
+  /**
+   * Map a lyrics format to a compact display label.
+   */
+  static getFormatLabel(format) {
+    switch (format) {
+      case 'json':
+        return LyricsManager.t('lyrics.synced');
+      case 'lrc':
+        return LyricsManager.t('lyrics.timed');
+      case 'txt':
+        return LyricsManager.t('lyrics.plain');
+      default:
+        return LyricsManager.t('common.unknown');
+    }
   }
 
   /**
@@ -135,7 +177,7 @@ class LyricsManager {
     this.state.text = trimmedText;
     this.state.format = format;
     this.state.provider = providerInfo;
-    this.state.isSynced = typeof options.isSynced === 'boolean' ? options.isSynced : format === 'lrc';
+    this.state.isSynced = typeof options.isSynced === 'boolean' ? options.isSynced : format !== 'txt';
     this.state.lyricsState = options.lyricsState || (trimmedText ? 'manual' : 'idle');
     this.notifyListeners();
   }
@@ -147,6 +189,14 @@ class LyricsManager {
     this.state.title = (title || '').trim();
     this.state.artist = (artist || '').trim();
     this.state.youtubeTitle = (youtubeTitle || '').trim();
+    this.notifyListeners();
+  }
+
+  /**
+   * Request WhisperX word-level alignment for the current lyrics draft.
+   */
+  setAlignLyricsRequested(requested) {
+    this.state.alignLyricsRequested = Boolean(requested);
     this.notifyListeners();
   }
 
@@ -267,7 +317,7 @@ class LyricsManager {
     if (trimmedText) {
       this.state.lyricsState = 'manual';
       this.state.format = LyricsManager.inferFormat(trimmedText);
-      this.state.isSynced = this.state.format === 'lrc';
+      this.state.isSynced = this.state.format !== 'txt';
     } else if (this.state.lyricsState === 'manual') {
       this.state.lyricsState = 'idle';
       this.state.format = 'txt';
@@ -288,8 +338,8 @@ class LyricsManager {
     try {
       const text = await file.text();
       this.state.text = text.trim();
-      this.state.format = file.name.toLowerCase().endsWith('.lrc') ? 'lrc' : 'txt';
-      this.state.isSynced = this.state.format === 'lrc';
+      this.state.format = LyricsManager.inferFormatFromFilename(file.name);
+      this.state.isSynced = this.state.format !== 'txt';
       this.state.provider = `upload:${file.name}`;
       this.state.lyricsState = 'manual';
       this.notifyListeners();
@@ -327,6 +377,7 @@ class LyricsManager {
     return {
       lyrics_text: lyricsText,
       lyrics_format: this.state.format,
+      align_lyrics: Boolean(this.state.alignLyricsRequested),
     };
   }
 

@@ -140,8 +140,16 @@
                                 <span class="material-symbols-outlined text-sm">upload_file</span>
                                 {{ t('common.upload') }}
                             </button>
-                            <input type="file" id="upload-lyrics-file" class="hidden" accept=".lrc,.txt" />
+                            <input type="file" id="upload-lyrics-file" class="hidden" accept=".lrc,.txt,.json" />
                         </div>
+
+                        <label class="flex cursor-pointer items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+                            <span class="flex min-w-0 flex-col">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-primary">{{ t('lyrics.whisperx_align') }}</span>
+                                <span id="upload-lyrics-align-status" class="text-[10px] leading-tight text-on-surface-variant">{{ t('lyrics.align_requires_text') }}</span>
+                            </span>
+                            <input id="upload-lyrics-align-toggle" type="checkbox" class="h-5 w-5 accent-primary disabled:cursor-not-allowed disabled:opacity-50" disabled />
+                        </label>
 
                         <!-- Status Badge -->
                         <div id="upload-lyrics-status" class="text-[10px] font-semibold text-on-surface-variant"></div>

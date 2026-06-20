@@ -529,6 +529,74 @@ def test_job_result_includes_aligned_lyrics_zip_entry(monkeypatch, tmp_path):
     assert "aligned_lyrics" in metadata["files"]
 
 
+def test_alignment_job_result_returns_json(monkeypatch, tmp_path):
+    monkeypatch.setattr(demucs_app, "_cuda_available", lambda: True)
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    demucs_app.INCOMING_ROOT.mkdir(parents=True, exist_ok=True)
+    demucs_app.OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+
+    def fake_start_alignment_job(payload, original_filename, config):
+        job_id = "job-align-only"
+        output_dir = demucs_app.OUTPUT_ROOT / job_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+        aligned_path = output_dir / "aligned_lyrics.json"
+        aligned_path.write_text('[{"start":1.0,"end":2.0,"text":"hello"}]', encoding="utf-8")
+        return demucs_app.job_store.create(
+            demucs_app.DemucsJobState(
+                job_id=job_id,
+                model=config.model,
+                device=config.device,
+                output_format=config.output_format,
+                mp3_bitrate=config.mp3_bitrate,
+                original_filename=original_filename,
+                job_kind="lyrics_alignment",
+                status="completed",
+                progress_percent=100,
+                progress_message="Completed",
+                created_at=demucs_app.utc_now(),
+                started_at=demucs_app.utc_now(),
+                finished_at=demucs_app.utc_now(),
+                duration_ms=25,
+                aligned_lyrics_path=str(aligned_path),
+            )
+        )
+
+    monkeypatch.setattr(demucs_app, "_start_alignment_job", fake_start_alignment_job)
+
+    client = TestClient(demucs_app.app)
+    response = client.post(
+        "/align-jobs",
+        data={
+            "lyrics_text": "[00:01.00]hello",
+            "lyrics_format": "lrc",
+            "transcription_model": "base",
+        },
+        files={"file": ("vocals.wav", b"vocals", "audio/wav")},
+    )
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["result_url"].endswith("/align-jobs/job-align-only/result")
+
+    result_response = client.get("/align-jobs/job-align-only/result")
+    assert result_response.status_code == 200
+    assert result_response.json()[0]["text"] == "hello"
+
+
+def test_alignment_job_requires_lyrics_text(monkeypatch):
+    monkeypatch.setattr(demucs_app, "_cuda_available", lambda: True)
+    client = TestClient(demucs_app.app)
+
+    response = client.post(
+        "/align-jobs",
+        data={"lyrics_format": "lrc"},
+        files={"file": ("vocals.wav", b"vocals", "audio/wav")},
+    )
+
+    assert response.status_code == 422
+    assert "lyrics_text is required" in str(response.json()["detail"])
+
+
 def test_create_job_and_fetch_result(monkeypatch, tmp_path):
     monkeypatch.setattr(demucs_app, "_cuda_available", lambda: True)
     monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")

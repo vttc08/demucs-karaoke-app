@@ -191,7 +191,7 @@ function applyLyricsDraft(manager, text, providerInfo, options = {}) {
         return;
     }
 
-// Compatibility fallback for older manager bundles.
+    // Compatibility fallback for older manager bundles.
     const trimmedText = String(text || "").trim();
     const inferredFormat = options.format || LyricsManager.inferFormat(trimmedText);
     if (typeof manager.cancelInFlight === "function") {
@@ -201,7 +201,7 @@ function applyLyricsDraft(manager, text, providerInfo, options = {}) {
         manager.state.text = trimmedText;
         manager.state.format = inferredFormat;
         manager.state.provider = providerInfo || "";
-        manager.state.isSynced = typeof options.isSynced === "boolean" ? options.isSynced : inferredFormat === "lrc";
+        manager.state.isSynced = typeof options.isSynced === "boolean" ? options.isSynced : inferredFormat !== "txt";
         manager.state.lyricsState = options.lyricsState || (trimmedText ? "manual" : "idle");
     }
     if (typeof manager.notifyListeners === "function") {
@@ -552,6 +552,95 @@ function parsePlainLyrics(text) {
         .filter(Boolean);
 }
 
+function parseJsonLyrics(text) {
+    let payload;
+    try {
+        payload = JSON.parse(String(text || "").trim());
+    } catch (_) {
+        return [];
+    }
+
+    const rows = Array.isArray(payload)
+        ? payload
+        : (payload && typeof payload === "object" && Array.isArray(payload.cues))
+            ? payload.cues
+            : null;
+    if (!Array.isArray(rows)) {
+        return [];
+    }
+
+    const cues = [];
+    for (const row of rows) {
+        if (!row || typeof row !== "object") {
+            continue;
+        }
+
+        const time = Number(row.time ?? row.start ?? row.timestamp);
+        if (!Number.isFinite(time)) {
+            continue;
+        }
+
+        let textValue = "";
+        if (typeof row.text === "string" && row.text.trim()) {
+            textValue = row.text.trim();
+        } else if (typeof row.line === "string" && row.line.trim()) {
+            textValue = row.line.trim();
+        } else if (typeof row.lyric === "string" && row.lyric.trim()) {
+            textValue = row.lyric.trim();
+        } else if (Array.isArray(row.words)) {
+            textValue = row.words
+                .filter((word) => word && typeof word === "object" && typeof word.word === "string" && word.word.trim())
+                .map((word) => word.word.trim())
+                .join(" ");
+        }
+
+        if (!textValue) {
+            continue;
+        }
+
+        const cue = { time: Math.max(0, time), text: textValue };
+        const end = Number(row.end);
+        if (Number.isFinite(end) && end >= time) {
+            cue.end = Math.max(0, end);
+        }
+
+        if (Array.isArray(row.words)) {
+            const words = [];
+            let complete = Boolean(row.words.length);
+            for (const word of row.words) {
+                if (!word || typeof word !== "object") {
+                    complete = false;
+                    continue;
+                }
+
+                const wordText = typeof word.word === "string" ? word.word.trim() : "";
+                const wordStart = Number(word.start);
+                const wordEnd = Number(word.end);
+                if (!wordText || !Number.isFinite(wordStart) || !Number.isFinite(wordEnd) || wordEnd < wordStart) {
+                    complete = false;
+                    continue;
+                }
+
+                words.push({
+                    word: wordText,
+                    start: Math.max(0, wordStart),
+                    end: Math.max(0, wordEnd),
+                });
+            }
+
+            if (complete && words.length > 0) {
+                words.sort((a, b) => a.start - b.start);
+                cue.words = words;
+            }
+        }
+
+        cues.push(cue);
+    }
+
+    cues.sort((a, b) => a.time - b.time);
+    return cues;
+}
+
 function formatLrcTimestamp(seconds) {
     const totalHundredths = Math.max(0, Math.round(Number(seconds || 0) * 100));
     const minutes = Math.floor(totalHundredths / 6000);
@@ -731,8 +820,19 @@ function buildSourceFromText(text, format = "txt") {
         return null;
     }
 
-    const inferredSynced = format === "lrc" || LyricsManager.inferFormat(trimmedText) === "lrc";
-    if (inferredSynced) {
+    const inferredFormat = format || LyricsManager.inferFormat(trimmedText);
+    if (inferredFormat === "json" || LyricsManager.inferFormat(trimmedText) === "json") {
+        const parsedCues = parseJsonLyrics(trimmedText);
+        if (parsedCues.length > 0) {
+            return {
+                isSynced: true,
+                cues: parsedCues,
+                lines: parsedCues.map((cue) => cue.text),
+            };
+        }
+    }
+
+    if (inferredFormat === "lrc" || LyricsManager.inferFormat(trimmedText) === "lrc") {
         const parsedCues = parseLrcLyrics(trimmedText);
         if (parsedCues.length > 0) {
             return {
@@ -797,8 +897,9 @@ function seedLyricsManagerForCurrentItem(payload) {
         lyricsManager.setMetadata(title, artist, title);
         const seedText = payloadToEditorText(payload);
         if (seedText) {
+            const sourceFormat = payload?.source_format || (payload?.is_synced ? "lrc" : "txt");
             applyLyricsDraft(lyricsManager, seedText, `saved:${payload?.source_format || "txt"}`, {
-                format: payload?.source_format === "txt" ? "txt" : "lrc",
+                format: sourceFormat,
                 isSynced: Boolean(payload?.is_synced),
                 lyricsState: "manual",
             });

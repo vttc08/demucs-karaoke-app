@@ -61,6 +61,7 @@ class QueueItem(Base):
     )
     position = Column(Integer, nullable=False, index=True)
     requested_karaoke = Column(Boolean, default=False, nullable=False)
+    requested_lyrics_alignment = Column(Boolean, default=False, nullable=False)
     user_id = Column(String, nullable=True)
     session_id = Column(String, nullable=True)
     requester_name = Column(String, nullable=True)
@@ -217,7 +218,8 @@ class QueueItemCreate(BaseModel):
     artist: Optional[str] = None
     is_karaoke: bool = False
     lyrics_text: Optional[str] = None
-    lyrics_format: Optional[Literal["lrc", "txt"]] = None
+    lyrics_format: Optional[Literal["lrc", "txt", "json"]] = None
+    align_lyrics: bool = False
     whisperx_align_language_override: Optional[str] = None
     queue_as_name: Optional[str] = None
     queue_as_guest_id: Optional[str] = None
@@ -525,7 +527,7 @@ class DemucsRequest(BaseModel):
 
     audio_path: str
     lyrics_text: Optional[str] = None
-    lyrics_format: Optional[Literal["lrc", "txt"]] = None
+    lyrics_format: Optional[Literal["lrc", "txt", "json"]] = None
     transcription_model: str = "tiny"
     align_language: Optional[str] = None
     detect_language: bool = False

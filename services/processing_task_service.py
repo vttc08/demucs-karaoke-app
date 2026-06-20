@@ -75,12 +75,29 @@ class ProcessingTaskService:
 
     def get_or_create_media_task(self, db: Session, media_item_id: int) -> ProcessingTask:
         """Return an existing active media karaoke task or create one."""
+        return self._get_or_create_media_task(db, media_item_id, task_type="media_karaoke")
+
+    def get_or_create_media_karaoke_align_task(self, db: Session, media_item_id: int) -> ProcessingTask:
+        """Return an existing active media separation+alignment task or create one."""
+        return self._get_or_create_media_task(db, media_item_id, task_type="media_karaoke_align")
+
+    def get_or_create_media_lyrics_align_task(self, db: Session, media_item_id: int) -> ProcessingTask:
+        """Return an existing active media lyrics alignment task or create one."""
+        return self._get_or_create_media_task(db, media_item_id, task_type="media_lyrics_align")
+
+    def _get_or_create_media_task(
+        self,
+        db: Session,
+        media_item_id: int,
+        *,
+        task_type: str,
+    ) -> ProcessingTask:
         active = (
             db.query(ProcessingTask)
             .filter(
                 ProcessingTask.target_media_item_id == media_item_id,
                 ProcessingTask.target_queue_item_id.is_(None),
-                ProcessingTask.task_type == "media_karaoke",
+                ProcessingTask.task_type == task_type,
                 ProcessingTask.status.in_(self.ACTIVE_STATUSES),
             )
             .order_by(ProcessingTask.id.desc())
@@ -93,7 +110,7 @@ class ProcessingTaskService:
         if media_item is None:
             raise ValueError(f"Media item not found: {media_item_id}")
         task = ProcessingTask(
-            task_type="media_karaoke",
+            task_type=task_type,
             source_kind="library_media" if not media_item.youtube_id else "uploaded_media",
             target_media_item_id=media_item_id,
             status=ProcessingTaskStatus.PENDING.value,

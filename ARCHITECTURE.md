@@ -322,9 +322,10 @@ The stage page uses a websocket-first model:
   - saves the uploaded file under the configured media root using the normalized title/artist stem
   - creates a durable `media_items` row with `media_path` pointing at the saved file
   - persists submitted `lyrics_text` as a reusable media-adjacent lyrics sidecar on the media row
+  - accepts `align_lyrics` for submitted plain/LRC lyrics and routes missing-vocals items through separation plus WhisperX alignment
   - optionally creates a queue row for the new media item when "Add to queue" is enabled
   - checks Demucs health before accepting AI karaoke processing
-  - starts one queue preparation task for queued uploads, or one `media_karaoke` task for non-queued AI uploads
+  - starts one queue preparation task for queued uploads, or one `media_karaoke` / `media_karaoke_align` task for non-queued AI uploads
   - preserves the saved upload and returns a warning when Demucs becomes unavailable before task creation
   - broadcasts the new queue item so real-time clients stay in sync
 - Successful uploads redirect the browser to the media management page.
@@ -391,13 +392,13 @@ The stage page uses a websocket-first model:
 - `queue_items` is active queue state only:
   - `media_id` FK (`ON DELETE RESTRICT`)
   - sparse `position` ordering (`1000` step)
-  - runtime queue state (`requested_karaoke`, `status`, `error`)
+  - runtime queue state (`requested_karaoke`, `requested_lyrics_alignment`, `status`, `error`)
   - rows are removed when songs are skipped/completed (active queue persists across crashes)
 
 ## Durable processing tasks
 
 - `processing_tasks` is the durable processing/restart model:
-  - `task_type` (`queue_prepare`, `media_karaoke`)
+  - `task_type` (`queue_prepare`, `media_karaoke`, `media_karaoke_align`, `media_lyrics_align`)
   - `source_kind` (`youtube`, `library_media`, `uploaded_media`)
   - target linkage to queue and/or media rows
   - coarse durable `status` (`pending`, `downloading`, `processing`, `done`, `failed`)
@@ -406,6 +407,9 @@ The stage page uses a websocket-first model:
   - terminal failure summaries (`last_error_summary`, `last_error_detail`)
 - `queue_items.status` remains the playback-facing queue state for compatibility with stage/queue logic and is mirrored from queue-backed processing tasks.
 - Existing media karaoke processing also uses `processing_tasks`, but it does not create queue rows unless the item is separately added to queue.
+- Media lyrics alignment uses the same durable task/progress infrastructure. `media_karaoke_align`
+  runs vocal separation plus WhisperX alignment when guide vocals are missing; `media_lyrics_align`
+  reuses an existing `vocals_path` and replaces `lyrics_path` with the aligned JSON sidecar.
 
 ## Live task progress architecture
 
