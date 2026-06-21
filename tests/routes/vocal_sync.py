@@ -36,6 +36,8 @@ def test_media_vocals_page_renders_admin_shell(client, tmp_path, monkeypatch):
     assert "/static/media_vocals.js" in response.text
     assert "Song" in response.text
     assert "Artist" in response.text
+    assert 'id="vocal-sync-youtube-selected"' in response.text
+    assert 'id="vocal-sync-prepare-youtube"' in response.text
     assert 'id="vocal-sync-upload-progress"' in response.text
     assert 'type="submit" aria-label="Prepare Upload"' in response.text
 

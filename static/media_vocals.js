@@ -15,6 +15,12 @@
     const searchClearBtn = document.getElementById("vocal-sync-search-clear");
     const searchBtn = document.getElementById("vocal-sync-search-btn");
     const searchResults = document.getElementById("vocal-sync-search-results");
+    const youtubeSelected = document.getElementById("vocal-sync-youtube-selected");
+    const youtubeHint = document.getElementById("vocal-sync-youtube-hint");
+    const youtubePrepareBtn = document.getElementById("vocal-sync-prepare-youtube");
+    const youtubePrepareBtnLabel = document.getElementById("vocal-sync-prepare-youtube-label");
+    const youtubeProgress = document.getElementById("vocal-sync-youtube-progress");
+    const youtubeProgressStatus = document.getElementById("vocal-sync-youtube-progress-status");
     const uploadForm = document.getElementById("vocal-sync-upload-form");
     const uploadFile = document.getElementById("vocal-sync-upload-file");
     const uploadProgress = document.getElementById("vocal-sync-upload-progress");
@@ -28,8 +34,13 @@
     const previewStop = document.getElementById("vocal-sync-preview-stop");
     const commitBtn = document.getElementById("vocal-sync-commit");
 
+    const OFFICIAL_MV_HINT_RE = /\b(official\s*mv|official\s*music\s*video|official\s*video|mv|music\s*video)\b/i;
+
     let activeSession = null;
     let vocalsTimer = null;
+    let youtubeBusy = false;
+    let youtubeSearchBusy = false;
+    let selectedYoutubeSource = null;
 
     function setMessage(text, isError = false) {
         if (!message) return;
@@ -44,10 +55,109 @@
         }
     }
 
+    function updateSearchControls() {
+        const hasQuery = Boolean(searchInput?.value.trim());
+        const isLocked = youtubeBusy || youtubeSearchBusy;
+        if (searchInput) {
+            searchInput.disabled = isLocked;
+        }
+        if (searchBtn) {
+            searchBtn.disabled = isLocked || !hasQuery;
+        }
+        if (searchClearBtn) {
+            searchClearBtn.disabled = isLocked || !hasQuery;
+        }
+    }
+
+    function syncYoutubeResultButtons() {
+        if (!searchResults) return;
+        searchResults.querySelectorAll("[data-youtube-id]").forEach((button) => {
+            const isSelected = Boolean(selectedYoutubeSource && button.dataset.youtubeId === selectedYoutubeSource.videoId);
+            button.disabled = youtubeBusy || youtubeSearchBusy;
+            button.classList.toggle("border-primary/60", isSelected);
+            button.classList.toggle("bg-primary/10", isSelected);
+            button.classList.toggle("ring-1", isSelected);
+            button.classList.toggle("ring-primary/40", isSelected);
+            button.classList.toggle("hover:border-primary/40", !youtubeBusy);
+            button.classList.toggle("hover:bg-surface-container-highest/70", !youtubeBusy);
+            button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+            const actionLabel = button.querySelector("[data-youtube-action]");
+            const actionIcon = button.querySelector("[data-youtube-action-icon]");
+            if (actionLabel) {
+                actionLabel.textContent = t(isSelected ? "vocalsync.selected_source_short" : "vocalsync.select_source_short");
+            }
+            if (actionIcon) {
+                actionIcon.textContent = isSelected ? "check" : "open_in_new";
+            }
+        });
+    }
+
+    function bindYoutubeResultButtons() {
+        if (!searchResults) return;
+        searchResults.querySelectorAll("[data-youtube-id]").forEach((button) => {
+            button.onclick = () => {
+                if (youtubeBusy || youtubeSearchBusy) return;
+                setYoutubeSelection({
+                    videoId: button.dataset.youtubeId,
+                    title: button.dataset.youtubeTitle,
+                    channel: button.dataset.youtubeChannel,
+                    thumbnail: button.dataset.youtubeThumbnail,
+                });
+            };
+        });
+    }
+
+    function setYoutubeSelection(source) {
+        selectedYoutubeSource = source ? {
+            videoId: String(source.videoId || ""),
+            title: String(source.title || ""),
+            channel: String(source.channel || ""),
+            thumbnail: String(source.thumbnail || ""),
+        } : null;
+        updateYoutubeSelectionUi();
+    }
+
+    function updateYoutubeSelectionUi() {
+        const hasSelection = Boolean(selectedYoutubeSource);
+        if (youtubeSelected) {
+            youtubeSelected.textContent = hasSelection
+                ? `${selectedYoutubeSource.title}${selectedYoutubeSource.channel ? ` · ${selectedYoutubeSource.channel}` : ""}`
+                : t("vocalsync.selected_source_empty");
+            youtubeSelected.title = hasSelection
+                ? `${selectedYoutubeSource.title}${selectedYoutubeSource.channel ? ` · ${selectedYoutubeSource.channel}` : ""}`
+                : "";
+                if (hasSelection && OFFICIAL_MV_HINT_RE.test(selectedYoutubeSource.title)) {
+                    youtubeHint.textContent = t("vocalsync.official_mv_hint");
+                } else {
+                    youtubeHint.textContent = "";
+                }
+        }
+        if (youtubePrepareBtn) {
+            youtubePrepareBtn.disabled = youtubeBusy || youtubeSearchBusy || !hasSelection || hasVocals;
+        }
+        if (youtubePrepareBtnLabel) {
+            youtubePrepareBtnLabel.textContent = youtubeBusy
+                ? t("vocalsync.preparing")
+                : t("vocalsync.prepare_source");
+        }
+        if (youtubeProgress) {
+            youtubeProgress.classList.toggle("hidden", !youtubeBusy);
+        }
+        if (youtubeProgressStatus) {
+            youtubeProgressStatus.textContent = youtubeBusy
+                ? t("vocalsync.preparing")
+                : t("vocalsync.prepare_source");
+        }
+        syncYoutubeResultButtons();
+    }
+
     function setBusy(isBusy) {
+        youtubeBusy = Boolean(isBusy);
         [searchBtn, searchClearBtn, uploadSubmitBtn, commitBtn, previewPlay].forEach((el) => {
             if (el) el.disabled = Boolean(isBusy) || (el === commitBtn && !activeSession) || (el === previewPlay && !activeSession);
         });
+        updateSearchControls();
+        updateYoutubeSelectionUi();
     }
 
     function updateUploadProgress(percent, statusKey) {
@@ -106,6 +216,14 @@
         updateOffsetDetail();
     }
 
+    function clearYoutubeSelection({ keepSearch = true } = {}) {
+        selectedYoutubeSource = null;
+        if (!keepSearch && searchResults) {
+            searchResults.innerHTML = "";
+        }
+        updateYoutubeSelectionUi();
+    }
+
     async function parseJsonResponse(response) {
         let payload = {};
         try {
@@ -128,6 +246,7 @@
             const payload = await parseJsonResponse(response);
             if (payload.title && payload.artist) {
                 searchInput.value = `${payload.artist} - ${payload.title}`;
+                updateSearchControls();
             }
         } catch (error) {
             console.error("Failed to auto-infer search query:", error instanceof Error ? error.message : error);
@@ -137,7 +256,9 @@
     async function searchYoutube() {
         const query = searchInput.value.trim();
         if (!query) return;
-        searchBtn.disabled = true;
+        youtubeSearchBusy = true;
+        updateSearchControls();
+        clearYoutubeSelection({ keepSearch: true });
         searchResults.innerHTML = `<p class="rounded-xl bg-surface-container-high/50 p-3 text-sm text-on-surface-variant">${escapeHtml(t("lyrics.searching"))}</p>`;
         try {
             const response = await fetch(appUrl(`/api/search/?q=${encodeURIComponent(query)}&source=youtube&concurrent=false`));
@@ -149,26 +270,41 @@
             searchResults.innerHTML = results.map((result) => {
                 const videoId = escapeHtml(result.video_id || "");
                 return `
-                    <button type="button" data-youtube-id="${videoId}" class="vocal-sync-youtube-result flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-white/10 bg-surface-container-high/50 p-2.5 text-left transition hover:border-primary/40 hover:bg-surface-container-highest/70">
+                    <button
+                        type="button"
+                        data-youtube-id="${videoId}"
+                        data-youtube-title="${escapeHtml(result.title || "")}"
+                        data-youtube-channel="${escapeHtml(result.channel || "")}"
+                        data-youtube-thumbnail="${escapeHtml(result.thumbnail || "")}"
+                        class="vocal-sync-youtube-result flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-white/10 bg-surface-container-high/50 p-2.5 text-left transition hover:border-primary/40 hover:bg-surface-container-highest/70"
+                    >
                         <img src="${escapeHtml(result.thumbnail || "")}" alt="" class="h-12 w-20 rounded-lg object-cover">
                         <span class="min-w-0 flex-1 overflow-hidden">
                             <span class="block truncate text-xs font-bold text-on-surface">${escapeHtml(result.title || t("common.unknown"))}</span>
                             <span class="block truncate text-[10px] text-on-surface-variant">${escapeHtml(result.channel || "")}</span>
                         </span>
-                        <span class="material-symbols-outlined text-[18px] text-primary">graphic_eq</span>
+                        <span class="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-surface-container-highest/70 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
+                            <span data-youtube-action-icon class="material-symbols-outlined text-[14px]">open_in_new</span>
+                            <span data-youtube-action>${escapeHtml(t("vocalsync.select_source_short"))}</span>
+                        </span>
                     </button>
                 `;
             }).join("");
+            syncYoutubeResultButtons();
+            bindYoutubeResultButtons();
         } catch (error) {
             searchResults.innerHTML = "";
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
         } finally {
-            searchBtn.disabled = false;
+            youtubeSearchBusy = false;
+            updateSearchControls();
+            syncYoutubeResultButtons();
         }
     }
 
-    async function prepareYoutube(youtubeId) {
-        if (!youtubeId || hasVocals) return;
+    async function prepareYoutube() {
+        const youtubeId = selectedYoutubeSource?.videoId;
+        if (!youtubeId || hasVocals || youtubeBusy) return;
         stopPreview();
         setBusy(true);
         setState("vocalsync.preparing");
@@ -312,6 +448,8 @@
     searchClearBtn?.addEventListener("click", () => {
         searchInput.value = "";
         searchResults.innerHTML = "";
+        clearYoutubeSelection({ keepSearch: true });
+        updateSearchControls();
         setMessage("");
     });
     searchInput?.addEventListener("keydown", (event) => {
@@ -320,11 +458,17 @@
             searchYoutube();
         }
     });
-    searchResults?.addEventListener("click", (event) => {
-        const button = event.target.closest("[data-youtube-id]");
-        if (button) {
-            prepareYoutube(button.dataset.youtubeId);
+    searchInput?.addEventListener("input", () => {
+        if (!youtubeBusy) {
+            clearYoutubeSelection({ keepSearch: true });
         }
+        updateSearchControls();
+    });
+    youtubePrepareBtn?.addEventListener("click", () => {
+        prepareYoutube().catch((error) => {
+            setState("common.failed");
+            setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
+        });
     });
     uploadForm?.addEventListener("submit", prepareUpload);
     offsetInput?.addEventListener("input", updateOffsetDetail);
@@ -350,8 +494,8 @@
         setBusy(true);
     } else {
         resetUploadProgress();
-        Promise.race([autoInferSearchBox(), 
-            new Promise((resolve) => window.setTimeout(resolve, 1500))
-        ])
+        Promise.race([autoInferSearchBox(), new Promise((resolve) => window.setTimeout(resolve, 1500))]);
+        updateSearchControls();
+        updateYoutubeSelectionUi();
     }
 })();

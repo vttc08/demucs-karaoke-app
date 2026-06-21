@@ -7,12 +7,14 @@ replacing the primary media file.
 
 1. Open **Add Vocals** from the media edit modal.
 2. Choose an unseparated vocal source from YouTube search or upload an audio/video file.
-3. The main app downloads or stores the source under cache and sends it to the remote Demucs service
+3. For YouTube, click a result to select it first, then tap **Prepare source** to start the download,
+   remote Demucs separation, and offset estimation.
+4. The main app downloads or stores the source under cache and sends it to the remote Demucs service
    for two-stem separation.
-4. The main app prepares mono WAV comparison files with ffmpeg, estimates a constant offset locally,
+5. The main app prepares mono WAV comparison files with ffmpeg, estimates a constant offset locally,
    and stores a review session under `cache/vocal_sync/`.
-5. The browser previews the existing karaoke media and prepared vocal stem with the estimated offset.
-6. The admin can adjust the offset and commit a new `/media/<stem>.vocals.wav` sidecar.
+6. The browser previews the existing karaoke media and prepared vocal stem with the estimated offset.
+7. The admin can adjust the offset and commit a new `/media/<stem>.vocals.wav` sidecar.
 
 Review sessions are cache-backed manifests, not durable processing tasks. They survive page refresh
 while the cache files remain, but they are not restored as restartable jobs after app restarts.

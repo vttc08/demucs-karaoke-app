@@ -112,13 +112,35 @@
                 <div class="flex min-w-0 gap-2">
                     <div class="relative min-w-0 flex-1">
                         <input id="vocal-sync-search-input" type="search" class="h-10 w-full min-w-0 rounded-xl border-none bg-surface-container-highest/60 px-3 pr-20 text-sm text-on-surface focus:ring-2 focus:ring-primary/50" placeholder="{{ t('vocalsync.search_placeholder') }}">
-                        <button id="vocal-sync-search-clear" type="button" aria-label="Clear search" title="Clear search" class="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant transition hover:bg-white/10 hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40">
+                        <button id="vocal-sync-search-clear" type="button" aria-label="{{ t('common.clear') }}" title="{{ t('common.clear') }}" class="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant transition hover:bg-white/10 hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40">
                             <span class="material-symbols-outlined text-[18px]">close</span>
                         </button>
                     </div>
                     <button id="vocal-sync-search-btn" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-on-primary">
                         <span class="material-symbols-outlined text-[18px]">search</span>
                     </button>
+                </div>
+                <div class="mt-3 rounded-xl border border-white/10 bg-surface-container-high/35 p-3">
+                    <div class="flex min-w-0 items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="text-[10px] font-black uppercase tracking-[0.18em] text-on-surface-variant">{{ t('vocalsync.selected_source') }}</p>
+                            <p id="vocal-sync-youtube-selected" class="truncate text-sm font-semibold text-on-surface-variant">{{ t('vocalsync.selected_source_empty') }}</p>
+                        </div>
+                        <button id="vocal-sync-prepare-youtube" type="button" disabled class="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-[10px] font-black uppercase tracking-widest text-on-primary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50">
+                            <span class="material-symbols-outlined text-[16px]">download</span>
+                            <span id="vocal-sync-prepare-youtube-label">{{ t('vocalsync.prepare_source') }}</span>
+                        </button>
+                    </div>
+                    <p id="vocal-sync-youtube-hint" class="mt-2 text-[11px] text-tertiary leading-relaxed text-on-surface-variant"></p>
+                    <div id="vocal-sync-youtube-progress" class="mt-3 hidden rounded-xl border border-primary/20 bg-primary/10 p-3">
+                        <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary">
+                            <span class="material-symbols-outlined animate-spin text-[16px]">autorenew</span>
+                            <span id="vocal-sync-youtube-progress-status">{{ t('vocalsync.preparing') }}</span>
+                        </div>
+                        <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+                            <div class="h-full w-2/5 rounded-full bg-primary/80 animate-pulse"></div>
+                        </div>
+                    </div>
                 </div>
                 <div id="vocal-sync-search-results" class="mt-3 grid min-w-0 gap-2"></div>
             </div>
