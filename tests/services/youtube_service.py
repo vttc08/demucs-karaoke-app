@@ -192,6 +192,27 @@ def test_youtube_service_search_detects_raw_youtube_id(mock_ytdlp):
     assert called_url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     mock_instance.search.assert_not_called()
 
+def test_youtube_service_search_can_disable_concurrent_karaoke_search(mock_ytdlp):
+    """Search should fall back to a single plain YouTube query when concurrency is disabled."""
+    mock_instance = Mock()
+    mock_instance.search.return_value = [
+        {
+            "video_id": "plain123",
+            "title": "Plain Result",
+            "channel": "Channel",
+            "duration": "3:00",
+            "thumbnail": None,
+        }
+    ]
+    mock_ytdlp.return_value = mock_instance
+
+    service = YouTubeService()
+    results = service.search("test query", concurrent=False)
+
+    assert len(results) == 1
+    assert results[0].video_id == "plain123"
+    mock_instance.search.assert_called_once_with("test query", 10)
+
 def test_youtube_service_download_video_with_audio(mock_ytdlp):
     """Test progressive video+audio download delegation."""
     mock_instance = Mock()

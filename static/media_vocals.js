@@ -1,4 +1,5 @@
 (function () {
+    const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
     const t = (key, params = {}) => window.KaraokeI18n?.t(key, params) || key;
     const root = document.getElementById("vocal-sync-page");
     if (!root) return;
@@ -100,7 +101,7 @@
         searchBtn.disabled = true;
         searchResults.innerHTML = `<p class="rounded-xl bg-surface-container-high/50 p-3 text-sm text-on-surface-variant">${escapeHtml(t("lyrics.searching"))}</p>`;
         try {
-            const response = await fetch(appUrl(`/api/search/?q=${encodeURIComponent(query)}&source=youtube`));
+            const response = await fetch(appUrl(`/api/search/?q=${encodeURIComponent(query)}&source=youtube&concurrent=false`));
             const results = await parseJsonResponse(response);
             if (!Array.isArray(results) || results.length === 0) {
                 searchResults.innerHTML = `<p class="rounded-xl bg-surface-container-high/50 p-3 text-sm text-on-surface-variant">${escapeHtml(t("queue.no_results"))}</p>`;
@@ -109,9 +110,9 @@
             searchResults.innerHTML = results.map((result) => {
                 const videoId = escapeHtml(result.video_id || "");
                 return `
-                    <button type="button" data-youtube-id="${videoId}" class="vocal-sync-youtube-result flex items-center gap-3 rounded-xl border border-white/10 bg-surface-container-high/50 p-3 text-left transition hover:border-primary/40 hover:bg-surface-container-highest/70">
+                    <button type="button" data-youtube-id="${videoId}" class="vocal-sync-youtube-result flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-white/10 bg-surface-container-high/50 p-3 text-left transition hover:border-primary/40 hover:bg-surface-container-highest/70">
                         <img src="${escapeHtml(result.thumbnail || "")}" alt="" class="h-14 w-20 rounded-lg object-cover">
-                        <span class="min-w-0 flex-1">
+                        <span class="min-w-0 flex-1 overflow-hidden">
                             <span class="block truncate text-sm font-bold text-on-surface">${escapeHtml(result.title || t("common.unknown"))}</span>
                             <span class="block truncate text-xs text-on-surface-variant">${escapeHtml(result.channel || "")}</span>
                         </span>
