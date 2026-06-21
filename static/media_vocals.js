@@ -34,9 +34,12 @@
     const commitBtn = document.getElementById("vocal-sync-commit");
 
     const OFFICIAL_MV_HINT_RE = /\b(official\s*mv|official\s*music\s*video|official\s*video|mv|music\s*video)\b/i;
+    const AUTO_PREVIEW_DELAY_MS = 500;
 
     let activeSession = null;
     let vocalsTimer = null;
+    let previewRestartTimer = null;
+    let previewGeneration = 0;
     let youtubeBusy = false;
     let youtubeSearchBusy = false;
     let selectedYoutubeSource = null;
@@ -70,6 +73,13 @@
         if (uploadTaskStream) {
             uploadTaskStream.close();
             uploadTaskStream = null;
+        }
+    }
+
+    function cancelScheduledPreviewRestart() {
+        if (previewRestartTimer) {
+            window.clearTimeout(previewRestartTimer);
+            previewRestartTimer = null;
         }
     }
 
@@ -784,7 +794,11 @@
         }
     }
 
-    function stopPreview() {
+    function stopPreview({ cancelScheduled = true } = {}) {
+        previewGeneration += 1;
+        if (cancelScheduled) {
+            cancelScheduledPreviewRestart();
+        }
         if (vocalsTimer) {
             window.clearTimeout(vocalsTimer);
             vocalsTimer = null;
@@ -795,17 +809,24 @@
 
     async function playPreview() {
         if (!activeSession) return;
-        stopPreview();
+        stopPreview({ cancelScheduled: false });
+        const previewToken = ++previewGeneration;
         const offset = Number(offsetInput.value || 0);
         const mediaTime = media.currentTime || 0;
         if (offset >= 0) {
             await media.play();
+            if (previewToken !== previewGeneration) {
+                return;
+            }
             if (mediaTime >= offset) {
                 vocals.currentTime = Math.max(0, mediaTime - offset);
                 await vocals.play();
             } else {
                 vocals.currentTime = 0;
                 vocalsTimer = window.setTimeout(() => {
+                    if (previewToken !== previewGeneration) {
+                        return;
+                    }
                     vocals.play().catch(() => {});
                 }, Math.round((offset - mediaTime) * 1000));
             }
@@ -816,6 +837,23 @@
                 vocals.play(),
             ]);
         }
+        if (previewToken !== previewGeneration) {
+            stopPreview({ cancelScheduled: false });
+        }
+    }
+
+    function schedulePreviewRestart() {
+        if (!activeSession || offsetInput?.disabled) {
+            return;
+        }
+        stopPreview({ cancelScheduled: false });
+        cancelScheduledPreviewRestart();
+        previewRestartTimer = window.setTimeout(() => {
+            previewRestartTimer = null;
+            playPreview().catch((error) => {
+                setMessage(error instanceof Error ? error.message : t("vocalsync.preview_failed"), true);
+            });
+        }, AUTO_PREVIEW_DELAY_MS);
     }
 
     async function commitSession() {
@@ -899,21 +937,30 @@
         });
     });
     uploadForm?.addEventListener("submit", prepareUpload);
-    offsetInput?.addEventListener("input", updateOffsetDetail);
+    offsetInput?.addEventListener("input", () => {
+        updateOffsetDetail();
+        schedulePreviewRestart();
+    });
     document.querySelectorAll("[data-offset-step]").forEach((button) => {
         button.addEventListener("click", () => {
             if (offsetInput.disabled) return;
             const next = Number(offsetInput.value || 0) + Number(button.dataset.offsetStep || 0);
             offsetInput.value = formatOffset(next);
             updateOffsetDetail();
+            schedulePreviewRestart();
         });
     });
     previewPlay?.addEventListener("click", () => {
+        cancelScheduledPreviewRestart();
         playPreview().catch((error) => {
             setMessage(error instanceof Error ? error.message : t("vocalsync.preview_failed"), true);
         });
     });
-    previewStop?.addEventListener("click", stopPreview);
+    previewStop?.addEventListener("click", () => stopPreview());
+    media?.addEventListener("seeked", () => {
+        if (!activeSession || offsetInput.disabled) return;
+        schedulePreviewRestart();
+    });
     deleteBtn?.addEventListener("click", deleteReviewSession);
     commitBtn?.addEventListener("click", commitSession);
     window.addEventListener("beforeunload", () => {

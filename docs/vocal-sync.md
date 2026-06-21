@@ -22,6 +22,13 @@ replacing the primary media file.
 8. The admin can adjust the offset and commit a new `/media/<stem>.vocals.wav` sidecar, or delete
    the prepared review to remove all vocal-sync cache artifacts and return the page to idle.
 
+While reviewing, changing the offset value or using the `+/-` controls automatically restarts the
+browser preview after a short 500 ms throttle window. This keeps the comparison responsive without
+spamming rapid media restarts while the admin is still typing or stepping through values.
+
+Changing the karaoke timeline also restarts the preview through the same throttled path, so moving
+to a new position keeps the vocal comparison aligned with the current playback time.
+
 Review sessions are cache-backed manifests and the YouTube prep request itself is now a durable
 processing task. The task survives like other active processing rows, while the prepared review
 session remains cache-backed under `cache/vocal_sync/`. The task-to-session handoff is stored under
