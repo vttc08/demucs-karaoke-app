@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from adapters.ffmpeg import FFmpegAdapter
 from config import settings
-from models import MediaItem
+from models import MediaItem, ProcessingTask, ProcessingTaskStatus
 from services.demucs_client import DemucsClient
 from services.media_naming import build_media_stem
 from services.queue_service import QueueService
@@ -398,6 +398,40 @@ class VocalSyncService:
         payload = cls.read_task_manifest(task_id)
         payload["session_id"] = session_id
         cls.write_task_manifest(task_id, payload)
+
+    def latest_ready_review_for_media(
+        self,
+        db: Session,
+        media_item_id: int,
+        *,
+        task_types: tuple[str, ...],
+        limit: int = 25,
+    ) -> tuple[ProcessingTask, VocalSyncSession] | None:
+        """Return the latest completed vocal-sync task with an existing review session."""
+        tasks = (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_media_item_id == media_item_id,
+                ProcessingTask.target_queue_item_id.is_(None),
+                ProcessingTask.task_type.in_(task_types),
+                ProcessingTask.status == ProcessingTaskStatus.DONE.value,
+            )
+            .order_by(ProcessingTask.updated_at.desc(), ProcessingTask.id.desc())
+            .limit(limit)
+            .all()
+        )
+        for task in tasks:
+            try:
+                manifest = self.read_task_manifest(task.id)
+                session_id = str(manifest.get("session_id") or "").strip()
+                if not session_id:
+                    continue
+                session = self.get_session(session_id)
+            except VocalSyncError:
+                continue
+            if int(session.media_item_id) == int(media_item_id):
+                return task, session
+        return None
 
     @classmethod
     def cleanup_task_source(cls, task_id: int) -> None:

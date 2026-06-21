@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from database import get_db
+from models import MediaItem
 from routes.auth import require_admin_user
 from services.processing_task_service import processing_task_service, task_execution_coordinator
 from services.vocal_sync_service import (
@@ -31,6 +32,89 @@ class VocalSyncCommitRequest(BaseModel):
     offset_seconds: float
 
 
+def _task_payload(task) -> dict:
+    return processing_task_service.to_response(task).model_dump(mode="json")
+
+
+def _ready_review(db: Session, item_id: int):
+    return vocal_sync_service.latest_ready_review_for_media(
+        db,
+        item_id,
+        task_types=processing_task_service.VOCAL_SYNC_PREPARE_TASK_TYPES,
+    )
+
+
+def _raise_prepare_conflict_if_needed(db: Session, item_id: int) -> None:
+    active_task = processing_task_service.get_active_media_vocal_sync_prepare_task(db, item_id)
+    if active_task is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "A vocal sync prepare task is already running for this media item",
+                "status": "preparing",
+                "existing_task_id": active_task.id,
+            },
+        )
+    ready = _ready_review(db, item_id)
+    if ready is not None:
+        task, session = ready
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "A vocal sync review is already ready for this media item",
+                "status": "ready",
+                "existing_task_id": task.id,
+                "existing_session_id": session.session_id,
+            },
+        )
+
+
+@router.get("/status")
+def get_vocal_sync_status(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Return the current durable vocal-sync state for one media item."""
+    media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
+    if media_item is None:
+        raise HTTPException(status_code=404, detail="Media item not found")
+    if media_item.vocals_path and media_item.vocals_path.strip():
+        return {"status": "has_vocals", "task": None, "session": None, "message": None}
+    if media_item.missing:
+        raise HTTPException(status_code=404, detail="Media item file is missing")
+
+    active_task = processing_task_service.get_active_media_vocal_sync_prepare_task(db, item_id)
+    if active_task is not None:
+        return {
+            "status": "preparing",
+            "task": _task_payload(active_task),
+            "session": None,
+            "message": None,
+        }
+
+    ready = _ready_review(db, item_id)
+    if ready is not None:
+        task, session = ready
+        return {
+            "status": "ready",
+            "task": _task_payload(task),
+            "session": session.to_dict(),
+            "message": None,
+        }
+
+    terminal_task = processing_task_service.get_latest_terminal_media_vocal_sync_prepare_task(db, item_id)
+    if terminal_task is not None:
+        return {
+            "status": terminal_task.status,
+            "task": _task_payload(terminal_task),
+            "session": None,
+            "message": terminal_task.last_error_summary,
+        }
+
+    return {"status": "idle", "task": None, "session": None, "message": None}
+
+
 @router.post("/prepare-youtube")
 async def prepare_vocals_from_youtube(
     item_id: int,
@@ -41,6 +125,7 @@ async def prepare_vocals_from_youtube(
     """Download a vocal source from YouTube, separate it, and estimate the offset."""
     try:
         vocal_sync_service.validate_media_item_for_prepare(db, item_id)
+        _raise_prepare_conflict_if_needed(db, item_id)
         task = processing_task_service.create_media_vocal_sync_prepare_task(db, item_id)
         vocal_sync_service.create_youtube_prepare_task_manifest(
             task.id,
@@ -70,6 +155,7 @@ async def prepare_vocals_from_upload(
     """Prepare guide vocals from an uploaded unseparated source file."""
     try:
         vocal_sync_service.validate_media_item_for_prepare(db, item_id)
+        _raise_prepare_conflict_if_needed(db, item_id)
         task = processing_task_service.create_media_vocal_sync_prepare_task(db, item_id, source_kind="upload")
         vocal_sync_service.create_upload_prepare_task_manifest(
             task.id,

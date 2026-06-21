@@ -526,6 +526,7 @@ also needed. Rename and lyrics changes remain saved if the health check fails.
 ```
 POST /api/media/{item_id}/vocals-sync/prepare-youtube
 POST /api/media/{item_id}/vocals-sync/prepare-upload
+GET /api/media/{item_id}/vocals-sync/status
 GET /api/media/{item_id}/vocals-sync/tasks/{task_id}/session
 GET /api/media/{item_id}/vocals-sync/sessions/{session_id}
 POST /api/media/{item_id}/vocals-sync/sessions/{session_id}/commit
@@ -558,6 +559,15 @@ When the task finishes, fetch the prepared review session with:
 ```
 GET /api/media/{item_id}/vocals-sync/tasks/{task_id}/session
 ```
+
+The page can recover after browser refresh by calling:
+```
+GET /api/media/{item_id}/vocals-sync/status
+```
+
+The status response reports one of `idle`, `preparing`, `ready`, `failed`, `canceled`, or
+`has_vocals`, with the matching durable task and prepared review session when available. A ready
+review locks new prepare requests until the user commits the existing review.
 
 Commit accepts the reviewed offset:
 ```json

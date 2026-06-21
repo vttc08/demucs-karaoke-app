@@ -26,6 +26,11 @@ processing task. The task survives like other active processing rows, while the 
 session remains cache-backed under `cache/vocal_sync/`. The task-to-session handoff is stored under
 `cache/vocal_sync_tasks/`.
 
+On page load, `/media-vocals` calls `/api/media/{item_id}/vocals-sync/status` before enabling source
+preparation. This restores an active prepare task after browser refresh by reconnecting to its task
+stream, and restores a completed review session without rerunning download or Demucs. Once a review
+session is ready, new source preparation is locked until the admin commits the restored review.
+
 ## Offset Semantics
 
 The estimator compares:

@@ -3,6 +3,7 @@ from .common import *
 import importlib
 import sys
 import wave
+from io import BytesIO
 
 from services import vocal_sync_service as vocal_sync_module
 from services.vocal_sync_service import VocalSyncService
@@ -98,6 +99,104 @@ def test_commit_session_installs_vocals_sidecar(db_session, tmp_path, monkeypatc
     assert media.vocals_path == "/media/song.vocals.wav"
     assert (media_root / "song.vocals.wav").read_bytes() == b"aligned vocals"
     assert not session_dir.exists()
+
+
+def test_active_vocal_sync_prepare_task_spans_source_kinds(db_session):
+    media = MediaItem(title="Song", artist="Artist", media_path="/media/song.mp4", missing=False)
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+    youtube_task = ProcessingTask(
+        task_type="media_vocal_sync_prepare_youtube",
+        source_kind="youtube",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PROCESSING.value,
+        stage="download",
+    )
+    upload_task = ProcessingTask(
+        task_type="media_vocal_sync_prepare_upload",
+        source_kind="upload",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.FAILED.value,
+        stage="failed",
+    )
+    db_session.add_all([youtube_task, upload_task])
+    db_session.commit()
+
+    active = processing_task_service.get_active_media_vocal_sync_prepare_task(db_session, media.id)
+
+    assert active.id == youtube_task.id
+
+
+def test_latest_ready_review_skips_stale_sessions(db_session, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "cache_path", tmp_path)
+    media = MediaItem(title="Song", artist="Artist", media_path="/media/song.mp4", missing=False)
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+    ready_task = ProcessingTask(
+        task_type="media_vocal_sync_prepare_upload",
+        source_kind="upload",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.DONE.value,
+        stage="ready",
+    )
+    stale_task = ProcessingTask(
+        task_type="media_vocal_sync_prepare_youtube",
+        source_kind="youtube",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.DONE.value,
+        stage="ready",
+    )
+    db_session.add_all([ready_task, stale_task])
+    db_session.commit()
+    db_session.refresh(stale_task)
+    db_session.refresh(ready_task)
+
+    stale_session_id = "33333333-3333-3333-3333-333333333333"
+    ready_session_id = "44444444-4444-4444-4444-444444444444"
+    VocalSyncService.create_youtube_prepare_task_manifest(
+        stale_task.id,
+        media_item_id=media.id,
+        youtube_id="abcdefghijk",
+    )
+    VocalSyncService.update_task_manifest_session(stale_task.id, stale_session_id)
+    VocalSyncService.create_upload_prepare_task_manifest(
+        ready_task.id,
+        media_item_id=media.id,
+        source_filename="source.mp3",
+        source_file=BytesIO(b"audio"),
+    )
+    VocalSyncService.update_task_manifest_session(ready_task.id, ready_session_id)
+    ready_dir = tmp_path / "vocal_sync" / ready_session_id
+    ready_dir.mkdir(parents=True)
+    vocals_file = ready_dir / "review_vocals.wav"
+    vocals_file.write_bytes(b"vocals")
+    VocalSyncService._write_manifest(
+        ready_session_id,
+        {
+            "session_id": ready_session_id,
+            "media_item_id": media.id,
+            "media_url": "/media/song.mp4",
+            "vocals_path": str(vocals_file),
+            "estimated_offset_seconds": 0.5,
+            "method": "scipy_cross_correlation",
+            "source_kind": "upload",
+            "title": "Song",
+            "artist": "Artist",
+        },
+    )
+
+    result = VocalSyncService().latest_ready_review_for_media(
+        db_session,
+        media.id,
+        task_types=processing_task_service.VOCAL_SYNC_PREPARE_TASK_TYPES,
+    )
+
+    assert result is not None
+    task, session = result
+    assert task.id == ready_task.id
+    assert session.session_id == ready_session_id
 
 
 def test_render_aligned_vocals_uses_positive_delay(tmp_path, monkeypatch):

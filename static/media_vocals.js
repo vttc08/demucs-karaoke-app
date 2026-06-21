@@ -43,6 +43,7 @@
     let youtubeTaskStream = null;
     let activeUploadTaskId = null;
     let uploadTaskStream = null;
+    let sourcePrepLocked = false;
 
     function setMessage(text, isError = false) {
         if (!message) return;
@@ -133,7 +134,7 @@
 
     function updateSearchControls() {
         const hasQuery = Boolean(searchInput?.value.trim());
-        const isLocked = youtubeBusy || youtubeSearchBusy;
+        const isLocked = youtubeBusy || youtubeSearchBusy || sourcePrepLocked;
         if (searchInput) {
             searchInput.disabled = isLocked;
         }
@@ -149,7 +150,7 @@
         if (!searchResults) return;
         searchResults.querySelectorAll("[data-youtube-id]").forEach((button) => {
             const isSelected = Boolean(selectedYoutubeSource && button.dataset.youtubeId === selectedYoutubeSource.videoId);
-            button.disabled = youtubeBusy || youtubeSearchBusy;
+            button.disabled = youtubeBusy || youtubeSearchBusy || sourcePrepLocked;
             button.classList.toggle("border-primary/60", isSelected);
             button.classList.toggle("bg-primary/10", isSelected);
             button.classList.toggle("ring-1", isSelected);
@@ -172,7 +173,7 @@
         if (!searchResults) return;
         searchResults.querySelectorAll("[data-youtube-id]").forEach((button) => {
             button.onclick = () => {
-                if (youtubeBusy || youtubeSearchBusy) return;
+                if (youtubeBusy || youtubeSearchBusy || sourcePrepLocked) return;
                 setYoutubeSelection({
                     videoId: button.dataset.youtubeId,
                     title: button.dataset.youtubeTitle,
@@ -209,7 +210,7 @@
                 }
         }
         if (youtubePrepareBtn) {
-            youtubePrepareBtn.disabled = youtubeBusy || youtubeSearchBusy || !hasSelection || hasVocals;
+            youtubePrepareBtn.disabled = youtubeBusy || youtubeSearchBusy || sourcePrepLocked || !hasSelection || hasVocals;
         }
         if (youtubePrepareBtnLabel) {
             youtubePrepareBtnLabel.textContent = youtubeBusy
@@ -232,10 +233,25 @@
     function setBusy(isBusy) {
         youtubeBusy = Boolean(isBusy);
         [searchBtn, searchClearBtn, uploadSubmitBtn, commitBtn, previewPlay].forEach((el) => {
-            if (el) el.disabled = Boolean(isBusy) || (el === commitBtn && !activeSession) || (el === previewPlay && !activeSession);
+            if (el) {
+                el.disabled = Boolean(isBusy)
+                    || (sourcePrepLocked && el !== commitBtn && el !== previewPlay)
+                    || (el === commitBtn && !activeSession)
+                    || (el === previewPlay && !activeSession);
+            }
         });
         updateSearchControls();
+        updateUploadControls();
         updateYoutubeSelectionUi();
+    }
+
+    function updateUploadControls() {
+        if (uploadSubmitBtn) {
+            uploadSubmitBtn.disabled = youtubeBusy || sourcePrepLocked || hasVocals;
+        }
+        if (uploadFile) {
+            uploadFile.disabled = youtubeBusy || sourcePrepLocked || hasVocals;
+        }
     }
 
     function updateUploadTaskProgress(payload) {
@@ -279,6 +295,7 @@
 
     function applySession(session) {
         activeSession = session;
+        sourcePrepLocked = true;
         vocals.src = appUrl(session.vocals_url);
         offsetInput.value = formatOffset(session.estimated_offset_seconds);
         offsetInput.disabled = false;
@@ -288,6 +305,9 @@
         setState("vocalsync.ready");
         setMessage(t("vocalsync.prepared", { offset: formatOffset(session.estimated_offset_seconds) }));
         updateOffsetDetail();
+        updateSearchControls();
+        updateUploadControls();
+        updateYoutubeSelectionUi();
     }
 
     function clearYoutubeSelection({ keepSearch = true } = {}) {
@@ -306,9 +326,98 @@
             payload = {};
         }
         if (!response.ok) {
-            throw new Error(payload.detail || t("vocalsync.request_failed"));
+            const detail = payload.detail;
+            const message = typeof detail === "string"
+                ? detail
+                : (detail?.message || t("vocalsync.request_failed"));
+            const error = new Error(message);
+            error.detail = detail;
+            throw error;
         }
         return payload;
+    }
+
+    function statusFallbackPayload(task) {
+        const live = task?.live || {};
+        const stage = String(live.stage || task?.stage || "");
+        let fallbackKey = "vocalsync.preparing";
+        if (stage === "download") {
+            fallbackKey = "task.downloading_audio";
+        } else if (stage === "demucs") {
+            fallbackKey = "task.separating_vocals";
+        } else if (stage === "finalize") {
+            fallbackKey = "task.finalizing_vocal_sync";
+        } else if (task?.status === "pending") {
+            fallbackKey = "task.starting";
+        }
+        return {
+            status: task?.status,
+            stage,
+            progress_percent: live.progress_percent,
+            progress_label: live.progress_label,
+            progress_label_key: live.progress_label_key || fallbackKey,
+            progress_label_args: live.progress_label_args,
+            progress_step_index: live.progress_step_index,
+            progress_step_total: live.progress_step_total,
+        };
+    }
+
+    function restoreTaskProgress(task) {
+        const payload = statusFallbackPayload(task);
+        renderSharedProgress({
+            visible: true,
+            statusText: formatTaskLabel(payload),
+            percent: Number.isFinite(Number(payload.progress_percent)) ? Number(payload.progress_percent) : 0,
+            indeterminate: payload.stage === "finalize" || !Number.isFinite(Number(payload.progress_percent)),
+        });
+    }
+
+    async function restoreVocalSyncStatus() {
+        const response = await fetch(appUrl(`/api/media/${mediaId}/vocals-sync/status`));
+        const payload = await parseJsonResponse(response);
+        const status = String(payload.status || "idle");
+        if (status === "has_vocals") {
+            sourcePrepLocked = true;
+            setState("karaoke.already_multi_track");
+            setMessage(t("vocalsync.already_has_vocals"), true);
+            setBusy(true);
+            return;
+        }
+        if (status === "ready" && payload.session) {
+            resetSharedProgress();
+            applySession(payload.session);
+            setMessage(t("vocalsync.review_restored"));
+            return;
+        }
+        if (status === "preparing" && payload.task) {
+            const taskId = Number(payload.task.id);
+            if (!Number.isFinite(taskId) || taskId <= 0) {
+                return;
+            }
+            stopPreview();
+            sourcePrepLocked = true;
+            setBusy(true);
+            setState("vocalsync.preparing");
+            setMessage(t("vocalsync.task_restored"));
+            restoreTaskProgress(payload.task);
+            if (payload.task.source_kind === "upload") {
+                activeUploadTaskId = taskId;
+                await followUploadPrepareTask(taskId);
+            } else {
+                activeYoutubeTaskId = taskId;
+                await followYoutubePrepareTask(taskId);
+            }
+            return;
+        }
+        if (status === "failed" || status === "canceled") {
+            sourcePrepLocked = false;
+            resetSharedProgress();
+            setState(status === "canceled" ? "task.canceled" : "common.failed");
+            setMessage(payload.message || t(status === "canceled" ? "vocalsync.previous_canceled" : "vocalsync.previous_failed"), status !== "canceled");
+            return;
+        }
+        sourcePrepLocked = false;
+        resetSharedProgress();
     }
 
     async function autoInferSearchBox() {
@@ -401,6 +510,12 @@
             });
             await followYoutubePrepareTask(taskId);
         } catch (error) {
+            if (error?.detail?.status === "preparing" || error?.detail?.status === "ready") {
+                await restoreVocalSyncStatus();
+                setBusy(false);
+                return;
+            }
+            sourcePrepLocked = false;
             setState("common.failed");
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
             resetSharedProgress();
@@ -421,6 +536,13 @@
             resetSharedProgress();
             setBusy(false);
         } catch (error) {
+            if (error?.detail?.status === "preparing" || error?.detail?.status === "ready") {
+                await restoreVocalSyncStatus();
+                setBusy(false);
+                updateUploadControls();
+                return;
+            }
+            sourcePrepLocked = false;
             setState("common.failed");
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
             resetSharedProgress();
@@ -435,6 +557,7 @@
             resetSharedProgress();
             setBusy(false);
         } catch (error) {
+            sourcePrepLocked = false;
             setState("common.failed");
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
             resetSharedProgress();
@@ -472,6 +595,7 @@
                 if (payload?.status === "failed" || payload?.status === "canceled") {
                     settled = true;
                     closeYoutubeTaskStream();
+                    sourcePrepLocked = false;
                     resetSharedProgress();
                     setBusy(false);
                     const failureMessage = String(payload?.message || payload?.progress_label || t("vocalsync.request_failed"));
@@ -525,6 +649,7 @@
                 if (payload?.status === "failed" || payload?.status === "canceled") {
                     settled = true;
                     closeUploadTaskStream();
+                    sourcePrepLocked = false;
                     resetSharedProgress();
                     setBusy(false);
                     const failureMessage = String(payload?.message || payload?.progress_label || t("vocalsync.request_failed"));
@@ -620,6 +745,7 @@
             });
             await followUploadPrepareTask(taskId);
         } catch (error) {
+            sourcePrepLocked = false;
             setState("common.failed");
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
             renderSharedProgress({
@@ -629,6 +755,7 @@
             });
         } finally {
             setBusy(false);
+            updateUploadControls();
         }
     }
 
@@ -739,14 +866,29 @@
         closeUploadTaskStream();
     });
 
+    async function initializePage() {
+        try {
+            await restoreVocalSyncStatus();
+        } catch (error) {
+            sourcePrepLocked = false;
+            resetSharedProgress();
+            setState("common.failed");
+            setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
+        }
+        updateSearchControls();
+        updateUploadControls();
+        updateYoutubeSelectionUi();
+        if (!sourcePrepLocked && !activeSession) {
+            Promise.race([autoInferSearchBox(), new Promise((resolve) => window.setTimeout(resolve, 1500))]);
+        }
+    }
+
     if (hasVocals) {
         setState("karaoke.already_multi_track");
         setMessage(t("vocalsync.already_has_vocals"), true);
+        sourcePrepLocked = true;
         setBusy(true);
     } else {
-        resetSharedProgress();
-        Promise.race([autoInferSearchBox(), new Promise((resolve) => window.setTimeout(resolve, 1500))]);
-        updateSearchControls();
-        updateYoutubeSelectionUi();
+        initializePage();
     }
 })();
