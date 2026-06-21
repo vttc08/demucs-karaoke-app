@@ -85,14 +85,21 @@ class ProcessingTaskService:
         """Return an existing active media lyrics alignment task or create one."""
         return self._get_or_create_media_task(db, media_item_id, task_type="media_lyrics_align")
 
-    def create_media_vocal_sync_prepare_task(self, db: Session, media_item_id: int) -> ProcessingTask:
-        """Create one active vocal-sync YouTube prepare task for a media item."""
+    def create_media_vocal_sync_prepare_task(
+        self,
+        db: Session,
+        media_item_id: int,
+        *,
+        source_kind: str = "youtube",
+    ) -> ProcessingTask:
+        """Create one active vocal-sync prepare task for a media item/source kind."""
+        task_type = f"media_vocal_sync_prepare_{source_kind}"
         active = (
             db.query(ProcessingTask)
             .filter(
                 ProcessingTask.target_media_item_id == media_item_id,
                 ProcessingTask.target_queue_item_id.is_(None),
-                ProcessingTask.task_type == "media_vocal_sync_prepare_youtube",
+                ProcessingTask.task_type == task_type,
                 ProcessingTask.status.in_(self.ACTIVE_STATUSES),
             )
             .order_by(ProcessingTask.id.desc())
@@ -105,8 +112,8 @@ class ProcessingTaskService:
         if media_item is None:
             raise ValueError(f"Media item not found: {media_item_id}")
         task = ProcessingTask(
-            task_type="media_vocal_sync_prepare_youtube",
-            source_kind="youtube",
+            task_type=task_type,
+            source_kind=source_kind,
             target_media_item_id=media_item_id,
             status=ProcessingTaskStatus.PENDING.value,
             stage="queued",

@@ -8,11 +8,13 @@ replacing the primary media file.
 1. Open **Add Vocals** from the media edit modal.
 2. Choose an unseparated vocal source from YouTube search or upload an audio/video file.
 3. For YouTube, click a result to select it first, then tap **Prepare source** to create a durable
-   prep task.
+   prep task. Upload uses the same durable prep-task model after the browser finishes transferring
+   the file.
 4. The main app downloads or stores the source under cache and sends it to the remote Demucs service
    for two-stem separation.
-5. `/media-vocals` subscribes to the task stream and shows real yt-dlp download progress plus remote
-   Demucs progress. The final local sync-estimation step is shown as a generic finalizing phase.
+5. `/media-vocals` subscribes to the task stream and shows real yt-dlp download progress for
+   YouTube sources plus remote Demucs progress for both YouTube and upload sources. The final local
+   sync-estimation step is shown as a generic finalizing phase.
 6. The main app prepares mono WAV comparison files with ffmpeg, estimates a constant offset locally,
    and stores a review session under `cache/vocal_sync/`.
 7. The browser fetches the prepared session by `task_id`, previews the existing karaoke media and

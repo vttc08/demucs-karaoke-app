@@ -149,6 +149,13 @@ class VocalSyncService:
             db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
         )
 
+    @staticmethod
+    def validate_upload_source_filename(source_filename: str) -> str:
+        ext = Path(source_filename or "").suffix.lower()
+        if ext not in _UPLOAD_EXTENSIONS:
+            raise VocalSyncConflictError("Unsupported vocal source upload type")
+        return ext
+
     def _check_demucs_available(self) -> None:
         health = self.runtime_settings_service.get_demucs_health()
         if not health.healthy:
@@ -209,9 +216,7 @@ class VocalSyncService:
         source_file,
     ) -> VocalSyncSession:
         media_item = self.validate_media_item_for_prepare(db, media_item_id)
-        ext = Path(source_filename or "").suffix.lower()
-        if ext not in _UPLOAD_EXTENSIONS:
-            raise VocalSyncConflictError("Unsupported vocal source upload type")
+        ext = self.validate_upload_source_filename(source_filename)
         self._check_demucs_available()
         session_id = str(uuid.uuid4())
         session_dir = self._session_dir(session_id)
@@ -225,6 +230,38 @@ class VocalSyncService:
             session_id=session_id,
             source_kind="upload",
             source_ref=source_filename,
+        )
+
+    async def prepare_from_staged_upload(
+        self,
+        db: Session,
+        media_item_id: int,
+        *,
+        source_filename: str,
+        source_path: Path,
+        cancel_event=None,
+        demucs_progress_callback: Callable[[int, str, dict | None], None] | None = None,
+        demucs_log_callback: Callable[[str, str], None] | None = None,
+        before_finalize: Callable[[], None] | None = None,
+    ) -> VocalSyncSession:
+        media_item = self.validate_media_item_for_prepare(db, media_item_id)
+        self.validate_upload_source_filename(source_filename)
+        self._check_demucs_available()
+        if not source_path.is_file():
+            raise VocalSyncNotFoundError("Uploaded vocal source file is missing")
+        session_id = str(uuid.uuid4())
+        session_dir = self._session_dir(session_id)
+        session_dir.mkdir(parents=True, exist_ok=False)
+        return await self._prepare_from_source(
+            media_item=media_item,
+            source_path=source_path,
+            session_id=session_id,
+            source_kind="upload",
+            source_ref=source_filename,
+            cancel_event=cancel_event,
+            demucs_progress_callback=demucs_progress_callback,
+            demucs_log_callback=demucs_log_callback,
+            before_finalize=before_finalize,
         )
 
     async def _prepare_from_source(
@@ -332,9 +369,53 @@ class VocalSyncService:
         )
 
     @classmethod
+    def create_upload_prepare_task_manifest(
+        cls,
+        task_id: int,
+        *,
+        media_item_id: int,
+        source_filename: str,
+        source_file,
+    ) -> None:
+        ext = cls.validate_upload_source_filename(source_filename)
+        source_path = cls.task_root() / f"{int(task_id)}_source{ext}"
+        with source_path.open("wb") as target:
+            shutil.copyfileobj(source_file, target)
+        cls.write_task_manifest(
+            task_id,
+            {
+                "task_id": int(task_id),
+                "media_item_id": int(media_item_id),
+                "source_kind": "upload",
+                "source_filename": source_filename,
+                "source_path": str(source_path),
+                "session_id": None,
+            },
+        )
+
+    @classmethod
     def update_task_manifest_session(cls, task_id: int, session_id: str) -> None:
         payload = cls.read_task_manifest(task_id)
         payload["session_id"] = session_id
+        cls.write_task_manifest(task_id, payload)
+
+    @classmethod
+    def cleanup_task_source(cls, task_id: int) -> None:
+        try:
+            payload = cls.read_task_manifest(task_id)
+        except VocalSyncError:
+            return
+        source_path_raw = str(payload.get("source_path") or "").strip()
+        if not source_path_raw:
+            return
+        source_path = Path(source_path_raw)
+        try:
+            if source_path.exists():
+                source_path.unlink()
+        except OSError:
+            logger.exception("Failed to remove vocal sync staged upload source path=%s task_id=%s", source_path, task_id)
+            return
+        payload["source_path"] = None
         cls.write_task_manifest(task_id, payload)
 
     def get_session(self, session_id: str) -> VocalSyncSession:

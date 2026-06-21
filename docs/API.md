@@ -526,6 +526,7 @@ also needed. Rename and lyrics changes remain saved if the health check fails.
 ```
 POST /api/media/{item_id}/vocals-sync/prepare-youtube
 POST /api/media/{item_id}/vocals-sync/prepare-upload
+GET /api/media/{item_id}/vocals-sync/tasks/{task_id}/session
 GET /api/media/{item_id}/vocals-sync/sessions/{session_id}
 POST /api/media/{item_id}/vocals-sync/sessions/{session_id}/commit
 DELETE /api/media/{item_id}/vocals-sync/sessions/{session_id}
@@ -545,22 +546,17 @@ The media item must exist on disk and must not already have `vocals_path`.
 
 Preparation downloads or stores the unseparated source, sends it to the remote Demucs service, then
 estimates a local constant offset using the separated background stem and the existing karaoke media
-audio. The review session is stored under cache and returns:
+audio. Both prepare endpoints now return a durable task id:
 ```json
 {
-  "status": "ready",
-  "session": {
-    "session_id": "11111111-1111-1111-1111-111111111111",
-    "media_item_id": 1,
-    "media_url": "/media/song.mp4",
-    "vocals_url": "/cache/vocal_sync/11111111-1111-1111-1111-111111111111/review_vocals.wav",
-    "estimated_offset_seconds": 0.25,
-    "method": "scipy_cross_correlation",
-    "source_kind": "youtube",
-    "title": "Song",
-    "artist": "Artist"
-  }
+  "status": "processing",
+  "task_id": 17
 }
+```
+
+When the task finishes, fetch the prepared review session with:
+```
+GET /api/media/{item_id}/vocals-sync/tasks/{task_id}/session
 ```
 
 Commit accepts the reviewed offset:

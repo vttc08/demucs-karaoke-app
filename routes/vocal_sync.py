@@ -69,16 +69,21 @@ async def prepare_vocals_from_upload(
 ):
     """Prepare guide vocals from an uploaded unseparated source file."""
     try:
-        session = await vocal_sync_service.prepare_from_upload(
-            db,
-            item_id,
+        vocal_sync_service.validate_media_item_for_prepare(db, item_id)
+        task = processing_task_service.create_media_vocal_sync_prepare_task(db, item_id, source_kind="upload")
+        vocal_sync_service.create_upload_prepare_task_manifest(
+            task.id,
+            media_item_id=item_id,
             source_filename=file.filename or "source",
             source_file=file.file,
         )
-        return {"status": "ready", "session": session.to_dict()}
+        task_execution_coordinator.start(task.id)
+        return {"status": "processing", "task_id": task.id}
     except VocalSyncNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except VocalSyncConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (VocalSyncError, subprocess.SubprocessError, OSError) as exc:
         logger.exception("Vocal sync upload preparation failed media_id=%s", item_id)

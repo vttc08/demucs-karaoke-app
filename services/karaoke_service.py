@@ -87,16 +87,24 @@ class KaraokeService:
                 if media_item is None:
                     raise RuntimeError(f"Media item not found for task {task.id}")
                 await self._process_media_lyrics_align_task(db, task, media_item, cancel_event=cancel_event)
-            elif task.task_type == "media_vocal_sync_prepare_youtube":
+            elif task.task_type in {"media_vocal_sync_prepare_youtube", "media_vocal_sync_prepare_upload"}:
                 media_item = db.query(MediaItem).filter(MediaItem.id == task.target_media_item_id).first()
                 if media_item is None:
                     raise RuntimeError(f"Media item not found for task {task.id}")
-                await self._process_media_vocal_sync_prepare_task(
-                    db,
-                    task,
-                    media_item,
-                    cancel_event=cancel_event,
-                )
+                if task.task_type == "media_vocal_sync_prepare_youtube":
+                    await self._process_media_vocal_sync_prepare_task(
+                        db,
+                        task,
+                        media_item,
+                        cancel_event=cancel_event,
+                    )
+                else:
+                    await self._process_media_vocal_sync_prepare_upload_task(
+                        db,
+                        task,
+                        media_item,
+                        cancel_event=cancel_event,
+                    )
             else:
                 raise RuntimeError(f"Unsupported processing task type: {task.task_type}")
         except asyncio.CancelledError:
@@ -1212,6 +1220,88 @@ class KaraokeService:
             progress_step_index=3,
             progress_step_total=3,
         )
+
+    async def _process_media_vocal_sync_prepare_upload_task(
+        self,
+        db: Session,
+        task: ProcessingTask,
+        media_item: MediaItem,
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> None:
+        manifest = self.vocal_sync_service.read_task_manifest(task.id)
+        source_filename = str(manifest.get("source_filename") or "").strip()
+        source_path_raw = str(manifest.get("source_path") or "").strip()
+        if not source_filename or not source_path_raw:
+            raise RuntimeError("Vocal sync upload task is missing the uploaded source")
+        source_path = Path(source_path_raw)
+
+        self.vocal_sync_service.validate_media_item_for_prepare(db, media_item.id)
+        self.vocal_sync_service._check_demucs_available()
+        loop = asyncio.get_running_loop()
+        try:
+            await processing_task_service.set_stage(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.PROCESSING,
+                stage="demucs",
+                progress_label="Separating vocals",
+                progress_label_key="task.separating_vocals",
+                progress_percent=0,
+                progress_step_index=1,
+                progress_step_total=2,
+            )
+            session = await self.vocal_sync_service.prepare_from_staged_upload(
+                db,
+                media_item.id,
+                source_filename=source_filename,
+                source_path=source_path,
+                cancel_event=cancel_event,
+                demucs_progress_callback=self._demucs_progress_callback(
+                    loop,
+                    task.id,
+                    step_index=1,
+                    step_total=2,
+                    status=ProcessingTaskStatus.PROCESSING.value,
+                    stage="demucs",
+                    has_whisperx=False,
+                ),
+                demucs_log_callback=self._log_callback(
+                    loop,
+                    task.id,
+                    status=ProcessingTaskStatus.PROCESSING.value,
+                    stage="demucs",
+                ),
+                before_finalize=lambda: self._dispatch_loop_coroutine(
+                    loop,
+                    processing_task_service.set_stage(
+                        db,
+                        task.id,
+                        status=ProcessingTaskStatus.PROCESSING,
+                        stage="finalize",
+                        progress_label="Finalizing vocals",
+                        progress_label_key="task.finalizing_vocal_sync",
+                        progress_percent=0,
+                        progress_step_index=2,
+                        progress_step_total=2,
+                    ),
+                ),
+            )
+            self.vocal_sync_service.update_task_manifest_session(task.id, session.session_id)
+            await self._raise_if_canceled(cancel_event, task.id)
+            await processing_task_service.set_status(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.DONE,
+                stage="ready",
+                progress_label="Ready",
+                progress_label_key="task.ready",
+                progress_percent=100,
+                progress_step_index=2,
+                progress_step_total=2,
+            )
+        finally:
+            self.vocal_sync_service.cleanup_task_source(task.id)
 
     @staticmethod
     def _dispatch_loop_coroutine(loop: asyncio.AbstractEventLoop, coroutine) -> None:

@@ -36,9 +36,9 @@ def test_media_vocals_page_renders_admin_shell(client, tmp_path, monkeypatch):
     assert "/static/media_vocals.js" in response.text
     assert "Song" in response.text
     assert "Artist" in response.text
+    assert 'id="vocal-sync-youtube-progress"' in response.text
     assert 'id="vocal-sync-youtube-selected"' in response.text
     assert 'id="vocal-sync-prepare-youtube"' in response.text
-    assert 'id="vocal-sync-upload-progress"' in response.text
     assert 'type="submit" aria-label="Prepare Upload"' in response.text
 
 
@@ -68,32 +68,30 @@ def test_prepare_youtube_returns_task_id(client):
     start_task.assert_called_once_with(17)
 
 
-def test_prepare_upload_returns_session(client):
+def test_prepare_upload_returns_task_id(client):
     authenticate_admin_client(client)
-    service_session = Mock()
-    service_session.to_dict.return_value = {
-        "session_id": "22222222-2222-2222-2222-222222222222",
-        "media_item_id": 42,
-        "media_url": "/media/song.mp4",
-        "vocals_url": "/cache/vocal_sync/222/review_vocals.wav",
-        "estimated_offset_seconds": -0.5,
-        "method": "scipy_cross_correlation",
-        "source_kind": "upload",
-        "title": "Song",
-        "artist": None,
-    }
+    task = Mock(id=23)
     with patch(
-        "routes.vocal_sync.vocal_sync_service.prepare_from_upload",
-        new=AsyncMock(return_value=service_session),
-    ) as prepare:
+        "routes.vocal_sync.vocal_sync_service.validate_media_item_for_prepare",
+        return_value=Mock(id=42),
+    ), patch(
+        "routes.vocal_sync.processing_task_service.create_media_vocal_sync_prepare_task",
+        return_value=task,
+    ) as create_task, patch(
+        "routes.vocal_sync.vocal_sync_service.create_upload_prepare_task_manifest",
+    ) as create_manifest, patch(
+        "routes.vocal_sync.task_execution_coordinator.start",
+    ) as start_task:
         response = client.post(
             "/api/media/42/vocals-sync/prepare-upload",
             files={"file": ("source.mp3", b"audio", "audio/mpeg")},
         )
 
     assert response.status_code == 200
-    assert response.json()["session"]["estimated_offset_seconds"] == -0.5
-    prepare.assert_awaited_once()
+    assert response.json() == {"status": "processing", "task_id": 23}
+    create_task.assert_called_once_with(ANY, 42, source_kind="upload")
+    create_manifest.assert_called_once()
+    start_task.assert_called_once_with(23)
 
 
 def test_commit_session_rejects_mismatched_session(client):

@@ -25,10 +25,6 @@
     const youtubeProgressBar = document.getElementById("vocal-sync-youtube-progress-bar");
     const uploadForm = document.getElementById("vocal-sync-upload-form");
     const uploadFile = document.getElementById("vocal-sync-upload-file");
-    const uploadProgress = document.getElementById("vocal-sync-upload-progress");
-    const uploadProgressStatus = document.getElementById("vocal-sync-upload-progress-status");
-    const uploadProgressPercent = document.getElementById("vocal-sync-upload-progress-percent");
-    const uploadProgressBar = document.getElementById("vocal-sync-upload-progress-bar");
     const uploadSubmitBtn = uploadForm?.querySelector('[type="submit"]');
     const offsetInput = document.getElementById("vocal-sync-offset");
     const offsetDetail = document.getElementById("vocal-sync-offset-detail");
@@ -45,6 +41,8 @@
     let selectedYoutubeSource = null;
     let activeYoutubeTaskId = null;
     let youtubeTaskStream = null;
+    let activeUploadTaskId = null;
+    let uploadTaskStream = null;
 
     function setMessage(text, isError = false) {
         if (!message) return;
@@ -66,6 +64,13 @@
         }
     }
 
+    function closeUploadTaskStream() {
+        if (uploadTaskStream) {
+            uploadTaskStream.close();
+            uploadTaskStream = null;
+        }
+    }
+
     function formatTaskLabel(payload, fallbackKey = "vocalsync.preparing") {
         const baseLabel = payload?.progress_label_key
             ? t(payload.progress_label_key, payload.progress_label_args || {})
@@ -82,7 +87,7 @@
         return baseLabel;
     }
 
-    function renderYoutubeProgress({ visible, statusText, percent = null, indeterminate = false }) {
+    function renderSharedProgress({ visible, statusText, percent = null, indeterminate = false }) {
         if (!youtubeProgress || !youtubeProgressStatus || !youtubeProgressBar || !youtubeProgressPercent) {
             return;
         }
@@ -101,10 +106,12 @@
         youtubeProgressPercent.textContent = `${Math.round(safePercent)}%`;
     }
 
-    function resetYoutubeProgress() {
+    function resetSharedProgress() {
         activeYoutubeTaskId = null;
+        activeUploadTaskId = null;
         closeYoutubeTaskStream();
-        renderYoutubeProgress({
+        closeUploadTaskStream();
+        renderSharedProgress({
             visible: false,
             statusText: t("vocalsync.preparing"),
             percent: 0,
@@ -116,7 +123,7 @@
         const statusText = formatTaskLabel(payload);
         const percent = Number(payload?.progress_percent);
         const isFinalizing = stage === "finalize";
-        renderYoutubeProgress({
+        renderSharedProgress({
             visible: true,
             statusText,
             percent: Number.isFinite(percent) ? percent : 0,
@@ -210,10 +217,10 @@
                 : t("vocalsync.prepare_source");
         }
         if (youtubeProgress) {
-            youtubeProgress.classList.toggle("hidden", !youtubeBusy);
+            youtubeProgress.classList.toggle("hidden", !(youtubeBusy || activeUploadTaskId));
         }
         if (youtubeBusy && !activeYoutubeTaskId) {
-            renderYoutubeProgress({
+            renderSharedProgress({
                 visible: true,
                 statusText: t("vocalsync.preparing"),
                 percent: 0,
@@ -231,21 +238,17 @@
         updateYoutubeSelectionUi();
     }
 
-    function updateUploadProgress(percent, statusKey) {
-        if (!uploadProgress || !uploadProgressStatus || !uploadProgressPercent || !uploadProgressBar) return;
-        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
-        uploadProgress.classList.remove("hidden");
-        uploadProgressStatus.textContent = t(statusKey);
-        uploadProgressPercent.textContent = `${Math.round(safePercent)}%`;
-        uploadProgressBar.style.width = `${safePercent}%`;
-    }
-
-    function resetUploadProgress() {
-        if (!uploadProgress || !uploadProgressStatus || !uploadProgressPercent || !uploadProgressBar) return;
-        uploadProgress.classList.add("hidden");
-        uploadProgressStatus.textContent = t("upload.system_ready");
-        uploadProgressPercent.textContent = "0%";
-        uploadProgressBar.style.width = "0%";
+    function updateUploadTaskProgress(payload) {
+        const stage = String(payload?.stage || "");
+        const statusText = formatTaskLabel(payload);
+        const percent = Number(payload?.progress_percent);
+        const isFinalizing = stage === "finalize";
+        renderSharedProgress({
+            visible: true,
+            statusText,
+            percent: Number.isFinite(percent) ? percent : 0,
+            indeterminate: isFinalizing,
+        });
     }
 
     function escapeHtml(value) {
@@ -391,7 +394,7 @@
                 throw new Error(t("vocalsync.request_failed"));
             }
             activeYoutubeTaskId = taskId;
-            renderYoutubeProgress({
+            renderSharedProgress({
                 visible: true,
                 statusText: t("vocalsync.preparing"),
                 percent: 0,
@@ -400,7 +403,7 @@
         } catch (error) {
             setState("common.failed");
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
-            resetYoutubeProgress();
+            resetSharedProgress();
             setBusy(false);
         }
     }
@@ -415,12 +418,26 @@
         closeYoutubeTaskStream();
         try {
             await loadPreparedSessionForTask(taskId);
-            resetYoutubeProgress();
+            resetSharedProgress();
             setBusy(false);
         } catch (error) {
             setState("common.failed");
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
-            resetYoutubeProgress();
+            resetSharedProgress();
+            setBusy(false);
+        }
+    }
+
+    async function finishUploadTask(taskId) {
+        closeUploadTaskStream();
+        try {
+            await loadPreparedSessionForTask(taskId);
+            resetSharedProgress();
+            setBusy(false);
+        } catch (error) {
+            setState("common.failed");
+            setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
+            resetSharedProgress();
             setBusy(false);
         }
     }
@@ -455,7 +472,7 @@
                 if (payload?.status === "failed" || payload?.status === "canceled") {
                     settled = true;
                     closeYoutubeTaskStream();
-                    resetYoutubeProgress();
+                    resetSharedProgress();
                     setBusy(false);
                     const failureMessage = String(payload?.message || payload?.progress_label || t("vocalsync.request_failed"));
                     setState(payload.status === "canceled" ? "task.canceled" : "common.failed");
@@ -468,9 +485,62 @@
                 if (settled) {
                     return;
                 }
-                renderYoutubeProgress({
+                renderSharedProgress({
                     visible: true,
                     statusText: t("vocalsync.preparing"),
+                    percent: 0,
+                    indeterminate: true,
+                });
+            };
+        });
+    }
+
+    function followUploadPrepareTask(taskId) {
+        return new Promise((resolve, reject) => {
+            closeUploadTaskStream();
+            if (typeof EventSource === "undefined") {
+                reject(new Error(t("vocalsync.request_failed")));
+                return;
+            }
+
+            let settled = false;
+            uploadTaskStream = new EventSource(appUrl(`/api/tasks/${taskId}/stream`));
+
+            uploadTaskStream.onmessage = (event) => {
+                let payload;
+                try {
+                    payload = JSON.parse(event.data);
+                } catch (_) {
+                    return;
+                }
+                if (Number(payload?.task_id) !== Number(taskId)) {
+                    return;
+                }
+                updateUploadTaskProgress(payload);
+                if (payload?.status === "done") {
+                    settled = true;
+                    finishUploadTask(taskId).then(resolve).catch(reject);
+                    return;
+                }
+                if (payload?.status === "failed" || payload?.status === "canceled") {
+                    settled = true;
+                    closeUploadTaskStream();
+                    resetSharedProgress();
+                    setBusy(false);
+                    const failureMessage = String(payload?.message || payload?.progress_label || t("vocalsync.request_failed"));
+                    setState(payload.status === "canceled" ? "task.canceled" : "common.failed");
+                    setMessage(failureMessage, payload.status !== "canceled");
+                    reject(new Error(failureMessage));
+                }
+            };
+
+            uploadTaskStream.onerror = () => {
+                if (settled) {
+                    return;
+                }
+                renderSharedProgress({
+                    visible: true,
+                    statusText: t("media.task_stream_reconnecting"),
                     percent: 0,
                     indeterminate: true,
                 });
@@ -485,7 +555,11 @@
         stopPreview();
         setBusy(true);
         setState("vocalsync.preparing");
-        updateUploadProgress(0, "upload.connecting");
+        renderSharedProgress({
+            visible: true,
+            statusText: t("upload.connecting"),
+            percent: 0,
+        });
         const formData = new FormData();
         formData.append("file", file);
         try {
@@ -496,14 +570,20 @@
                 xhr.upload.onprogress = (event) => {
                     if (!event.lengthComputable) return;
                     const percent = Math.round((event.loaded / event.total) * 100);
-                    updateUploadProgress(percent, percent < 100 ? "upload.uploading" : "upload.processing");
-                    percent == 100 ? 
-                        setTimeout(() => {scrollTo({ top: youtubeProgress?.offsetTop - 80 || 0, behavior: "smooth" }); uploadProgress.classList.add("hidden")}, 500): null;
+                    renderSharedProgress({
+                        visible: true,
+                        statusText: t(percent < 100 ? "upload.uploading" : "upload.processing"),
+                        percent,
+                    });
                 };
 
                 xhr.onload = () => {
                     if (xhr.status >= 200 && xhr.status < 300) {
-                        updateUploadProgress(100, "upload.processing");
+                        renderSharedProgress({
+                            visible: true,
+                            statusText: t("upload.processing"),
+                            percent: 100,
+                        });
                         try {
                             resolve(JSON.parse(xhr.responseText));
                         } catch (error) {
@@ -528,12 +608,25 @@
 
                 xhr.send(formData);
             });
-            applySession(payload.session);
-            updateUploadProgress(100, "common.success");
+            const taskId = Number(payload.task_id);
+            if (!Number.isFinite(taskId) || taskId <= 0) {
+                throw new Error(t("vocalsync.request_failed"));
+            }
+            activeUploadTaskId = taskId;
+            renderSharedProgress({
+                visible: true,
+                statusText: t("task.separating_vocals"),
+                percent: 0,
+            });
+            await followUploadPrepareTask(taskId);
         } catch (error) {
             setState("common.failed");
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
-            updateUploadProgress(0, "upload.upload_failed");
+            renderSharedProgress({
+                visible: true,
+                statusText: t("upload.upload_failed"),
+                percent: 0,
+            });
         } finally {
             setBusy(false);
         }
@@ -641,15 +734,17 @@
     });
     previewStop?.addEventListener("click", stopPreview);
     commitBtn?.addEventListener("click", commitSession);
-    window.addEventListener("beforeunload", closeYoutubeTaskStream);
+    window.addEventListener("beforeunload", () => {
+        closeYoutubeTaskStream();
+        closeUploadTaskStream();
+    });
 
     if (hasVocals) {
         setState("karaoke.already_multi_track");
         setMessage(t("vocalsync.already_has_vocals"), true);
         setBusy(true);
     } else {
-        resetUploadProgress();
-        resetYoutubeProgress();
+        resetSharedProgress();
         Promise.race([autoInferSearchBox(), new Promise((resolve) => window.setTimeout(resolve, 1500))]);
         updateSearchControls();
         updateYoutubeSelectionUi();
