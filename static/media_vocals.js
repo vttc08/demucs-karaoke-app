@@ -132,13 +132,13 @@
             searchResults.innerHTML = results.map((result) => {
                 const videoId = escapeHtml(result.video_id || "");
                 return `
-                    <button type="button" data-youtube-id="${videoId}" class="vocal-sync-youtube-result flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-white/10 bg-surface-container-high/50 p-3 text-left transition hover:border-primary/40 hover:bg-surface-container-highest/70">
-                        <img src="${escapeHtml(result.thumbnail || "")}" alt="" class="h-14 w-20 rounded-lg object-cover">
+                    <button type="button" data-youtube-id="${videoId}" class="vocal-sync-youtube-result flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-white/10 bg-surface-container-high/50 p-2.5 text-left transition hover:border-primary/40 hover:bg-surface-container-highest/70">
+                        <img src="${escapeHtml(result.thumbnail || "")}" alt="" class="h-12 w-20 rounded-lg object-cover">
                         <span class="min-w-0 flex-1 overflow-hidden">
-                            <span class="block truncate text-sm font-bold text-on-surface">${escapeHtml(result.title || t("common.unknown"))}</span>
-                            <span class="block truncate text-xs text-on-surface-variant">${escapeHtml(result.channel || "")}</span>
+                            <span class="block truncate text-xs font-bold text-on-surface">${escapeHtml(result.title || t("common.unknown"))}</span>
+                            <span class="block truncate text-[10px] text-on-surface-variant">${escapeHtml(result.channel || "")}</span>
                         </span>
-                        <span class="material-symbols-outlined text-primary">graphic_eq</span>
+                        <span class="material-symbols-outlined text-[18px] text-primary">graphic_eq</span>
                     </button>
                 `;
             }).join("");

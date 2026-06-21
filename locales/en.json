@@ -274,7 +274,7 @@
   "vocalsync.prepared": "Prepared vocals with estimated offset {offset}s.",
   "vocalsync.preparing": "Preparing",
   "vocalsync.preparing_detail": "Downloading or uploading source audio, separating vocals, and estimating sync.",
-  "vocalsync.preview": "Preview Sync",
+  "vocalsync.preview": "Preview",
   "vocalsync.preview_failed": "Preview could not start.",
   "vocalsync.ready": "Ready",
   "vocalsync.request_failed": "Vocal sync request failed",

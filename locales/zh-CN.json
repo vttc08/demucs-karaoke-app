@@ -274,7 +274,7 @@
   "vocalsync.prepared": "已准备人声，估算偏移为 {offset} 秒。",
   "vocalsync.preparing": "准备中",
   "vocalsync.preparing_detail": "正在下载或上传源音频、分离人声并估算同步。",
-  "vocalsync.preview": "预览同步",
+  "vocalsync.preview": "预览",
   "vocalsync.preview_failed": "无法开始预览。",
   "vocalsync.ready": "就绪",
   "vocalsync.request_failed": "人声同步请求失败",
