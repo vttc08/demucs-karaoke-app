@@ -10,6 +10,7 @@
     const vocals = document.getElementById("vocal-sync-vocals");
     const stateLabel = document.getElementById("vocal-sync-state");
     const message = document.getElementById("vocal-sync-message");
+    const vocalSyncSearchHeading = document.getElementById("vocal-sync-search-heading");
     const searchInput = document.getElementById("vocal-sync-search-input");
     const searchClearBtn = document.getElementById("vocal-sync-search-clear");
     const searchBtn = document.getElementById("vocal-sync-search-btn");
@@ -116,6 +117,21 @@
             throw new Error(payload.detail || t("vocalsync.request_failed"));
         }
         return payload;
+    }
+
+    async function autoInferSearchBox() {
+        const title = vocalSyncSearchHeading?.textContent?.trim() || "";
+        if (!title) return;
+        const inferURL = appUrl(`/api/search/infer/?title=${encodeURIComponent(title)}`);
+        try {
+            const response = await fetch(inferURL);
+            const payload = await parseJsonResponse(response);
+            if (payload.title && payload.artist) {
+                searchInput.value = `${payload.artist} - ${payload.title}`;
+            }
+        } catch (error) {
+            console.error("Failed to auto-infer search query:", error instanceof Error ? error.message : error);
+        }  
     }
 
     async function searchYoutube() {
@@ -334,5 +350,8 @@
         setBusy(true);
     } else {
         resetUploadProgress();
+        Promise.race([autoInferSearchBox(), 
+            new Promise((resolve) => window.setTimeout(resolve, 1500))
+        ])
     }
 })();
