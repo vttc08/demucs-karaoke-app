@@ -11,6 +11,7 @@
     const stateLabel = document.getElementById("vocal-sync-state");
     const message = document.getElementById("vocal-sync-message");
     const searchInput = document.getElementById("vocal-sync-search-input");
+    const searchClearBtn = document.getElementById("vocal-sync-search-clear");
     const searchBtn = document.getElementById("vocal-sync-search-btn");
     const searchResults = document.getElementById("vocal-sync-search-results");
     const uploadForm = document.getElementById("vocal-sync-upload-form");
@@ -43,7 +44,7 @@
     }
 
     function setBusy(isBusy) {
-        [searchBtn, uploadSubmitBtn, commitBtn, previewPlay].forEach((el) => {
+        [searchBtn, searchClearBtn, uploadSubmitBtn, commitBtn, previewPlay].forEach((el) => {
             if (el) el.disabled = Boolean(isBusy) || (el === commitBtn && !activeSession) || (el === previewPlay && !activeSession);
         });
     }
@@ -292,6 +293,11 @@
     }
 
     searchBtn?.addEventListener("click", searchYoutube);
+    searchClearBtn?.addEventListener("click", () => {
+        searchInput.value = "";
+        searchResults.innerHTML = "";
+        setMessage("");
+    });
     searchInput?.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             event.preventDefault();

@@ -110,7 +110,12 @@
                     <span class="material-symbols-outlined shrink-0 text-[20px] text-primary">youtube_activity</span>
                 </div>
                 <div class="flex min-w-0 gap-2">
-                    <input id="vocal-sync-search-input" type="search" class="h-10 min-w-0 flex-1 rounded-xl border-none bg-surface-container-highest/60 px-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/50" placeholder="{{ t('vocalsync.search_placeholder') }}">
+                    <div class="relative min-w-0 flex-1">
+                        <input id="vocal-sync-search-input" type="search" class="h-10 w-full min-w-0 rounded-xl border-none bg-surface-container-highest/60 px-3 pr-20 text-sm text-on-surface focus:ring-2 focus:ring-primary/50" placeholder="{{ t('vocalsync.search_placeholder') }}">
+                        <button id="vocal-sync-search-clear" type="button" aria-label="Clear search" title="Clear search" class="absolute right-3 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-on-surface-variant transition hover:bg-white/10 hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-40">
+                            <span class="material-symbols-outlined text-[18px]">close</span>
+                        </button>
+                    </div>
                     <button id="vocal-sync-search-btn" type="button" class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-on-primary">
                         <span class="material-symbols-outlined text-[18px]">search</span>
                     </button>
