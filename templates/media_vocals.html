@@ -101,6 +101,20 @@
             </div>
             {% endif %}
 
+            <div id="vocal-sync-youtube-progress" class="glass-card hidden min-w-0 rounded-xl border border-primary/20 p-4">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-black uppercase tracking-[0.18em] text-on-surface-variant">{{ t('vocalsync.prepare_progress') }}</p>
+                        <p id="vocal-sync-youtube-progress-status" class="mt-1 text-sm font-semibold text-on-surface">{{ t('vocalsync.preparing') }}</p>
+                    </div>
+                    <span id="vocal-sync-youtube-progress-percent" class="shrink-0 text-[11px] font-black uppercase tracking-widest text-primary">0%</span>
+                </div>
+                <div class="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+                    <div id="vocal-sync-youtube-progress-bar" class="h-full w-0 rounded-full bg-primary transition-all duration-300" style="box-shadow: 0 0 10px rgba(0, 242, 255, 0.3)"></div>
+                </div>
+                <p id="vocal-sync-youtube-progress-detail" class="mt-2 text-[11px] leading-relaxed text-on-surface-variant">{{ t('vocalsync.preparing_detail') }}</p>
+            </div>
+
             <div class="glass-card min-w-0 rounded-xl border border-white/10 p-4">
                 <div class="mb-4 flex items-center justify-between gap-3">
                     <div class="min-w-0">
@@ -132,15 +146,6 @@
                         </button>
                     </div>
                     <p id="vocal-sync-youtube-hint" class="mt-2 text-[11px] text-tertiary leading-relaxed text-on-surface-variant"></p>
-                    <div id="vocal-sync-youtube-progress" class="mt-3 hidden rounded-xl border border-primary/20 bg-primary/10 p-3">
-                        <div class="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary">
-                            <span class="material-symbols-outlined animate-spin text-[16px]">autorenew</span>
-                            <span id="vocal-sync-youtube-progress-status">{{ t('vocalsync.preparing') }}</span>
-                        </div>
-                        <div class="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/5">
-                            <div class="h-full w-2/5 rounded-full bg-primary/80 animate-pulse"></div>
-                        </div>
-                    </div>
                 </div>
                 <div id="vocal-sync-search-results" class="mt-3 grid min-w-0 gap-2"></div>
             </div>

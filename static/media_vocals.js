@@ -21,6 +21,9 @@
     const youtubePrepareBtnLabel = document.getElementById("vocal-sync-prepare-youtube-label");
     const youtubeProgress = document.getElementById("vocal-sync-youtube-progress");
     const youtubeProgressStatus = document.getElementById("vocal-sync-youtube-progress-status");
+    const youtubeProgressPercent = document.getElementById("vocal-sync-youtube-progress-percent");
+    const youtubeProgressBar = document.getElementById("vocal-sync-youtube-progress-bar");
+    const youtubeProgressDetail = document.getElementById("vocal-sync-youtube-progress-detail");
     const uploadForm = document.getElementById("vocal-sync-upload-form");
     const uploadFile = document.getElementById("vocal-sync-upload-file");
     const uploadProgress = document.getElementById("vocal-sync-upload-progress");
@@ -41,6 +44,8 @@
     let youtubeBusy = false;
     let youtubeSearchBusy = false;
     let selectedYoutubeSource = null;
+    let activeYoutubeTaskId = null;
+    let youtubeTaskStream = null;
 
     function setMessage(text, isError = false) {
         if (!message) return;
@@ -53,6 +58,74 @@
         if (stateLabel) {
             stateLabel.textContent = t(key);
         }
+    }
+
+    function closeYoutubeTaskStream() {
+        if (youtubeTaskStream) {
+            youtubeTaskStream.close();
+            youtubeTaskStream = null;
+        }
+    }
+
+    function formatTaskLabel(payload, fallbackKey = "vocalsync.preparing") {
+        const baseLabel = payload?.progress_label_key
+            ? t(payload.progress_label_key, payload.progress_label_args || {})
+            : String(payload?.progress_label || payload?.stage || t(fallbackKey));
+        const stepIndex = Number(payload?.progress_step_index);
+        const stepTotal = Number(payload?.progress_step_total);
+        if (Number.isFinite(stepIndex) && Number.isFinite(stepTotal) && stepIndex > 0 && stepTotal > 0) {
+            return t("task.progress_step", {
+                label: baseLabel,
+                current: stepIndex,
+                total: stepTotal,
+            });
+        }
+        return baseLabel;
+    }
+
+    function renderYoutubeProgress({ visible, statusText, detailText, percent = null, indeterminate = false }) {
+        if (!youtubeProgress || !youtubeProgressStatus || !youtubeProgressBar || !youtubeProgressPercent || !youtubeProgressDetail) {
+            return;
+        }
+        youtubeProgress.classList.toggle("hidden", !visible);
+        youtubeProgressStatus.textContent = statusText || t("vocalsync.preparing");
+        youtubeProgressDetail.textContent = detailText || "";
+        youtubeProgressBar.classList.toggle("animate-pulse", Boolean(indeterminate));
+        if (indeterminate) {
+            youtubeProgressBar.style.width = "100%";
+            youtubeProgressBar.style.opacity = "0.45";
+            youtubeProgressPercent.textContent = t("vocalsync.progress_pending_short");
+            return;
+        }
+        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+        youtubeProgressBar.style.width = `${safePercent}%`;
+        youtubeProgressBar.style.opacity = "1";
+        youtubeProgressPercent.textContent = `${Math.round(safePercent)}%`;
+    }
+
+    function resetYoutubeProgress() {
+        activeYoutubeTaskId = null;
+        closeYoutubeTaskStream();
+        renderYoutubeProgress({
+            visible: false,
+            statusText: t("vocalsync.preparing"),
+            detailText: t("vocalsync.preparing_detail"),
+            percent: 0,
+        });
+    }
+
+    function updateYoutubeTaskProgress(payload) {
+        const stage = String(payload?.stage || "");
+        const statusText = formatTaskLabel(payload);
+        const percent = Number(payload?.progress_percent);
+        const isFinalizing = stage === "finalize";
+        renderYoutubeProgress({
+            visible: true,
+            statusText,
+            detailText: isFinalizing ? t("vocalsync.finalizing_detail") : t("vocalsync.preparing_detail"),
+            percent: Number.isFinite(percent) ? percent : 0,
+            indeterminate: isFinalizing,
+        });
     }
 
     function updateSearchControls() {
@@ -143,10 +216,13 @@
         if (youtubeProgress) {
             youtubeProgress.classList.toggle("hidden", !youtubeBusy);
         }
-        if (youtubeProgressStatus) {
-            youtubeProgressStatus.textContent = youtubeBusy
-                ? t("vocalsync.preparing")
-                : t("vocalsync.prepare_source");
+        if (youtubeBusy && !activeYoutubeTaskId) {
+            renderYoutubeProgress({
+                visible: true,
+                statusText: t("vocalsync.preparing"),
+                detailText: t("vocalsync.preparing_detail"),
+                percent: 0,
+            });
         }
         syncYoutubeResultButtons();
     }
@@ -316,13 +392,98 @@
                 body: JSON.stringify({ youtube_id: youtubeId }),
             });
             const payload = await parseJsonResponse(response);
-            applySession(payload.session);
+            const taskId = Number(payload.task_id);
+            if (!Number.isFinite(taskId) || taskId <= 0) {
+                throw new Error(t("vocalsync.request_failed"));
+            }
+            activeYoutubeTaskId = taskId;
+            renderYoutubeProgress({
+                visible: true,
+                statusText: t("vocalsync.preparing"),
+                detailText: t("vocalsync.preparing_detail"),
+                percent: 0,
+            });
+            await followYoutubePrepareTask(taskId);
         } catch (error) {
             setState("common.failed");
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
-        } finally {
+            resetYoutubeProgress();
             setBusy(false);
         }
+    }
+
+    async function loadPreparedSessionForTask(taskId) {
+        const response = await fetch(appUrl(`/api/media/${mediaId}/vocals-sync/tasks/${taskId}/session`));
+        const payload = await parseJsonResponse(response);
+        applySession(payload.session);
+    }
+
+    async function finishYoutubeTask(taskId) {
+        closeYoutubeTaskStream();
+        try {
+            await loadPreparedSessionForTask(taskId);
+            resetYoutubeProgress();
+            setBusy(false);
+        } catch (error) {
+            setState("common.failed");
+            setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
+            resetYoutubeProgress();
+            setBusy(false);
+        }
+    }
+
+    function followYoutubePrepareTask(taskId) {
+        return new Promise((resolve, reject) => {
+            closeYoutubeTaskStream();
+            if (typeof EventSource === "undefined") {
+                reject(new Error(t("vocalsync.request_failed")));
+                return;
+            }
+
+            let settled = false;
+            youtubeTaskStream = new EventSource(appUrl(`/api/tasks/${taskId}/stream`));
+
+            youtubeTaskStream.onmessage = (event) => {
+                let payload;
+                try {
+                    payload = JSON.parse(event.data);
+                } catch (_) {
+                    return;
+                }
+                if (Number(payload?.task_id) !== Number(taskId)) {
+                    return;
+                }
+                updateYoutubeTaskProgress(payload);
+                if (payload?.status === "done") {
+                    settled = true;
+                    finishYoutubeTask(taskId).then(resolve).catch(reject);
+                    return;
+                }
+                if (payload?.status === "failed" || payload?.status === "canceled") {
+                    settled = true;
+                    closeYoutubeTaskStream();
+                    resetYoutubeProgress();
+                    setBusy(false);
+                    const failureMessage = String(payload?.message || payload?.progress_label || t("vocalsync.request_failed"));
+                    setState(payload.status === "canceled" ? "task.canceled" : "common.failed");
+                    setMessage(failureMessage, payload.status !== "canceled");
+                    reject(new Error(failureMessage));
+                }
+            };
+
+            youtubeTaskStream.onerror = () => {
+                if (settled) {
+                    return;
+                }
+                renderYoutubeProgress({
+                    visible: true,
+                    statusText: t("vocalsync.preparing"),
+                    detailText: t("media.task_stream_reconnecting"),
+                    percent: 0,
+                    indeterminate: true,
+                });
+            };
+        });
     }
 
     async function prepareUpload(event) {
@@ -345,6 +506,8 @@
                     if (!event.lengthComputable) return;
                     const percent = Math.round((event.loaded / event.total) * 100);
                     updateUploadProgress(percent, percent < 100 ? "upload.uploading" : "upload.processing");
+                    percent == 100 ? 
+                        setTimeout(() => {scrollTo({ top: youtubeProgress?.offsetTop - 80 || 0, behavior: "smooth" }); uploadProgress.classList.add("hidden")}, 500): null;
                 };
 
                 xhr.onload = () => {
@@ -487,6 +650,7 @@
     });
     previewStop?.addEventListener("click", stopPreview);
     commitBtn?.addEventListener("click", commitSession);
+    window.addEventListener("beforeunload", closeYoutubeTaskStream);
 
     if (hasVocals) {
         setState("karaoke.already_multi_track");
@@ -494,6 +658,7 @@
         setBusy(true);
     } else {
         resetUploadProgress();
+        resetYoutubeProgress();
         Promise.race([autoInferSearchBox(), new Promise((resolve) => window.setTimeout(resolve, 1500))]);
         updateSearchControls();
         updateYoutubeSelectionUi();

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import json
 import logging
 import os
@@ -96,6 +97,18 @@ class VocalSyncService:
         return VocalSyncService._session_dir(session_id) / "manifest.json"
 
     @staticmethod
+    def task_root() -> Path:
+        path = settings.cache_path / "vocal_sync_tasks"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @staticmethod
+    def _task_manifest_path(task_id: int) -> Path:
+        if int(task_id) <= 0:
+            raise VocalSyncNotFoundError("Invalid vocal sync task")
+        return VocalSyncService.task_root() / f"{int(task_id)}.json"
+
+    @staticmethod
     def _cache_url(path: Path) -> str:
         try:
             relative = path.resolve().relative_to(settings.cache_path.resolve())
@@ -131,6 +144,11 @@ class VocalSyncService:
         VocalSyncService._local_media_path(media_item)
         return media_item
 
+    def validate_media_item_for_prepare(self, db: Session, media_item_id: int) -> MediaItem:
+        return self._validate_media_for_prepare(
+            db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
+        )
+
     def _check_demucs_available(self) -> None:
         health = self.runtime_settings_service.get_demucs_health()
         if not health.healthy:
@@ -141,25 +159,45 @@ class VocalSyncService:
         db: Session,
         media_item_id: int,
         youtube_id: str,
+        *,
+        cancel_event=None,
+        download_progress_callback: Callable[[int, str], None] | None = None,
+        download_log_callback: Callable[[str, str], None] | None = None,
+        demucs_progress_callback: Callable[[int, str, dict | None], None] | None = None,
+        demucs_log_callback: Callable[[str, str], None] | None = None,
+        before_finalize: Callable[[], None] | None = None,
     ) -> VocalSyncSession:
-        media_item = self._validate_media_for_prepare(
-            db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
-        )
+        media_item = self.validate_media_item_for_prepare(db, media_item_id)
         self._check_demucs_available()
         session_id = str(uuid.uuid4())
         session_dir = self._session_dir(session_id)
         session_dir.mkdir(parents=True, exist_ok=False)
-        source_path = await asyncio.to_thread(
-            self.youtube_service.download_audio,
-            youtube_id,
-            session_dir,
-        )
+        if download_progress_callback or download_log_callback:
+            source_path = await asyncio.to_thread(
+                self.youtube_service.download_audio_with_progress,
+                youtube_id,
+                session_dir,
+                progress_callback=download_progress_callback,
+                log_callback=download_log_callback,
+                cancel_event=cancel_event,
+            )
+        else:
+            source_path = await asyncio.to_thread(
+                self.youtube_service.download_audio,
+                youtube_id,
+                session_dir,
+                cancel_event=cancel_event,
+            )
         return await self._prepare_from_source(
             media_item=media_item,
             source_path=source_path,
             session_id=session_id,
             source_kind="youtube",
             source_ref=youtube_id,
+            cancel_event=cancel_event,
+            demucs_progress_callback=demucs_progress_callback,
+            demucs_log_callback=demucs_log_callback,
+            before_finalize=before_finalize,
         )
 
     async def prepare_from_upload(
@@ -170,9 +208,7 @@ class VocalSyncService:
         source_filename: str,
         source_file,
     ) -> VocalSyncSession:
-        media_item = self._validate_media_for_prepare(
-            db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
-        )
+        media_item = self.validate_media_item_for_prepare(db, media_item_id)
         ext = Path(source_filename or "").suffix.lower()
         if ext not in _UPLOAD_EXTENSIONS:
             raise VocalSyncConflictError("Unsupported vocal source upload type")
@@ -199,10 +235,19 @@ class VocalSyncService:
         session_id: str,
         source_kind: str,
         source_ref: str,
+        cancel_event=None,
+        demucs_progress_callback: Callable[[int, str, dict | None], None] | None = None,
+        demucs_log_callback: Callable[[str, str], None] | None = None,
+        before_finalize: Callable[[], None] | None = None,
     ) -> VocalSyncSession:
         session_dir = self._session_dir(session_id)
         media_path = self._local_media_path(media_item)
-        demucs_response = await self.demucs_client.separate_vocals(source_path)
+        demucs_response = await self.demucs_client.separate_vocals(
+            source_path,
+            cancel_event=cancel_event,
+            progress_callback=demucs_progress_callback,
+            log_callback=demucs_log_callback,
+        )
         no_vocals_path = Path(demucs_response.no_vocals_path)
         vocals_path = Path(demucs_response.vocals_path)
         if not no_vocals_path.is_file() or not vocals_path.is_file():
@@ -212,6 +257,9 @@ class VocalSyncService:
         review_bg_path = session_dir / f"review_background{no_vocals_path.suffix.lower() or '.wav'}"
         shutil.copy2(vocals_path, review_vocals_path)
         shutil.copy2(no_vocals_path, review_bg_path)
+
+        if before_finalize is not None:
+            before_finalize()
 
         karaoke_wav = session_dir / "karaoke_mono.wav"
         background_wav = session_dir / "background_mono.wav"
@@ -245,6 +293,49 @@ class VocalSyncService:
             offset_seconds,
         )
         return self._session_from_manifest(manifest)
+
+    @classmethod
+    def write_task_manifest(cls, task_id: int, payload: dict[str, Any]) -> None:
+        path = cls._task_manifest_path(task_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = path.with_suffix(".tmp")
+        temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(temp_path, path)
+
+    @classmethod
+    def read_task_manifest(cls, task_id: int) -> dict[str, Any]:
+        path = cls._task_manifest_path(task_id)
+        if not path.is_file():
+            raise VocalSyncNotFoundError("Vocal sync task not found")
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise VocalSyncError("Vocal sync task manifest is invalid") from exc
+
+    @classmethod
+    def create_youtube_prepare_task_manifest(
+        cls,
+        task_id: int,
+        *,
+        media_item_id: int,
+        youtube_id: str,
+    ) -> None:
+        cls.write_task_manifest(
+            task_id,
+            {
+                "task_id": int(task_id),
+                "media_item_id": int(media_item_id),
+                "source_kind": "youtube",
+                "youtube_id": youtube_id.strip(),
+                "session_id": None,
+            },
+        )
+
+    @classmethod
+    def update_task_manifest_session(cls, task_id: int, session_id: str) -> None:
+        payload = cls.read_task_manifest(task_id)
+        payload["session_id"] = session_id
+        cls.write_task_manifest(task_id, payload)
 
     def get_session(self, session_id: str) -> VocalSyncSession:
         return self._session_from_manifest(self._read_manifest(session_id))
