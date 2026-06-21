@@ -277,7 +277,6 @@
   "vocalsync.prepare_upload": "准备上传",
   "vocalsync.prepared": "已准备人声，估算偏移为 {offset} 秒。",
   "vocalsync.preparing": "准备中",
-  "vocalsync.preparing_detail": "正在下载或上传源音频、分离人声并估算同步。",
   "vocalsync.progress_pending_short": "...",
   "vocalsync.preview": "预览",
   "vocalsync.preview_failed": "无法开始预览。",

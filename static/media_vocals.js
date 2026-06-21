@@ -23,7 +23,6 @@
     const youtubeProgressStatus = document.getElementById("vocal-sync-youtube-progress-status");
     const youtubeProgressPercent = document.getElementById("vocal-sync-youtube-progress-percent");
     const youtubeProgressBar = document.getElementById("vocal-sync-youtube-progress-bar");
-    const youtubeProgressDetail = document.getElementById("vocal-sync-youtube-progress-detail");
     const uploadForm = document.getElementById("vocal-sync-upload-form");
     const uploadFile = document.getElementById("vocal-sync-upload-file");
     const uploadProgress = document.getElementById("vocal-sync-upload-progress");
@@ -83,13 +82,12 @@
         return baseLabel;
     }
 
-    function renderYoutubeProgress({ visible, statusText, detailText, percent = null, indeterminate = false }) {
-        if (!youtubeProgress || !youtubeProgressStatus || !youtubeProgressBar || !youtubeProgressPercent || !youtubeProgressDetail) {
+    function renderYoutubeProgress({ visible, statusText, percent = null, indeterminate = false }) {
+        if (!youtubeProgress || !youtubeProgressStatus || !youtubeProgressBar || !youtubeProgressPercent) {
             return;
         }
         youtubeProgress.classList.toggle("hidden", !visible);
         youtubeProgressStatus.textContent = statusText || t("vocalsync.preparing");
-        youtubeProgressDetail.textContent = detailText || "";
         youtubeProgressBar.classList.toggle("animate-pulse", Boolean(indeterminate));
         if (indeterminate) {
             youtubeProgressBar.style.width = "100%";
@@ -109,7 +107,6 @@
         renderYoutubeProgress({
             visible: false,
             statusText: t("vocalsync.preparing"),
-            detailText: t("vocalsync.preparing_detail"),
             percent: 0,
         });
     }
@@ -122,7 +119,6 @@
         renderYoutubeProgress({
             visible: true,
             statusText,
-            detailText: isFinalizing ? t("vocalsync.finalizing_detail") : t("vocalsync.preparing_detail"),
             percent: Number.isFinite(percent) ? percent : 0,
             indeterminate: isFinalizing,
         });
@@ -220,7 +216,6 @@
             renderYoutubeProgress({
                 visible: true,
                 statusText: t("vocalsync.preparing"),
-                detailText: t("vocalsync.preparing_detail"),
                 percent: 0,
             });
         }
@@ -384,7 +379,6 @@
         stopPreview();
         setBusy(true);
         setState("vocalsync.preparing");
-        setMessage(t("vocalsync.preparing_detail"));
         try {
             const response = await fetch(appUrl(`/api/media/${mediaId}/vocals-sync/prepare-youtube`), {
                 method: "POST",
@@ -400,7 +394,6 @@
             renderYoutubeProgress({
                 visible: true,
                 statusText: t("vocalsync.preparing"),
-                detailText: t("vocalsync.preparing_detail"),
                 percent: 0,
             });
             await followYoutubePrepareTask(taskId);
@@ -478,7 +471,6 @@
                 renderYoutubeProgress({
                     visible: true,
                     statusText: t("vocalsync.preparing"),
-                    detailText: t("media.task_stream_reconnecting"),
                     percent: 0,
                     indeterminate: true,
                 });
@@ -493,7 +485,6 @@
         stopPreview();
         setBusy(true);
         setState("vocalsync.preparing");
-        setMessage(t("vocalsync.preparing_detail"));
         updateUploadProgress(0, "upload.connecting");
         const formData = new FormData();
         formData.append("file", file);
