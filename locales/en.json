@@ -258,7 +258,7 @@
   "trim.trimming": "Trimming...",
   "trim.vocals_sidecar": "Guide vocals",
   "vocalsync.already_has_vocals": "This media item already has guide vocals.",
-  "vocalsync.commit": "Commit Vocals",
+  "vocalsync.commit": "Commit",
   "vocalsync.committed": "Guide vocals added. Returning to media library...",
   "vocalsync.committing": "Committing",
   "vocalsync.committing_detail": "Rendering the adjusted vocals sidecar.",

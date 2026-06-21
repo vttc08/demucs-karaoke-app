@@ -258,7 +258,7 @@
   "trim.trimming": "正在裁剪...",
   "trim.vocals_sidecar": "引导人声",
   "vocalsync.already_has_vocals": "此媒体项已经有人声伴奏轨。",
-  "vocalsync.commit": "提交人声",
+  "vocalsync.commit": "提交",
   "vocalsync.committed": "已添加人声伴奏轨，正在返回媒体库...",
   "vocalsync.committing": "提交中",
   "vocalsync.committing_detail": "正在渲染调整后的人声附属文件。",
