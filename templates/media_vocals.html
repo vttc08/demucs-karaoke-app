@@ -121,11 +121,21 @@
                     <span class="material-symbols-outlined text-secondary">upload_file</span>
                 </div>
                 <form id="vocal-sync-upload-form" class="grid gap-3">
-                    <input id="vocal-sync-upload-file" type="file" accept="audio/*,video/*" class="block w-full cursor-pointer rounded-xl border border-white/10 bg-surface-container-highest/60 text-sm text-on-surface file:mr-3 file:h-11 file:border-0 file:bg-primary file:px-4 file:text-sm file:font-bold file:text-on-primary">
-                    <button type="submit" class="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-secondary/30 bg-secondary/15 px-4 text-xs font-black uppercase tracking-widest text-secondary">
-                        <span class="material-symbols-outlined">graphic_eq</span>
-                        <span>{{ t('vocalsync.prepare_upload') }}</span>
-                    </button>
+                    <div class="flex items-stretch gap-2">
+                        <input id="vocal-sync-upload-file" type="file" accept="audio/*,video/*" class="min-w-0 flex-1 cursor-pointer rounded-xl border border-white/10 bg-surface-container-highest/60 text-sm text-on-surface file:mr-3 file:h-11 file:border-0 file:bg-primary file:px-4 file:text-sm file:font-bold file:text-on-primary">
+                        <button type="submit" aria-label="{{ t('vocalsync.prepare_upload') }}" title="{{ t('vocalsync.prepare_upload') }}" class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-secondary/30 bg-secondary/15 text-secondary transition hover:bg-secondary/25 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                            <span class="material-symbols-outlined">graphic_eq</span>
+                        </button>
+                    </div>
+                    <div id="vocal-sync-upload-progress" class="hidden space-y-2 rounded-xl border border-white/10 bg-surface-container-high/50 p-3">
+                        <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                            <span id="vocal-sync-upload-progress-status" class="text-secondary">{{ t('upload.system_ready') }}</span>
+                            <span id="vocal-sync-upload-progress-percent" class="text-on-surface">0%</span>
+                        </div>
+                        <div class="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+                            <div id="vocal-sync-upload-progress-bar" class="h-full w-0 bg-secondary transition-all duration-300" style="box-shadow: 0 0 10px rgba(60, 227, 106, 0.35)"></div>
+                        </div>
+                    </div>
                 </form>
             </div>
 

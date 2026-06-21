@@ -15,6 +15,11 @@
     const searchResults = document.getElementById("vocal-sync-search-results");
     const uploadForm = document.getElementById("vocal-sync-upload-form");
     const uploadFile = document.getElementById("vocal-sync-upload-file");
+    const uploadProgress = document.getElementById("vocal-sync-upload-progress");
+    const uploadProgressStatus = document.getElementById("vocal-sync-upload-progress-status");
+    const uploadProgressPercent = document.getElementById("vocal-sync-upload-progress-percent");
+    const uploadProgressBar = document.getElementById("vocal-sync-upload-progress-bar");
+    const uploadSubmitBtn = uploadForm?.querySelector('[type="submit"]');
     const offsetInput = document.getElementById("vocal-sync-offset");
     const offsetDetail = document.getElementById("vocal-sync-offset-detail");
     const previewPlay = document.getElementById("vocal-sync-preview-play");
@@ -38,9 +43,26 @@
     }
 
     function setBusy(isBusy) {
-        [searchBtn, uploadForm?.querySelector("button"), commitBtn, previewPlay].forEach((el) => {
+        [searchBtn, uploadSubmitBtn, commitBtn, previewPlay].forEach((el) => {
             if (el) el.disabled = Boolean(isBusy) || (el === commitBtn && !activeSession) || (el === previewPlay && !activeSession);
         });
+    }
+
+    function updateUploadProgress(percent, statusKey) {
+        if (!uploadProgress || !uploadProgressStatus || !uploadProgressPercent || !uploadProgressBar) return;
+        const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+        uploadProgress.classList.remove("hidden");
+        uploadProgressStatus.textContent = t(statusKey);
+        uploadProgressPercent.textContent = `${Math.round(safePercent)}%`;
+        uploadProgressBar.style.width = `${safePercent}%`;
+    }
+
+    function resetUploadProgress() {
+        if (!uploadProgress || !uploadProgressStatus || !uploadProgressPercent || !uploadProgressBar) return;
+        uploadProgress.classList.add("hidden");
+        uploadProgressStatus.textContent = t("upload.system_ready");
+        uploadProgressPercent.textContent = "0%";
+        uploadProgressBar.style.width = "0%";
     }
 
     function escapeHtml(value) {
@@ -158,18 +180,53 @@
         setBusy(true);
         setState("vocalsync.preparing");
         setMessage(t("vocalsync.preparing_detail"));
+        updateUploadProgress(0, "upload.connecting");
         const formData = new FormData();
         formData.append("file", file);
         try {
-            const response = await fetch(appUrl(`/api/media/${mediaId}/vocals-sync/prepare-upload`), {
-                method: "POST",
-                body: formData,
+            const payload = await new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open("POST", appUrl(`/api/media/${mediaId}/vocals-sync/prepare-upload`), true);
+
+                xhr.upload.onprogress = (event) => {
+                    if (!event.lengthComputable) return;
+                    const percent = Math.round((event.loaded / event.total) * 100);
+                    updateUploadProgress(percent, percent < 100 ? "upload.uploading" : "upload.processing");
+                };
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        updateUploadProgress(100, "upload.processing");
+                        try {
+                            resolve(JSON.parse(xhr.responseText));
+                        } catch (error) {
+                            reject(new Error(t("vocalsync.request_failed")));
+                        }
+                        return;
+                    }
+
+                    let errorMessage = t("vocalsync.request_failed");
+                    try {
+                        const error = JSON.parse(xhr.responseText);
+                        errorMessage = error.detail || errorMessage;
+                    } catch (parseError) {
+                        console.error("Vocal sync upload error response parse failed:", parseError);
+                    }
+                    reject(new Error(errorMessage));
+                };
+
+                xhr.onerror = () => {
+                    reject(new Error(t("upload.network_error")));
+                };
+
+                xhr.send(formData);
             });
-            const payload = await parseJsonResponse(response);
             applySession(payload.session);
+            updateUploadProgress(100, "common.success");
         } catch (error) {
             setState("common.failed");
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
+            updateUploadProgress(0, "upload.upload_failed");
         } finally {
             setBusy(false);
         }
@@ -269,5 +326,7 @@
         setState("karaoke.already_multi_track");
         setMessage(t("vocalsync.already_has_vocals"), true);
         setBusy(true);
+    } else {
+        resetUploadProgress();
     }
 })();
