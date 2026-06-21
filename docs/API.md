@@ -577,7 +577,8 @@ Commit accepts the reviewed offset:
 ```
 
 Commit renders `/media/<stem>.vocals.wav`, updates `media_items.vocals_path`, and leaves
-`media_items.media_path` unchanged.
+`media_items.media_path` unchanged. Deleting a prepared review session or committing it removes the
+associated vocal-sync cache session and task-manifest artifacts.
 
 ---
 

@@ -30,6 +30,7 @@
     const offsetDetail = document.getElementById("vocal-sync-offset-detail");
     const previewPlay = document.getElementById("vocal-sync-preview-play");
     const previewStop = document.getElementById("vocal-sync-preview-stop");
+    const deleteBtn = document.getElementById("vocal-sync-delete");
     const commitBtn = document.getElementById("vocal-sync-commit");
 
     const OFFICIAL_MV_HINT_RE = /\b(official\s*mv|official\s*music\s*video|official\s*video|mv|music\s*video)\b/i;
@@ -232,12 +233,13 @@
 
     function setBusy(isBusy) {
         youtubeBusy = Boolean(isBusy);
-        [searchBtn, searchClearBtn, uploadSubmitBtn, commitBtn, previewPlay].forEach((el) => {
+        [searchBtn, searchClearBtn, uploadSubmitBtn, commitBtn, previewPlay, deleteBtn].forEach((el) => {
             if (el) {
                 el.disabled = Boolean(isBusy)
-                    || (sourcePrepLocked && el !== commitBtn && el !== previewPlay)
+                    || (sourcePrepLocked && el !== commitBtn && el !== previewPlay && el !== deleteBtn)
                     || (el === commitBtn && !activeSession)
-                    || (el === previewPlay && !activeSession);
+                    || (el === previewPlay && !activeSession)
+                    || (el === deleteBtn && !activeSession);
             }
         });
         updateSearchControls();
@@ -301,6 +303,7 @@
         offsetInput.disabled = false;
         previewPlay.disabled = false;
         previewStop.disabled = false;
+        deleteBtn.disabled = false;
         commitBtn.disabled = false;
         setState("vocalsync.ready");
         setMessage(t("vocalsync.prepared", { offset: formatOffset(session.estimated_offset_seconds) }));
@@ -316,6 +319,28 @@
             searchResults.innerHTML = "";
         }
         updateYoutubeSelectionUi();
+    }
+
+    function clearReviewSession({ keepMessage = false } = {}) {
+        stopPreview();
+        activeSession = null;
+        sourcePrepLocked = false;
+        vocals.removeAttribute("src");
+        vocals.load();
+        offsetInput.value = "0";
+        offsetInput.disabled = true;
+        previewPlay.disabled = true;
+        previewStop.disabled = true;
+        deleteBtn.disabled = true;
+        commitBtn.disabled = true;
+        setState("vocalsync.idle");
+        updateOffsetDetail();
+        updateSearchControls();
+        updateUploadControls();
+        updateYoutubeSelectionUi();
+        if (!keepMessage) {
+            setMessage("");
+        }
     }
 
     async function parseJsonResponse(response) {
@@ -795,6 +820,9 @@
 
     async function commitSession() {
         if (!activeSession) return;
+        if (!window.confirm(t("vocalsync.confirm_commit"))) {
+            return;
+        }
         stopPreview();
         commitBtn.disabled = true;
         setState("vocalsync.committing");
@@ -815,6 +843,32 @@
             commitBtn.disabled = false;
             setState("common.failed");
             setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
+        }
+    }
+
+    async function deleteReviewSession() {
+        if (!activeSession) return;
+        if (!window.confirm(t("vocalsync.confirm_delete_review"))) {
+            return;
+        }
+        stopPreview();
+        setBusy(true);
+        setState("vocalsync.deleting");
+        setMessage(t("vocalsync.deleting_detail"));
+        try {
+            const response = await fetch(
+                appUrl(`/api/media/${mediaId}/vocals-sync/sessions/${encodeURIComponent(activeSession.session_id)}`),
+                { method: "DELETE" },
+            );
+            await parseJsonResponse(response);
+            resetSharedProgress();
+            clearReviewSession({ keepMessage: true });
+            setMessage(t("vocalsync.deleted_review"));
+        } catch (error) {
+            setState("common.failed");
+            setMessage(error instanceof Error ? error.message : t("vocalsync.request_failed"), true);
+        } finally {
+            setBusy(false);
         }
     }
 
@@ -860,6 +914,7 @@
         });
     });
     previewStop?.addEventListener("click", stopPreview);
+    deleteBtn?.addEventListener("click", deleteReviewSession);
     commitBtn?.addEventListener("click", commitSession);
     window.addEventListener("beforeunload", () => {
         closeYoutubeTaskStream();

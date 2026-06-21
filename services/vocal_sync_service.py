@@ -399,6 +399,15 @@ class VocalSyncService:
         payload["session_id"] = session_id
         cls.write_task_manifest(task_id, payload)
 
+    @classmethod
+    def delete_task_manifest(cls, task_id: int) -> None:
+        path = cls._task_manifest_path(task_id)
+        try:
+            if path.exists():
+                path.unlink()
+        except OSError as exc:
+            raise VocalSyncError("Failed to remove vocal sync task manifest") from exc
+
     def latest_ready_review_for_media(
         self,
         db: Session,
@@ -433,6 +442,37 @@ class VocalSyncService:
                 return task, session
         return None
 
+    def task_for_session(
+        self,
+        db: Session,
+        media_item_id: int,
+        session_id: str,
+        *,
+        task_types: tuple[str, ...],
+        limit: int = 25,
+    ) -> ProcessingTask | None:
+        """Return the durable vocal-sync task associated with a review session."""
+        tasks = (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_media_item_id == media_item_id,
+                ProcessingTask.target_queue_item_id.is_(None),
+                ProcessingTask.task_type.in_(task_types),
+            )
+            .order_by(ProcessingTask.updated_at.desc(), ProcessingTask.id.desc())
+            .limit(limit)
+            .all()
+        )
+        normalized_session_id = str(session_id or "").strip()
+        for task in tasks:
+            try:
+                manifest = self.read_task_manifest(task.id)
+            except VocalSyncError:
+                continue
+            if str(manifest.get("session_id") or "").strip() == normalized_session_id:
+                return task
+        return None
+
     @classmethod
     def cleanup_task_source(cls, task_id: int) -> None:
         try:
@@ -465,6 +505,15 @@ class VocalSyncService:
         manifest = self._read_manifest(session_id)
         if int(manifest.get("media_item_id") or 0) != int(media_item_id):
             raise VocalSyncConflictError("Vocal sync session does not match media item")
+        linked_task = self.task_for_session(
+            db,
+            media_item_id,
+            session_id,
+            task_types=(
+                "media_vocal_sync_prepare_youtube",
+                "media_vocal_sync_prepare_upload",
+            ),
+        )
         media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
         media_item = self._validate_media_for_prepare(media_item)
         vocals_source = Path(str(manifest["vocals_path"]))
@@ -493,12 +542,36 @@ class VocalSyncService:
         self._write_manifest(session_id, manifest)
         session = self._session_from_manifest(manifest)
         self.delete_session(session_id)
+        if linked_task is not None:
+            self.cleanup_task_artifacts(linked_task.id)
         return session
 
     def delete_session(self, session_id: str) -> None:
         session_dir = self._session_dir(session_id)
         if session_dir.exists():
             shutil.rmtree(session_dir)
+
+    def delete_review_session(
+        self,
+        db: Session,
+        media_item_id: int,
+        session_id: str,
+    ) -> None:
+        manifest = self._read_manifest(session_id)
+        if int(manifest.get("media_item_id") or 0) != int(media_item_id):
+            raise VocalSyncConflictError("Vocal sync session does not match media item")
+        linked_task = self.task_for_session(
+            db,
+            media_item_id,
+            session_id,
+            task_types=(
+                "media_vocal_sync_prepare_youtube",
+                "media_vocal_sync_prepare_upload",
+            ),
+        )
+        self.delete_session(session_id)
+        if linked_task is not None:
+            self.cleanup_task_artifacts(linked_task.id)
 
     @classmethod
     def _read_manifest(cls, session_id: str) -> dict[str, Any]:
@@ -517,6 +590,14 @@ class VocalSyncService:
         temp_path = path.with_suffix(".tmp")
         temp_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
         os.replace(temp_path, path)
+
+    @classmethod
+    def cleanup_task_artifacts(cls, task_id: int) -> None:
+        cls.cleanup_task_source(task_id)
+        try:
+            cls.delete_task_manifest(task_id)
+        except VocalSyncNotFoundError:
+            return
 
     @classmethod
     def _session_from_manifest(cls, manifest: dict[str, Any]) -> VocalSyncSession:

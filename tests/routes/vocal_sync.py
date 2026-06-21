@@ -338,3 +338,13 @@ def test_get_task_session_returns_prepared_session(client):
 
     assert response.status_code == 200
     assert response.json()["session"]["session_id"] == "11111111-1111-1111-1111-111111111111"
+
+
+def test_delete_review_session_uses_service_cleanup(client):
+    authenticate_admin_client(client)
+    with patch("routes.vocal_sync.vocal_sync_service.delete_review_session") as delete_review:
+        response = client.delete("/api/media/42/vocals-sync/sessions/abc123")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    delete_review.assert_called_once_with(ANY, 42, "abc123")

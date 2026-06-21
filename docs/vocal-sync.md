@@ -19,7 +19,8 @@ replacing the primary media file.
    and stores a review session under `cache/vocal_sync/`.
 7. The browser fetches the prepared session by `task_id`, previews the existing karaoke media and
    prepared vocal stem with the estimated offset.
-8. The admin can adjust the offset and commit a new `/media/<stem>.vocals.wav` sidecar.
+8. The admin can adjust the offset and commit a new `/media/<stem>.vocals.wav` sidecar, or delete
+   the prepared review to remove all vocal-sync cache artifacts and return the page to idle.
 
 Review sessions are cache-backed manifests and the YouTube prep request itself is now a durable
 processing task. The task survives like other active processing rows, while the prepared review
@@ -30,6 +31,10 @@ On page load, `/media-vocals` calls `/api/media/{item_id}/vocals-sync/status` be
 preparation. This restores an active prepare task after browser refresh by reconnecting to its task
 stream, and restores a completed review session without rerunning download or Demucs. Once a review
 session is ready, new source preparation is locked until the admin commits the restored review.
+
+Deleting a ready review session removes the session directory under `cache/vocal_sync/` and the
+linked task manifest under `cache/vocal_sync_tasks/`. A successful commit performs the same cleanup
+after writing the final `/media/<stem>.vocals.wav` sidecar.
 
 ## Offset Semantics
 

@@ -254,14 +254,12 @@ def commit_vocal_sync_session(
 def delete_vocal_sync_session(
     item_id: int,
     session_id: str,
+    db: Session = Depends(get_db),
     _admin=Depends(require_admin_user),
 ):
     """Delete a prepared review session and its cache artifacts."""
     try:
-        session = vocal_sync_service.get_session(session_id)
-        if session.media_item_id != item_id:
-            raise VocalSyncConflictError("Vocal sync session does not match media item")
-        vocal_sync_service.delete_session(session_id)
+        vocal_sync_service.delete_review_session(db, item_id, session_id)
         return {"status": "ok"}
     except VocalSyncNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

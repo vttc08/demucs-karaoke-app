@@ -85,9 +85,13 @@
                             <span class="material-symbols-outlined text-[16px]">stop</span>
                             <span class="truncate">{{ t('common.stop') }}</span>
                         </button>
-                        <button id="vocal-sync-commit" type="button" disabled class="col-start-2 inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-secondary px-3 text-[10px] font-black uppercase tracking-widest text-surface-container-lowest transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:opacity-50 lg:col-span-1">
+                        <button id="vocal-sync-delete" type="button" disabled class="inline-flex h-9 min-w-0 items-center justify-center gap-2 overflow-hidden rounded-xl border border-error/30 bg-error/10 px-2 text-[10px] font-bold uppercase tracking-widest text-error transition hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-50">
+                            <span class="material-symbols-outlined text-[16px]">delete</span>
+                            <span class="truncate">{{ t('common.delete') }}</span>
+                        </button>
+                        <button id="vocal-sync-commit" type="button" disabled class="inline-flex h-9 min-w-0 items-center justify-center gap-2 overflow-hidden rounded-xl bg-secondary px-3 text-[10px] font-black uppercase tracking-widest text-surface-container-lowest transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:opacity-50">
                             <span class="material-symbols-outlined text-[16px]">library_add_check</span>
-                            <span>{{ t('vocalsync.commit') }}</span>
+                            <span class="truncate">{{ t('vocalsync.commit') }}</span>
                         </button>
                     </div>
                 </div>

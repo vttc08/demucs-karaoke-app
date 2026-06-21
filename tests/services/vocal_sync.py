@@ -63,6 +63,16 @@ def test_commit_session_installs_vocals_sidecar(db_session, tmp_path, monkeypatc
     db_session.add(media)
     db_session.commit()
     db_session.refresh(media)
+    task = ProcessingTask(
+        task_type="media_vocal_sync_prepare_upload",
+        source_kind="upload",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.DONE.value,
+        stage="ready",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
     manifest = {
         "session_id": session_id,
         "media_item_id": media.id,
@@ -80,6 +90,17 @@ def test_commit_session_installs_vocals_sidecar(db_session, tmp_path, monkeypatc
         "artist": "Artist",
     }
     VocalSyncService._write_manifest(session_id, manifest)
+    VocalSyncService.write_task_manifest(
+        task.id,
+        {
+            "task_id": task.id,
+            "media_item_id": media.id,
+            "source_kind": "upload",
+            "source_filename": "source.wav",
+            "source_path": None,
+            "session_id": session_id,
+        },
+    )
 
     service = VocalSyncService()
 
@@ -99,6 +120,65 @@ def test_commit_session_installs_vocals_sidecar(db_session, tmp_path, monkeypatc
     assert media.vocals_path == "/media/song.vocals.wav"
     assert (media_root / "song.vocals.wav").read_bytes() == b"aligned vocals"
     assert not session_dir.exists()
+    assert not (cache_root / "vocal_sync_tasks" / f"{task.id}.json").exists()
+
+
+def test_delete_review_session_removes_session_and_task_manifest(db_session, tmp_path, monkeypatch):
+    cache_root = tmp_path / "cache"
+    session_id = "55555555-5555-5555-5555-555555555555"
+    session_dir = cache_root / "vocal_sync" / session_id
+    session_dir.mkdir(parents=True)
+    vocals_file = session_dir / "review_vocals.wav"
+    vocals_file.write_bytes(b"vocals")
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+    media = MediaItem(
+        title="Song",
+        artist="Artist",
+        media_path="/media/song.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+    task = ProcessingTask(
+        task_type="media_vocal_sync_prepare_youtube",
+        source_kind="youtube",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.DONE.value,
+        stage="ready",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+    VocalSyncService._write_manifest(
+        session_id,
+        {
+            "session_id": session_id,
+            "media_item_id": media.id,
+            "media_url": "/media/song.mp4",
+            "vocals_path": str(vocals_file),
+            "estimated_offset_seconds": 0.2,
+            "method": "scipy_cross_correlation",
+            "source_kind": "youtube",
+            "title": "Song",
+            "artist": "Artist",
+        },
+    )
+    VocalSyncService.write_task_manifest(
+        task.id,
+        {
+            "task_id": task.id,
+            "media_item_id": media.id,
+            "source_kind": "youtube",
+            "youtube_id": "abcdefghijk",
+            "session_id": session_id,
+        },
+    )
+
+    VocalSyncService().delete_review_session(db_session, media.id, session_id)
+
+    assert not session_dir.exists()
+    assert not (cache_root / "vocal_sync_tasks" / f"{task.id}.json").exists()
 
 
 def test_active_vocal_sync_prepare_task_spans_source_kinds(db_session):
