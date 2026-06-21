@@ -1,0 +1,41 @@
+# Add Vocals Workflow
+
+The admin-only vocal sync workflow adds guide vocals to an existing karaoke media item without
+replacing the primary media file.
+
+## Flow
+
+1. Open **Add Vocals** from the media edit modal.
+2. Choose an unseparated vocal source from YouTube search or upload an audio/video file.
+3. The main app downloads or stores the source under cache and sends it to the remote Demucs service
+   for two-stem separation.
+4. The main app prepares mono WAV comparison files with ffmpeg, estimates a constant offset locally,
+   and stores a review session under `cache/vocal_sync/`.
+5. The browser previews the existing karaoke media and prepared vocal stem with the estimated offset.
+6. The admin can adjust the offset and commit a new `/media/<stem>.vocals.wav` sidecar.
+
+Review sessions are cache-backed manifests, not durable processing tasks. They survive page refresh
+while the cache files remain, but they are not restored as restartable jobs after app restarts.
+
+## Offset Semantics
+
+The estimator compares:
+
+- reference: separated background/no-vocals stem from the source track
+- target: existing karaoke media audio
+
+Positive offset means the source vocals are early relative to the karaoke media, so commit prepends
+silence before the vocals.
+
+Negative offset means the source vocals are late relative to the karaoke media, so commit trims the
+beginning of the vocal stem by `abs(offset)`.
+
+## Deployment Notes
+
+The main app depends only on `numpy` and `scipy` for the local cross-correlation estimator. These
+libraries are imported inside the estimator function so normal FastAPI startup does not load the
+scientific stack.
+
+The workflow intentionally does not add `librosa` to the main app. A future DTW fallback can live
+behind the remote Demucs service if constant-offset cross-correlation is not reliable enough for a
+specific source.

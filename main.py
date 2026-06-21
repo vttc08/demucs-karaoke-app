@@ -24,6 +24,7 @@ from routes import (
     search,
     settings as settings_routes,
     tasks as task_routes,
+    vocal_sync,
 )
 from services.media_library_sync_service import MediaLibrarySyncService
 from services.processing_task_service import processing_task_service, task_execution_coordinator
@@ -114,6 +115,7 @@ def create_app() -> FastAPI:
     created_app.include_router(search.router, prefix=base_path)
     created_app.include_router(settings_routes.router, prefix=base_path)
     created_app.include_router(task_routes.router, prefix=base_path)
+    created_app.include_router(vocal_sync.router, prefix=base_path)
 
     @created_app.get(f"{base_path}/health")
     def health_check():

@@ -68,6 +68,11 @@ This project currently uses two services:
   timestamps. The resolved range is also applied to vocals and timed lyrics.
 - Staged files and temporary rollback files are created beside each source so `os.replace` remains
   same-filesystem and atomic. Rollback files are removed after success and are not permanent backups.
+- The Add Vocals page at `/media-vocals/{item_id}` prepares guide vocals for an existing karaoke
+  media item without replacing `media_path`. Source audio comes from YouTube audio download or upload,
+  remote Demucs returns vocals/background stems, and the main app estimates a constant offset locally
+  with lazy-loaded NumPy/SciPy cross-correlation. Review sessions live under `cache/vocal_sync/` until
+  the admin commits a `/media/<stem>.vocals.wav` sidecar.
 
 ## Real-time queue update architecture
 

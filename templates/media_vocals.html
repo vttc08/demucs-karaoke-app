@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('vocalsync.title') }} - {{ vocal_sync.title }}{% endblock %}
+{% block header_title %}{{ t('vocalsync.short_title') }}{% endblock %}
+
+{% block content %}
+<main
+    id="vocal-sync-page"
+    class="min-h-screen px-4 pb-10 pt-24 sm:px-6 lg:px-8"
+    data-media-id="{{ vocal_sync.media_id }}"
+    data-media-url="{{ vocal_sync.media_url|public_url }}"
+    data-has-vocals="{{ 'true' if vocal_sync.has_vocals else 'false' }}"
+>
+    <div class="mx-auto grid w-full max-w-7xl gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
+        <section class="glass-card overflow-hidden rounded-2xl border border-white/10 shadow-2xl shadow-black/30">
+            <div class="border-b border-white/10 px-5 py-4">
+                <a href="{{ app_url('/media') }}" class="mb-3 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary hover:text-primary/80">
+                    <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                    <span>{{ t('trim.back_to_media') }}</span>
+                </a>
+                <div class="flex flex-wrap items-end justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-[11px] font-black uppercase tracking-[0.2em] text-on-surface-variant">{{ t('vocalsync.workspace') }}</p>
+                        <h2 class="mt-1 truncate font-headline text-3xl font-black text-on-surface">{{ vocal_sync.title }}</h2>
+                        <p class="truncate text-sm font-semibold text-primary">{{ vocal_sync.artist or t('common.unknown_artist') }}</p>
+                    </div>
+                    <span id="vocal-sync-state" class="rounded-full border border-white/10 bg-surface-container-highest/70 px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">
+                        {{ t('vocalsync.idle') }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="grid gap-5 p-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
+                <div class="overflow-hidden rounded-xl bg-black shadow-xl ring-1 ring-white/10">
+                    {% if vocal_sync.has_video %}
+                    <video
+                        id="vocal-sync-media"
+                        class="aspect-video w-full bg-black"
+                        src="{{ vocal_sync.media_url|public_url }}"
+                        controls
+                        playsinline
+                    ></video>
+                    {% else %}
+                    <div class="flex aspect-video flex-col items-center justify-center gap-4 bg-surface-container-lowest">
+                        <span class="material-symbols-outlined text-6xl text-primary/80">music_note</span>
+                        <div class="text-center">
+                            <h3 class="font-headline text-xl font-black">{{ vocal_sync.title }}</h3>
+                            <p class="text-sm text-on-surface-variant">{{ vocal_sync.artist or t('common.unknown_artist') }}</p>
+                        </div>
+                        <audio
+                            id="vocal-sync-media"
+                            class="w-[min(28rem,90%)]"
+                            src="{{ vocal_sync.media_url|public_url }}"
+                            controls
+                        ></audio>
+                    </div>
+                    {% endif %}
+                    <audio id="vocal-sync-vocals" preload="auto"></audio>
+                </div>
+
+                <aside class="grid content-start gap-3">
+                    <button id="vocal-sync-preview-play" type="button" disabled class="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-black uppercase tracking-widest text-on-primary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50">
+                        <span class="material-symbols-outlined">play_arrow</span>
+                        <span>{{ t('vocalsync.preview') }}</span>
+                    </button>
+                    <button id="vocal-sync-preview-stop" type="button" disabled class="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-surface-container-highest/60 px-4 text-xs font-bold uppercase tracking-widest text-on-surface transition hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-50">
+                        <span class="material-symbols-outlined">stop</span>
+                        <span>{{ t('common.stop') }}</span>
+                    </button>
+                    <div class="rounded-xl border border-white/10 bg-surface-container-high/50 p-4">
+                        <label for="vocal-sync-offset" class="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">{{ t('vocalsync.offset') }}</label>
+                        <div class="mt-2 flex items-center gap-2">
+                            <button type="button" data-offset-step="-0.1" class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-surface-container-highest text-primary" aria-label="{{ t('vocalsync.offset_down') }}">
+                                <span class="material-symbols-outlined">remove</span>
+                            </button>
+                            <input id="vocal-sync-offset" type="number" step="0.01" value="0" disabled class="h-10 min-w-0 flex-1 rounded-lg border-none bg-surface-container-low px-3 text-center text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary/50">
+                            <button type="button" data-offset-step="0.1" class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-surface-container-highest text-primary" aria-label="{{ t('vocalsync.offset_up') }}">
+                                <span class="material-symbols-outlined">add</span>
+                            </button>
+                        </div>
+                        <p id="vocal-sync-offset-detail" class="mt-2 text-xs leading-relaxed text-on-surface-variant">{{ t('vocalsync.offset_waiting') }}</p>
+                    </div>
+                    <button id="vocal-sync-commit" type="button" disabled class="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-secondary px-4 text-sm font-black uppercase tracking-widest text-surface-container-lowest transition hover:bg-secondary/90 disabled:cursor-not-allowed disabled:opacity-50">
+                        <span class="material-symbols-outlined">library_add_check</span>
+                        <span>{{ t('vocalsync.commit') }}</span>
+                    </button>
+                </aside>
+            </div>
+        </section>
+
+        <section class="grid content-start gap-5">
+            {% if vocal_sync.has_vocals %}
+            <div class="rounded-xl border border-tertiary/30 bg-tertiary/10 p-4 text-sm font-semibold text-tertiary">
+                {{ t('vocalsync.already_has_vocals') }}
+            </div>
+            {% endif %}
+
+            <div class="glass-card rounded-2xl border border-white/10 p-5">
+                <div class="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                        <p class="text-[11px] font-black uppercase tracking-[0.2em] text-on-surface-variant">{{ t('vocalsync.youtube_source') }}</p>
+                        <h3 class="font-headline text-xl font-black">{{ t('common.search') }}</h3>
+                    </div>
+                    <span class="material-symbols-outlined text-primary">youtube_activity</span>
+                </div>
+                <div class="flex gap-2">
+                    <input id="vocal-sync-search-input" type="search" class="h-11 min-w-0 flex-1 rounded-xl border-none bg-surface-container-highest/60 px-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/50" placeholder="{{ t('vocalsync.search_placeholder') }}">
+                    <button id="vocal-sync-search-btn" type="button" class="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-on-primary">
+                        <span class="material-symbols-outlined">search</span>
+                    </button>
+                </div>
+                <div id="vocal-sync-search-results" class="mt-4 grid gap-2"></div>
+            </div>
+
+            <div class="glass-card rounded-2xl border border-white/10 p-5">
+                <div class="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                        <p class="text-[11px] font-black uppercase tracking-[0.2em] text-on-surface-variant">{{ t('vocalsync.upload_source') }}</p>
+                        <h3 class="font-headline text-xl font-black">{{ t('common.upload') }}</h3>
+                    </div>
+                    <span class="material-symbols-outlined text-secondary">upload_file</span>
+                </div>
+                <form id="vocal-sync-upload-form" class="grid gap-3">
+                    <input id="vocal-sync-upload-file" type="file" accept="audio/*,video/*" class="block w-full cursor-pointer rounded-xl border border-white/10 bg-surface-container-highest/60 text-sm text-on-surface file:mr-3 file:h-11 file:border-0 file:bg-primary file:px-4 file:text-sm file:font-bold file:text-on-primary">
+                    <button type="submit" class="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-secondary/30 bg-secondary/15 px-4 text-xs font-black uppercase tracking-widest text-secondary">
+                        <span class="material-symbols-outlined">graphic_eq</span>
+                        <span>{{ t('vocalsync.prepare_upload') }}</span>
+                    </button>
+                </form>
+            </div>
+
+            <p id="vocal-sync-message" class="min-h-5 text-sm font-semibold text-on-surface-variant" role="status" aria-live="polite"></p>
+        </section>
+    </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ app_url('/static/media_vocals.js') }}"></script>
+{% endblock %}

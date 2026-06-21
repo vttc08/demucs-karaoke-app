@@ -21,6 +21,8 @@ dependencies = [
     "pycryptodome>=3.22.0",
     "pylrc>=0.1.2",
     "srt>=3.5.3",
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
 ]
 
 [tool.setuptools]

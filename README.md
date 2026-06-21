@@ -182,12 +182,14 @@ and `/static/...`.
           - Admin users can use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
           - Lyrics sidecars are classified by suffix: `.lrc` and `.txt` stay under the normal lyrics badge, while WhisperX word-aligned `.json` sidecars get a separate badge
           - Admin users can open **Lossless Trim** from the edit modal to retain an intro/outro interval without re-encoding; video boundaries snap outward to I-frames and attached vocals/lyrics are shifted to the same interval
+          - Admin users can open **Add Vocals** from the edit modal to prepare a vocal source from YouTube or upload, review the estimated sync offset, and commit a new guide-vocal sidecar
           - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
           - Admin users can trigger **Scan Library** to reconcile DB with filesystem on demand
           - App also performs one media-library scan on startup/restart
 
 See [docs/lossless-trim-editor.md](docs/lossless-trim-editor.md) for supported
 sidecars, FFmpeg behavior, and the destructive replacement contract.
+See [docs/vocal-sync.md](docs/vocal-sync.md) for the Add Vocals workflow and offset semantics.
 
 6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
         - Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files into the media library with title and artist metadata

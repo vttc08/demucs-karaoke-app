@@ -522,6 +522,59 @@ also needed. Rename and lyrics changes remain saved if the health check fails.
 
 ---
 
+### Add Vocals To Media Item
+```
+POST /api/media/{item_id}/vocals-sync/prepare-youtube
+POST /api/media/{item_id}/vocals-sync/prepare-upload
+GET /api/media/{item_id}/vocals-sync/sessions/{session_id}
+POST /api/media/{item_id}/vocals-sync/sessions/{session_id}/commit
+DELETE /api/media/{item_id}/vocals-sync/sessions/{session_id}
+```
+
+Admin-only workflow for preparing and committing a guide-vocal sidecar for an existing media item.
+The media item must exist on disk and must not already have `vocals_path`.
+
+`prepare-youtube` accepts:
+```json
+{
+  "youtube_id": "abcdefghijk"
+}
+```
+
+`prepare-upload` accepts multipart form data with `file`.
+
+Preparation downloads or stores the unseparated source, sends it to the remote Demucs service, then
+estimates a local constant offset using the separated background stem and the existing karaoke media
+audio. The review session is stored under cache and returns:
+```json
+{
+  "status": "ready",
+  "session": {
+    "session_id": "11111111-1111-1111-1111-111111111111",
+    "media_item_id": 1,
+    "media_url": "/media/song.mp4",
+    "vocals_url": "/cache/vocal_sync/11111111-1111-1111-1111-111111111111/review_vocals.wav",
+    "estimated_offset_seconds": 0.25,
+    "method": "scipy_cross_correlation",
+    "source_kind": "youtube",
+    "title": "Song",
+    "artist": "Artist"
+  }
+}
+```
+
+Commit accepts the reviewed offset:
+```json
+{
+  "offset_seconds": 0.35
+}
+```
+
+Commit renders `/media/<stem>.vocals.wav`, updates `media_items.vocals_path`, and leaves
+`media_items.media_path` unchanged.
+
+---
+
 ### Delete Media Item
 ```
 DELETE /api/media/{item_id}
