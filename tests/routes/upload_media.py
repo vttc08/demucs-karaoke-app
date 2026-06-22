@@ -494,6 +494,7 @@ def test_media_management_page_shows_edit_controls_for_admin(client):
     assert b'data-action="open-trim-editor"' in response.content
     assert b'data-action="download-media-package"' in response.content
     assert b"File Management" in response.content
+    assert b'id="media-file-management-panel"' in response.content
     assert b'id="media-edit-files-list"' in response.content
     assert b'id="media-download-package-button"' in response.content
 

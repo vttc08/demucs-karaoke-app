@@ -87,12 +87,35 @@ class MediaLibraryService:
 
     @staticmethod
     def _thumbnail_for(item: MediaItem) -> str | None:
-        media_file = QueueService._media_url_to_file(item.media_path)
-        if media_file is not None:
-            thumbnail_path = MediaThumbnailService.best_thumbnail_path_for_media_file(media_file)
-            if thumbnail_path is not None:
-                return MediaThumbnailService.thumbnail_url_for_media_file(media_file)
+        adjacent_thumbnail = MediaLibraryService._local_adjacent_thumbnail_for(item)
+        if adjacent_thumbnail is not None:
+            return adjacent_thumbnail
 
+        youtube_thumbnail = MediaLibraryService._youtube_thumbnail_for(item)
+        if youtube_thumbnail is not None:
+            return youtube_thumbnail
+
+        media_file = QueueService._media_url_to_file(item.media_path)
+        if media_file is None:
+            return None
+
+        thumbnail_path = MediaThumbnailService.best_thumbnail_path_for_media_file(media_file)
+        if thumbnail_path is None:
+            return None
+        return MediaThumbnailService.thumbnail_url_for_media_file(media_file)
+
+    @staticmethod
+    def _local_adjacent_thumbnail_for(item: MediaItem) -> str | None:
+        media_file = QueueService._media_url_to_file(item.media_path)
+        if media_file is None:
+            return None
+        for candidate in MediaThumbnailService.adjacent_thumbnail_paths_for_media_file(media_file):
+            if candidate.exists():
+                return MediaThumbnailService.public_url_for_path(candidate)
+        return None
+
+    @staticmethod
+    def _youtube_thumbnail_for(item: MediaItem) -> str | None:
         if item.youtube_id:
             youtube_id = item.youtube_id.strip()
             if youtube_id:

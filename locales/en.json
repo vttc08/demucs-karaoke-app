@@ -160,7 +160,6 @@
   "media.file_lyrics_lrc": "Lyrics LRC",
   "media.file_lyrics_txt": "Lyrics TXT",
   "media.file_main": "Main file",
-  "media.file_management_detail": "Inspect the media file and tracked sidecars, download individual files, or remove sidecars so separation or alignment can be re-run.",
   "media.file_management_empty": "No files are currently tracked for this item.",
   "media.file_management_failed": "Failed to load file list",
   "media.file_management_loading": "Loading files...",

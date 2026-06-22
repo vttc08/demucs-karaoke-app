@@ -236,7 +236,9 @@ class MediaLibrarySyncService:
         media_item.file_stem = media_item.file_stem or media_file.stem
 
         sidecars_updated = 1 if self._refresh_sidecars(media_item, media_file) else 0
-        thumbnails_updated = 1 if self.thumbnail_service.ensure_thumbnail_for_media_file(media_file) else 0
+        thumbnails_updated = 0
+        if self._should_refresh_thumbnail(media_item, media_file):
+            thumbnails_updated = 1 if self.thumbnail_service.ensure_thumbnail_for_media_file(media_file) else 0
         return restored, sidecars_updated, thumbnails_updated
 
     def _find_vocals_sidecar(self, media_file: Path) -> str | None:
@@ -281,3 +283,12 @@ class MediaLibrarySyncService:
             return None
         cleaned = value.strip()
         return cleaned or None
+
+    def _should_refresh_thumbnail(self, media_item: MediaItem, media_file: Path) -> bool:
+        """Return whether scan refresh should touch the thumbnail cache for this row."""
+        if not media_item.youtube_id:
+            return True
+        return any(
+            candidate.exists()
+            for candidate in self.thumbnail_service.adjacent_thumbnail_paths_for_media_file(media_file)
+        )
