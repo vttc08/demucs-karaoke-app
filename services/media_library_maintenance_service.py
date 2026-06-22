@@ -303,6 +303,11 @@ class MediaLibraryMaintenanceService:
                 if not isinstance(file_path, Path) or not file_path.exists():
                     continue
                 archive.write(file_path, arcname=file_path.name)
+            thumbnail_entry = self._thumbnail_zip_entry(media_item)
+            if thumbnail_entry is not None:
+                thumbnail_path, thumbnail_name = thumbnail_entry
+                if thumbnail_path.exists():
+                    archive.write(thumbnail_path, arcname=thumbnail_name)
         return buffer.getvalue(), archive_name
 
     def _collect_local_paths(self, media_item: MediaItem) -> list[Path]:
@@ -431,6 +436,21 @@ class MediaLibraryMaintenanceService:
         if media_item.file_stem:
             return media_item.file_stem
         return build_media_stem(media_item.title, media_item.artist)
+
+    def _thumbnail_zip_entry(self, media_item: MediaItem) -> tuple[Path, str] | None:
+        """Return the thumbnail file and ZIP entry name, if any thumbnail exists."""
+        media_file = self.queue_service._media_url_to_file(media_item.media_path)
+        if media_file is None:
+            return None
+
+        thumbnail_path = MediaThumbnailService.best_thumbnail_path_for_media_file(media_file)
+        if thumbnail_path is None:
+            return None
+
+        if thumbnail_path.parent == media_file.parent:
+            return thumbnail_path, thumbnail_path.name
+
+        return thumbnail_path, f"{self._media_package_stem(media_item)}{thumbnail_path.suffix.lower()}"
 
     def _resolve_media_file_entry(
         self,

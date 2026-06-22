@@ -271,9 +271,12 @@ def test_media_library_maintenance_service_builds_zip_package(db_session, tmp_pa
         media_file = settings.media_path / "zip-song.mp4"
         vocals_file = settings.media_path / "zip-song.vocals.wav"
         lyrics_file = settings.cache_path / "lyrics" / "zip-song.lrc"
+        thumb_file = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
         media_file.write_bytes(b"video-bytes")
         vocals_file.write_bytes(b"vocals-bytes")
         lyrics_file.write_text("[00:01.00]zip", encoding="utf-8")
+        thumb_file.parent.mkdir(parents=True, exist_ok=True)
+        thumb_file.write_bytes(b"thumb-bytes")
 
         media = MediaItem(
             title="Zip Song",
@@ -291,11 +294,12 @@ def test_media_library_maintenance_service_builds_zip_package(db_session, tmp_pa
 
         assert archive_name == "zip-song.zip"
         with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
-            assert archive.namelist() == ["zip-song.mp4", "zip-song.vocals.wav", "zip-song.lrc"]
+            assert archive.namelist() == ["zip-song.mp4", "zip-song.vocals.wav", "zip-song.lrc", "zip-song.jpg"]
             assert archive.getinfo("zip-song.mp4").compress_type == zipfile.ZIP_STORED
             assert archive.read("zip-song.mp4") == b"video-bytes"
             assert archive.read("zip-song.vocals.wav") == b"vocals-bytes"
             assert archive.read("zip-song.lrc") == b"[00:01.00]zip"
+            assert archive.read("zip-song.jpg") == b"thumb-bytes"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache

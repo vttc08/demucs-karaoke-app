@@ -822,9 +822,12 @@ def test_media_package_download_route_returns_zip(client, tmp_path):
         media_file = settings.media_path / "package-route.mp4"
         vocals_file = settings.media_path / "package-route.vocals.wav"
         lyrics_file = settings.cache_path / "lyrics" / "package-route.json"
+        thumb_file = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
         media_file.write_bytes(b"video-bytes")
         vocals_file.write_bytes(b"vocals-bytes")
         lyrics_file.write_text("{}", encoding="utf-8")
+        thumb_file.parent.mkdir(parents=True, exist_ok=True)
+        thumb_file.write_bytes(b"thumb-bytes")
 
         with TestingSessionLocal() as db:
             media = MediaItem(
@@ -847,11 +850,13 @@ def test_media_package_download_route_returns_zip(client, tmp_path):
                 "package-route.mp4",
                 "package-route.vocals.wav",
                 "package-route.json",
+                "package-route.jpg",
             ]
             assert archive.getinfo("package-route.mp4").compress_type == zipfile.ZIP_STORED
             assert archive.read("package-route.mp4") == b"video-bytes"
             assert archive.read("package-route.vocals.wav") == b"vocals-bytes"
             assert archive.read("package-route.json") == b"{}"
+            assert archive.read("package-route.jpg") == b"thumb-bytes"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
