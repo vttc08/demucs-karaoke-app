@@ -228,6 +228,10 @@ The stage page uses a websocket-first model:
   `vocals_path`).
 - yt-dlp downloads and Demucs scratch outputs are staged under `cache/` first; they are not durable
   library assets and should never be imported as standalone media rows.
+- Main-app scratch outputs are isolated under per-task subdirectories in `cache/ytdlp/`,
+  `cache/audio/`, `cache/processed/`, and `cache/demucs_outputs/`. Successful tasks remove only their
+  own subdirectories after durable media paths are committed; failed task artifacts remain for
+  manual diagnosis. Referenced lyrics and generated thumbnail caches are excluded from this cleanup.
 - Stage playback is sidecar-first (not browser multi-audio-track MP4 selection):
   - `<video>` plays `media_path`
   - optional hidden `<audio>` plays `vocals_path`

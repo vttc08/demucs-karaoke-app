@@ -66,6 +66,29 @@ On startup:
 
 The restart model is coarse on purpose. yt-dlp and local ffmpeg/demucs work restart from the beginning of the relevant operation instead of pretending to resume from a stale percentage.
 
+## Cache Artifact Lifecycle
+
+Main-app processing scratch files are isolated by durable task id under:
+
+- `cache/ytdlp/<task_id>/`
+- `cache/audio/<task_id>/`
+- `cache/processed/<task_id>/`
+- `cache/demucs_outputs/<task_id>/`
+
+After a task has installed its durable media and sidecars, committed their database paths, and
+reached `done`, the app removes that task's scratch directories. Cleanup is best-effort: a
+filesystem cleanup error is logged but does not turn a completed processing task into a failed one.
+
+Failed task directories remain intact for manual diagnosis. Explicitly canceled tasks retain the
+existing cancellation behavior and remove partial scratch data. Legacy flat files created before
+task-scoped directories were introduced are not swept automatically because their ownership and
+success state cannot be proven safely.
+
+Lyrics stored under `cache/lyrics/` and generated files under `cache/media-thumbnails/` are durable
+app assets and are not part of processing cleanup. Vocal-sync preparation removes its redundant
+task-scoped Demucs results after the review session is ready, while the review session and task
+manifest remain under `cache/vocal_sync/` and `cache/vocal_sync_tasks/` until commit or deletion.
+
 ## SSE Endpoints
 
 - `GET /api/tasks`

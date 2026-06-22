@@ -37,8 +37,8 @@ class KaraokeService:
         self.vocal_sync_service = VocalSyncService()
 
     @staticmethod
-    def _processing_cache_dir() -> Path:
-        path = settings.cache_path / "ytdlp"
+    def _task_cache_dir(category: str, task_id: int) -> Path:
+        path = settings.cache_path / category / str(task_id)
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -107,6 +107,9 @@ class KaraokeService:
                     )
             else:
                 raise RuntimeError(f"Unsupported processing task type: {task.task_type}")
+            db.refresh(task)
+            if task.status == ProcessingTaskStatus.DONE.value:
+                self.cleanup_successful_task(task)
         except asyncio.CancelledError:
             logger.info("Processing task canceled task_id=%s", task.id)
             await self._finalize_cancellation(db, task)
@@ -220,7 +223,7 @@ class KaraokeService:
         )
         loop = asyncio.get_running_loop()
         media_stem = self._media_stem_for_media(item.media, fallback=f"queue-{item.id}")
-        processing_dir = self._processing_cache_dir()
+        processing_dir = self._task_cache_dir("ytdlp", task.id)
         video_path = await asyncio.to_thread(
             lambda: self._download_video_with_audio_for_task(
                 item.media.youtube_id,
@@ -374,6 +377,7 @@ class KaraokeService:
         )
         aligned_lyrics_path = await self.demucs_client.align_lyrics(
             vocals_path,
+            output_dir=self._task_cache_dir("demucs_outputs", task.id),
             lyrics_text=lyrics_text,
             lyrics_format=lyrics_format,
             transcription_model=settings.whisperx_transcription_model,
@@ -456,7 +460,7 @@ class KaraokeService:
                 progress_step_index=1,
                 progress_step_total=3,
             )
-            extracted_audio_path = settings.cache_path / "audio" / f"{media_stem}.audio.m4a"
+            extracted_audio_path = self._task_cache_dir("audio", task.id) / f"{media_stem}.audio.m4a"
             audio_path = await asyncio.to_thread(
                 lambda: self.ffmpeg.extract_audio(
                     existing_media_path,
@@ -492,7 +496,7 @@ class KaraokeService:
         if not media_item.youtube_id:
             raise RuntimeError("Missing YouTube source for karaoke preparation")
 
-        processing_dir = self._processing_cache_dir()
+        processing_dir = self._task_cache_dir("ytdlp", task.id)
         await processing_task_service.set_stage(
             db,
             task.id,
@@ -661,7 +665,7 @@ class KaraokeService:
         if self._is_audio_only_media_path(video_path):
             output_path = no_vocals_path
         else:
-            output_path = settings.cache_path / "processed" / f"{media_stem}.mp4"
+            output_path = self._task_cache_dir("processed", task.id) / f"{media_stem}.mp4"
             output_path.parent.mkdir(parents=True, exist_ok=True)
             if cancel_event is None:
                 await asyncio.to_thread(
@@ -893,6 +897,7 @@ class KaraokeService:
 
         async def run_demucs(target_audio_path: Path):
             demucs_kwargs = {
+                "output_dir": self._task_cache_dir("demucs_outputs", task_id),
                 "lyrics_text": lyrics_text,
                 "lyrics_format": lyrics_format,
                 "transcription_model": settings.whisperx_transcription_model,
@@ -950,7 +955,7 @@ class KaraokeService:
                 progress_step_index=progress_step_index,
                 progress_step_total=progress_step_total,
             )
-            processing_dir = self._processing_cache_dir()
+            processing_dir = self._task_cache_dir("ytdlp", task_id)
             if cancel_event is None:
                 fallback_audio_path = await asyncio.to_thread(
                     lambda: self.youtube_service.download_audio(
@@ -1032,6 +1037,7 @@ class KaraokeService:
             or task.source_kind == "library_media"
         )
         paths_to_remove = self._cached_task_paths(media_stem)
+        self._remove_task_cache_dirs(task)
         paths_to_remove.extend(
             path
             for path in settings.media_path.glob(f".{media_stem}.{task.id}.*.tmp*")
@@ -1074,6 +1080,35 @@ class KaraokeService:
         current_media_file = QueueService._media_url_to_file(media_item.media_path)
         media_item.missing = current_media_file is None or not current_media_file.exists()
         db.commit()
+
+    def cleanup_successful_task(self, task: ProcessingTask) -> None:
+        """Remove task-owned scratch data after durable finalization succeeds."""
+        categories = (
+            ("demucs_outputs",)
+            if task.task_type
+            in {"media_vocal_sync_prepare_youtube", "media_vocal_sync_prepare_upload"}
+            else ("ytdlp", "audio", "processed", "demucs_outputs")
+        )
+        self._remove_task_cache_dirs(task, categories=categories)
+
+    @staticmethod
+    def _remove_task_cache_dirs(
+        task: ProcessingTask,
+        *,
+        categories: tuple[str, ...] = ("ytdlp", "audio", "processed", "demucs_outputs"),
+    ) -> None:
+        for category in categories:
+            task_dir = settings.cache_path / category / str(task.id)
+            try:
+                if task_dir.is_dir():
+                    shutil.rmtree(task_dir)
+            except OSError:
+                logger.exception(
+                    "Failed to remove task cache directory task_id=%s category=%s path=%s",
+                    task.id,
+                    category,
+                    task_dir,
+                )
 
     def _cached_task_paths(self, media_stem: str) -> list[Path]:
         """Collect temporary cache paths that belong to a task stem."""
@@ -1208,6 +1243,7 @@ class KaraokeService:
                     progress_step_total=3,
                 ),
             ),
+            demucs_output_dir=self._task_cache_dir("demucs_outputs", task.id),
         )
         self.vocal_sync_service.update_task_manifest_session(task.id, session.session_id)
         await self._raise_if_canceled(cancel_event, task.id)
@@ -1288,6 +1324,7 @@ class KaraokeService:
                         progress_step_total=2,
                     ),
                 ),
+                demucs_output_dir=self._task_cache_dir("demucs_outputs", task.id),
             )
             self.vocal_sync_service.update_task_manifest_session(task.id, session.session_id)
             await self._raise_if_canceled(cancel_event, task.id)

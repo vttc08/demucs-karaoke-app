@@ -175,6 +175,7 @@ class VocalSyncService:
         demucs_progress_callback: Callable[[int, str, dict | None], None] | None = None,
         demucs_log_callback: Callable[[str, str], None] | None = None,
         before_finalize: Callable[[], None] | None = None,
+        demucs_output_dir: Path | None = None,
     ) -> VocalSyncSession:
         media_item = self.validate_media_item_for_prepare(db, media_item_id)
         self._check_demucs_available()
@@ -207,6 +208,7 @@ class VocalSyncService:
             demucs_progress_callback=demucs_progress_callback,
             demucs_log_callback=demucs_log_callback,
             before_finalize=before_finalize,
+            demucs_output_dir=demucs_output_dir,
         )
 
     async def prepare_from_upload(
@@ -245,6 +247,7 @@ class VocalSyncService:
         demucs_progress_callback: Callable[[int, str, dict | None], None] | None = None,
         demucs_log_callback: Callable[[str, str], None] | None = None,
         before_finalize: Callable[[], None] | None = None,
+        demucs_output_dir: Path | None = None,
     ) -> VocalSyncSession:
         media_item = self.validate_media_item_for_prepare(db, media_item_id)
         self.validate_upload_source_filename(source_filename)
@@ -264,6 +267,7 @@ class VocalSyncService:
             demucs_progress_callback=demucs_progress_callback,
             demucs_log_callback=demucs_log_callback,
             before_finalize=before_finalize,
+            demucs_output_dir=demucs_output_dir,
         )
 
     async def _prepare_from_source(
@@ -278,11 +282,13 @@ class VocalSyncService:
         demucs_progress_callback: Callable[[int, str, dict | None], None] | None = None,
         demucs_log_callback: Callable[[str, str], None] | None = None,
         before_finalize: Callable[[], None] | None = None,
+        demucs_output_dir: Path | None = None,
     ) -> VocalSyncSession:
         session_dir = self._session_dir(session_id)
         media_path = self._local_media_path(media_item)
         demucs_response = await self.demucs_client.separate_vocals(
             source_path,
+            output_dir=demucs_output_dir,
             cancel_event=cancel_event,
             progress_callback=demucs_progress_callback,
             log_callback=demucs_log_callback,

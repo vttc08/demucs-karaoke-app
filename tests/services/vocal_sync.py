@@ -352,6 +352,7 @@ async def test_prepare_from_upload_falls_back_to_manual_offset_when_sync_deps_mi
 
     service = VocalSyncService()
     source_bytes = BytesIO(b"source-audio")
+    monkeypatch.setattr(service, "_check_demucs_available", lambda: None)
 
     async def fake_separate_vocals(*args, **kwargs):
         output_dir = tmp_path / "demucs"

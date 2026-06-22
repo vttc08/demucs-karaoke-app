@@ -120,6 +120,7 @@ class DemucsClient:
         self,
         audio_path: Path,
         *,
+        output_dir: Path | None = None,
         lyrics_text: str | None = None,
         lyrics_format: str | None = None,
         transcription_model: str | None = None,
@@ -137,7 +138,7 @@ class DemucsClient:
         if cancel_event is not None and cancel_event.is_set():
             raise asyncio.CancelledError()
 
-        out_dir = settings.cache_path / "demucs_outputs"
+        out_dir = output_dir or settings.cache_path / "demucs_outputs"
         out_dir.mkdir(parents=True, exist_ok=True)
         seen_output_lines: set[str] = set()
 
@@ -244,6 +245,7 @@ class DemucsClient:
         self,
         vocals_path: Path,
         *,
+        output_dir: Path | None = None,
         lyrics_text: str,
         lyrics_format: str | None = None,
         transcription_model: str | None = None,
@@ -264,7 +266,7 @@ class DemucsClient:
         if cancel_event is not None and cancel_event.is_set():
             raise asyncio.CancelledError()
 
-        out_dir = settings.cache_path / "demucs_outputs"
+        out_dir = output_dir or settings.cache_path / "demucs_outputs"
         out_dir.mkdir(parents=True, exist_ok=True)
         seen_output_lines: set[str] = set()
 
