@@ -496,8 +496,8 @@ function renderMediaFilesList(manifest) {
         const deleteLabel = kind === "main" ? "" : t("common.delete");
         return `
             <article class="rounded-xl border border-white/5 bg-surface-container-highest/30 p-3">
-                <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
+                <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2">
                             <span class="inline-flex items-center gap-1 rounded-full border border-white/10 bg-surface-container-highest/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
                                 <span class="material-symbols-outlined text-[13px]">${mediaFileKindIcon(kind)}</span>
@@ -509,30 +509,28 @@ function renderMediaFilesList(manifest) {
                         </div>
                         <p class="mt-2 break-all text-sm font-medium text-on-surface">${escapeHtml(file.filename || "")}</p>
                     </div>
-                    <div class="flex shrink-0 flex-wrap justify-end gap-2">
+                    <div class="grid grid-cols-4 gap-2 w-full shrink-0 sm:flex sm:flex-wrap sm:justify-end md:w-auto">
                         <button
                             type="button"
                             data-action="download-media-file"
                             data-media-file-kind="${escapeHtml(kind)}"
                             data-media-file-url="${escapeHtml(downloadUrl)}"
-                            class="inline-flex items-center gap-1 rounded-full border border-white/10 bg-surface-container-high/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-50"
+                            class="col-start-3 col-span-1 inline-flex w-full min-w-0 items-center justify-center gap-1 rounded-full border border-white/10 bg-surface-container-high/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                             ${downloadable ? "" : "disabled"}
                         >
                             <span class="material-symbols-outlined text-[15px]">download</span>
-                            ${escapeHtml(t("common.download"))}
+                            
                         </button>
-                        ${deletable ? `
                         <button
                             type="button"
                             data-action="delete-media-file"
                             data-media-file-kind="${escapeHtml(kind)}"
                             data-media-file-url="${escapeHtml(deleteUrl)}"
-                            class="inline-flex items-center gap-1 rounded-full border border-error/25 bg-error/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-50"
+                            class="inline-flex w-full min-w-0 items-center justify-center gap-1 rounded-full border border-error/25 bg-error/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                            ${deletable ? "" : "disabled"}
                         >
                             <span class="material-symbols-outlined text-[15px]">delete</span>
-                            ${escapeHtml(deleteLabel)}
                         </button>
-                        ` : ""}
                     </div>
                 </div>
             </article>
