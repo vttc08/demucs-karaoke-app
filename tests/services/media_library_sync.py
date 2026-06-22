@@ -177,6 +177,42 @@ def test_media_library_sync_service_preserves_adjacent_thumbnail_sidecar(
     finally:
         settings.media_path = original_media
 
+def test_media_library_sync_service_skips_thumbnail_regen_for_youtube_rows_without_override(
+    db_session, tmp_path
+):
+    """YouTube-backed scans should not recreate cache thumbnails when no override exists."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "blank-space.mp4"
+        media_file.write_text("video", encoding="utf-8")
+        thumb_path = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+
+        media = MediaItem(
+            title="Blank Space",
+            artist="Taylor Swift",
+            youtube_id="abc123",
+            media_path="/media/blank-space.mp4",
+            missing=True,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        summary = MediaLibrarySyncService().scan_media_item(db_session, media.id)
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert summary["thumbnails_updated"] == 0
+        assert not thumb_path.exists()
+        assert MediaLibraryService._thumbnail_for(stored) == "https://i.ytimg.com/vi/abc123/hqdefault.jpg"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
 def test_media_library_sync_service_skips_sidecars_as_primary_media(db_session, tmp_path):
     """Sidecar-only files should not be inserted as standalone media rows."""
     original_media = settings.media_path

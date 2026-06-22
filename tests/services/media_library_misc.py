@@ -107,6 +107,42 @@ def test_media_library_service_prefers_local_thumbnail_over_youtube_fallback(db_
         settings.media_path = original_media
         settings.cache_path = original_cache
 
+def test_media_library_service_prefers_youtube_thumbnail_over_cache(db_session, tmp_path):
+    """YouTube-backed media should fall back to YouTube art instead of a bad cache frame."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "blank-space.mp4"
+        media_file.write_text("video", encoding="utf-8")
+        cache_thumb = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+        cache_thumb.parent.mkdir(parents=True, exist_ok=True)
+        cache_thumb.write_bytes(b"black")
+
+        db_session.add(
+            MediaItem(
+                youtube_id="abc123",
+                title="Blank Space",
+                artist="Taylor Swift",
+                media_path="/media/blank-space.mp4",
+                missing=False,
+            )
+        )
+        db_session.commit()
+
+        service = MediaLibraryService()
+        items = service.list_media_items(db_session)
+
+        assert len(items) == 1
+        assert items[0]["thumbnail"] == "https://i.ytimg.com/vi/abc123/hqdefault.jpg"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
 def test_media_thumbnail_service_prefers_adjacent_thumbnail_over_cache(tmp_path):
     """Adjacent thumbnail sidecars should win over cached thumbnails."""
     original_media = settings.media_path

@@ -138,6 +138,45 @@ def test_queue_service_prefers_local_thumbnail_over_youtube_fallback(db_session,
 
     assert result.thumbnail == MediaThumbnailService.public_url_for_path(adjacent_thumb)
 
+def test_queue_service_prefers_youtube_thumbnail_over_cache(db_session, tmp_path, monkeypatch):
+    """Queue responses should prefer YouTube thumbnails over a bad cached frame."""
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media_file = media_root / "blank-space.mp4"
+    media_file.write_bytes(b"media")
+    cache_thumb = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+    cache_thumb.parent.mkdir(parents=True, exist_ok=True)
+    cache_thumb.write_bytes(b"black")
+
+    db_session.add(
+        MediaItem(
+            youtube_id="abc123",
+            title="Blank Space",
+            artist="Taylor Swift",
+            media_path="/media/blank-space.mp4",
+            missing=False,
+        )
+    )
+    db_session.commit()
+
+    service = QueueService()
+    result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            media_item_id=db_session.query(MediaItem).filter(MediaItem.title == "Blank Space").first().id,
+            title="Blank Space",
+            artist="Taylor Swift",
+            is_karaoke=False,
+        ),
+    )
+
+    assert result.thumbnail == "https://i.ytimg.com/vi/abc123/hqdefault.jpg"
+
 def test_queue_service_add_to_queue_stores_requester_metadata(db_session):
     """Queue items should preserve requester identity and display name."""
     service = QueueService()
