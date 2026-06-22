@@ -2,6 +2,8 @@
 import asyncio
 import json
 import re
+import zipfile
+from io import BytesIO
 import pytest
 from pathlib import Path
 from unittest.mock import ANY, AsyncMock, Mock, patch
@@ -29,6 +31,7 @@ from services.i18n_service import LOCALE_COOKIE
 from services.media_naming import build_media_stem
 from services.media_thumbnail_service import MediaThumbnailService
 from services.processing_task_service import processing_task_service
+from services.websocket_manager import manager
 from services.task_stream_service import task_stream_manager
 from config import settings
 
@@ -55,6 +58,9 @@ app.dependency_overrides[get_db] = override_get_db
 @pytest.fixture(scope="function")
 def client():
     """Create test client and database."""
+    canonical_stage_vocals_volume_default = type(settings).model_fields[
+        "stage_vocals_volume_default"
+    ].default
     original_demucs_api_url = settings.demucs_api_url
     original_demucs_model = settings.demucs_model
     original_demucs_device = settings.demucs_device
@@ -77,9 +83,21 @@ def client():
     original_cache_path = settings.cache_path
     original_stage_qr_url = settings.stage_qr_url
     original_stage_lobby_media_path = settings.stage_lobby_media_path
+    settings.stage_vocals_volume_default = canonical_stage_vocals_volume_default
 
     Base.metadata.create_all(bind=engine)
     ensure_auxiliary_schema(engine)
+    manager.active_connections.clear()
+    manager._connection_context.clear()
+    manager._queue_presence.clear()
+    manager._stage_presence.clear()
+    manager._stage_state = {
+        "is_paused": False,
+        "vocals_enabled": True,
+        "vocals_volume": canonical_stage_vocals_volume_default,
+        "lyrics_enabled": True,
+        "current_time": 0.0,
+    }
     with patch("routes.media_library.task_execution_coordinator.start"):
         yield TestClient(app)
     settings.demucs_api_url = original_demucs_api_url
@@ -104,6 +122,7 @@ def client():
     settings.cache_path = original_cache_path
     settings.stage_qr_url = original_stage_qr_url
     settings.stage_lobby_media_path = original_stage_lobby_media_path
+    settings.stage_vocals_volume_default = canonical_stage_vocals_volume_default
     Base.metadata.drop_all(bind=engine)
 
 

@@ -492,6 +492,8 @@ def test_media_management_page_shows_edit_controls_for_admin(client):
     assert b'data-action="scan-library"' in response.content
     assert b'data-action="upload-media"' in response.content
     assert b'data-action="open-trim-editor"' in response.content
+    assert b'data-action="download-media-package"' in response.content
+    assert b"File Management" in response.content
 
 def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
     """Manual media scan route should create and mark rows from filesystem diff."""
@@ -684,6 +686,173 @@ def test_media_delete_route_requires_admin(client):
 
     assert response.status_code == 403
     assert response.json()["detail"] == "Admin session required"
+
+
+def test_media_file_manifest_route_returns_files_and_requires_admin(client, tmp_path):
+    """File manifest routes should be admin-only and expose the tracked files."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "manifest-route.mp4"
+        vocals_file = settings.media_path / "manifest-route.vocals.wav"
+        lyrics_file = settings.cache_path / "lyrics" / "manifest-route.lrc"
+        media_file.write_bytes(b"video")
+        vocals_file.write_bytes(b"vocals")
+        lyrics_file.write_text("[00:01.00]lyrics", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Manifest Route",
+                artist="Artist",
+                media_path="/media/manifest-route.mp4",
+                vocals_path="/media/manifest-route.vocals.wav",
+                lyrics_path="/cache/lyrics/manifest-route.lrc",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        guest_response = client.get(f"/api/media/{media_id}/files")
+        assert guest_response.status_code == 403
+
+        authenticate_admin_client(client)
+        response = client.get(f"/api/media/{media_id}/files")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["download_name"] == "manifest-route.zip"
+        assert payload["has_multi_track"] is True
+        assert payload["has_lyrics"] is True
+        assert [entry["kind"] for entry in payload["files"]] == ["main", "vocals", "lyrics"]
+        assert payload["files"][0]["exists"] is True
+        assert payload["files"][1]["downloadable"] is True
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_file_download_route_returns_attachment(client, tmp_path):
+    """Individual media files should download as attachments."""
+    authenticate_admin_client(client)
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "download-route.mp4"
+        media_file.write_bytes(b"video-bytes")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Download Route",
+                media_path="/media/download-route.mp4",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        response = client.get(f"/api/media/{media_id}/files/main/download")
+        assert response.status_code == 200
+        assert response.headers["content-disposition"].startswith('attachment; filename="download-route.mp4"')
+        assert response.content == b"video-bytes"
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_file_delete_route_clears_sidecar_and_rejects_main(client, tmp_path):
+    """Sidecar deletion should work while main-file deletion stays blocked."""
+    authenticate_admin_client(client)
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        vocals_file = settings.media_path / "delete-route.vocals.wav"
+        vocals_file.write_bytes(b"vocals")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Delete Route",
+                media_path="/media/delete-route.mp4",
+                vocals_path="/media/delete-route.vocals.wav",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        response = client.delete(f"/api/media/{media_id}/files/vocals")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["summary"]["kind"] == "vocals"
+        assert not vocals_file.exists()
+
+        with TestingSessionLocal() as db:
+            stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+            assert stored is not None
+            assert stored.vocals_path is None
+
+        main_response = client.delete(f"/api/media/{media_id}/files/main")
+        assert main_response.status_code == 400
+        assert "cannot be deleted" in main_response.json()["detail"].lower()
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_package_download_route_returns_zip(client, tmp_path):
+    """The ZIP download should include all available files using stored entries."""
+    authenticate_admin_client(client)
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "package-route.mp4"
+        vocals_file = settings.media_path / "package-route.vocals.wav"
+        lyrics_file = settings.cache_path / "lyrics" / "package-route.json"
+        media_file.write_bytes(b"video-bytes")
+        vocals_file.write_bytes(b"vocals-bytes")
+        lyrics_file.write_text("{}", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Package Route",
+                artist="Artist",
+                media_path="/media/package-route.mp4",
+                vocals_path="/media/package-route.vocals.wav",
+                lyrics_path="/cache/lyrics/package-route.json",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        response = client.get(f"/api/media/{media_id}/download")
+        assert response.status_code == 200
+        assert response.headers["content-disposition"].startswith('attachment; filename="package-route.zip"')
+        with zipfile.ZipFile(BytesIO(response.content)) as archive:
+            assert archive.namelist() == [
+                "package-route.mp4",
+                "package-route.vocals.wav",
+                "package-route.json",
+            ]
+            assert archive.getinfo("package-route.mp4").compress_type == zipfile.ZIP_STORED
+            assert archive.read("package-route.mp4") == b"video-bytes"
+            assert archive.read("package-route.vocals.wav") == b"vocals-bytes"
+            assert archive.read("package-route.json") == b"{}"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
 
 def test_media_rename_route_updates_database_and_files(client, tmp_path):
     """Rename route should update metadata and on-disk assets."""

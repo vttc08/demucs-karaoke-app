@@ -186,6 +186,7 @@ and `/static/...`.
           - Admin users can open **Lossless Trim** from the edit modal to retain an intro/outro interval without re-encoding; video boundaries snap outward to I-frames and attached vocals/lyrics are shifted to the same interval
           - Admin users can open **Add Vocals** from the edit modal to prepare a vocal source from YouTube or upload, review the estimated sync offset, and commit a new guide-vocal sidecar
           - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
+          - Admin users can open the media edit modal file panel to download the main file or tracked sidecars individually, delete sidecars when they want to re-run processing, or download the whole package as a ZIP
           - Admin users can trigger **Scan Library** to reconcile DB with filesystem on demand
           - App also performs one media-library scan on startup/restart
 

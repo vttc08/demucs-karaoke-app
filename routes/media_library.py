@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -16,6 +17,9 @@ from routes.auth import require_admin_user
 from services.media_library_maintenance_service import (
     MediaItemDeleteConflictError,
     MediaItemNotFoundError,
+    MediaFileDeleteConflictError,
+    MediaFileKindError,
+    MediaFileNotFoundError,
     MediaLibraryMaintenanceService,
     MediaItemRenameConflictError,
 )
@@ -43,6 +47,7 @@ queue_service = QueueService()
 runtime_settings_service = RuntimeSettingsService()
 media_trim_service = MediaTrimService()
 _UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
+_MEDIA_FILE_KINDS = {"main", "vocals", "lyrics"}
 
 
 @router.get("/{item_id}/trim-info")
@@ -327,6 +332,103 @@ def scan_media_item(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"status": "ok", "summary": summary}
+
+
+@router.get("/{item_id}/files")
+def get_media_files(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Return the media file manifest for the edit modal."""
+    try:
+        return media_library_maintenance_service.get_media_file_manifest(db, item_id)
+    except MediaItemNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{item_id}/files/{kind}/download")
+def download_media_file(
+    item_id: int,
+    kind: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Download one tracked media file as an attachment."""
+    normalized_kind = kind.strip().lower()
+    if normalized_kind not in _MEDIA_FILE_KINDS:
+        raise HTTPException(status_code=400, detail=f"Unsupported media file kind: {kind}")
+
+    try:
+        media_item, file_path, _entry = media_library_maintenance_service.get_media_file(
+            db,
+            item_id,
+            normalized_kind,
+        )
+    except MediaItemNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MediaFileKindError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except MediaFileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Media file not found")
+
+    return FileResponse(path=file_path, filename=file_path.name)
+
+
+@router.delete("/{item_id}/files/{kind}")
+def delete_media_file(
+    item_id: int,
+    kind: str,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Delete one tracked sidecar file and clear the matching DB field."""
+    normalized_kind = kind.strip().lower()
+    if normalized_kind not in _MEDIA_FILE_KINDS:
+        raise HTTPException(status_code=400, detail=f"Unsupported media file kind: {kind}")
+
+    try:
+        summary = media_library_maintenance_service.delete_media_file(
+            db,
+            item_id,
+            normalized_kind,
+        )
+    except MediaItemNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MediaFileDeleteConflictError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except MediaFileKindError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except MediaFileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except OSError as exc:
+        logger.exception("Failed to delete media sidecar media_id=%s kind=%s", item_id, normalized_kind)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "ok", "summary": summary}
+
+
+@router.get("/{item_id}/download")
+def download_media_package(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Download the current media item and available sidecars as a ZIP archive."""
+    try:
+        archive_bytes, archive_name = media_library_maintenance_service.build_media_zip(db, item_id)
+    except MediaItemNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MediaFileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except MediaFileKindError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    headers = {
+        "Content-Disposition": f'attachment; filename="{archive_name}"',
+    }
+    return Response(content=archive_bytes, media_type="application/zip", headers=headers)
 
 
 @router.delete("/{item_id}")

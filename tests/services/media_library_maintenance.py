@@ -89,6 +89,177 @@ def test_media_library_maintenance_service_rejects_playing_queue_item(db_session
     with pytest.raises(MediaItemDeleteConflictError):
         service.delete_media_item(db_session, media.id)
 
+
+def test_media_library_maintenance_service_builds_file_manifest(db_session, tmp_path):
+    """File manifests should include the main file and tracked sidecars."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "manifest-song.mp4"
+        vocals_file = settings.media_path / "manifest-song.vocals.wav"
+        lyrics_file = settings.cache_path / "lyrics" / "manifest-song.json"
+        media_file.write_bytes(b"video")
+        vocals_file.write_bytes(b"vocals")
+        lyrics_file.write_text("{}", encoding="utf-8")
+
+        media = MediaItem(
+            title="Manifest Song",
+            artist="Manifest Artist",
+            media_path="/media/manifest-song.mp4",
+            vocals_path="/media/manifest-song.vocals.wav",
+            lyrics_path="/cache/lyrics/manifest-song.json",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        manifest = service.get_media_file_manifest(db_session, media.id)
+
+        assert manifest["media_id"] == media.id
+        assert manifest["has_multi_track"] is True
+        assert manifest["has_lyrics"] is True
+        assert manifest["lyrics_kind"] == "json"
+        assert manifest["download_name"] == "manifest-song.zip"
+        assert [entry["kind"] for entry in manifest["files"]] == ["main", "vocals", "lyrics"]
+        assert manifest["files"][0]["filename"] == "manifest-song.mp4"
+        assert manifest["files"][0]["exists"] is True
+        assert manifest["files"][1]["filename"] == "manifest-song.vocals.wav"
+        assert manifest["files"][2]["filename"] == "manifest-song.json"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_library_maintenance_service_deletes_sidecar_and_clears_db_field(
+    db_session, tmp_path
+):
+    """Deleting a sidecar should remove the file and clear the matching DB field."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        vocals_file = settings.media_path / "delete-sidecar.vocals.wav"
+        vocals_file.write_bytes(b"vocals")
+
+        media = MediaItem(
+            title="Delete Sidecar",
+            media_path="/media/delete-sidecar.mp4",
+            vocals_path="/media/delete-sidecar.vocals.wav",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        summary = service.delete_media_file(db_session, media.id, "vocals")
+
+        assert summary["kind"] == "vocals"
+        assert summary["deleted"] is True
+        assert not vocals_file.exists()
+
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.vocals_path is None
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_library_maintenance_service_allows_missing_sidecar_cleanup(
+    db_session, tmp_path
+):
+    """Missing sidecars should still be cleared from the DB when deleted."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media = MediaItem(
+            title="Missing Sidecar",
+            media_path="/media/missing-sidecar.mp4",
+            lyrics_path="/media/missing-sidecar.lrc",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        summary = service.delete_media_file(db_session, media.id, "lyrics")
+
+        assert summary["kind"] == "lyrics"
+        assert summary["deleted"] is False
+
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.lyrics_path is None
+    finally:
+        settings.media_path = original_media
+
+
+def test_media_library_maintenance_service_rejects_main_file_delete(db_session):
+    """The main media file should not be deletable through the modal service."""
+    media = MediaItem(
+        title="Main Delete",
+        media_path="/media/main-delete.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+
+    service = MediaLibraryMaintenanceService()
+
+    with pytest.raises(MediaFileDeleteConflictError):
+        service.delete_media_file(db_session, media.id, "main")
+
+
+def test_media_library_maintenance_service_builds_zip_package(db_session, tmp_path):
+    """ZIP packages should include available media files without compression."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "zip-song.mp4"
+        vocals_file = settings.media_path / "zip-song.vocals.wav"
+        lyrics_file = settings.cache_path / "lyrics" / "zip-song.lrc"
+        media_file.write_bytes(b"video-bytes")
+        vocals_file.write_bytes(b"vocals-bytes")
+        lyrics_file.write_text("[00:01.00]zip", encoding="utf-8")
+
+        media = MediaItem(
+            title="Zip Song",
+            artist="Zip Artist",
+            media_path="/media/zip-song.mp4",
+            vocals_path="/media/zip-song.vocals.wav",
+            lyrics_path="/cache/lyrics/zip-song.lrc",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        archive_bytes, archive_name = service.build_media_zip(db_session, media.id)
+
+        assert archive_name == "zip-song.zip"
+        with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
+            assert archive.namelist() == ["zip-song.mp4", "zip-song.vocals.wav", "zip-song.lrc"]
+            assert archive.getinfo("zip-song.mp4").compress_type == zipfile.ZIP_STORED
+            assert archive.read("zip-song.mp4") == b"video-bytes"
+            assert archive.read("zip-song.vocals.wav") == b"vocals-bytes"
+            assert archive.read("zip-song.lrc") == b"[00:01.00]zip"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
 def test_media_library_maintenance_service_renames_metadata_and_files(db_session, tmp_path):
     """Renaming a media item should update DB fields and disk assets."""
     original_media = settings.media_path

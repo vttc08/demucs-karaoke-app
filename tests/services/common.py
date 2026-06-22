@@ -19,6 +19,7 @@ from services.demucs_client import DemucsClient
 from services.media_naming import build_media_stem
 from services.media_library_maintenance_service import (
     MediaItemDeleteConflictError,
+    MediaFileDeleteConflictError,
     MediaItemNotFoundError,
     MediaItemRenameConflictError,
     MediaLibraryMaintenanceService,

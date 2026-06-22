@@ -26,6 +26,8 @@ const editLyricsFileInput = document.getElementById("media-edit-lyrics-file");
 const editLyricsAlignToggle = document.getElementById("media-edit-lyrics-align-toggle");
 const editLyricsAlignStatus = document.getElementById("media-edit-lyrics-align-status");
 const editFilenamePreview = document.getElementById("media-edit-filename-preview");
+const editFilesList = document.getElementById("media-edit-files-list");
+const editDownloadPackageButton = document.getElementById("media-download-package-button");
 const editModalCloseButtons = document.querySelectorAll("[data-edit-modal-close]");
 const isAdmin = document.querySelector('main[data-is-admin]')?.dataset.isAdmin === "true";
 const taskPanel = document.getElementById("media-task-panel");
@@ -145,6 +147,8 @@ let activeEditInitialArtist = "";
 let activeEditInitialRenameOnDisk = true;
 let activeEditInitialAiChecked = false;
 let activeEditHasMulti = false;
+let activeEditFileManifest = null;
+let activeEditFilesLoadToken = 0;
 let demucsHealth = { healthy: false, detail: t("karaoke.checking_availability") };
 let activeTaskId = null;
 let activeTaskLogSequence = 0;
@@ -397,6 +401,293 @@ function updateFilenamePreview() {
     editFilenamePreview.textContent = renameEnabled
         ? t("media.will_rename_to", { filename: nextFilename })
         : t("media.current_filename", { filename: currentFilename });
+}
+
+function getMediaFileKindLabel(kind, extension = "") {
+    const normalizedKind = String(kind || "").toLowerCase();
+    const normalizedExtension = String(extension || "").toLowerCase();
+    if (normalizedKind === "main") {
+        return t("media.file_main");
+    }
+    if (normalizedKind === "vocals") {
+        return t("media.file_vocals");
+    }
+    if (normalizedKind !== "lyrics") {
+        return normalizedKind;
+    }
+    if (normalizedExtension === "json") {
+        return t("media.file_lyrics_json");
+    }
+    if (normalizedExtension === "lrc") {
+        return t("media.file_lyrics_lrc");
+    }
+    if (normalizedExtension === "txt") {
+        return t("media.file_lyrics_txt");
+    }
+    return t("media.file_lyrics");
+}
+
+function mediaFileKindIcon(kind) {
+    switch (String(kind || "").toLowerCase()) {
+        case "main":
+            return "music_video";
+        case "vocals":
+            return "mic_external_on";
+        case "lyrics":
+            return "lyrics";
+        default:
+            return "draft";
+    }
+}
+
+function buildMediaFileDownloadUrl(kind) {
+    if (!activeEditItemId) {
+        return "";
+    }
+    return appUrl(`/api/media/${Number(activeEditItemId)}/files/${encodeURIComponent(kind)}/download`);
+}
+
+function buildMediaFileDeleteUrl(kind) {
+    if (!activeEditItemId) {
+        return "";
+    }
+    return appUrl(`/api/media/${Number(activeEditItemId)}/files/${encodeURIComponent(kind)}`);
+}
+
+function triggerDownload(url) {
+    if (!url) {
+        return;
+    }
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.rel = "noopener";
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+}
+
+function setFileManagementBusy(isBusy) {
+    if (editFilesList) {
+        editFilesList.classList.toggle("opacity-60", isBusy);
+    }
+}
+
+function renderMediaFilesList(manifest) {
+    if (!editFilesList) {
+        return;
+    }
+    const files = Array.isArray(manifest?.files) ? manifest.files : [];
+    if (!files.length) {
+        editFilesList.innerHTML = `<p class="text-[11px] text-on-surface-variant">${escapeHtml(t("media.file_management_empty"))}</p>`;
+        return;
+    }
+
+    editFilesList.innerHTML = files.map((file) => {
+        const kind = String(file.kind || "");
+        const extension = String(file.extension || "");
+        const exists = Boolean(file.exists);
+        const downloadable = Boolean(file.downloadable && exists);
+        const deletable = Boolean(file.deletable);
+        const label = getMediaFileKindLabel(kind, extension);
+        const stateLabel = exists ? t("media.file_available") : t("media.file_missing");
+        const downloadUrl = buildMediaFileDownloadUrl(kind);
+        const deleteUrl = buildMediaFileDeleteUrl(kind);
+        const deleteLabel = kind === "main" ? "" : t("common.delete");
+        return `
+            <article class="rounded-xl border border-white/5 bg-surface-container-highest/30 p-3">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="inline-flex items-center gap-1 rounded-full border border-white/10 bg-surface-container-highest/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                                <span class="material-symbols-outlined text-[13px]">${mediaFileKindIcon(kind)}</span>
+                                ${escapeHtml(label)}
+                            </span>
+                            <span class="rounded-full border ${exists ? "border-secondary/20 bg-secondary/10 text-secondary" : "border-error/20 bg-error/10 text-error"} px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest">
+                                ${escapeHtml(stateLabel)}
+                            </span>
+                        </div>
+                        <p class="mt-2 break-all text-sm font-medium text-on-surface">${escapeHtml(file.filename || "")}</p>
+                    </div>
+                    <div class="flex shrink-0 flex-wrap justify-end gap-2">
+                        <button
+                            type="button"
+                            data-action="download-media-file"
+                            data-media-file-kind="${escapeHtml(kind)}"
+                            data-media-file-url="${escapeHtml(downloadUrl)}"
+                            class="inline-flex items-center gap-1 rounded-full border border-white/10 bg-surface-container-high/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-50"
+                            ${downloadable ? "" : "disabled"}
+                        >
+                            <span class="material-symbols-outlined text-[15px]">download</span>
+                            ${escapeHtml(t("common.download"))}
+                        </button>
+                        ${deletable ? `
+                        <button
+                            type="button"
+                            data-action="delete-media-file"
+                            data-media-file-kind="${escapeHtml(kind)}"
+                            data-media-file-url="${escapeHtml(deleteUrl)}"
+                            class="inline-flex items-center gap-1 rounded-full border border-error/25 bg-error/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <span class="material-symbols-outlined text-[15px]">delete</span>
+                            ${escapeHtml(deleteLabel)}
+                        </button>
+                        ` : ""}
+                    </div>
+                </div>
+            </article>
+        `;
+    }).join("");
+}
+
+function syncEditManifestState(manifest) {
+    if (!manifest) {
+        return;
+    }
+    activeEditFileManifest = manifest;
+    activeEditHasMulti = Boolean(manifest.has_multi_track);
+    const hasLyrics = Boolean(manifest.has_lyrics);
+    const lyricsKind = String(manifest.lyrics_kind || "");
+    const displayTitle = editTitleInput?.value?.trim() || activeEditInitialTitle || manifest.title || "";
+    const displayArtist = editArtistInput?.value?.trim() || activeEditInitialArtist || manifest.artist || "";
+    updateMediaItemDisplay(
+        Number(activeEditItemId || manifest.media_id || 0),
+        displayTitle,
+        displayArtist,
+        activeEditHasMulti,
+        hasLyrics,
+        lyricsKind,
+    );
+    applyEditAiAvailability();
+    if (editDownloadPackageButton) {
+        const mainEntry = Array.isArray(manifest.files)
+            ? manifest.files.find((entry) => entry?.kind === "main")
+            : null;
+        editDownloadPackageButton.disabled = !activeEditItemId || !Boolean(mainEntry?.exists);
+    }
+    if (!hasLyrics && lyricsManager) {
+        lyricsManager.reset();
+        lyricsManager.setEnabled(false);
+        lyricsManager.setMetadata(editTitleInput?.value || "", editArtistInput?.value || "", editTitleInput?.value || "");
+        activeEditLyricsBaselineHash = "";
+        activeEditLyricsBaselineFormat = "";
+        activeEditLyricsBaselineProvider = "";
+    }
+    updateMediaEditLyricsControls();
+    updateFilenamePreview();
+}
+
+async function refreshMediaFileManifest() {
+    if (!isAdmin || !activeEditItemId) {
+        return null;
+    }
+    const loadToken = ++activeEditFilesLoadToken;
+    setFileManagementBusy(true);
+    if (editDownloadPackageButton) {
+        editDownloadPackageButton.disabled = true;
+    }
+    if (editFilesList) {
+        editFilesList.innerHTML = `<p class="text-[11px] text-on-surface-variant">${escapeHtml(t("media.file_management_loading"))}</p>`;
+    }
+    try {
+        const response = await fetch(appUrl(`/api/media/${Number(activeEditItemId)}/files`));
+        if (!response.ok) {
+            throw new Error(t("media.file_management_failed"));
+        }
+        const manifest = await response.json();
+        if (loadToken !== activeEditFilesLoadToken) {
+            return null;
+        }
+        renderMediaFilesList(manifest);
+        syncEditManifestState(manifest);
+        return manifest;
+    } catch (error) {
+        if (loadToken !== activeEditFilesLoadToken) {
+            return null;
+        }
+        activeEditFileManifest = null;
+        const message = error instanceof Error ? error.message : t("media.file_management_failed");
+        if (editFilesList) {
+            editFilesList.innerHTML = `<p class="text-[11px] text-error">${escapeHtml(message)}</p>`;
+        }
+        if (editDownloadPackageButton) {
+            editDownloadPackageButton.disabled = true;
+        }
+        return null;
+    } finally {
+        if (loadToken === activeEditFilesLoadToken) {
+            setFileManagementBusy(false);
+        }
+    }
+}
+
+async function downloadMediaFile(button) {
+    if (!button || button.disabled) {
+        return;
+    }
+    const url = button.dataset.mediaFileUrl || "";
+    if (!url) {
+        showToast(t("media.file_download_failed"));
+        return;
+    }
+    triggerDownload(url);
+}
+
+async function deleteMediaFile(button) {
+    if (!button || button.disabled) {
+        return;
+    }
+    const kind = button.dataset.mediaFileKind || "";
+    const label = getMediaFileKindLabel(kind, "");
+    if (kind === "main") {
+        showToast(t("media.main_file_not_deletable"));
+        return;
+    }
+    if (!window.confirm(t("media.delete_sidecar_confirm", { kind: label }))) {
+        return;
+    }
+
+    const originalHtml = button.innerHTML;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.innerHTML = '<span class="material-symbols-outlined animate-spin text-[15px]">sync</span>';
+
+    try {
+        const response = await fetch(button.dataset.mediaFileUrl || buildMediaFileDeleteUrl(kind), {
+            method: "DELETE",
+        });
+        if (!response.ok) {
+            let detail = t("media.delete_sidecar_failed");
+            try {
+                const payload = await response.json();
+                if (payload?.detail) {
+                    detail = payload.detail;
+                }
+            } catch (_error) {
+                // Keep fallback text.
+            }
+            throw new Error(detail);
+        }
+        showToast(t("media.file_deleted", { kind: label }));
+        await refreshMediaFileManifest();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : t("media.delete_sidecar_failed");
+        showToast(message);
+        button.disabled = false;
+        button.removeAttribute("aria-busy");
+        button.innerHTML = originalHtml;
+    }
+}
+
+function downloadMediaPackage() {
+    if (!activeEditItemId) {
+        return;
+    }
+    if (editDownloadPackageButton?.disabled) {
+        showToast(t("media.file_download_failed"));
+        return;
+    }
+    triggerDownload(appUrl(`/api/media/${Number(activeEditItemId)}/download`));
 }
 
 function syncEditPreviewLabels(title, artist) {
@@ -1074,6 +1365,7 @@ function openEditModal(itemNode) {
     }
     activeEditItemId = itemId;
     activeEditHasMulti = hasMulti;
+    activeEditFileManifest = null;
     resetMediaEditLyricsState();
     resetMediaEditInitialState();
     activeEditLyricsPath = lyricsPath;
@@ -1122,6 +1414,9 @@ function openEditModal(itemNode) {
     if (editRenameDiskCheckbox) editRenameDiskCheckbox.checked = true;
     activeEditInitialAiChecked = Boolean(editAiToggle?.checked && !activeEditHasMulti);
     updateFilenamePreview();
+    if (editDownloadPackageButton) {
+        editDownloadPackageButton.disabled = true;
+    }
 
     // Initialize lyrics manager with current metadata
     initializeMediaEditLyricsManager();
@@ -1136,6 +1431,8 @@ function openEditModal(itemNode) {
             updateMediaEditLyricsControls();
         }
     }
+
+    refreshMediaFileManifest();
 
     if (editModal) {
         editModal.classList.remove("hidden");
@@ -1153,10 +1450,15 @@ function openEditModal(itemNode) {
 function closeEditModal() {
     activeEditItemId = null;
     activeEditHasMulti = false;
+    activeEditFileManifest = null;
     resetMediaEditLyricsState();
+    activeEditFilesLoadToken += 1;
     if (editLyricsStatus) {
         editLyricsStatus.textContent = "";
         editLyricsStatus.className = "text-[10px] font-semibold text-on-surface-variant";
+    }
+    if (editFilesList) {
+        editFilesList.innerHTML = "";
     }
     if (editModal) {
         editModal.classList.add("hidden");
@@ -1557,6 +1859,21 @@ function handleActionClick(event) {
 
     if (action === "scan-item-sidecars") {
         refreshMediaItemSidecars(button);
+        return;
+    }
+
+    if (action === "download-media-package") {
+        downloadMediaPackage();
+        return;
+    }
+
+    if (action === "download-media-file") {
+        downloadMediaFile(button);
+        return;
+    }
+
+    if (action === "delete-media-file") {
+        deleteMediaFile(button);
         return;
     }
 

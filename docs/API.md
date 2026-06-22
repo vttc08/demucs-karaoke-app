@@ -478,6 +478,71 @@ If the backing media file is missing, the row is marked missing and left otherwi
 
 ---
 
+### Media File Manifest
+```
+GET /api/media/{item_id}/files
+```
+
+Admin-only manifest for the media edit modal. Returns the main file plus tracked vocals and lyrics
+sidecars, including missing-file state and per-file download/delete capability flags.
+
+**Response:**
+```json
+{
+  "media_id": 42,
+  "title": "Song Title",
+  "artist": "Artist Name",
+  "download_name": "song-title.zip",
+  "has_multi_track": true,
+  "has_lyrics": true,
+  "lyrics_kind": "lrc",
+  "files": [
+    {
+      "kind": "main",
+      "label": "main",
+      "filename": "song-title.mp4",
+      "path": "/media/song-title.mp4",
+      "exists": true,
+      "downloadable": true,
+      "deletable": false,
+      "extension": "mp4"
+    }
+  ]
+}
+```
+
+---
+
+### Download One Media File
+```
+GET /api/media/{item_id}/files/{kind}/download
+```
+
+Admin-only attachment download for one tracked file. `kind` must be `main`, `vocals`, or
+`lyrics`.
+
+---
+
+### Delete One Sidecar File
+```
+DELETE /api/media/{item_id}/files/{kind}
+```
+
+Admin-only sidecar deletion for the modal. `kind` must be `vocals` or `lyrics`; deleting `main`
+is rejected. The server removes the file when present and clears the matching DB field.
+
+---
+
+### Download Media Package
+```
+GET /api/media/{item_id}/download
+```
+
+Admin-only ZIP download for the current main file and any available sidecars. The archive uses
+stored entries only and skips missing sidecars.
+
+---
+
 ### Rename Media Item
 ```
 PATCH /api/media/{item_id}

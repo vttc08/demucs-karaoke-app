@@ -1,6 +1,8 @@
 """Media library maintenance helpers for destructive actions."""
 import logging
 import shutil
+import zipfile
+from io import BytesIO
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -15,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 _VOCALS_AUDIO_EXTENSIONS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm")
 _LYRICS_EXTENSIONS = (".json", ".lrc", ".srt", ".txt")
+_FILE_KIND_ORDER = ("main", "vocals", "lyrics")
 
 
 class MediaItemNotFoundError(ValueError):
@@ -27,6 +30,18 @@ class MediaItemDeleteConflictError(ValueError):
 
 class MediaItemRenameConflictError(ValueError):
     """Raised when a media item rename would overwrite another file."""
+
+
+class MediaFileKindError(ValueError):
+    """Raised when a media file kind is unsupported."""
+
+
+class MediaFileDeleteConflictError(ValueError):
+    """Raised when a media file cannot be deleted safely."""
+
+
+class MediaFileNotFoundError(ValueError):
+    """Raised when a requested media file is not available."""
 
 
 class MediaLibraryMaintenanceService:
@@ -182,6 +197,114 @@ class MediaLibraryMaintenanceService:
         )
         return summary
 
+    def get_media_file_manifest(self, db: Session, media_item_id: int) -> dict[str, object]:
+        """Return media, vocals, and lyrics file metadata for the edit modal."""
+        media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
+        if media_item is None:
+            raise MediaItemNotFoundError(f"Media item not found: {media_item_id}")
+
+        entries = self._collect_media_file_entries(media_item)
+        has_multi_track = any(entry["kind"] == "vocals" and entry["exists"] for entry in entries)
+        has_lyrics = any(entry["kind"] == "lyrics" and entry["exists"] for entry in entries)
+        lyrics_kind = next(
+            (entry["extension"] for entry in entries if entry["kind"] == "lyrics" and entry["exists"]),
+            None,
+        )
+
+        return {
+            "media_id": media_item.id,
+            "title": media_item.title,
+            "artist": media_item.artist,
+            "download_name": f"{self._media_package_stem(media_item)}.zip",
+            "has_multi_track": has_multi_track,
+            "has_lyrics": has_lyrics,
+            "lyrics_kind": lyrics_kind,
+            "files": [
+                {key: value for key, value in entry.items() if key != "file_path"}
+                for entry in entries
+            ],
+        }
+
+    def get_media_file(self, db: Session, media_item_id: int, kind: str) -> tuple[MediaItem, Path, dict[str, object]]:
+        """Resolve one media file entry for download or deletion."""
+        media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
+        if media_item is None:
+            raise MediaItemNotFoundError(f"Media item not found: {media_item_id}")
+
+        entry = self._resolve_media_file_entry(media_item, kind)
+        if entry is None:
+            raise MediaFileKindError(f"Unsupported media file kind: {kind}")
+
+        file_path = entry.get("file_path")
+        if not isinstance(file_path, Path):
+            raise MediaFileNotFoundError(f"Media file not found: {kind}")
+        return media_item, file_path, entry
+
+    def delete_media_file(self, db: Session, media_item_id: int, kind: str) -> dict[str, object]:
+        """Delete a tracked sidecar file and clear the matching DB field."""
+        media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
+        if media_item is None:
+            raise MediaItemNotFoundError(f"Media item not found: {media_item_id}")
+
+        if kind == "main":
+            raise MediaFileDeleteConflictError("The main media file cannot be deleted from the modal")
+
+        entry = self._resolve_media_file_entry(media_item, kind)
+        if entry is None:
+            raise MediaFileKindError(f"Unsupported media file kind: {kind}")
+
+        file_path = entry.get("file_path")
+        if not isinstance(file_path, Path):
+            raise MediaFileNotFoundError(f"Media file not found: {kind}")
+
+        existed = file_path.exists()
+        if existed:
+            logger.info("Deleting media sidecar path=%s media_id=%s kind=%s", file_path, media_item_id, kind)
+            file_path.unlink()
+
+        if kind == "vocals":
+            current_value = self.queue_service._media_url_to_file(media_item.vocals_path)
+            if current_value is None or current_value.resolve() == file_path.resolve():
+                media_item.vocals_path = None
+        elif kind == "lyrics":
+            current_value = self.queue_service._media_url_to_file(media_item.lyrics_path)
+            if current_value is None or current_value.resolve() == file_path.resolve():
+                media_item.lyrics_path = None
+        else:
+            raise MediaFileKindError(f"Unsupported media file kind: {kind}")
+
+        db.commit()
+        return {
+            "deleted": existed,
+            "kind": kind,
+            "filename": file_path.name,
+            "path": self.queue_service.build_media_url(file_path),
+            "exists": file_path.exists(),
+        }
+
+    def build_media_zip(self, db: Session, media_item_id: int) -> tuple[bytes, str]:
+        """Build a ZIP package containing the media file and tracked sidecars."""
+        media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
+        if media_item is None:
+            raise MediaItemNotFoundError(f"Media item not found: {media_item_id}")
+
+        main_entry = self._resolve_media_file_entry(media_item, "main")
+        if main_entry is None:
+            raise MediaFileKindError("Unsupported media file kind: main")
+        main_path = main_entry.get("file_path")
+        if not isinstance(main_path, Path) or not main_path.exists():
+            raise MediaFileNotFoundError("Main media file is missing")
+
+        archive_name = f"{self._media_package_stem(media_item)}.zip"
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_STORED) as archive:
+            for entry in self._collect_media_file_entries(media_item):
+                file_path = entry.get("file_path")
+                if not isinstance(file_path, Path) or not file_path.exists():
+                    continue
+                archive.write(file_path, arcname=file_path.name)
+        return buffer.getvalue(), archive_name
+
     def _collect_local_paths(self, media_item: MediaItem) -> list[Path]:
         """Collect unique local filesystem paths for the media item and sidecars."""
         candidates: list[Path] = []
@@ -220,6 +343,94 @@ class MediaLibraryMaintenanceService:
                 add_candidate(candidate)
 
         return candidates
+
+    def _collect_media_file_entries(self, media_item: MediaItem) -> list[dict[str, object]]:
+        """Collect main and sidecar file entries for UI and download workflows."""
+        media_file = self.queue_service._media_url_to_file(media_item.media_path)
+        vocals_url, lyrics_url = self.queue_service._repair_sidecar_fields(
+            media_path=media_item.media_path,
+            vocals_path=media_item.vocals_path,
+            lyrics_path=media_item.lyrics_path,
+        )
+
+        resolved_files: dict[str, Path | None] = {
+            "main": media_file,
+            "vocals": self.queue_service._media_url_to_file(vocals_url),
+            "lyrics": self.queue_service._media_url_to_file(lyrics_url),
+        }
+        stored_urls = {
+            "main": media_item.media_path,
+            "vocals": vocals_url,
+            "lyrics": lyrics_url,
+        }
+
+        entries: list[dict[str, object]] = []
+        for kind in _FILE_KIND_ORDER:
+            file_path = resolved_files[kind]
+            stored_url = stored_urls[kind]
+            exists = bool(file_path and file_path.exists())
+            filename = file_path.name if file_path is not None else self._fallback_filename(media_item, kind)
+            extension = file_path.suffix.lower().lstrip(".") if file_path is not None else ""
+            entries.append(
+                {
+                    "kind": kind,
+                    "label": self._file_kind_label(kind, file_path),
+                    "filename": filename,
+                    "path": stored_url,
+                    "exists": exists,
+                    "downloadable": exists,
+                    "deletable": kind != "main",
+                    "extension": extension,
+                    "file_path": file_path,
+                }
+            )
+        return entries
+
+    @staticmethod
+    def _fallback_filename(media_item: MediaItem, kind: str) -> str:
+        stem = Path(media_item.media_path).stem if media_item.media_path else media_item.file_stem or media_item.title
+        if kind == "main":
+            return Path(media_item.media_path).name if media_item.media_path else f"{stem}.mp4"
+        if kind == "vocals":
+            return f"{stem}.vocals"
+        return f"{stem}.lyrics"
+
+    @staticmethod
+    def _file_kind_label(kind: str, file_path: Path | None) -> str:
+        if kind == "main":
+            return "main"
+        if kind == "vocals":
+            return "vocals"
+        if kind != "lyrics":
+            return kind
+        if file_path is None:
+            return "lyrics"
+        suffix = file_path.suffix.lower()
+        if suffix == ".json":
+            return "json"
+        if suffix == ".lrc":
+            return "lrc"
+        if suffix == ".txt":
+            return "txt"
+        if suffix == ".srt":
+            return "srt"
+        return "lyrics"
+
+    @staticmethod
+    def _media_package_stem(media_item: MediaItem) -> str:
+        media_file = Path(media_item.media_path).name if media_item.media_path else ""
+        if media_file:
+            return Path(media_file).stem
+        if media_item.file_stem:
+            return media_item.file_stem
+        return build_media_stem(media_item.title, media_item.artist)
+
+    def _resolve_media_file_entry(self, media_item: MediaItem, kind: str) -> dict[str, object] | None:
+        entries = self._collect_media_file_entries(media_item)
+        for entry in entries:
+            if entry["kind"] == kind:
+                return entry
+        return None
 
     def _rename_local_asset(
         self,

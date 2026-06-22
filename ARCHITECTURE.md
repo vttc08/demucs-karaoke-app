@@ -62,6 +62,9 @@ This project currently uses two services:
 - The edit modal links to the admin-only `/media-editor/{item_id}` page. It renders an immediate
   shell with the native browser media player, then hydrates duration and ffprobe I-frame timestamps
   asynchronously from `/api/media/{item_id}/trim-info` without introducing a frontend framework.
+- The media edit modal also exposes a compact file-manifest panel backed by `/api/media/{item_id}/files`
+  plus per-file download/delete and ZIP download endpoints so admins can inspect or remove sidecars
+  before re-running separation/alignment work.
 - `MediaTrimService` owns trim validation, conflict checks, sidecar shifting, and atomic file
   replacement. `FFmpegAdapter` owns ffprobe metadata/keyframe reads and `ffmpeg -c copy` remuxing.
 - Video ranges snap outward to surrounding keyframes; audio-only ranges retain exact requested
