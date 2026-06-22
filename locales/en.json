@@ -277,6 +277,7 @@
   "vocalsync.offset_up": "Increase offset",
   "vocalsync.offset_waiting": "Prepare a source track to estimate the offset.",
   "vocalsync.offset_zero": "No timing shift will be applied.",
+  "vocalsync.manual_offset_only": "Automatic sync estimation is unavailable here. Use the offset controls to set the timing manually.",
   "vocalsync.prepare_source": "Prepare",
   "vocalsync.prepare_progress": "Prepare progress",
   "vocalsync.prepare_upload": "Prepare Upload",

@@ -21,19 +21,23 @@ dependencies = [
     "pycryptodome>=3.22.0",
     "pylrc>=0.1.2",
     "srt>=3.5.3",
-    "numpy>=1.26.0",
-    "scipy>=1.11.0",
 ]
 
 [tool.setuptools]
 py-modules = []
 
 [project.optional-dependencies]
+vocal-sync = [
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+]
 dev = [
     "pytest>=7.4.4",
     "pytest-asyncio>=0.23.3",
     "pytest-cov>=4.1.0",
     "pytest-timeout>=2.1.0",
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
 ]
 
 [build-system]

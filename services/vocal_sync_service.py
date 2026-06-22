@@ -29,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 _UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v", ".wav", ".flac", ".aac", ".ogg", ".opus"}
 _TARGET_SAMPLE_RATE = 22050
+_SYNC_METHOD_CORRELATION = "scipy_cross_correlation"
+_SYNC_METHOD_MANUAL = "manual_offset"
 
 
 class VocalSyncError(RuntimeError):
@@ -302,10 +304,20 @@ class VocalSyncService:
         background_wav = session_dir / "background_mono.wav"
         self.prepare_mono_wav(media_path, karaoke_wav)
         self.prepare_mono_wav(review_bg_path, background_wav)
-        offset_seconds = self.estimate_offset_seconds(
-            reference_path=background_wav,
-            target_path=karaoke_wav,
-        )
+        try:
+            offset_seconds = self.estimate_offset_seconds(
+                reference_path=background_wav,
+                target_path=karaoke_wav,
+            )
+            method = _SYNC_METHOD_CORRELATION
+        except ImportError:
+            logger.warning(
+                "Audio sync dependencies unavailable; falling back to manual offset media_id=%s session_id=%s",
+                media_item.id,
+                session_id,
+            )
+            offset_seconds = 0.0
+            method = _SYNC_METHOD_MANUAL
         manifest = {
             "session_id": session_id,
             "media_item_id": media_item.id,
@@ -316,7 +328,7 @@ class VocalSyncService:
             "karaoke_wav_path": str(karaoke_wav),
             "background_wav_path": str(background_wav),
             "estimated_offset_seconds": offset_seconds,
-            "method": "scipy_cross_correlation",
+            "method": method,
             "source_kind": source_kind,
             "source_ref": source_ref,
             "title": media_item.title,

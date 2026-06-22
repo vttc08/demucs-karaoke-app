@@ -322,3 +322,64 @@ def test_render_aligned_vocals_uses_negative_trim(tmp_path, monkeypatch):
     )
 
     assert "atrim=start=0.750000" in " ".join(commands[0])
+
+
+@pytest.mark.asyncio
+async def test_prepare_from_upload_falls_back_to_manual_offset_when_sync_deps_missing(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media_file = media_root / "song.mp4"
+    media_file.write_bytes(b"video")
+    media = MediaItem(
+        title="Song",
+        artist="Artist",
+        file_stem="song",
+        media_path="/media/song.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    service = VocalSyncService()
+    source_bytes = BytesIO(b"source-audio")
+
+    async def fake_separate_vocals(*args, **kwargs):
+        output_dir = tmp_path / "demucs"
+        output_dir.mkdir(exist_ok=True)
+        no_vocals_path = output_dir / "no_vocals.wav"
+        vocals_path = output_dir / "vocals.wav"
+        no_vocals_path.write_bytes(b"no-vocals")
+        vocals_path.write_bytes(b"vocals")
+        return Mock(no_vocals_path=str(no_vocals_path), vocals_path=str(vocals_path))
+
+    def fake_prepare_mono_wav(source_path, output_path):
+        output_path.write_bytes(b"wav")
+        return output_path
+
+    def fake_estimate_offset_seconds(reference_path, target_path):
+        raise ImportError("numpy is not installed")
+
+    monkeypatch.setattr(service.demucs_client, "separate_vocals", fake_separate_vocals)
+    monkeypatch.setattr(service, "prepare_mono_wav", fake_prepare_mono_wav)
+    monkeypatch.setattr(VocalSyncService, "estimate_offset_seconds", staticmethod(fake_estimate_offset_seconds))
+
+    session = await service.prepare_from_upload(
+        db_session,
+        media.id,
+        source_filename="source.mp3",
+        source_file=source_bytes,
+    )
+
+    assert session.estimated_offset_seconds == 0.0
+    assert session.method == "manual_offset"
+    assert (cache_root / "vocal_sync" / session.session_id / "manifest.json").is_file()

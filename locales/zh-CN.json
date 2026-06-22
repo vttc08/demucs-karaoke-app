@@ -277,6 +277,7 @@
   "vocalsync.offset_up": "增加偏移",
   "vocalsync.offset_waiting": "准备源音轨后会估算偏移。",
   "vocalsync.offset_zero": "不会应用时间偏移。",
+  "vocalsync.manual_offset_only": "此处无法自动估算同步，请使用偏移控件手动调整时间。",
   "vocalsync.prepare_source": "准备",
   "vocalsync.prepare_progress": "准备进度",
   "vocalsync.prepare_upload": "准备上传",

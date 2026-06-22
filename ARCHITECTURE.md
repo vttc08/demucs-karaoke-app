@@ -71,8 +71,10 @@ This project currently uses two services:
 - The Add Vocals page at `/media-vocals/{item_id}` prepares guide vocals for an existing karaoke
   media item without replacing `media_path`. Source audio comes from YouTube audio download or upload,
   remote Demucs returns vocals/background stems, and the main app estimates a constant offset locally
-  with lazy-loaded NumPy/SciPy cross-correlation. Review sessions live under `cache/vocal_sync/` until
-  the admin commits a `/media/<stem>.vocals.wav` sidecar.
+  with lazy-loaded NumPy/SciPy cross-correlation when the optional sync extra is installed. If those
+  libraries are absent, the workflow still prepares the review session and falls back to `0.00` so
+  the admin can do manual sync. Review sessions live under `cache/vocal_sync/` until the admin
+  commits a `/media/<stem>.vocals.wav` sidecar.
 
 ## Real-time queue update architecture
 

@@ -58,9 +58,16 @@ beginning of the vocal stem by `abs(offset)`.
 
 ## Deployment Notes
 
-The main app depends only on `numpy` and `scipy` for the local cross-correlation estimator. These
-libraries are imported inside the estimator function so normal FastAPI startup does not load the
-scientific stack.
+The local cross-correlation estimator is optional. Install the `vocal-sync` extra if you want the
+automatic offset estimate:
+
+```bash
+uv pip install -e ".[vocal-sync]"
+```
+
+If `numpy` or `scipy` are not installed, the app still prepares the Demucs stems and review
+session, but it falls back to `0.00` offset with the manual sync controls enabled. That keeps the
+feature usable on smaller Docker images or low-power systems that skip the scientific stack.
 
 The workflow intentionally does not add `librosa` to the main app. A future DTW fallback can live
 behind the remote Demucs service if constant-offset cross-correlation is not reliable enough for a

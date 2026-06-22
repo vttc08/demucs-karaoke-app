@@ -316,7 +316,11 @@
         deleteBtn.disabled = false;
         commitBtn.disabled = false;
         setState("vocalsync.ready");
-        setMessage(t("vocalsync.prepared", { offset: formatOffset(session.estimated_offset_seconds) }));
+        if (session.method === "manual_offset") {
+            setMessage(t("vocalsync.manual_offset_only"));
+        } else {
+            setMessage(t("vocalsync.prepared", { offset: formatOffset(session.estimated_offset_seconds) }));
+        }
         updateOffsetDetail();
         updateSearchControls();
         updateUploadControls();
