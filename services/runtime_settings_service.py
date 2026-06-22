@@ -69,6 +69,7 @@ class RuntimeSettingsService:
         "cache_path",
         "stage_qr_url",
         "stage_lobby_media_path",
+        "stage_vocals_volume_default",
     )
     YTDLP_COMMAND_TIMEOUT_SECONDS = 60
 
@@ -167,6 +168,7 @@ class RuntimeSettingsService:
             cache_path=str(settings.cache_path),
             stage_qr_url=settings.stage_qr_url,
             stage_lobby_media_path=settings.stage_lobby_media_path,
+            stage_vocals_volume_default=settings.stage_vocals_volume_default,
         )
 
     def get_settings(self) -> RuntimeSettingsResponse:
@@ -407,6 +409,16 @@ class RuntimeSettingsService:
             settings.stage_lobby_media_path = payload.stage_lobby_media_path.strip()
             updated_fields.append("stage_lobby_media_path")
 
+        if payload.stage_vocals_volume_default is not None:
+            default_volume = float(payload.stage_vocals_volume_default)
+            if default_volume < 0.0 or default_volume > 1.0:
+                raise ValueError("stage_vocals_volume_default must be between 0.0 and 1.0")
+            snapshot.setdefault(
+                "stage_vocals_volume_default", settings.stage_vocals_volume_default
+            )
+            settings.stage_vocals_volume_default = default_volume
+            updated_fields.append("stage_vocals_volume_default")
+
         try:
             settings.ensure_paths()
             if db is not None and updated_fields:
@@ -503,6 +515,13 @@ class RuntimeSettingsService:
             settings.stage_qr_url = raw_value
         elif field_name == "stage_lobby_media_path":
             settings.stage_lobby_media_path = raw_value
+        elif field_name == "stage_vocals_volume_default":
+            volume = float(raw_value)
+            if volume < 0.0 or volume > 1.0:
+                raise ValueError(
+                    f"Invalid persisted stage_vocals_volume_default: {raw_value}"
+                )
+            settings.stage_vocals_volume_default = volume
         else:
             raise ValueError(f"Unknown persisted runtime setting: {field_name}")
 

@@ -962,7 +962,8 @@ endpoint reflects the latest saved UI configuration after the app has booted.
   "ytdlp_video_resolution": "default",
   "ffmpeg_path": "/usr/bin/ffmpeg",
   "stage_qr_url": "https://karaoke.example/queue",
-  "stage_lobby_media_path": "/media/stage-lobby.mp4"
+  "stage_lobby_media_path": "/media/stage-lobby.mp4",
+  "stage_vocals_volume_default": 1.0
 }
 ```
 
@@ -1004,7 +1005,8 @@ and restarts when no explicit `.env` override is present.
   "ytdlp_video_resolution": "default",
   "ffmpeg_path": "ffmpeg",
   "stage_qr_url": "https://karaoke.example/queue",
-  "stage_lobby_media_path": "/media/stage-lobby.mp4"
+  "stage_lobby_media_path": "/media/stage-lobby.mp4",
+  "stage_vocals_volume_default": 0.75
 }
 ```
 
@@ -1028,6 +1030,7 @@ Validation:
 - `ytdlp_video_resolution` must be `default` or one of: `360`, `480`, `720`, `1080`, `2160`
 - executable paths cannot be empty
 - `media_path` and `cache_path` cannot be empty when provided
+- `stage_vocals_volume_default` must be between `0.0` and `1.0`
 
 Notes:
 - Updating `media_path`/`cache_path` applies immediately for processing and new outputs.

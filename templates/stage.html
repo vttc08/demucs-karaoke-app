@@ -1894,6 +1894,10 @@ if (stageDisplayNameInput) {
 }
 void loadLyricsPresets();
 const QR_CODE_ENDPOINT = window.KaraokeURLs.appUrl('/api/qr');
+const STAGE_VOCALS_VOLUME_DEFAULT = {{ stage_vocals_volume_default | tojson }};
+const normalizedStageVocalsVolumeDefault = Number.isFinite(Number(STAGE_VOCALS_VOLUME_DEFAULT))
+    ? Math.max(0, Math.min(1, Number(STAGE_VOCALS_VOLUME_DEFAULT)))
+    : 1.0;
 let controlsHideTimer = null;
 let isQrVisible = false;
 let shortcutsPanelVisible = false;
@@ -1901,7 +1905,7 @@ let qrDragState = null;
 let stageSocket = null;
 let mixState = {
     vocals_enabled: true,
-    vocals_volume: 1.0,
+    vocals_volume: normalizedStageVocalsVolumeDefault,
 };
 let lyricsState = {
     enabled: true,

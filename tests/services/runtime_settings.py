@@ -149,6 +149,17 @@ def test_runtime_settings_get_settings_is_non_blocking():
     assert result.whisperx_detect_language == settings.whisperx_detect_language
     assert result.whisperx_use_synced_lyrics == settings.whisperx_use_synced_lyrics
     assert result.whisperx_preload_models == settings.whisperx_preload_models
+    assert result.stage_vocals_volume_default == settings.stage_vocals_volume_default
+
+def test_connection_manager_uses_configured_default_vocals_volume():
+    """Stage state should seed vocals volume from the configured default."""
+    original_default = settings.stage_vocals_volume_default
+    try:
+        settings.stage_vocals_volume_default = 0.35
+        manager = ConnectionManager()
+        assert manager.get_stage_state()["vocals_volume"] == 0.35
+    finally:
+        settings.stage_vocals_volume_default = original_default
 
 def test_runtime_settings_update_settings_includes_demucs_health():
     """Updating settings should still return current Demucs health."""
@@ -537,6 +548,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
     service = RuntimeSettingsService()
     original_stage_qr_url = settings.stage_qr_url
     original_stage_lobby_media_path = settings.stage_lobby_media_path
+    original_stage_vocals_volume_default = settings.stage_vocals_volume_default
     original_concurrent = settings.concurrent_ytdlp_search_enabled
     original_netease = settings.lyrics_provider_netease_enabled
     original_lrclib = settings.lyrics_provider_lrclib_enabled
@@ -573,6 +585,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
                     whisperx_preload_models="transcription=tiny",
                     stage_qr_url="https://karaoke.test/stage",
                     stage_lobby_media_path="/media/stage-lobby.mp4",
+                    stage_vocals_volume_default=0.4,
                 ),
                 db_session,
             )
@@ -590,6 +603,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert result.whisperx_preload_models == "transcription=tiny"
         assert result.stage_qr_url == "https://karaoke.test/stage"
         assert result.stage_lobby_media_path == "/media/stage-lobby.mp4"
+        assert result.stage_vocals_volume_default == 0.4
 
         stored = {
             row.key: row.value
@@ -608,9 +622,11 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert stored["whisperx_preload_models"] == "transcription=tiny"
         assert stored["stage_qr_url"] == "https://karaoke.test/stage"
         assert stored["stage_lobby_media_path"] == "/media/stage-lobby.mp4"
+        assert stored["stage_vocals_volume_default"] == "0.4"
     finally:
         settings.stage_qr_url = original_stage_qr_url
         settings.stage_lobby_media_path = original_stage_lobby_media_path
+        settings.stage_vocals_volume_default = original_stage_vocals_volume_default
         settings.concurrent_ytdlp_search_enabled = original_concurrent
         settings.lyrics_provider_netease_enabled = original_netease
         settings.lyrics_provider_lrclib_enabled = original_lrclib
@@ -636,6 +652,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
                 RuntimeSetting(key="demucs_model", value="persisted-model"),
                 RuntimeSetting(key="stage_qr_url", value="https://karaoke.test/stage"),
                 RuntimeSetting(key="stage_lobby_media_path", value="/media/stage-lobby.mp4"),
+                RuntimeSetting(key="stage_vocals_volume_default", value="0.35"),
                 RuntimeSetting(key="ffmpeg_preset", value="veryslow"),
                 RuntimeSetting(key="ytdlp_video_resolution", value="720"),
                 RuntimeSetting(key="demucs_direct_media_max_mb", value="777"),
@@ -652,6 +669,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         settings.demucs_model = "temporary-model"
         settings.stage_qr_url = ""
         settings.stage_lobby_media_path = ""
+        settings.stage_vocals_volume_default = 1.0
         settings.ytdlp_video_resolution = "default"
         settings.demucs_direct_media_max_mb = 500
         settings.demucs_poll_interval_seconds = 1.0
@@ -666,12 +684,14 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         assert "demucs_model" in applied
         assert "stage_qr_url" in applied
         assert "stage_lobby_media_path" in applied
+        assert "stage_vocals_volume_default" in applied
         assert "ytdlp_video_resolution" in applied
         assert "demucs_direct_media_max_mb" in applied
         assert "demucs_poll_interval_seconds" in applied
         assert settings.demucs_model == "persisted-model"
         assert settings.stage_qr_url == "https://karaoke.test/stage"
         assert settings.stage_lobby_media_path == "/media/stage-lobby.mp4"
+        assert settings.stage_vocals_volume_default == 0.35
         assert settings.ytdlp_video_resolution == "720"
         assert settings.demucs_direct_media_max_mb == 777
         assert settings.demucs_poll_interval_seconds == 1.25

@@ -106,6 +106,7 @@ class Settings(BaseSettings):
     log_to_file_in_reload: bool = False
     stage_qr_url: str = ""
     stage_lobby_media_path: str = ""
+    stage_vocals_volume_default: float = 1.0
     
     # WebSocket
     ws_heartbeat_interval: int = 30

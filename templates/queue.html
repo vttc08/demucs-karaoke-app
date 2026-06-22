@@ -660,6 +660,9 @@
 {% block scripts %}
 <script src="{{ app_url('/static/lyrics-manager.js') }}"></script>
 <script src="{{ app_url('/static/lyrics-ui.js') }}"></script>
+<script>
+    window.KARAOKE_STAGE_VOCALS_VOLUME_DEFAULT = {{ stage_vocals_volume_default | tojson }};
+</script>
 <script src="{{ app_url('/static/queue.js') }}"></script>
 <script>
 function getCookieValue(name) {

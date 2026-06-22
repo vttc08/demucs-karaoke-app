@@ -496,6 +496,8 @@
   "settings.qr_url_detail": "Optional. Used by Stage View QR overlay. Defaults to current hostname when empty.",
   "settings.lobby_media_path": "Stage Lobby Media URL",
   "settings.lobby_media_path_detail": "Optional. /media/... or /cache/... URL to loop when queue is empty.",
+  "settings.vocals_volume_default": "Default vocals volume",
+  "settings.vocals_volume_default_detail": "Used when stage or queue loads after a restart. Live vocals volume can still be changed on stage.",
   "settings.saved": "Settings saved",
   "settings.demucs_health_fetch_failed": "Unable to fetch Demucs health",
   "settings.loaded": "Settings loaded",

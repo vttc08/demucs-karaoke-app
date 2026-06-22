@@ -35,6 +35,7 @@ def test_get_runtime_settings(client):
     assert "demucs_health_detail" in data
     assert "stage_qr_url" in data
     assert "stage_lobby_media_path" in data
+    assert "stage_vocals_volume_default" in data
 
 def test_runtime_settings_api_requires_admin(client):
     """Settings management API should reject guests."""
@@ -73,6 +74,7 @@ def test_update_runtime_settings(client):
             "ffmpeg_path": "ffmpeg",
             "stage_qr_url": "https://karaoke.test/queue",
             "stage_lobby_media_path": "/media/stage-lobby.mp4",
+            "stage_vocals_volume_default": 0.35,
         },
     )
     assert response.status_code == 200
@@ -100,6 +102,7 @@ def test_update_runtime_settings(client):
     assert data["lyrics_provider_lrclib_enabled"] is True
     assert data["stage_qr_url"] == "https://karaoke.test/queue"
     assert data["stage_lobby_media_path"] == "/media/stage-lobby.mp4"
+    assert data["stage_vocals_volume_default"] == 0.35
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
 
@@ -119,6 +122,7 @@ def test_update_runtime_settings_persists_to_database(client):
             json={
                 "stage_qr_url": "https://karaoke.test/queue",
                 "stage_lobby_media_path": "/media/stage-lobby.mp4",
+                "stage_vocals_volume_default": 0.25,
                 "whisperx_transcription_model": "tiny",
                 "whisperx_align_language": "",
                 "whisperx_detect_language": False,
@@ -137,6 +141,9 @@ def test_update_runtime_settings_persists_to_database(client):
         stage_qr = db.query(RuntimeSetting).filter(RuntimeSetting.key == "stage_qr_url").first()
         stage_lobby = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "stage_lobby_media_path"
+        ).first()
+        stage_vocals_volume_default = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "stage_vocals_volume_default"
         ).first()
         resolution = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "ytdlp_video_resolution"
@@ -169,6 +176,8 @@ def test_update_runtime_settings_persists_to_database(client):
         assert stage_qr.value == "https://karaoke.test/queue"
         assert stage_lobby is not None
         assert stage_lobby.value == "/media/stage-lobby.mp4"
+        assert stage_vocals_volume_default is not None
+        assert stage_vocals_volume_default.value == "0.25"
         assert resolution is not None
         assert resolution.value == "1080"
         assert cutoff is not None
@@ -381,3 +390,13 @@ def test_update_runtime_settings_rejects_invalid_demucs_direct_media_cutoff(clie
     response = client.patch("/api/settings/", json={"demucs_direct_media_max_mb": 5001})
     assert response.status_code == 400
     assert "demucs_direct_media_max_mb" in response.json()["detail"]
+
+def test_update_runtime_settings_rejects_invalid_vocals_volume_default(client):
+    """Runtime settings endpoint should validate the default vocals volume."""
+    authenticate_admin_client(client)
+    response = client.patch(
+        "/api/settings/",
+        json={"stage_vocals_volume_default": 1.5},
+    )
+    assert response.status_code == 400
+    assert "stage_vocals_volume_default" in response.json()["detail"]

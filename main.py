@@ -28,6 +28,7 @@ from routes import (
 )
 from services.media_library_sync_service import MediaLibrarySyncService
 from services.processing_task_service import processing_task_service, task_execution_coordinator
+from services.websocket_manager import manager as websocket_manager
 
 configure_logging()
 logger = logging.getLogger(__name__)
@@ -62,6 +63,11 @@ async def lifespan(app: FastAPI):
         logger.info("Loaded persisted runtime settings: %s", ", ".join(applied_fields))
     else:
         logger.info("No persisted runtime settings found")
+
+    await websocket_manager.set_stage_vocals_volume(
+        settings.stage_vocals_volume_default,
+        source="startup",
+    )
 
     recovered_task_ids: list[int] = []
     db = SessionLocal()

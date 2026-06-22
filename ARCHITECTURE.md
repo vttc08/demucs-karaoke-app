@@ -206,6 +206,7 @@ The stage page uses a websocket-first model:
 
 - Runtime settings include `stage_lobby_media_path` for optional empty-queue loop media.
 - Runtime settings include `stage_qr_url` for the stage QR overlay link.
+- Runtime settings include `stage_vocals_volume_default`, which seeds the shared stage mix state on startup so `/stage` and `/queue` reopen with the saved default vocals volume after a restart.
 - Stage QR size and placement are stored in browser local storage on `/stage`, so each device can keep its own layout.
 - The stage route resolves lobby playback in this order:
   1. Configured media URL exists (`/media/...` or `/cache/...`) -> use it.

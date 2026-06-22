@@ -61,6 +61,7 @@ const fields = {
     ffmpeg_path: document.getElementById("ffmpeg_path"),
     stage_qr_url: document.getElementById("stage_qr_url"),
     stage_lobby_media_path: document.getElementById("stage_lobby_media_path"),
+    stage_vocals_volume_default: document.getElementById("stage_vocals_volume_default"),
 };
 
 function setStatus(message, isError = false) {
@@ -449,6 +450,11 @@ function applySettingsToForm(data) {
     if (fields.stage_lobby_media_path) {
         fields.stage_lobby_media_path.value = data.stage_lobby_media_path || "";
     }
+    if (fields.stage_vocals_volume_default) {
+        const defaultVolume = Number(data.stage_vocals_volume_default);
+        const normalizedVolume = Number.isFinite(defaultVolume) ? Math.max(0, Math.min(1, defaultVolume)) : 1.0;
+        fields.stage_vocals_volume_default.value = String(Math.round(normalizedVolume * 100));
+    }
     updateWhisperxLanguageUi();
     updateDemucsOutputUi();
     resetProxyInfoDisplay();
@@ -518,6 +524,9 @@ async function saveSettings() {
         ffmpeg_path: fields.ffmpeg_path.value.trim(),
         stage_qr_url: fields.stage_qr_url ? fields.stage_qr_url.value.trim() : "",
         stage_lobby_media_path: fields.stage_lobby_media_path ? fields.stage_lobby_media_path.value.trim() : "",
+        stage_vocals_volume_default: fields.stage_vocals_volume_default
+            ? Number(fields.stage_vocals_volume_default.value) / 100
+            : 1.0,
     };
     if (fields.demucs_output_format.value === "mp3") {
         payload.demucs_mp3_bitrate = Number(fields.demucs_mp3_bitrate.value);

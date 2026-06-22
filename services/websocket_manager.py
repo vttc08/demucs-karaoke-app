@@ -6,6 +6,8 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +27,7 @@ class ConnectionManager:
         self._stage_state = {
             "is_paused": False,
             "vocals_enabled": True,
-            "vocals_volume": 1.0,
+            "vocals_volume": settings.stage_vocals_volume_default,
             "lyrics_enabled": True,
             "current_time": 0.0,
         }

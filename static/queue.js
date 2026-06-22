@@ -102,8 +102,11 @@ let stageRemoteLyricsEnabled = true;
 let stageRemoteLyricsAvailable = false;
 let stageRemoteCanControl = isAdminUser;
 let stageRemoteVocalsEnabled = true;
-let stageRemoteVocalsVolume = 1.0;
-let stageRemoteVocalsLastVolume = 1.0;
+let stageRemoteVocalsVolume = Number(window.KARAOKE_STAGE_VOCALS_VOLUME_DEFAULT);
+stageRemoteVocalsVolume = Number.isFinite(stageRemoteVocalsVolume)
+    ? Math.max(0, Math.min(1, stageRemoteVocalsVolume))
+    : 1.0;
+let stageRemoteVocalsLastVolume = stageRemoteVocalsVolume > 0 ? stageRemoteVocalsVolume : 1.0;
 let stageRemoteVocalsAvailable = false;
 let stageRemoteCurrentTime = null;
 let stageRemoteStageDisplays = [];

@@ -496,6 +496,8 @@
   "settings.qr_url_detail": "可选。用于舞台视图二维码浮层。留空时默认使用当前主机名。",
   "settings.lobby_media_path": "舞台大厅媒体 URL",
   "settings.lobby_media_path_detail": "可选。队列为空时循环播放的 /media/... 或 /cache/... URL。",
+  "settings.vocals_volume_default": "默认人声音量",
+  "settings.vocals_volume_default_detail": "用于舞台或队列在重启后首次加载时的默认值。舞台上的实时人声音量仍可继续调整。",
   "settings.saved": "设置已保存",
   "settings.demucs_health_fetch_failed": "无法获取 Demucs 健康状态",
   "settings.loaded": "设置已加载",

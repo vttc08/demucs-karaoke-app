@@ -432,6 +432,7 @@ class RuntimeSettingsResponse(BaseModel):
     cache_path: str
     stage_qr_url: str
     stage_lobby_media_path: str
+    stage_vocals_volume_default: float
 
 
 class RuntimeSettingsUpdateRequest(BaseModel):
@@ -462,6 +463,7 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     cache_path: Optional[str] = None
     stage_qr_url: Optional[str] = None
     stage_lobby_media_path: Optional[str] = None
+    stage_vocals_volume_default: Optional[float] = None
 
 
 class LyricsPresetCreateRequest(BaseModel):

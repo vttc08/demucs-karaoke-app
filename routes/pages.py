@@ -207,6 +207,7 @@ async def logout(request: Request, db: Session = Depends(get_db)):
 async def queue_page(request: Request, db: Session = Depends(get_db)):
     """Mobile queue page."""
     is_admin = get_admin_user(request, db) is not None
+    runtime_settings = runtime_settings_service.get_settings()
     guest_id = normalized_cookie_value(request.cookies.get("karaoke_guest_id"))
     queue_items = queue_service.get_queue(
         db,
@@ -229,6 +230,7 @@ async def queue_page(request: Request, db: Session = Depends(get_db)):
             "singer_name": singer_name,
             "needs_singer_name": not singer_name,
             "is_admin": is_admin,
+            "stage_vocals_volume_default": runtime_settings.stage_vocals_volume_default,
         },
     )
 
@@ -263,6 +265,7 @@ async def stage_page(request: Request, db: Session = Depends(get_db)):
             "queue": queue_items,
             "stage_qr_url": runtime_settings.stage_qr_url,
             "stage_lobby_media_url": lobby_media_url,
+            "stage_vocals_volume_default": runtime_settings.stage_vocals_volume_default,
         },
     )
 
