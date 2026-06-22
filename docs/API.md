@@ -483,8 +483,9 @@ If the backing media file is missing, the row is marked missing and left otherwi
 GET /api/media/{item_id}/files
 ```
 
-Admin-only manifest for the media edit modal. Returns the main file plus tracked vocals and lyrics
-sidecars, including missing-file state and per-file download/delete capability flags.
+Admin-only manifest for the media edit modal. Returns the main file plus any tracked vocals and
+lyrics sidecars that still exist on disk. Missing sidecars are omitted so the modal does not render
+broken download/delete actions.
 
 **Response:**
 ```json

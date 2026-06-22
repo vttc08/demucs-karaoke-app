@@ -136,6 +136,46 @@ def test_media_library_maintenance_service_builds_file_manifest(db_session, tmp_
         settings.cache_path = original_cache
 
 
+def test_media_library_maintenance_service_omits_missing_sidecars_from_manifest(
+    db_session, tmp_path
+):
+    """Missing sidecars should not be exposed to the edit modal."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.cache_path / "lyrics").mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "hidden-missing-song.mp4"
+        vocals_file = settings.media_path / "hidden-missing-song.vocals.wav"
+        media_file.write_bytes(b"video")
+        vocals_file.write_bytes(b"vocals")
+
+        media = MediaItem(
+            title="Hidden Missing Song",
+            artist="Hidden Artist",
+            media_path="/media/hidden-missing-song.mp4",
+            vocals_path="/media/hidden-missing-song.vocals.wav",
+            lyrics_path="/cache/lyrics/hidden-missing-song.lrc",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        manifest = service.get_media_file_manifest(db_session, media.id)
+
+        assert [entry["kind"] for entry in manifest["files"]] == ["main", "vocals"]
+        assert manifest["has_multi_track"] is True
+        assert manifest["has_lyrics"] is False
+        assert manifest["lyrics_kind"] is None
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
 def test_media_library_maintenance_service_deletes_sidecar_and_clears_db_field(
     db_session, tmp_path
 ):

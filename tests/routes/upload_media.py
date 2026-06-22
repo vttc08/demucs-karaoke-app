@@ -494,6 +494,8 @@ def test_media_management_page_shows_edit_controls_for_admin(client):
     assert b'data-action="open-trim-editor"' in response.content
     assert b'data-action="download-media-package"' in response.content
     assert b"File Management" in response.content
+    assert b'id="media-edit-files-list"' in response.content
+    assert b'id="media-download-package-button"' in response.content
 
 def test_media_scan_route_reconciles_filesystem_and_database(client, tmp_path):
     """Manual media scan route should create and mark rows from filesystem diff."""
@@ -703,7 +705,6 @@ def test_media_file_manifest_route_returns_files_and_requires_admin(client, tmp_
         lyrics_file = settings.cache_path / "lyrics" / "manifest-route.lrc"
         media_file.write_bytes(b"video")
         vocals_file.write_bytes(b"vocals")
-        lyrics_file.write_text("[00:01.00]lyrics", encoding="utf-8")
 
         with TestingSessionLocal() as db:
             media = MediaItem(
@@ -727,8 +728,8 @@ def test_media_file_manifest_route_returns_files_and_requires_admin(client, tmp_
         payload = response.json()
         assert payload["download_name"] == "manifest-route.zip"
         assert payload["has_multi_track"] is True
-        assert payload["has_lyrics"] is True
-        assert [entry["kind"] for entry in payload["files"]] == ["main", "vocals", "lyrics"]
+        assert payload["has_lyrics"] is False
+        assert [entry["kind"] for entry in payload["files"]] == ["main", "vocals"]
         assert payload["files"][0]["exists"] is True
         assert payload["files"][1]["downloadable"] is True
     finally:

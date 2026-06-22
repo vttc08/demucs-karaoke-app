@@ -160,7 +160,6 @@
   "media.file_lyrics_lrc": "歌词 LRC",
   "media.file_lyrics_txt": "歌词 TXT",
   "media.file_main": "主文件",
-  "media.file_management_detail": "查看媒体文件和已跟踪的附属文件，下载单个文件，或删除附属文件以便重新执行分离或对齐。",
   "media.file_management_empty": "此条目当前没有跟踪任何文件。",
   "media.file_management_failed": "加载文件列表失败",
   "media.file_management_loading": "正在加载文件...",

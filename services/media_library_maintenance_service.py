@@ -231,7 +231,7 @@ class MediaLibraryMaintenanceService:
         if media_item is None:
             raise MediaItemNotFoundError(f"Media item not found: {media_item_id}")
 
-        entry = self._resolve_media_file_entry(media_item, kind)
+        entry = self._resolve_media_file_entry(media_item, kind, include_missing=True)
         if entry is None:
             raise MediaFileKindError(f"Unsupported media file kind: {kind}")
 
@@ -249,7 +249,7 @@ class MediaLibraryMaintenanceService:
         if kind == "main":
             raise MediaFileDeleteConflictError("The main media file cannot be deleted from the modal")
 
-        entry = self._resolve_media_file_entry(media_item, kind)
+        entry = self._resolve_media_file_entry(media_item, kind, include_missing=True)
         if entry is None:
             raise MediaFileKindError(f"Unsupported media file kind: {kind}")
 
@@ -288,7 +288,7 @@ class MediaLibraryMaintenanceService:
         if media_item is None:
             raise MediaItemNotFoundError(f"Media item not found: {media_item_id}")
 
-        main_entry = self._resolve_media_file_entry(media_item, "main")
+        main_entry = self._resolve_media_file_entry(media_item, "main", include_missing=True)
         if main_entry is None:
             raise MediaFileKindError("Unsupported media file kind: main")
         main_path = main_entry.get("file_path")
@@ -344,7 +344,12 @@ class MediaLibraryMaintenanceService:
 
         return candidates
 
-    def _collect_media_file_entries(self, media_item: MediaItem) -> list[dict[str, object]]:
+    def _collect_media_file_entries(
+        self,
+        media_item: MediaItem,
+        *,
+        include_missing: bool = False,
+    ) -> list[dict[str, object]]:
         """Collect main and sidecar file entries for UI and download workflows."""
         media_file = self.queue_service._media_url_to_file(media_item.media_path)
         vocals_url, lyrics_url = self.queue_service._repair_sidecar_fields(
@@ -369,6 +374,8 @@ class MediaLibraryMaintenanceService:
             file_path = resolved_files[kind]
             stored_url = stored_urls[kind]
             exists = bool(file_path and file_path.exists())
+            if not exists and not include_missing:
+                continue
             filename = file_path.name if file_path is not None else self._fallback_filename(media_item, kind)
             extension = file_path.suffix.lower().lstrip(".") if file_path is not None else ""
             entries.append(
@@ -425,8 +432,14 @@ class MediaLibraryMaintenanceService:
             return media_item.file_stem
         return build_media_stem(media_item.title, media_item.artist)
 
-    def _resolve_media_file_entry(self, media_item: MediaItem, kind: str) -> dict[str, object] | None:
-        entries = self._collect_media_file_entries(media_item)
+    def _resolve_media_file_entry(
+        self,
+        media_item: MediaItem,
+        kind: str,
+        *,
+        include_missing: bool = False,
+    ) -> dict[str, object] | None:
+        entries = self._collect_media_file_entries(media_item, include_missing=include_missing)
         for entry in entries:
             if entry["kind"] == kind:
                 return entry

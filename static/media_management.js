@@ -477,7 +477,9 @@ function renderMediaFilesList(manifest) {
     if (!editFilesList) {
         return;
     }
-    const files = Array.isArray(manifest?.files) ? manifest.files : [];
+    const files = Array.isArray(manifest?.files)
+        ? manifest.files.filter((file) => Boolean(file?.exists))
+        : [];
     if (!files.length) {
         editFilesList.innerHTML = `<p class="text-[11px] text-on-surface-variant">${escapeHtml(t("media.file_management_empty"))}</p>`;
         return;
@@ -486,14 +488,12 @@ function renderMediaFilesList(manifest) {
     editFilesList.innerHTML = files.map((file) => {
         const kind = String(file.kind || "");
         const extension = String(file.extension || "");
-        const exists = Boolean(file.exists);
-        const downloadable = Boolean(file.downloadable && exists);
+        const downloadable = Boolean(file.downloadable);
         const deletable = Boolean(file.deletable);
         const label = getMediaFileKindLabel(kind, extension);
-        const stateLabel = exists ? t("media.file_available") : t("media.file_missing");
+        const stateLabel = t("media.file_available");
         const downloadUrl = buildMediaFileDownloadUrl(kind);
         const deleteUrl = buildMediaFileDeleteUrl(kind);
-        const deleteLabel = kind === "main" ? "" : t("common.delete");
         return `
             <article class="rounded-xl border border-white/5 bg-surface-container-highest/30 p-3">
                 <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -503,7 +503,7 @@ function renderMediaFilesList(manifest) {
                                 <span class="material-symbols-outlined text-[13px]">${mediaFileKindIcon(kind)}</span>
                                 ${escapeHtml(label)}
                             </span>
-                            <span class="rounded-full border ${exists ? "border-secondary/20 bg-secondary/10 text-secondary" : "border-error/20 bg-error/10 text-error"} px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest">
+                            <span class="rounded-full border border-secondary/20 bg-secondary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-secondary">
                                 ${escapeHtml(stateLabel)}
                             </span>
                         </div>
@@ -519,7 +519,6 @@ function renderMediaFilesList(manifest) {
                             ${downloadable ? "" : "disabled"}
                         >
                             <span class="material-symbols-outlined text-[15px]">download</span>
-                            
                         </button>
                         <button
                             type="button"
