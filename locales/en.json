@@ -683,7 +683,7 @@
   "upload.queueing": "Queueing...",
   "upload.select_file": "Please select a file first",
   "upload.submit": "Upload Media",
-  "upload.supported_formats": "Supported formats: MP3, MP4, WebM, MKV, MOV, AVI, and M4V",
+  "upload.supported_formats": "Supported formats: MP3, MP4, WebM, MKV, MOV, AVI, M4V, and ZIP",
   "upload.system_ready": "System_Ready",
   "upload.title": "Upload Media - Karaoke",
   "upload.unexpected_error": "An unexpected error occurred",

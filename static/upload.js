@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressBar = document.getElementById('progress-bar');
     const submitBtn = document.getElementById('submit-btn');
     const videoExtensions = new Set(['mp4', 'webm', 'mkv', 'mov', 'avi', 'm4v']);
+    const archiveExtensions = new Set(['zip']);
 
     let selectedFile = null;
     const inferMetadataBtn = document.getElementById('infer-metadata-btn');
@@ -128,13 +129,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Metadata Inference ---
 
-    function inferMetadataFromFilename(filename) {
+    function parseMetadataFromFilename(filename) {
         const stem = filename.replace(/\.[^/.]+$/, "");
-        return stem;
+        const parts = stem.split(' - ');
+        if (parts.length >= 2) {
+            return {
+                artist: parts[0].trim(),
+                title: parts.slice(1).join(' - ').trim(),
+                stem,
+            };
+        }
+        return {
+            artist: '',
+            title: stem,
+            stem,
+        };
     }
 
     async function inferMetadataViaAPI(filename) {
-        const stem = inferMetadataFromFilename(filename);
+        const { stem } = parseMetadataFromFilename(filename);
         
         try {
             inferMetadataBtn.disabled = true;
@@ -229,8 +242,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (files.length > 0) {
             const file = files[0];
             const ext = file.name.split('.').pop().toLowerCase();
-            if (['mp3', 'mp4', 'webm', 'mkv', 'mov', 'avi', 'm4v'].includes(ext)) {
+            if (['mp3', 'mp4', 'webm', 'mkv', 'mov', 'avi', 'm4v', 'zip'].includes(ext)) {
                 selectedFile = file;
+                if (ext === 'zip') {
+                    const metadata = parseMetadataFromFilename(file.name);
+                    const titleInput = document.getElementById('song-title');
+                    const artistInput = document.getElementById('artist-name');
+                    if (titleInput && metadata.title) {
+                        titleInput.value = metadata.title;
+                    }
+                    if (artistInput) {
+                        artistInput.value = metadata.artist;
+                    }
+                    syncUploadLyricsMetadata();
+                }
                 updateFilePreview();
             } else {
                 showToast(t('upload.supported_formats'), true);
@@ -244,8 +269,9 @@ document.addEventListener('DOMContentLoaded', () => {
             fileSize.textContent = (selectedFile.size / (1024 * 1024)).toFixed(2) + ' MB';
             
             const ext = selectedFile.name.split('.').pop().toLowerCase();
+            const isArchive = archiveExtensions.has(ext);
             const isVideo = videoExtensions.has(ext);
-            fileTypeIcon.textContent = isVideo ? 'movie' : 'music_note';
+            fileTypeIcon.textContent = isArchive ? 'folder_zip' : isVideo ? 'movie' : 'music_note';
             
             dropZoneText.classList.add('hidden');
             filePreview.classList.remove('hidden');

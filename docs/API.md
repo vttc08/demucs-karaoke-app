@@ -385,10 +385,10 @@ Returns the current in-memory roster of active `/queue` viewers. This is mainly 
 POST /api/media/upload
 ```
 
-Uploads a local media file into the library. The request is multipart form data.
+Uploads a local media file or ZIP bundle into the library. The request is multipart form data.
 
 **Form Fields:**
-- `file` (required): MP3, MP4, WebM, MKV, MOV, AVI, or M4V file
+- `file` (required): MP3, MP4, WebM, MKV, MOV, AVI, M4V, or ZIP file
 - `title` (required): media title
 - `artist` (optional): media artist
 - `add_to_queue` (optional, default `true`): queue the uploaded media after saving
@@ -416,6 +416,8 @@ Uploads a local media file into the library. The request is multipart form data.
 
 When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued. Upload and media-edit lyrics are saved beside the media file as `<filename>.lrc` or `<filename>.txt` so library scans can rediscover them.
 When `align_lyrics` is true, the upload must include non-empty plain/LRC lyrics. Missing-vocals uploads run separation plus WhisperX alignment and later replace `lyrics_path` with the aligned JSON sidecar.
+
+ZIP uploads are treated as import bundles. The archive must include exactly one main audio/video file and may also include matching same-stem `*.vocals.*`, `*.lrc` / `*.json`, and `*.png` / `*.jpg` / `*.jpeg` / `*.webp` sidecars. Unrelated files and folders inside the archive are ignored. Karaoke and lyric submission fields are ignored for ZIP imports because the archive is expected to already contain the desired tracks/metadata.
 
 Queued uploads use a single queue preparation task. Non-queued AI karaoke uploads use a
 `media_karaoke` task. If Demucs is unavailable at submission time, the file and metadata remain

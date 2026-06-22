@@ -6,7 +6,7 @@ This project currently uses two services:
 1. Main app
 - serves mobile queue page, stage page, and settings page
 - serves media library management page (`/media`) with database-backed listing and CRUD actions
-- serves upload page (`/upload`) for saving uploaded MP3/MP4 files into the media library and optionally queueing the new item
+- serves upload page (`/upload`) for saving uploaded MP3/MP4 files or ZIP imports into the media library and optionally queueing the new item
 - reconciles media library metadata with filesystem on startup and via manual scan API trigger
 - serves a static access-restricted gate page (`/access-restricted`) for reverse-proxy network checks
 - serves stage-focused presentation page
@@ -337,12 +337,16 @@ The stage page uses a websocket-first model:
 
 - The upload page posts multipart form data to `POST /api/media/upload`.
 - Backend flow:
-  - saves the uploaded file under the configured media root using the normalized title/artist stem
+  - validates either a single media file or a ZIP bundle
+  - saves standalone uploads under the configured media root using the normalized title/artist stem
+  - imports ZIP bundles by copying the main audio/video file plus matching same-stem sidecars into the media root
+  - ignores unrelated ZIP contents such as folders, executables, and stray files
   - creates a durable `media_items` row with `media_path` pointing at the saved file
   - persists submitted `lyrics_text` as a reusable media-adjacent lyrics sidecar on the media row
   - accepts `align_lyrics` for submitted plain/LRC lyrics and routes missing-vocals items through separation plus WhisperX alignment
   - optionally creates a queue row for the new media item when "Add to queue" is enabled
   - checks Demucs health before accepting AI karaoke processing
+  - treats ZIP uploads as already-prepared imports, so karaoke and lyrics submission options are ignored for them
   - starts one queue preparation task for queued uploads, or one `media_karaoke` / `media_karaoke_align` task for non-queued AI uploads
   - preserves the saved upload and returns a warning when Demucs becomes unavailable before task creation
   - broadcasts the new queue item so real-time clients stay in sync

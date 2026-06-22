@@ -683,7 +683,7 @@
   "upload.queueing": "加入队列中...",
   "upload.select_file": "请先选择一个文件",
   "upload.submit": "上传媒体",
-  "upload.supported_formats": "支持格式：MP3、MP4、WebM、MKV、MOV、AVI 和 M4V",
+  "upload.supported_formats": "支持格式：MP3、MP4、WebM、MKV、MOV、AVI、M4V 和 ZIP",
   "upload.system_ready": "系统就绪",
   "upload.title": "上传媒体 - 卡拉 OK",
   "upload.unexpected_error": "发生意外错误",

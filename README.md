@@ -195,13 +195,14 @@ sidecars, FFmpeg behavior, and the destructive replacement contract.
 See [docs/vocal-sync.md](docs/vocal-sync.md) for the Add Vocals workflow and offset semantics.
 
 6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
-        - Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files into the media library with title and artist metadata
+        - Upload MP3, MP4, WebM, MKV, MOV, AVI, M4V, or ZIP bundles into the media library with title and artist metadata
         - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use, and the lyrics file picker accepts `.lrc`, `.txt`, or WhisperX `.json`
         - **AI Karaoke** is available only while Demucs is online and can process uploads whether or not **Add to queue** is enabled
         - Queued AI uploads use the queue preparation task; non-queued AI uploads create a media-library karaoke task
         - If Demucs becomes unavailable during submission, the upload is still saved and optionally queued without karaoke processing
         - Keep the default checked **Add to queue** toggle enabled to enqueue the new media item after upload
         - Uploaded audio files write embedded album art to a durable adjacent thumbnail sidecar when present
+        - ZIP uploads are treated as imports: the archive must contain one main audio/video file and may include matching `.vocals.*`, `.lrc` / `.json`, and `.png` / `.jpg` / `.jpeg` / `.webp` sidecars; unrelated files are ignored
         - Successful uploads redirect to the media management page
 
 7. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`

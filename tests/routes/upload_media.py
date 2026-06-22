@@ -14,6 +14,7 @@ def test_upload_page_loads(client):
     assert not re.search(r'<input[^>]*id="artist-name"[^>]*required', response.text)
     assert 'id="infer-metadata-btn"' in response.text
     assert "Infer from filename" in response.text
+    assert 'accept=".mp3,.mp4,.webm,.mkv,.mov,.avi,.m4v,.zip"' in response.text
     assert 'accept=".lrc,.txt,.json"' in response.text
 
 def test_upload_media_saves_file_and_queues_item(client, tmp_path):
@@ -370,6 +371,132 @@ def test_upload_media_supports_common_video_formats(client, tmp_path, filename):
         saved_file = settings.media_path / payload["filename"]
         assert saved_file.exists()
         assert saved_file.name.endswith(Path(filename).suffix)
+    finally:
+        settings.media_path = original_media
+
+
+def test_upload_media_imports_zip_bundle_with_sidecars(client, tmp_path):
+    """ZIP uploads should import one main file plus matching sidecars."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        archive_bytes = BytesIO()
+        with zipfile.ZipFile(archive_bytes, mode="w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr("zip-bundle.mp3", b"audio-bytes")
+            archive.writestr("zip-bundle.vocals.wav", b"vocals-bytes")
+            archive.writestr("zip-bundle.lrc", b"[00:01.00]zip")
+            archive.writestr("zip-bundle.jpg", b"thumb-bytes")
+            archive.writestr("__MACOSX/._ignored", b"ignored")
+            archive.writestr("nested/ignored.txt", b"ignored")
+            archive.writestr("random.exe", b"ignored")
+
+        with patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()):
+            response = client.post(
+                "/api/media/upload",
+                data={
+                    "title": "Zip Import",
+                    "artist": "Bundle Artist",
+                    "add_to_queue": "false",
+                    "is_karaoke": "true",
+                    "lyrics_text": "[00:02.00]Ignored",
+                    "lyrics_format": "lrc",
+                    "align_lyrics": "true",
+                },
+                files={
+                    "file": ("bundle.zip", archive_bytes.getvalue(), "application/zip"),
+                },
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["queued"] is False
+        assert payload["karaoke_requested"] is False
+        assert payload["karaoke_started"] is False
+        assert payload["filename"] == "zip-bundle.mp3"
+
+        main_file = settings.media_path / "zip-bundle.mp3"
+        vocals_file = settings.media_path / "zip-bundle.vocals.wav"
+        lyrics_file = settings.media_path / "zip-bundle.lrc"
+        thumb_file = settings.media_path / "zip-bundle.jpg"
+        assert main_file.exists()
+        assert vocals_file.exists()
+        assert lyrics_file.exists()
+        assert thumb_file.exists()
+        assert main_file.read_bytes() == b"audio-bytes"
+        assert vocals_file.read_bytes() == b"vocals-bytes"
+        assert lyrics_file.read_text(encoding="utf-8") == "[00:01.00]zip"
+        assert thumb_file.read_bytes() == b"thumb-bytes"
+
+        with TestingSessionLocal() as db:
+            media_item = db.query(MediaItem).filter(MediaItem.id == payload["media_id"]).first()
+            assert media_item is not None
+            assert media_item.media_path == "/media/zip-bundle.mp3"
+            assert media_item.vocals_path == "/media/zip-bundle.vocals.wav"
+            assert media_item.lyrics_path == "/media/zip-bundle.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_upload_media_rejects_zip_without_main_media(client, tmp_path):
+    """ZIP imports must include one audio or video file."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        archive_bytes = BytesIO()
+        with zipfile.ZipFile(archive_bytes, mode="w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr("notes.txt", b"ignored")
+            archive.writestr("__MACOSX/._ignored", b"ignored")
+
+        response = client.post(
+            "/api/media/upload",
+            data={
+                "title": "Broken Zip",
+                "add_to_queue": "false",
+            },
+            files={
+                "file": ("broken.zip", archive_bytes.getvalue(), "application/zip"),
+            },
+        )
+
+        assert response.status_code == 400
+        assert "main audio or video file" in response.json()["detail"]
+    finally:
+        settings.media_path = original_media
+
+
+def test_upload_media_rejects_zip_with_multiple_main_media_files(client, tmp_path):
+    """ZIP imports should reject bundles with more than one main media file."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        archive_bytes = BytesIO()
+        with zipfile.ZipFile(archive_bytes, mode="w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr("alpha.mp4", b"video-bytes")
+            archive.writestr("beta.mp3", b"audio-bytes")
+
+        response = client.post(
+            "/api/media/upload",
+            data={
+                "title": "Broken Zip",
+                "add_to_queue": "false",
+            },
+            files={
+                "file": ("broken.zip", archive_bytes.getvalue(), "application/zip"),
+            },
+        )
+
+        assert response.status_code == 400
+        assert "exactly one main audio or video file" in response.json()["detail"]
     finally:
         settings.media_path = original_media
 

@@ -4,6 +4,7 @@ import json
 import logging
 import shutil
 import subprocess
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -46,7 +47,11 @@ media_thumbnail_service = MediaThumbnailService()
 queue_service = QueueService()
 runtime_settings_service = RuntimeSettingsService()
 media_trim_service = MediaTrimService()
-_UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
+_UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v", ".zip"}
+_MEDIA_UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
+_ZIP_THUMBNAIL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
+_ZIP_LYRICS_EXTENSIONS = (".json", ".lrc", ".srt", ".txt")
+_ZIP_VOCALS_EXTENSIONS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm")
 _MEDIA_FILE_KINDS = {"main", "vocals", "lyrics"}
 
 
@@ -128,6 +133,86 @@ def _validate_alignment_request(
         raise HTTPException(status_code=400, detail="WhisperX alignment requires plain text or LRC lyrics")
 
 
+def _is_zip_root_entry(filename: str) -> bool:
+    normalized = filename.replace("\\", "/").strip()
+    if not normalized or normalized.endswith("/"):
+        return False
+    if normalized.startswith("__MACOSX/") or normalized == "__MACOSX":
+        return False
+    return "/" not in normalized
+
+
+def _zip_entry_is_main_media(filename: str) -> bool:
+    path = Path(filename)
+    suffix = path.suffix.lower()
+    if suffix not in _MEDIA_UPLOAD_EXTENSIONS:
+        return False
+    lower_name = filename.lower()
+    if ".vocals." in lower_name or path.stem.lower().endswith(".vocals"):
+        return False
+    return True
+
+
+def _select_zip_entry(
+    archive: zipfile.ZipFile,
+    stem: str,
+    suffixes: tuple[str, ...],
+) -> zipfile.ZipInfo | None:
+    for candidate_suffix in suffixes:
+        candidate_name = f"{stem}{candidate_suffix}"
+        for info in archive.infolist():
+            if info.filename.lower() != candidate_name.lower():
+                continue
+            if _is_zip_root_entry(info.filename):
+                return info
+    return None
+
+
+def _select_zip_vocals_entry(
+    archive: zipfile.ZipFile,
+    stem: str,
+    suffixes: tuple[str, ...],
+) -> zipfile.ZipInfo | None:
+    for candidate_suffix in suffixes:
+        candidate_name = f"{stem}.vocals{candidate_suffix}"
+        for info in archive.infolist():
+            if info.filename.lower() != candidate_name.lower():
+                continue
+            if _is_zip_root_entry(info.filename):
+                return info
+    return None
+
+
+def _media_target_paths_for_zip(
+    media_root: Path,
+    target_stem: str,
+    main_suffix: str,
+    vocals_entry: zipfile.ZipInfo | None,
+    lyrics_entry: zipfile.ZipInfo | None,
+    thumbnail_entry: zipfile.ZipInfo | None,
+) -> list[tuple[str, Path]]:
+    paths: list[tuple[str, Path]] = [("main", media_root / f"{target_stem}{main_suffix}")]
+    if vocals_entry is not None:
+        paths.append(("vocals", media_root / f"{target_stem}.vocals{Path(vocals_entry.filename).suffix.lower()}"))
+    if lyrics_entry is not None:
+        paths.append(("lyrics", media_root / f"{target_stem}{Path(lyrics_entry.filename).suffix.lower()}"))
+    if thumbnail_entry is not None:
+        paths.append(("thumbnail", media_root / f"{target_stem}{Path(thumbnail_entry.filename).suffix.lower()}"))
+    return paths
+
+
+def _copy_zip_entry_to_path(archive: zipfile.ZipFile, entry: zipfile.ZipInfo, target_path: Path) -> None:
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    with archive.open(entry) as source, target_path.open("wb") as destination:
+        shutil.copyfileobj(source, destination)
+
+
+def _cleanup_paths(paths: list[Path]) -> None:
+    for path in paths:
+        if path.exists():
+            path.unlink()
+
+
 @router.post("/upload")
 async def upload_media(
     file: UploadFile = File(...),
@@ -145,119 +230,141 @@ async def upload_media(
     if ext not in _UPLOAD_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail="Supported uploads are .mp3, .mp4, .webm, .mkv, .mov, .avi, and .m4v",
+            detail="Supported uploads are .mp3, .mp4, .webm, .mkv, .mov, .avi, .m4v, and .zip",
         )
 
     normalized_title = queue_service._normalize_required_metadata(title)
     normalized_artist = queue_service._normalize_optional_metadata(artist)
-
-    stem = build_media_stem(normalized_title, normalized_artist)
-    final_stem = stem
-    counter = 1
-    while (settings.media_path / f"{final_stem}{ext}").exists():
-        final_stem = f"{stem}_{counter}"
-        counter += 1
-
-    filename = f"{final_stem}{ext}"
-    target_path = settings.media_path / filename
     queued_item = None
     karaoke_requested = bool(is_karaoke)
     alignment_requested = bool(align_lyrics)
-    if alignment_requested:
-        karaoke_requested = True
     karaoke_started = False
     karaoke_task_id = None
     karaoke_warning = None
     karaoke_warning_detail = None
 
+    if ext == ".zip":
+        karaoke_requested = False
+        alignment_requested = False
+        lyrics_text = None
+        lyrics_format = None
+    elif alignment_requested:
+        karaoke_requested = True
+
     try:
-        settings.media_path.mkdir(parents=True, exist_ok=True)
-        with target_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        media_item = MediaItem(
-            title=normalized_title,
-            artist=normalized_artist,
-            file_stem=final_stem,
-            media_path=queue_service.build_media_url(target_path),
-            missing=False,
-        )
-        db.add(media_item)
-        db.flush()
-        media_thumbnail_service.ensure_thumbnail_for_media_file(target_path)
-        lyrics_format = (lyrics_format or "").strip().lower() or None
-        if lyrics_format not in (None, "lrc", "txt", "json"):
-            raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc', 'txt', or 'json'")
-        _validate_alignment_request(
-            align_lyrics=alignment_requested,
-            lyrics_text=lyrics_text,
-            lyrics_format=lyrics_format,
-        )
-        if lyrics_text:
+        if ext == ".zip":
+            media_item, filename = _import_zip_media_bundle(
+                db=db,
+                upload_file=file,
+                normalized_title=normalized_title,
+                normalized_artist=normalized_artist,
+            )
+            if add_to_queue:
+                queued_item = queue_service.add_to_queue(
+                    db,
+                    QueueItemCreate(
+                        media_item_id=media_item.id,
+                        title=media_item.title,
+                        artist=media_item.artist,
+                        is_karaoke=False,
+                        align_lyrics=False,
+                    ),
+                )
+                await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
+            else:
+                db.commit()
+            db.refresh(media_item)
+        else:
+            stem = build_media_stem(normalized_title, normalized_artist)
+            final_stem = stem
+            counter = 1
+            while (settings.media_path / f"{final_stem}{ext}").exists():
+                final_stem = f"{stem}_{counter}"
+                counter += 1
+
+            filename = f"{final_stem}{ext}"
+            target_path = settings.media_path / filename
+
+            settings.media_path.mkdir(parents=True, exist_ok=True)
+            with target_path.open("wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            media_item = MediaItem(
+                title=normalized_title,
+                artist=normalized_artist,
+                file_stem=final_stem,
+                media_path=queue_service.build_media_url(target_path),
+                missing=False,
+            )
+            db.add(media_item)
+            db.flush()
+            media_thumbnail_service.ensure_thumbnail_for_media_file(target_path)
+
+            lyrics_format = (lyrics_format or "").strip().lower() or None
             if lyrics_format not in (None, "lrc", "txt", "json"):
                 raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc', 'txt', or 'json'")
-            queue_service.store_lyrics_sidecar(
-                media_item,
-                lyrics_text,
+            _validate_alignment_request(
+                align_lyrics=alignment_requested,
+                lyrics_text=lyrics_text,
                 lyrics_format=lyrics_format,
-                storage="media",
             )
-
-        karaoke_available = False
-        if karaoke_requested:
-            karaoke_available, karaoke_warning, karaoke_warning_detail = _karaoke_availability(
-                media_item
-            )
-            if not karaoke_available:
-                alignment_requested = False
-
-        if add_to_queue:
-            queued_item = queue_service.add_to_queue(
-                db,
-                QueueItemCreate(
-                    media_item_id=media_item.id,
-                    title=media_item.title,
-                    artist=media_item.artist,
-                    is_karaoke=karaoke_requested and karaoke_available,
-                    align_lyrics=alignment_requested and karaoke_available,
-                ),
-            )
-            await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
-        else:
-            db.commit()
-        db.refresh(media_item)
-
-        try:
-            if queued_item is not None:
-                task = processing_task_service.get_or_create_queue_task(db, queued_item.id)
-                task_execution_coordinator.start(task.id)
-                karaoke_task_id = task.id if karaoke_requested and karaoke_available else None
-                karaoke_started = bool(karaoke_task_id)
-            elif karaoke_requested and karaoke_available:
-                task = (
-                    processing_task_service.get_or_create_media_karaoke_align_task(db, media_item.id)
-                    if alignment_requested
-                    else processing_task_service.get_or_create_media_task(db, media_item.id)
+            if lyrics_text:
+                queue_service.store_lyrics_sidecar(
+                    media_item,
+                    lyrics_text,
+                    lyrics_format=lyrics_format,
+                    storage="media",
                 )
-                task_execution_coordinator.start(task.id)
-                karaoke_task_id = task.id
-                karaoke_started = True
-        except Exception as exc:
-            logger.exception("Failed to start upload processing media_id=%s", media_item.id)
+
+            karaoke_available = False
             if karaoke_requested:
-                karaoke_warning = "task_start_failed"
-                karaoke_warning_detail = str(exc)
+                karaoke_available, karaoke_warning, karaoke_warning_detail = _karaoke_availability(
+                    media_item
+                )
+                if not karaoke_available:
+                    alignment_requested = False
+
+            if add_to_queue:
+                queued_item = queue_service.add_to_queue(
+                    db,
+                    QueueItemCreate(
+                        media_item_id=media_item.id,
+                        title=media_item.title,
+                        artist=media_item.artist,
+                        is_karaoke=karaoke_requested and karaoke_available,
+                        align_lyrics=alignment_requested and karaoke_available,
+                    ),
+                )
+                await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
+            else:
+                db.commit()
+            db.refresh(media_item)
+
+            try:
+                if queued_item is not None:
+                    task = processing_task_service.get_or_create_queue_task(db, queued_item.id)
+                    task_execution_coordinator.start(task.id)
+                    karaoke_task_id = task.id if karaoke_requested and karaoke_available else None
+                    karaoke_started = bool(karaoke_task_id)
+                elif karaoke_requested and karaoke_available:
+                    task = (
+                        processing_task_service.get_or_create_media_karaoke_align_task(db, media_item.id)
+                        if alignment_requested
+                        else processing_task_service.get_or_create_media_task(db, media_item.id)
+                    )
+                    task_execution_coordinator.start(task.id)
+                    karaoke_task_id = task.id
+                    karaoke_started = True
+            except Exception as exc:
+                logger.exception("Failed to start upload processing media_id=%s", media_item.id)
+                if karaoke_requested:
+                    karaoke_warning = "task_start_failed"
+                    karaoke_warning_detail = str(exc)
     except HTTPException:
         db.rollback()
-        if target_path.exists():
-            target_path.unlink()
-        media_thumbnail_service.remove_thumbnail_for_media_file(target_path)
         raise
     except Exception as exc:
         db.rollback()
-        if target_path.exists():
-            target_path.unlink()
-        media_thumbnail_service.remove_thumbnail_for_media_file(target_path)
-        logger.exception("Failed to upload media file: %s", filename)
+        logger.exception("Failed to upload media file: %s", file.filename)
         raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(exc)}")
 
     logger.info(
@@ -281,6 +388,127 @@ async def upload_media(
         "karaoke_warning": karaoke_warning,
         "karaoke_warning_detail": karaoke_warning_detail,
     }
+
+
+def _import_zip_media_bundle(
+    *,
+    db: Session,
+    upload_file: UploadFile,
+    normalized_title: str,
+    normalized_artist: str | None,
+) -> tuple[MediaItem, str]:
+    """Import a ZIP bundle containing one main media file and optional sidecars."""
+    try:
+        upload_file.file.seek(0)
+    except Exception:
+        pass
+
+    try:
+        with zipfile.ZipFile(upload_file.file) as archive:
+            root_entries = [
+                info
+                for info in archive.infolist()
+                if not info.is_dir() and _is_zip_root_entry(info.filename)
+            ]
+            main_entries = [info for info in root_entries if _zip_entry_is_main_media(info.filename)]
+            if not main_entries:
+                raise HTTPException(
+                    status_code=400,
+                    detail="ZIP imports must include one main audio or video file",
+                )
+            if len(main_entries) != 1:
+                raise HTTPException(
+                    status_code=400,
+                    detail="ZIP imports must include exactly one main audio or video file",
+                )
+
+            main_entry = main_entries[0]
+            source_stem = Path(main_entry.filename).stem
+            main_suffix = Path(main_entry.filename).suffix.lower()
+            vocals_entry = _select_zip_vocals_entry(archive, source_stem, _ZIP_VOCALS_EXTENSIONS)
+            lyrics_entry = _select_zip_entry(archive, source_stem, _ZIP_LYRICS_EXTENSIONS)
+            thumbnail_entry = _select_zip_entry(archive, source_stem, _ZIP_THUMBNAIL_EXTENSIONS)
+
+            settings.media_path.mkdir(parents=True, exist_ok=True)
+            target_stem = source_stem
+            counter = 1
+            main_path = settings.media_path / f"{target_stem}{main_suffix}"
+            while True:
+                candidate_paths = _media_target_paths_for_zip(
+                    settings.media_path,
+                    target_stem,
+                    main_suffix,
+                    vocals_entry,
+                    lyrics_entry,
+                    thumbnail_entry,
+                )
+                if all(not path.exists() for _, path in candidate_paths):
+                    break
+                target_stem = f"{source_stem}_{counter}"
+                counter += 1
+
+            written_paths: list[Path] = []
+            try:
+                main_path = settings.media_path / f"{target_stem}{main_suffix}"
+                import_plan: list[tuple[zipfile.ZipInfo, Path]] = [
+                    (main_entry, main_path)
+                ]
+                if vocals_entry is not None:
+                    import_plan.append(
+                        (
+                            vocals_entry,
+                            settings.media_path / f"{target_stem}.vocals{Path(vocals_entry.filename).suffix.lower()}",
+                        )
+                    )
+                if lyrics_entry is not None:
+                    import_plan.append(
+                        (
+                            lyrics_entry,
+                            settings.media_path / f"{target_stem}{Path(lyrics_entry.filename).suffix.lower()}",
+                        )
+                    )
+                if thumbnail_entry is not None:
+                    import_plan.append(
+                        (
+                            thumbnail_entry,
+                            settings.media_path / f"{target_stem}{Path(thumbnail_entry.filename).suffix.lower()}",
+                        )
+                    )
+
+                for entry, target_path in import_plan:
+                    _copy_zip_entry_to_path(archive, entry, target_path)
+                    written_paths.append(target_path)
+
+                main_path = settings.media_path / f"{target_stem}{main_suffix}"
+                media_item = MediaItem(
+                    title=normalized_title,
+                    artist=normalized_artist,
+                    file_stem=target_stem,
+                    media_path=queue_service.build_media_url(main_path),
+                    missing=False,
+                )
+                if vocals_entry is not None:
+                    media_item.vocals_path = queue_service.build_media_url(
+                        settings.media_path / f"{target_stem}.vocals{Path(vocals_entry.filename).suffix.lower()}"
+                    )
+                if lyrics_entry is not None:
+                    media_item.lyrics_path = queue_service.build_media_url(
+                        settings.media_path / f"{target_stem}{Path(lyrics_entry.filename).suffix.lower()}"
+                    )
+
+                db.add(media_item)
+                db.flush()
+                media_thumbnail_service.ensure_thumbnail_for_media_file(main_path)
+                db.commit()
+                db.refresh(media_item)
+                return media_item, main_path.name
+            except Exception:
+                media_thumbnail_service.remove_thumbnail_for_media_file(main_path)
+                media_thumbnail_service.remove_thumbnail_sidecars_for_media_file(main_path)
+                _cleanup_paths(written_paths)
+                raise
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=400, detail="Uploaded ZIP file is not a valid archive") from exc
 
 
 @router.post("/{item_id}/karaoke")
