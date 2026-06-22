@@ -58,6 +58,86 @@ def test_queue_service_add_to_queue_includes_thumbnail_for_local_media(db_sessio
 
     assert result.thumbnail == MediaThumbnailService.thumbnail_url_for_media_file(media_file)
 
+def test_queue_service_prefers_adjacent_thumbnail_for_local_media(db_session, tmp_path, monkeypatch):
+    """Queue responses should prefer adjacent thumbnail sidecars over cached thumbs."""
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media_file = media_root / "adjacent-track.mp4"
+    media_file.write_bytes(b"media")
+    cache_thumb = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+    cache_thumb.parent.mkdir(parents=True, exist_ok=True)
+    cache_thumb.write_bytes(b"thumbnail")
+    adjacent_thumb = media_file.with_suffix(".jpg")
+    adjacent_thumb.write_bytes(b"adjacent")
+
+    db_session.add(
+        MediaItem(
+            youtube_id=None,
+            title="Adjacent Thumb",
+            artist="Artist",
+            media_path="/media/adjacent-track.mp4",
+            missing=False,
+        )
+    )
+    db_session.commit()
+
+    service = QueueService()
+    result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            media_item_id=db_session.query(MediaItem).filter(MediaItem.title == "Adjacent Thumb").first().id,
+            title="Adjacent Thumb",
+            artist="Artist",
+            is_karaoke=False,
+        ),
+    )
+
+    assert result.thumbnail == MediaThumbnailService.thumbnail_url_for_media_file(media_file)
+    assert result.thumbnail == MediaThumbnailService.public_url_for_path(adjacent_thumb)
+
+def test_queue_service_prefers_local_thumbnail_over_youtube_fallback(db_session, tmp_path, monkeypatch):
+    """Queue responses should prefer local thumbnail sidecars over YouTube thumbs."""
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media_file = media_root / "blank-space.mp4"
+    media_file.write_bytes(b"media")
+    adjacent_thumb = media_file.with_suffix(".jpg")
+    adjacent_thumb.write_bytes(b"adjacent")
+
+    db_session.add(
+        MediaItem(
+            youtube_id="abc123",
+            title="Blank Space",
+            artist="Taylor Swift",
+            media_path="/media/blank-space.mp4",
+            missing=False,
+        )
+    )
+    db_session.commit()
+
+    service = QueueService()
+    result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            media_item_id=db_session.query(MediaItem).filter(MediaItem.title == "Blank Space").first().id,
+            title="Blank Space",
+            artist="Taylor Swift",
+            is_karaoke=False,
+        ),
+    )
+
+    assert result.thumbnail == MediaThumbnailService.public_url_for_path(adjacent_thumb)
+
 def test_queue_service_add_to_queue_stores_requester_metadata(db_session):
     """Queue items should preserve requester identity and display name."""
     service = QueueService()

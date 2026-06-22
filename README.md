@@ -172,9 +172,10 @@ and `/static/...`.
        - View real-time Demucs engine health (online/offline with detail)
 
 5. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
-         - Browse existing database-backed media entries in responsive card/table layouts
-         - View title, artist, and capability badges (multi-track, lyrics)
-          - Local audio files reuse embedded album art as the thumbnail when cached cover art is available
+          - Browse existing database-backed media entries in responsive card/table layouts
+          - View title, artist, and capability badges (multi-track, lyrics)
+          - Local thumbnails prefer an adjacent same-name image sidecar (`.png`, `.jpg`, `.jpeg`, or `.webp`)
+          - Local audio files reuse embedded album art by writing a durable adjacent thumbnail sidecar when cover art is available
           - Use **Add to Queue** to enqueue a local media row through the existing queue API
           - Guests can browse and queue items only; edit, scan, upload, and delete controls are admin-only
           - Admin users can use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
@@ -199,7 +200,7 @@ See [docs/vocal-sync.md](docs/vocal-sync.md) for the Add Vocals workflow and off
         - Queued AI uploads use the queue preparation task; non-queued AI uploads create a media-library karaoke task
         - If Demucs becomes unavailable during submission, the upload is still saved and optionally queued without karaoke processing
         - Keep the default checked **Add to queue** toggle enabled to enqueue the new media item after upload
-        - Uploaded audio files generate cached cover thumbnails immediately when embedded album art is present
+        - Uploaded audio files write embedded album art to a durable adjacent thumbnail sidecar when present
         - Successful uploads redirect to the media management page
 
 7. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`

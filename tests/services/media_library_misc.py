@@ -36,6 +36,104 @@ def test_media_library_service_uses_cached_local_thumbnail(db_session, tmp_path)
         settings.media_path = original_media
         settings.cache_path = original_cache
 
+def test_media_library_service_prefers_adjacent_local_thumbnail(db_session, tmp_path):
+    """Media page rows should prefer adjacent thumbnail sidecars over cache."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "local-song.mp4"
+        media_file.write_text("video", encoding="utf-8")
+        cache_thumb = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+        cache_thumb.parent.mkdir(parents=True, exist_ok=True)
+        cache_thumb.write_bytes(b"thumb")
+        adjacent_thumb = media_file.with_suffix(".webp")
+        adjacent_thumb.write_bytes(b"adjacent")
+
+        db_session.add(
+            MediaItem(
+                title="Local Song",
+                media_path="/media/local-song.mp4",
+                missing=False,
+            )
+        )
+        db_session.commit()
+
+        service = MediaLibraryService()
+        items = service.list_media_items(db_session)
+
+        assert len(items) == 1
+        assert items[0]["thumbnail"] == MediaThumbnailService.public_url_for_path(adjacent_thumb)
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+def test_media_library_service_prefers_local_thumbnail_over_youtube_fallback(db_session, tmp_path):
+    """Local thumbnail sidecars should override the YouTube fallback for saved media."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "blank-space.mp4"
+        media_file.write_text("video", encoding="utf-8")
+        adjacent_thumb = media_file.with_suffix(".jpg")
+        adjacent_thumb.write_bytes(b"adjacent")
+
+        db_session.add(
+            MediaItem(
+                youtube_id="abc123",
+                title="Blank Space",
+                artist="Taylor Swift",
+                media_path="/media/blank-space.mp4",
+                missing=False,
+            )
+        )
+        db_session.commit()
+
+        service = MediaLibraryService()
+        items = service.list_media_items(db_session)
+
+        assert len(items) == 1
+        assert items[0]["thumbnail"] == MediaThumbnailService.public_url_for_path(adjacent_thumb)
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+def test_media_thumbnail_service_prefers_adjacent_thumbnail_over_cache(tmp_path):
+    """Adjacent thumbnail sidecars should win over cached thumbnails."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+        media_file = settings.media_path / "song.mp4"
+        media_file.write_bytes(b"video")
+
+        cache_thumb = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+        cache_thumb.parent.mkdir(parents=True, exist_ok=True)
+        cache_thumb.write_bytes(b"cache-thumb")
+
+        adjacent_thumb = media_file.with_suffix(".png")
+        adjacent_thumb.write_bytes(b"adjacent-thumb")
+
+        service = MediaThumbnailService()
+
+        assert service.best_thumbnail_path_for_media_file(media_file) == adjacent_thumb
+        assert service.thumbnail_url_for_media_file(media_file) == MediaThumbnailService.public_url_for_path(adjacent_thumb)
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
 def test_media_library_service_marks_json_lyrics_kind(db_session, tmp_path):
     """Media page rows should expose WhisperX JSON as a distinct lyrics kind."""
     original_media = settings.media_path
@@ -91,7 +189,8 @@ def test_media_thumbnail_service_uses_embedded_art_extraction_for_audio(tmp_path
 
         result = service.ensure_thumbnail_for_media_file(media_file)
 
-        assert result == MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+        assert result == media_file.with_suffix(".jpg")
+        assert result.exists()
         assert called == ["embedded:album-track.mp3"]
     finally:
         settings.cache_path = original_cache

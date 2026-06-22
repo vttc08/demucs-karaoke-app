@@ -252,10 +252,16 @@ The stage page uses a websocket-first model:
 
 ## Local thumbnails and audio cover art
 
-- Local media thumbnails are cached under `cache/media-thumbnails/` and reused by queue, media-library, and stage views.
-- Video thumbnails come from a captured frame.
-- Audio files (`.mp3`, `.wav`, `.m4a`, `.flac`, `.aac`, `.ogg`, `.opus`) attempt to extract embedded cover art via ffmpeg.
-- Uploads generate thumbnails immediately after save, while library scans refresh thumbnails for existing files under the media root.
+- Local media thumbnails prefer an adjacent same-stem image sidecar next to the media file.
+  Supported sidecar extensions are `.png`, `.jpg`, `.jpeg`, and `.webp`.
+- Generated thumbnails still live under `cache/media-thumbnails/` and remain the fallback for
+  video frames and older media without a sidecar.
+- Video thumbnails come from a captured frame when no adjacent override exists.
+- Audio files (`.mp3`, `.wav`, `.m4a`, `.flac`, `.aac`, `.ogg`, `.opus`) extract embedded cover art
+  into an adjacent thumbnail sidecar so artwork survives Demucs output replacement and cache GC.
+- Uploads generate thumbnails immediately after save, while library scans refresh thumbnails for
+  existing files under the media root without discarding adjacent thumbnail sidecars.
+- Renames and deletes keep adjacent thumbnail sidecars in sync with the media file.
 - Stage keeps the existing `<video>` path for video items and lobby playback, but switches to an `<audio>` primary player for audio-only queue items.
 - In audio-only stage mode, the queue item's `thumbnail` URL drives the fullscreen background/artwork treatment; if no cover is available, stage falls back to a branded placeholder background instead of a plain black screen.
 

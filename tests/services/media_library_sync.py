@@ -146,6 +146,37 @@ def test_media_library_sync_service_detects_json_lyrics_sidecar(db_session, tmp_
     finally:
         settings.media_path = original_media
 
+def test_media_library_sync_service_preserves_adjacent_thumbnail_sidecar(
+    db_session, tmp_path
+):
+    """Single-item scans should keep adjacent thumbnails available after refresh."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "thumb-refresh.mp4"
+        media_file.write_text("video", encoding="utf-8")
+        adjacent_thumb = media_file.with_suffix(".jpg")
+        adjacent_thumb.write_bytes(b"thumb")
+
+        media = MediaItem(
+            title="Thumb Refresh",
+            media_path="/media/thumb-refresh.mp4",
+            missing=True,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        summary = MediaLibrarySyncService().scan_media_item(db_session, media.id)
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert summary["thumbnails_updated"] == 1
+        assert stored.missing is False
+        assert MediaLibraryService._thumbnail_for(stored) == MediaThumbnailService.public_url_for_path(adjacent_thumb)
+    finally:
+        settings.media_path = original_media
+
 def test_media_library_sync_service_skips_sidecars_as_primary_media(db_session, tmp_path):
     """Sidecar-only files should not be inserted as standalone media rows."""
     original_media = settings.media_path

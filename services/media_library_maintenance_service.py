@@ -202,6 +202,9 @@ class MediaLibraryMaintenanceService:
         add_candidate(self.queue_service._media_url_to_file(media_item.lyrics_path))
         if media_file is not None:
             add_candidate(MediaThumbnailService.thumbnail_path_for_media_file(media_file))
+            for candidate in self.thumbnail_service.adjacent_thumbnail_paths_for_media_file(media_file):
+                if candidate.exists():
+                    add_candidate(candidate)
 
         if media_file is None:
             return candidates

@@ -16,10 +16,12 @@ def test_media_library_maintenance_service_deletes_files_and_queue_rows(db_sessi
         vocals_file = settings.media_path / "delete-me.vocals.wav"
         lyrics_file = settings.cache_path / "lyrics" / "delete-me.lrc"
         thumb_file = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
+        adjacent_thumb = media_file.with_suffix(".jpg")
         media_file.write_text("video", encoding="utf-8")
         vocals_file.write_text("vocals", encoding="utf-8")
         thumb_file.parent.mkdir(parents=True, exist_ok=True)
         thumb_file.write_bytes(b"thumb")
+        adjacent_thumb.write_bytes(b"adjacent")
 
         media = MediaItem(
             title="Delete Me",
@@ -43,13 +45,14 @@ def test_media_library_maintenance_service_deletes_files_and_queue_rows(db_sessi
         service = MediaLibraryMaintenanceService()
         summary = service.delete_media_item(db_session, media.id)
 
-        assert summary["deleted_files"] == 3
+        assert summary["deleted_files"] == 4
         assert summary["missing_files"] == 1
         assert summary["removed_queue_items"] == 1
         assert not media_file.exists()
         assert not vocals_file.exists()
         assert not lyrics_file.exists()
         assert not thumb_file.exists()
+        assert not adjacent_thumb.exists()
         assert db_session.query(MediaItem).filter(MediaItem.id == media.id).first() is None
         assert db_session.query(QueueItem).filter(QueueItem.media_id == media.id).count() == 0
     finally:
@@ -100,11 +103,13 @@ def test_media_library_maintenance_service_renames_metadata_and_files(db_session
         old_vocals = settings.media_path / "old-title.vocals.wav"
         old_lyrics = settings.cache_path / "lyrics" / "old-title.lrc"
         old_thumb = MediaThumbnailService.thumbnail_path_for_media_file(old_media)
+        old_adjacent_thumb = old_media.with_suffix(".png")
         old_media.write_text("video", encoding="utf-8")
         old_vocals.write_text("vocals", encoding="utf-8")
         old_lyrics.write_text("[00:01.00]lyrics", encoding="utf-8")
         old_thumb.parent.mkdir(parents=True, exist_ok=True)
         old_thumb.write_bytes(b"thumb")
+        old_adjacent_thumb.write_bytes(b"adjacent")
 
         media = MediaItem(
             title="Old Title",
@@ -137,11 +142,14 @@ def test_media_library_maintenance_service_renames_metadata_and_files(db_session
         renamed_vocals = settings.media_path / f"{expected_stem}.vocals.wav"
         renamed_lyrics = settings.cache_path / "lyrics" / f"{expected_stem}.lrc"
         renamed_thumb = MediaThumbnailService.thumbnail_path_for_media_file(renamed_media)
+        renamed_adjacent_thumb = renamed_media.with_suffix(".png")
         assert renamed_media.exists()
         assert renamed_vocals.exists()
         assert renamed_lyrics.exists()
         assert not old_thumb.exists()
         assert renamed_thumb.exists()
+        assert not old_adjacent_thumb.exists()
+        assert renamed_adjacent_thumb.exists()
 
         stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
         assert stored is not None

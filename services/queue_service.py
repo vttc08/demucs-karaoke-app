@@ -912,18 +912,17 @@ class QueueService:
 
     @staticmethod
     def _thumbnail_for_media(media_path: str | None, youtube_id: str | None) -> str | None:
+        media_file = QueueService._media_url_to_file(media_path)
+        if media_file is not None:
+            thumbnail_path = MediaThumbnailService.best_thumbnail_path_for_media_file(media_file)
+            if thumbnail_path is not None:
+                return MediaThumbnailService.thumbnail_url_for_media_file(media_file)
+
         youtube_id = (youtube_id or "").strip()
         if youtube_id:
             return f"https://i.ytimg.com/vi/{youtube_id}/hqdefault.jpg"
 
-        media_file = QueueService._media_url_to_file(media_path)
-        if media_file is None:
-            return None
-
-        thumbnail_path = MediaThumbnailService.thumbnail_path_for_media_file(media_file)
-        if not thumbnail_path.exists():
-            return None
-        return MediaThumbnailService.thumbnail_url_for_media_file(media_file)
+        return None
 
     def _repair_sidecar_fields(
         self, media_path: str | None, vocals_path: str | None, lyrics_path: str | None

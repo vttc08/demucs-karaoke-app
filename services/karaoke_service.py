@@ -706,7 +706,9 @@ class KaraokeService:
         if original_media_path is not None and original_media_path != final_media_path:
             from services.media_thumbnail_service import MediaThumbnailService
 
-            MediaThumbnailService().rename_thumbnail_for_media_file(
+            thumbnail_service = MediaThumbnailService()
+            thumbnail_service.ensure_thumbnail_for_media_file(original_media_path)
+            thumbnail_service.rename_thumbnail_for_media_file(
                 original_media_path,
                 final_media_path,
             )
