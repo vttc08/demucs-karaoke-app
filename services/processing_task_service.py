@@ -33,6 +33,10 @@ def utc_now_naive() -> datetime:
 class ProcessingTaskService:
     """Manage durable tasks and their live stream state."""
 
+    VOCAL_SYNC_PREPARE_TASK_TYPES = (
+        "media_vocal_sync_prepare_youtube",
+        "media_vocal_sync_prepare_upload",
+    )
     ACTIVE_STATUSES = (
         ProcessingTaskStatus.PENDING.value,
         ProcessingTaskStatus.DOWNLOADING.value,
@@ -84,6 +88,95 @@ class ProcessingTaskService:
     def get_or_create_media_lyrics_align_task(self, db: Session, media_item_id: int) -> ProcessingTask:
         """Return an existing active media lyrics alignment task or create one."""
         return self._get_or_create_media_task(db, media_item_id, task_type="media_lyrics_align")
+
+    def create_media_vocal_sync_prepare_task(
+        self,
+        db: Session,
+        media_item_id: int,
+        *,
+        source_kind: str = "youtube",
+    ) -> ProcessingTask:
+        """Create one active vocal-sync prepare task for a media item/source kind."""
+        task_type = f"media_vocal_sync_prepare_{source_kind}"
+        active = self.get_active_media_vocal_sync_prepare_task(db, media_item_id)
+        if active is not None:
+            raise ValueError("A vocal sync prepare task is already running for this media item")
+
+        media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
+        if media_item is None:
+            raise ValueError(f"Media item not found: {media_item_id}")
+        task = ProcessingTask(
+            task_type=task_type,
+            source_kind=source_kind,
+            target_media_item_id=media_item_id,
+            status=ProcessingTaskStatus.PENDING.value,
+            stage="queued",
+        )
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+        return task
+
+    def get_active_media_vocal_sync_prepare_task(
+        self,
+        db: Session,
+        media_item_id: int,
+    ) -> ProcessingTask | None:
+        """Return the active vocal-sync prepare task for one media item, if any."""
+        return (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_media_item_id == media_item_id,
+                ProcessingTask.target_queue_item_id.is_(None),
+                ProcessingTask.task_type.in_(self.VOCAL_SYNC_PREPARE_TASK_TYPES),
+                ProcessingTask.status.in_(self.ACTIVE_STATUSES),
+            )
+            .order_by(ProcessingTask.updated_at.desc(), ProcessingTask.id.desc())
+            .first()
+        )
+
+    def recent_media_vocal_sync_prepare_tasks(
+        self,
+        db: Session,
+        media_item_id: int,
+        *,
+        limit: int = 25,
+    ) -> list[ProcessingTask]:
+        """Return recent vocal-sync prepare tasks for one media item."""
+        return (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_media_item_id == media_item_id,
+                ProcessingTask.target_queue_item_id.is_(None),
+                ProcessingTask.task_type.in_(self.VOCAL_SYNC_PREPARE_TASK_TYPES),
+            )
+            .order_by(ProcessingTask.updated_at.desc(), ProcessingTask.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+    def get_latest_terminal_media_vocal_sync_prepare_task(
+        self,
+        db: Session,
+        media_item_id: int,
+    ) -> ProcessingTask | None:
+        """Return the latest failed or canceled vocal-sync prepare task for one media item."""
+        return (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_media_item_id == media_item_id,
+                ProcessingTask.target_queue_item_id.is_(None),
+                ProcessingTask.task_type.in_(self.VOCAL_SYNC_PREPARE_TASK_TYPES),
+                ProcessingTask.status.in_(
+                    [
+                        ProcessingTaskStatus.FAILED.value,
+                        ProcessingTaskStatus.CANCELED.value,
+                    ]
+                ),
+            )
+            .order_by(ProcessingTask.updated_at.desc(), ProcessingTask.id.desc())
+            .first()
+        )
 
     def _get_or_create_media_task(
         self,

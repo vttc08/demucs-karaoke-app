@@ -1567,6 +1567,13 @@ function handleActionClick(event) {
         return;
     }
 
+    if (action === "open-vocals-editor") {
+        if (activeEditItemId) {
+            window.location.href = appUrl(`/media-vocals/${activeEditItemId}`);
+        }
+        return;
+    }
+
     const itemNode = event.target.closest(".media-item-row, .media-item-card");
     if (!itemNode) {
         return;

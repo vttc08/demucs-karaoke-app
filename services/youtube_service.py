@@ -30,7 +30,12 @@ class YouTubeService:
         return settings.media_path
 
     def search(
-        self, query: str, max_results: int = 10, db: Session | None = None, source: str | None = None
+        self,
+        query: str,
+        max_results: int = 10,
+        db: Session | None = None,
+        source: str | None = None,
+        concurrent: bool = True,
     ) -> List[YouTubeSearchResult]:
         """
         Search YouTube and/or local library.
@@ -53,7 +58,7 @@ class YouTubeService:
         
         # Handle YouTube-only search
         if source == "youtube":
-            youtube_results = self._search_results(query, max_results)
+            youtube_results = self._search_results(query, max_results, concurrent=concurrent)
             downloaded_ids = self._downloaded_video_ids(db, youtube_results) if db else set()
             normalized_youtube = []
             for result in youtube_results:
@@ -74,11 +79,11 @@ class YouTubeService:
         
         # Default: both sources (concurrent search with merge)
         if db is None:
-            youtube_results = self._search_results(query, max_results)
+            youtube_results = self._search_results(query, max_results, concurrent=concurrent)
             local_results: List[dict] = []
         else:
             with ThreadPoolExecutor(max_workers=1) as executor:
-                youtube_future = executor.submit(self._search_results, query, max_results)
+                youtube_future = executor.submit(self._search_results, query, max_results, concurrent=concurrent)
                 local_results = self._local_search(query, max_results, db)
                 youtube_results = youtube_future.result()
 
@@ -126,13 +131,13 @@ class YouTubeService:
             if youtube_id and not missing
         }
 
-    def _search_results(self, query: str, max_results: int) -> List[dict]:
+    def _search_results(self, query: str, max_results: int, concurrent: bool = True) -> List[dict]:
         """Search with optional concurrent karaoke query strategy."""
         youtube_url = self._extract_youtube_url(query)
         if youtube_url:
             return [self.ytdlp.get_video_info(youtube_url)]
 
-        if not settings.concurrent_ytdlp_search_enabled:
+        if not concurrent or not settings.concurrent_ytdlp_search_enabled:
             return self.ytdlp.search(query, max_results)
         if "karaoke" in query.lower():
             return self.ytdlp.search(query, max_results)

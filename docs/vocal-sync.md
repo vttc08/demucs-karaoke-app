@@ -1,0 +1,74 @@
+# Add Vocals Workflow
+
+The admin-only vocal sync workflow adds guide vocals to an existing karaoke media item without
+replacing the primary media file.
+
+## Flow
+
+1. Open **Add Vocals** from the media edit modal.
+2. Choose an unseparated vocal source from YouTube search or upload an audio/video file.
+3. For YouTube, click a result to select it first, then tap **Prepare source** to create a durable
+   prep task. Upload uses the same durable prep-task model after the browser finishes transferring
+   the file.
+4. The main app downloads or stores the source under cache and sends it to the remote Demucs service
+   for two-stem separation.
+5. `/media-vocals` subscribes to the task stream and shows real yt-dlp download progress for
+   YouTube sources plus remote Demucs progress for both YouTube and upload sources. The final local
+   sync-estimation step is shown as a generic finalizing phase.
+6. The main app prepares mono WAV comparison files with ffmpeg, estimates a constant offset locally,
+   and stores a review session under `cache/vocal_sync/`.
+7. The browser fetches the prepared session by `task_id`, previews the existing karaoke media and
+   prepared vocal stem with the estimated offset.
+8. The admin can adjust the offset and commit a new `/media/<stem>.vocals.wav` sidecar, or delete
+   the prepared review to remove all vocal-sync cache artifacts and return the page to idle.
+
+While reviewing, changing the offset value or using the `+/-` controls automatically restarts the
+browser preview after a short 500 ms throttle window. This keeps the comparison responsive without
+spamming rapid media restarts while the admin is still typing or stepping through values.
+
+Changing the karaoke timeline also restarts the preview through the same throttled path, so moving
+to a new position keeps the vocal comparison aligned with the current playback time.
+
+Review sessions are cache-backed manifests and the YouTube prep request itself is now a durable
+processing task. The task survives like other active processing rows, while the prepared review
+session remains cache-backed under `cache/vocal_sync/`. The task-to-session handoff is stored under
+`cache/vocal_sync_tasks/`.
+
+On page load, `/media-vocals` calls `/api/media/{item_id}/vocals-sync/status` before enabling source
+preparation. This restores an active prepare task after browser refresh by reconnecting to its task
+stream, and restores a completed review session without rerunning download or Demucs. Once a review
+session is ready, new source preparation is locked until the admin commits the restored review.
+
+Deleting a ready review session removes the session directory under `cache/vocal_sync/` and the
+linked task manifest under `cache/vocal_sync_tasks/`. A successful commit performs the same cleanup
+after writing the final `/media/<stem>.vocals.wav` sidecar.
+
+## Offset Semantics
+
+The estimator compares:
+
+- reference: separated background/no-vocals stem from the source track
+- target: existing karaoke media audio
+
+Positive offset means the source vocals are early relative to the karaoke media, so commit prepends
+silence before the vocals.
+
+Negative offset means the source vocals are late relative to the karaoke media, so commit trims the
+beginning of the vocal stem by `abs(offset)`.
+
+## Deployment Notes
+
+The local cross-correlation estimator is optional. Install the `vocal-sync` extra if you want the
+automatic offset estimate:
+
+```bash
+uv pip install -e ".[vocal-sync]"
+```
+
+If `numpy` or `scipy` are not installed, the app still prepares the Demucs stems and review
+session, but it falls back to `0.00` offset with the manual sync controls enabled. That keeps the
+feature usable on smaller Docker images or low-power systems that skip the scientific stack.
+
+The workflow intentionally does not add `librosa` to the main app. A future DTW fallback can live
+behind the remote Demucs service if constant-offset cross-correlation is not reliable enough for a
+specific source.

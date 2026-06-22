@@ -338,6 +338,44 @@ async def media_editor_page(
     )
 
 
+@router.get("/media-vocals/{item_id}", response_class=HTMLResponse)
+async def media_vocals_page(
+    item_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Admin-only editor for adding synchronized guide vocals to one media item."""
+    admin = auth_service.get_admin_for_session(
+        db, request.cookies.get(ADMIN_SESSION_COOKIE)
+    )
+    if admin is None:
+        return RedirectResponse(url=app_url("/login"), status_code=302)
+
+    media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
+    if media_item is None or media_item.missing:
+        return RedirectResponse(url=app_url("/media"), status_code=302)
+    media_file = queue_service._media_url_to_file(media_item.media_path)
+    if media_file is None or not media_file.is_file():
+        return RedirectResponse(url=app_url("/media"), status_code=302)
+
+    media_suffix = Path(media_item.media_path).suffix.lower()
+    is_video = media_suffix in _VIDEO_SUFFIXES
+    return templates.TemplateResponse(
+        "media_vocals.html",
+        {
+            "request": request,
+            "vocal_sync": {
+                "media_id": media_item.id,
+                "title": media_item.title,
+                "artist": media_item.artist,
+                "media_url": media_item.media_path,
+                "has_video": is_video,
+                "has_vocals": bool(media_item.vocals_path and media_item.vocals_path.strip()),
+            },
+        },
+    )
+
+
 @router.get("/upload", response_class=HTMLResponse)
 async def upload_page(request: Request):
     """Media upload page for adding new tracks."""

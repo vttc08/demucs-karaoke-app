@@ -26,6 +26,7 @@ class MetadataInference(BaseModel):
 async def search_youtube(
     q: str = Query(..., description="Search query"),
     source: str | None = Query(None, description="Filter by source: 'local', 'youtube', or omit for both"),
+    concurrent: bool = Query(True, description="Enable concurrent karaoke-oriented YouTube search"),
     db: Session = Depends(get_db),
 ):
     """
@@ -44,7 +45,7 @@ async def search_youtube(
     
     try:
         logger.info("Search requested query=%r source=%r", q, source)
-        results = youtube_service.search(q, source=source, db=db)
+        results = youtube_service.search(q, source=source, db=db, concurrent=concurrent)
         return results
     except RuntimeError as e:
         logger.error("Search failed query=%r source=%r error=%s", q, source, str(e))

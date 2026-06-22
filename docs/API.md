@@ -522,6 +522,66 @@ also needed. Rename and lyrics changes remain saved if the health check fails.
 
 ---
 
+### Add Vocals To Media Item
+```
+POST /api/media/{item_id}/vocals-sync/prepare-youtube
+POST /api/media/{item_id}/vocals-sync/prepare-upload
+GET /api/media/{item_id}/vocals-sync/status
+GET /api/media/{item_id}/vocals-sync/tasks/{task_id}/session
+GET /api/media/{item_id}/vocals-sync/sessions/{session_id}
+POST /api/media/{item_id}/vocals-sync/sessions/{session_id}/commit
+DELETE /api/media/{item_id}/vocals-sync/sessions/{session_id}
+```
+
+Admin-only workflow for preparing and committing a guide-vocal sidecar for an existing media item.
+The media item must exist on disk and must not already have `vocals_path`.
+
+`prepare-youtube` accepts:
+```json
+{
+  "youtube_id": "abcdefghijk"
+}
+```
+
+`prepare-upload` accepts multipart form data with `file`.
+
+Preparation downloads or stores the unseparated source, sends it to the remote Demucs service, then
+estimates a local constant offset using the separated background stem and the existing karaoke media
+audio. Both prepare endpoints now return a durable task id:
+```json
+{
+  "status": "processing",
+  "task_id": 17
+}
+```
+
+When the task finishes, fetch the prepared review session with:
+```
+GET /api/media/{item_id}/vocals-sync/tasks/{task_id}/session
+```
+
+The page can recover after browser refresh by calling:
+```
+GET /api/media/{item_id}/vocals-sync/status
+```
+
+The status response reports one of `idle`, `preparing`, `ready`, `failed`, `canceled`, or
+`has_vocals`, with the matching durable task and prepared review session when available. A ready
+review locks new prepare requests until the user commits the existing review.
+
+Commit accepts the reviewed offset:
+```json
+{
+  "offset_seconds": 0.35
+}
+```
+
+Commit renders `/media/<stem>.vocals.wav`, updates `media_items.vocals_path`, and leaves
+`media_items.media_path` unchanged. Deleting a prepared review session or committing it removes the
+associated vocal-sync cache session and task-manifest artifacts.
+
+---
+
 ### Delete Media Item
 ```
 DELETE /api/media/{item_id}
