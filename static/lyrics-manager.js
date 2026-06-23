@@ -186,9 +186,9 @@ class LyricsManager {
    * Set title and artist for resolution
    */
   setMetadata(title, artist, youtubeTitle = '') {
-    this.state.title = (title || '').trim();
-    this.state.artist = (artist || '').trim();
-    this.state.youtubeTitle = (youtubeTitle || '').trim();
+    this.state.title = title || '';
+    this.state.artist = artist || '';
+    this.state.youtubeTitle = youtubeTitle || '';
     this.notifyListeners();
   }
 
@@ -205,8 +205,8 @@ class LyricsManager {
    */
   getSubmissionMetadata(fallbackTitle = '', fallbackArtist = '') {
     return {
-      title: this.state.title || fallbackTitle,
-      artist: this.state.artist || fallbackArtist,
+      title: (this.state.title || fallbackTitle || '').trim(),
+      artist: (this.state.artist || fallbackArtist || '').trim(),
     };
   }
 
@@ -229,7 +229,7 @@ class LyricsManager {
   async resolve(trigger = 'manual') {
     if (!this.state.lyricsEnabled) return;
 
-    const title = this.state.title || '';
+    const title = (this.state.title || '').trim();
     if (!title) {
       this.state.lyricsState = 'error';
       this.notifyListeners();
