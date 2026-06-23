@@ -152,7 +152,6 @@
   "media.edit_details": "Edit Media Details",
   "media.edit_media_details": "Edit media details",
   "media.empty_filter": "No media matches your current filter.",
-  "media.file_available": "available",
   "media.file_deleted": "Deleted {kind}",
   "media.file_download_failed": "Failed to download file",
   "media.file_lyrics": "Lyrics file",

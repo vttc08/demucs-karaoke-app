@@ -51,7 +51,6 @@ function initializeMediaEditLyricsManager() {
         titleInput: '#media-edit-lyrics-title',
         artistInput: '#media-edit-lyrics-artist',
         textarea: '#media-edit-lyrics-textarea',
-        stateLabel: '#media-edit-lyrics-status',
         providerLabel: '#media-edit-lyrics-provider',
         searchBtn: '#media-edit-lyrics-search-btn',
         googleLink: '#media-edit-lyrics-google-btn',
@@ -491,7 +490,6 @@ function renderMediaFilesList(manifest) {
         const downloadable = Boolean(file.downloadable);
         const deletable = Boolean(file.deletable);
         const label = getMediaFileKindLabel(kind, extension);
-        const stateLabel = t("media.file_available");
         const downloadUrl = buildMediaFileDownloadUrl(kind);
         const deleteUrl = buildMediaFileDeleteUrl(kind);
         return `
@@ -502,9 +500,6 @@ function renderMediaFilesList(manifest) {
                             <span class="inline-flex items-center gap-1 rounded-full border border-white/10 bg-surface-container-highest/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
                                 <span class="material-symbols-outlined text-[13px]">${mediaFileKindIcon(kind)}</span>
                                 ${escapeHtml(label)}
-                            </span>
-                            <span class="rounded-full border border-secondary/20 bg-secondary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-secondary">
-                                ${escapeHtml(stateLabel)}
                             </span>
                         </div>
                         <p class="mt-2 break-all text-sm font-medium text-on-surface">${escapeHtml(file.filename || "")}</p>
