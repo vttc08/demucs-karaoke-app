@@ -21,6 +21,7 @@ if str(REPO_ROOT) not in __import__("sys").path:
 demucs_app = importlib.import_module("demucs_svc.app")
 demucs_models = importlib.import_module("demucs_svc.models")
 demucs_runner = importlib.import_module("demucs_svc.demucs_runner")
+demucs_settings = importlib.import_module("demucs_svc.settings")
 
 
 def _clear_job_store() -> None:
@@ -39,6 +40,31 @@ def test_separate_config_defaults_and_mp3_bitrate():
     assert config.detect_language is False
     assert config.use_synced_lyrics is False
     assert config.whisperx_preload_models == "transcription=tiny,align=en"
+
+
+def test_demucs_settings_uses_default_io_root():
+    assert demucs_settings.IO_ROOT == demucs_settings.DEFAULT_IO_ROOT
+    assert demucs_settings.INCOMING_ROOT == demucs_settings.IO_ROOT / "incoming"
+    assert demucs_settings.OUTPUT_ROOT == demucs_settings.IO_ROOT / "output"
+
+
+def test_demucs_settings_accepts_env_var_override_for_io_root(tmp_path, monkeypatch):
+    custom_root = tmp_path / "custom-io"
+    monkeypatch.setenv("DEMUCS_IO_ROOT", str(custom_root))
+
+    config = demucs_settings.DemucsSettings()
+
+    assert config.io_root == custom_root
+
+
+def test_demucs_settings_accepts_env_file_override_for_io_root(tmp_path):
+    custom_root = tmp_path / "custom-io-from-file"
+    env_file = tmp_path / "demucs.env"
+    env_file.write_text(f"DEMUCS_IO_ROOT={custom_root}\n", encoding="utf-8")
+
+    config = demucs_settings.DemucsSettings(_env_file=env_file)
+
+    assert config.io_root == custom_root
 
 
 def test_separate_config_accepts_srt_lyrics_format():
@@ -646,9 +672,18 @@ def test_create_job_and_fetch_result(monkeypatch, tmp_path):
     payload = response.json()
     job_id = payload["job_id"]
 
-    status_response = client.get(f"/jobs/{job_id}")
-    assert status_response.status_code == 200
-    assert status_response.json()["status"] == "completed"
+    deadline = time.time() + 2
+    status_payload = None
+    while time.time() < deadline:
+        status_response = client.get(f"/jobs/{job_id}")
+        assert status_response.status_code == 200
+        status_payload = status_response.json()
+        if status_payload["status"] == "completed":
+            break
+        time.sleep(0.01)
+
+    assert status_payload is not None
+    assert status_payload["status"] == "completed"
 
     result_response = client.get(f"/jobs/{job_id}/result")
     assert result_response.status_code == 200

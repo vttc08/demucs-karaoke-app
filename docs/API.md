@@ -1134,6 +1134,11 @@ directories. This is separate from cancellation so failed jobs can keep their ar
 The remote service also exposes `GET /io` for a current scratch-space size snapshot and
 `DELETE /io` for a bulk cleanup pass once no jobs are active.
 
+The Demucs service reads its own configuration from environment variables and from
+`demucs_svc/.env` by default. `DEMUCS_IO_ROOT` controls the scratch root used for `incoming/` and
+`output/`; it defaults to `demucs_svc/io`. Set `DEMUCS_ENV_FILE` if you want the service to read a
+different `.env` file without affecting the main app config.
+
 For existing guide vocals, the main app can use the Demucs align-only job API:
 
 - `POST /align-jobs` uploads a vocals/audio file plus `lyrics_text`, `lyrics_format`, and the same WhisperX settings fields.
