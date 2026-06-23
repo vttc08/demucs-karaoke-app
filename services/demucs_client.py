@@ -12,6 +12,8 @@ import httpx
 
 from config import settings
 from models import (
+    DemucsIoCleanupResponse,
+    DemucsIoUsageResponse,
     DemucsGarbageCollectionResponse,
     DemucsHealthResponse,
     DemucsResponse,
@@ -28,6 +30,8 @@ class DemucsClient:
 
     HEALTH_TIMEOUT_SECONDS = 5.0
     GC_TIMEOUT_SECONDS = 120.0
+    IO_TIMEOUT_SECONDS = 10.0
+    IO_CLEANUP_TIMEOUT_SECONDS = 120.0
     PRELOAD_TIMEOUT_SECONDS = 1800.0
     REQUEST_TIMEOUT_SECONDS = 600.0
     DELETE_TIMEOUT_SECONDS = 30.0
@@ -443,6 +447,24 @@ class DemucsClient:
         response.raise_for_status()
         payload = response.json()
         return DemucsGarbageCollectionResponse(**payload)
+
+    def get_io_usage(self) -> DemucsIoUsageResponse:
+        """Fetch the current remote Demucs IO footprint."""
+        response = httpx.get(
+            f"{self.api_url}/io",
+            timeout=self.IO_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return DemucsIoUsageResponse(**response.json())
+
+    def cleanup_io(self) -> DemucsIoCleanupResponse:
+        """Delete all remote Demucs IO scratch files when no jobs are active."""
+        response = httpx.delete(
+            f"{self.api_url}/io",
+            timeout=self.IO_CLEANUP_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return DemucsIoCleanupResponse(**response.json())
 
     def delete_job_artifacts(self, job_id: str) -> None:
         """Delete remote job input/output artifacts after local success is durable."""

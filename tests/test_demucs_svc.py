@@ -23,6 +23,11 @@ demucs_models = importlib.import_module("demucs_svc.models")
 demucs_runner = importlib.import_module("demucs_svc.demucs_runner")
 
 
+def _clear_job_store() -> None:
+    for job in demucs_app.job_store.all():
+        demucs_app.job_store.delete(job.job_id)
+
+
 def test_separate_config_defaults_and_mp3_bitrate():
     config = demucs_models.SeparateConfig(output_format="mp3")
     assert config.model == "htdemucs"
@@ -760,6 +765,119 @@ def test_delete_job_artifacts_rejects_active_job(tmp_path, monkeypatch):
     assert response.status_code == 409
     assert "still active" in response.json()["detail"]
     assert demucs_app.job_store.get(job_id) is not None
+
+
+def test_get_io_usage_reports_current_folder_size_and_counts(monkeypatch, tmp_path):
+    _clear_job_store()
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    incoming_dir = demucs_app.INCOMING_ROOT / "job-one"
+    output_dir = demucs_app.OUTPUT_ROOT / "job-one"
+    incoming_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (incoming_dir / "input.wav").write_bytes(b"abcd")
+    (output_dir / "stem.wav").write_bytes(b"abcdef")
+    demucs_app.job_store.create(
+        demucs_app.DemucsJobState(
+            job_id="job-one",
+            model="htdemucs",
+            device="cpu",
+            output_format="wav",
+            mp3_bitrate=None,
+            original_filename="input.wav",
+            status="completed",
+            finished_at=demucs_app.utc_now(),
+        )
+    )
+
+    client = TestClient(demucs_app.app)
+    response = client.get("/io")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["incoming_bytes"] == 4
+    assert data["output_bytes"] == 6
+    assert data["total_bytes"] == 10
+    assert data["incoming_files"] == 1
+    assert data["output_files"] == 1
+    assert data["terminal_job_count"] == 1
+    assert data["active_job_count"] == 0
+    assert data["running_job_count"] == 0
+    assert data["detail"] == "Current Demucs IO footprint"
+
+
+def test_cleanup_io_deletes_terminal_jobs_and_files(monkeypatch, tmp_path):
+    _clear_job_store()
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    job_id = "job-cleanup"
+    incoming_dir = demucs_app.INCOMING_ROOT / job_id
+    output_dir = demucs_app.OUTPUT_ROOT / job_id
+    incoming_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (incoming_dir / "input.wav").write_bytes(b"abcd")
+    (output_dir / "stem.wav").write_bytes(b"abcdef")
+    demucs_app.job_store.create(
+        demucs_app.DemucsJobState(
+            job_id=job_id,
+            model="htdemucs",
+            device="cpu",
+            output_format="wav",
+            mp3_bitrate=None,
+            original_filename="input.wav",
+            status="completed",
+            finished_at=demucs_app.utc_now(),
+        )
+    )
+
+    client = TestClient(demucs_app.app)
+    response = client.delete("/io")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["deleted_bytes"] == 10
+    assert data["deleted_files"] == 2
+    assert data["deleted_job_count"] == 1
+    assert data["active_job_count"] == 0
+    assert data["running_job_count"] == 0
+    assert demucs_app.job_store.get(job_id) is None
+    assert incoming_dir.exists() is False
+    assert output_dir.exists() is False
+    assert demucs_app.INCOMING_ROOT.exists()
+    assert demucs_app.OUTPUT_ROOT.exists()
+
+
+def test_cleanup_io_rejects_when_jobs_are_active(monkeypatch, tmp_path):
+    _clear_job_store()
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    job_id = "job-active-cleanup"
+    incoming_dir = demucs_app.INCOMING_ROOT / job_id
+    output_dir = demucs_app.OUTPUT_ROOT / job_id
+    incoming_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (incoming_dir / "input.wav").write_bytes(b"abcd")
+    (output_dir / "stem.wav").write_bytes(b"abcdef")
+    demucs_app.job_store.create(
+        demucs_app.DemucsJobState(
+            job_id=job_id,
+            model="htdemucs",
+            device="cpu",
+            output_format="wav",
+            mp3_bitrate=None,
+            original_filename="input.wav",
+            status="running",
+        )
+    )
+
+    client = TestClient(demucs_app.app)
+    response = client.delete("/io")
+
+    assert response.status_code == 409
+    assert "still running" in response.json()["detail"]
+    assert demucs_app.job_store.get(job_id) is not None
+    assert incoming_dir.exists()
+    assert output_dir.exists()
 
 
 def test_separate_endpoint_defaults_to_wav(monkeypatch, tmp_path):

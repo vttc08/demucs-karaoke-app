@@ -126,6 +126,8 @@ Remote Demucs execution now uses an async job contract on `demucs_svc`:
 - `GET /jobs/{job_id}/result` returns the final ZIP payload once the job completes
 - `DELETE /jobs/{job_id}` requests remote cancellation and subprocess termination
 - `DELETE /jobs/{job_id}/artifacts` deletes retained remote input/output files for a terminal job
+- `GET /io` reports the current size and file count of the remote `incoming/` and `output/` trees
+- `DELETE /io` deletes all remote Demucs IO scratch files once no jobs are active
 
 The main app polls the remote job server-side and republishes the latest Demucs step progress through the existing local transports:
 
@@ -144,3 +146,6 @@ After a task reaches durable local success, the main app best-effort calls `DELE
 to retire the corresponding remote Demucs `incoming/` and `output/` directories. Failed tasks skip this
 call so remote artifacts remain available until the Demucs service's normal retention cleanup or manual
 intervention.
+
+When the main app verifies that no remote Demucs jobs remain active, it can also call `DELETE /io`
+to remove every remaining scratch file under the Demucs IO workspace in one pass.

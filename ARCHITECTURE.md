@@ -236,6 +236,9 @@ The stage page uses a websocket-first model:
   completion. The main app explicitly retires those artifacts with `DELETE /jobs/{job_id}/artifacts`
   only after the local durable flow succeeds; failed tasks skip explicit remote cleanup and rely on
   remote retention expiry or manual deletion instead.
+- The main app can also query `GET /io` to estimate the current Demucs scratch footprint and use
+  `DELETE /io` to bulk-remove all remote Demucs IO files once it has verified that no jobs remain
+  active.
 - Stage playback is sidecar-first (not browser multi-audio-track MP4 selection):
   - `<video>` plays `media_path`
   - optional hidden `<audio>` plays `vocals_path`

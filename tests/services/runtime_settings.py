@@ -149,6 +149,86 @@ def test_demucs_client_delete_job_artifacts_uses_artifact_endpoint():
     assert seen["url"] == "http://127.0.0.1:8001/jobs/job-123/artifacts"
     assert seen["timeout"] == DemucsClient.DELETE_TIMEOUT_SECONDS
 
+
+def test_demucs_client_get_io_usage_uses_io_endpoint():
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {
+                "io_root": "/opt/karaoke/karaoke_svc/io",
+                "incoming_root": "/opt/karaoke/karaoke_svc/io/incoming",
+                "output_root": "/opt/karaoke/karaoke_svc/io/output",
+                "total_bytes": 1024,
+                "incoming_bytes": 256,
+                "output_bytes": 768,
+                "total_files": 4,
+                "incoming_files": 1,
+                "output_files": 3,
+                "active_job_count": 0,
+                "running_job_count": 0,
+                "terminal_job_count": 2,
+                "detail": "Current Demucs IO footprint",
+            }
+
+    seen = {}
+
+    def fake_get(url, timeout):
+        seen["url"] = url
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    with patch("services.demucs_client.httpx.get", side_effect=fake_get):
+        client = DemucsClient(api_url="http://127.0.0.1:8001")
+        result = client.get_io_usage()
+
+    assert seen["url"] == "http://127.0.0.1:8001/io"
+    assert seen["timeout"] == DemucsClient.IO_TIMEOUT_SECONDS
+    assert result.total_bytes == 1024
+    assert result.terminal_job_count == 2
+
+
+def test_demucs_client_cleanup_io_uses_io_endpoint():
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+        @staticmethod
+        def json():
+            return {
+                "io_root": "/opt/karaoke/karaoke_svc/io",
+                "deleted_bytes": 1024,
+                "deleted_files": 4,
+                "deleted_job_count": 2,
+                "active_job_count": 0,
+                "running_job_count": 0,
+                "detail": "Deleted Demucs IO scratch files",
+            }
+
+    seen = {}
+
+    def fake_delete(url, timeout):
+        seen["url"] = url
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    with patch("services.demucs_client.httpx.delete", side_effect=fake_delete):
+        client = DemucsClient(api_url="http://127.0.0.1:8001")
+        result = client.cleanup_io()
+
+    assert seen["url"] == "http://127.0.0.1:8001/io"
+    assert seen["timeout"] == DemucsClient.IO_CLEANUP_TIMEOUT_SECONDS
+    assert result.deleted_job_count == 2
+    assert result.deleted_bytes == 1024
+
 def test_runtime_settings_get_settings_is_non_blocking():
     """Settings snapshot should not call external health checks."""
     service = RuntimeSettingsService()

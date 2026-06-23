@@ -27,6 +27,8 @@ try:
     from .models import (
         DemucsJobArtifactDeleteResponse,
         DemucsJobCreateResponse,
+        DemucsIoCleanupResponse,
+        DemucsIoUsageResponse,
         DemucsGarbageCollectionResponse,
         DemucsMetricsJobResponse,
         DemucsMetricsResponse,
@@ -70,6 +72,8 @@ except ImportError:
     from models import (
         DemucsJobArtifactDeleteResponse,
         DemucsJobCreateResponse,
+        DemucsIoCleanupResponse,
+        DemucsIoUsageResponse,
         DemucsGarbageCollectionResponse,
         DemucsMetricsJobResponse,
         DemucsMetricsResponse,
@@ -315,6 +319,80 @@ def _cleanup_job_files(job_id: str) -> None:
     for path in (incoming_dir, output_dir):
         if path.exists():
             shutil.rmtree(path, ignore_errors=True)
+
+
+def _folder_usage(path: Path) -> tuple[int, int]:
+    total_bytes = 0
+    file_count = 0
+    if not path.exists():
+        return total_bytes, file_count
+
+    for child in path.rglob("*"):
+        if not child.is_file():
+            continue
+        try:
+            stat_result = child.stat()
+        except OSError:
+            continue
+        total_bytes += int(stat_result.st_size)
+        file_count += 1
+    return total_bytes, file_count
+
+
+def _io_usage_snapshot() -> DemucsIoUsageResponse:
+    incoming_bytes, incoming_files = _folder_usage(INCOMING_ROOT)
+    output_bytes, output_files = _folder_usage(OUTPUT_ROOT)
+    active_jobs = [job for job in job_store.all() if job.status in {"queued", "running"}]
+    terminal_job_count = sum(1 for job in job_store.all() if job.status not in {"queued", "running"})
+    io_root = INCOMING_ROOT.parent
+    total_bytes = incoming_bytes + output_bytes
+    total_files = incoming_files + output_files
+    return DemucsIoUsageResponse(
+        io_root=str(io_root),
+        incoming_root=str(INCOMING_ROOT),
+        output_root=str(OUTPUT_ROOT),
+        total_bytes=total_bytes,
+        incoming_bytes=incoming_bytes,
+        output_bytes=output_bytes,
+        total_files=total_files,
+        incoming_files=incoming_files,
+        output_files=output_files,
+        active_job_count=len(active_jobs),
+        running_job_count=sum(1 for job in active_jobs if job.status == "running"),
+        terminal_job_count=terminal_job_count,
+        detail="Current Demucs IO footprint",
+    )
+
+
+def _cleanup_io() -> DemucsIoCleanupResponse:
+    active_jobs = [job for job in job_store.all() if job.status in {"queued", "running"}]
+    if active_jobs:
+        raise HTTPException(
+            status_code=409,
+            detail="Active jobs are still running; wait before cleaning the IO folder",
+        )
+
+    usage = _io_usage_snapshot()
+    terminal_jobs = [
+        job for job in job_store.all() if job.status not in {"queued", "running"}
+    ]
+    for job in terminal_jobs:
+        job_store.delete(job.job_id)
+
+    io_root = INCOMING_ROOT.parent
+    shutil.rmtree(io_root, ignore_errors=True)
+    INCOMING_ROOT.mkdir(parents=True, exist_ok=True)
+    OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+
+    return DemucsIoCleanupResponse(
+        io_root=usage.io_root,
+        deleted_bytes=usage.total_bytes,
+        deleted_files=usage.total_files,
+        deleted_job_count=len(terminal_jobs),
+        active_job_count=usage.active_job_count,
+        running_job_count=usage.running_job_count,
+        detail="Deleted Demucs IO scratch files",
+    )
 
 
 def _cleanup_expired_jobs() -> None:
@@ -1047,6 +1125,18 @@ def delete_job_artifacts(job_id: str):
         status=job.status,
         detail="Deleted Demucs job input/output artifacts",
     )
+
+
+@app.get("/io", response_model=DemucsIoUsageResponse)
+def get_io_usage():
+    return _io_usage_snapshot()
+
+
+@app.delete("/io", response_model=DemucsIoCleanupResponse)
+def cleanup_io():
+    response = _cleanup_io()
+    _cleanup_expired_jobs()
+    return response
 
 
 @app.post("/separate")

@@ -563,6 +563,36 @@ class DemucsResponse(BaseModel):
     aligned_lyrics_path: Optional[str] = None
 
 
+class DemucsIoUsageResponse(BaseModel):
+    """Current footprint of the Demucs IO scratch area."""
+
+    io_root: str
+    incoming_root: str
+    output_root: str
+    total_bytes: int
+    incoming_bytes: int
+    output_bytes: int
+    total_files: int
+    incoming_files: int
+    output_files: int
+    active_job_count: int
+    running_job_count: int
+    terminal_job_count: int
+    detail: str
+
+
+class DemucsIoCleanupResponse(BaseModel):
+    """Result of a bulk Demucs IO cleanup request."""
+
+    io_root: str
+    deleted_bytes: int
+    deleted_files: int
+    deleted_job_count: int
+    active_job_count: int
+    running_job_count: int
+    detail: str
+
+
 class DemucsGarbageCollectionResponse(BaseModel):
     """Response from Demucs garbage collection."""
 
