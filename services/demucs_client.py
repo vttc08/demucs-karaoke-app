@@ -12,6 +12,8 @@ import httpx
 
 from config import settings
 from models import (
+    DemucsIoCleanupResponse,
+    DemucsIoUsageResponse,
     DemucsGarbageCollectionResponse,
     DemucsHealthResponse,
     DemucsResponse,
@@ -28,8 +30,11 @@ class DemucsClient:
 
     HEALTH_TIMEOUT_SECONDS = 5.0
     GC_TIMEOUT_SECONDS = 120.0
+    IO_TIMEOUT_SECONDS = 10.0
+    IO_CLEANUP_TIMEOUT_SECONDS = 120.0
     PRELOAD_TIMEOUT_SECONDS = 1800.0
     REQUEST_TIMEOUT_SECONDS = 600.0
+    DELETE_TIMEOUT_SECONDS = 30.0
 
     def __init__(self, api_url: str = None, poll_interval_seconds: float | None = None):
         self.api_url = api_url or settings.demucs_api_url
@@ -120,6 +125,7 @@ class DemucsClient:
         self,
         audio_path: Path,
         *,
+        output_dir: Path | None = None,
         lyrics_text: str | None = None,
         lyrics_format: str | None = None,
         transcription_model: str | None = None,
@@ -137,7 +143,7 @@ class DemucsClient:
         if cancel_event is not None and cancel_event.is_set():
             raise asyncio.CancelledError()
 
-        out_dir = settings.cache_path / "demucs_outputs"
+        out_dir = output_dir or settings.cache_path / "demucs_outputs"
         out_dir.mkdir(parents=True, exist_ok=True)
         seen_output_lines: set[str] = set()
 
@@ -214,6 +220,7 @@ class DemucsClient:
                             {"job_id": job_id, "status": status},
                         )
                         return DemucsResponse(
+                            job_id=job_id,
                             no_vocals_path=str(output_path),
                             vocals_path=str(vocals_output_path),
                             aligned_lyrics_path=str(aligned_output_path) if aligned_output_path else None,
@@ -244,6 +251,7 @@ class DemucsClient:
         self,
         vocals_path: Path,
         *,
+        output_dir: Path | None = None,
         lyrics_text: str,
         lyrics_format: str | None = None,
         transcription_model: str | None = None,
@@ -255,7 +263,7 @@ class DemucsClient:
         cancel_event: threading.Event | None = None,
         progress_callback: ProgressCallback | None = None,
         log_callback: LogCallback | None = None,
-    ) -> Path:
+    ) -> tuple[Path, str]:
         """Run WhisperX alignment against an existing vocals sidecar."""
         if not vocals_path.exists():
             raise RuntimeError(f"Vocals path does not exist: {vocals_path}")
@@ -264,7 +272,7 @@ class DemucsClient:
         if cancel_event is not None and cancel_event.is_set():
             raise asyncio.CancelledError()
 
-        out_dir = settings.cache_path / "demucs_outputs"
+        out_dir = output_dir or settings.cache_path / "demucs_outputs"
         out_dir.mkdir(parents=True, exist_ok=True)
         seen_output_lines: set[str] = set()
 
@@ -331,7 +339,7 @@ class DemucsClient:
                             str(status_payload.get("progress_message") or "Completed"),
                             {"job_id": job_id, "status": status},
                         )
-                        return aligned_output_path
+                        return aligned_output_path, job_id
 
                     if status == "failed":
                         raise RuntimeError(
@@ -439,3 +447,29 @@ class DemucsClient:
         response.raise_for_status()
         payload = response.json()
         return DemucsGarbageCollectionResponse(**payload)
+
+    def get_io_usage(self) -> DemucsIoUsageResponse:
+        """Fetch the current remote Demucs IO footprint."""
+        response = httpx.get(
+            f"{self.api_url}/io",
+            timeout=self.IO_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return DemucsIoUsageResponse(**response.json())
+
+    def cleanup_io(self) -> DemucsIoCleanupResponse:
+        """Delete all remote Demucs IO scratch files when no jobs are active."""
+        response = httpx.delete(
+            f"{self.api_url}/io",
+            timeout=self.IO_CLEANUP_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return DemucsIoCleanupResponse(**response.json())
+
+    def delete_job_artifacts(self, job_id: str) -> None:
+        """Delete remote job input/output artifacts after local success is durable."""
+        response = httpx.delete(
+            f"{self.api_url}/jobs/{job_id}/artifacts",
+            timeout=self.DELETE_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()

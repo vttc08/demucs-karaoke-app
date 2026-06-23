@@ -1,6 +1,155 @@
 from .common import *
 
 
+def _write_task_cache_artifacts(cache_root, task_id):
+    artifacts = []
+    for category in ("ytdlp", "audio", "processed", "demucs_outputs"):
+        task_dir = cache_root / category / str(task_id)
+        task_dir.mkdir(parents=True)
+        artifact = task_dir / "artifact.tmp"
+        artifact.write_bytes(b"scratch")
+        artifacts.append(artifact)
+    return artifacts
+
+
+def test_successful_processing_task_removes_only_its_cache(db_session, tmp_path, monkeypatch):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media_file = media_root / "ready.mp4"
+    media_file.write_bytes(b"ready")
+    media = MediaItem(
+        title="Ready",
+        file_stem="ready",
+        media_path="/media/ready.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    queue_item = QueueItem(
+        media_id=media.id,
+        position=1,
+        requested_karaoke=False,
+        status=QueueStatus.PENDING.value,
+    )
+    db_session.add(queue_item)
+    db_session.commit()
+    task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="library_media",
+        target_queue_item_id=queue_item.id,
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PENDING.value,
+        stage="queued",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    artifacts = _write_task_cache_artifacts(cache_root, task.id)
+    other_artifact = cache_root / "processed" / "9999" / "other.tmp"
+    other_artifact.parent.mkdir(parents=True)
+    other_artifact.write_bytes(b"other")
+    legacy_artifact = cache_root / "processed" / "legacy.mp4"
+    legacy_artifact.write_bytes(b"legacy")
+
+    asyncio.run(KaraokeService().process_task(db_session, task.id))
+
+    db_session.refresh(task)
+    assert task.status == ProcessingTaskStatus.DONE.value
+    assert all(not artifact.exists() for artifact in artifacts)
+    assert other_artifact.exists()
+    assert legacy_artifact.exists()
+
+
+def test_failed_processing_task_retains_task_cache(db_session, tmp_path, monkeypatch):
+    cache_root = tmp_path / "cache"
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+    task = ProcessingTask(
+        task_type="unsupported",
+        source_kind="youtube",
+        status=ProcessingTaskStatus.PENDING.value,
+        stage="queued",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+    artifacts = _write_task_cache_artifacts(cache_root, task.id)
+
+    asyncio.run(KaraokeService().process_task(db_session, task.id))
+
+    db_session.refresh(task)
+    assert task.status == ProcessingTaskStatus.FAILED.value
+    assert all(artifact.exists() for artifact in artifacts)
+
+
+def test_vocal_sync_success_cleanup_preserves_review_cache(tmp_path, monkeypatch):
+    cache_root = tmp_path / "cache"
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+    task = ProcessingTask(id=42, task_type="media_vocal_sync_prepare_youtube")
+    artifacts = _write_task_cache_artifacts(cache_root, task.id)
+    review_file = cache_root / "vocal_sync" / "session" / "manifest.json"
+    review_file.parent.mkdir(parents=True)
+    review_file.write_text("{}", encoding="utf-8")
+    task_manifest = cache_root / "vocal_sync_tasks" / "42.json"
+    task_manifest.parent.mkdir(parents=True)
+    task_manifest.write_text("{}", encoding="utf-8")
+
+    KaraokeService().cleanup_successful_task(task)
+
+    assert artifacts[3].exists() is False
+    assert all(artifact.exists() for artifact in artifacts[:3])
+    assert review_file.exists()
+    assert task_manifest.exists()
+
+
+def test_success_cleanup_error_does_not_fail_completed_task(
+    db_session, tmp_path, monkeypatch
+):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+    media_file = media_root / "ready.mp4"
+    media_file.write_bytes(b"ready")
+    media = MediaItem(title="Ready", media_path="/media/ready.mp4", missing=False)
+    db_session.add(media)
+    db_session.commit()
+    queue_item = QueueItem(
+        media_id=media.id,
+        position=1,
+        requested_karaoke=False,
+        status=QueueStatus.PENDING.value,
+    )
+    db_session.add(queue_item)
+    db_session.commit()
+    task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="library_media",
+        target_queue_item_id=queue_item.id,
+        status=ProcessingTaskStatus.PENDING.value,
+        stage="queued",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+    _write_task_cache_artifacts(cache_root, task.id)
+    monkeypatch.setattr("services.karaoke_service.shutil.rmtree", Mock(side_effect=OSError("busy")))
+
+    asyncio.run(KaraokeService().process_task(db_session, task.id))
+
+    db_session.refresh(task)
+    assert task.status == ProcessingTaskStatus.DONE.value
+
+
 
 def test_processing_task_cancel_cleans_up_partial_artifacts_and_resets_rows(db_session, tmp_path, monkeypatch):
     """Cancel should remove partial files and reset queue/media rows for retry."""
@@ -372,6 +521,125 @@ def test_karaoke_alignment_requires_json_before_replacing_media(db_session, tmp_
     assert not (media_root / "align-song.wav").exists()
     assert not (media_root / "align-song.vocals.wav").exists()
     assert not (media_root / "align-song.json").exists()
+
+
+def test_process_karaoke_success_deletes_remote_demucs_job(db_session, tmp_path, monkeypatch):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    source_media = media_root / "source.mp3"
+    source_media.write_bytes(b"source")
+    no_vocals = cache_root / "demucs_outputs" / "1" / "no_vocals.wav"
+    vocals = cache_root / "demucs_outputs" / "1" / "vocals.wav"
+    no_vocals.parent.mkdir(parents=True, exist_ok=True)
+    no_vocals.write_bytes(b"no vocals")
+    vocals.write_bytes(b"vocals")
+
+    media = MediaItem(title="Song", file_stem="song", media_path="/media/source.mp3", missing=False)
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="library_media",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PROCESSING.value,
+        stage="demucs",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    service = KaraokeService()
+    service._separate_vocals_with_retry = AsyncMock(
+        return_value=DemucsResponse(
+            job_id="job-success",
+            no_vocals_path=str(no_vocals),
+            vocals_path=str(vocals),
+        )
+    )
+    service.demucs_client.delete_job_artifacts = Mock()
+
+    with patch.object(processing_task_service, "set_stage", AsyncMock()), patch.object(
+        processing_task_service, "emit_progress", AsyncMock()
+    ), patch.object(processing_task_service, "set_status", AsyncMock()):
+        asyncio.run(
+            service._process_karaoke(
+                db_session,
+                task,
+                queue_item=None,
+                media_item=media,
+                video_path=source_media,
+                audio_path=source_media,
+            )
+        )
+
+    service.demucs_client.delete_job_artifacts.assert_called_once_with("job-success")
+
+
+def test_process_karaoke_failure_before_done_keeps_remote_demucs_job(db_session, tmp_path, monkeypatch):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    source_media = media_root / "source.mp3"
+    source_media.write_bytes(b"source")
+    no_vocals = cache_root / "demucs_outputs" / "1" / "no_vocals.wav"
+    vocals = cache_root / "demucs_outputs" / "1" / "vocals.wav"
+    no_vocals.parent.mkdir(parents=True, exist_ok=True)
+    no_vocals.write_bytes(b"no vocals")
+    vocals.write_bytes(b"vocals")
+
+    media = MediaItem(title="Song", file_stem="song", media_path="/media/source.mp3", missing=False)
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="library_media",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PROCESSING.value,
+        stage="demucs",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    service = KaraokeService()
+    service._separate_vocals_with_retry = AsyncMock(
+        return_value=DemucsResponse(
+            job_id="job-failure",
+            no_vocals_path=str(no_vocals),
+            vocals_path=str(vocals),
+        )
+    )
+    service.demucs_client.delete_job_artifacts = Mock()
+
+    with patch.object(processing_task_service, "set_stage", AsyncMock()), patch.object(
+        processing_task_service, "emit_progress", AsyncMock()
+    ), patch.object(service, "_install_karaoke_outputs", side_effect=RuntimeError("copy failed")):
+        with pytest.raises(RuntimeError, match="copy failed"):
+            asyncio.run(
+                service._process_karaoke(
+                    db_session,
+                    task,
+                    queue_item=None,
+                    media_item=media,
+                    video_path=source_media,
+                    audio_path=source_media,
+                )
+            )
+
+    service.demucs_client.delete_job_artifacts.assert_not_called()
 
 
 def test_alignment_cancel_cleanup_preserves_durable_media(db_session, tmp_path, monkeypatch):

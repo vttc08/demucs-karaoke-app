@@ -66,6 +66,29 @@ On startup:
 
 The restart model is coarse on purpose. yt-dlp and local ffmpeg/demucs work restart from the beginning of the relevant operation instead of pretending to resume from a stale percentage.
 
+## Cache Artifact Lifecycle
+
+Main-app processing scratch files are isolated by durable task id under:
+
+- `cache/ytdlp/<task_id>/`
+- `cache/audio/<task_id>/`
+- `cache/processed/<task_id>/`
+- `cache/demucs_outputs/<task_id>/`
+
+After a task has installed its durable media and sidecars, committed their database paths, and
+reached `done`, the app removes that task's scratch directories. Cleanup is best-effort: a
+filesystem cleanup error is logged but does not turn a completed processing task into a failed one.
+
+Failed task directories remain intact for manual diagnosis. Explicitly canceled tasks retain the
+existing cancellation behavior and remove partial scratch data. Legacy flat files created before
+task-scoped directories were introduced are not swept automatically because their ownership and
+success state cannot be proven safely.
+
+Lyrics stored under `cache/lyrics/` and generated files under `cache/media-thumbnails/` are durable
+app assets and are not part of processing cleanup. Vocal-sync preparation removes its redundant
+task-scoped Demucs results after the review session is ready, while the review session and task
+manifest remain under `cache/vocal_sync/` and `cache/vocal_sync_tasks/` until commit or deletion.
+
 ## SSE Endpoints
 
 - `GET /api/tasks`
@@ -102,6 +125,9 @@ Remote Demucs execution now uses an async job contract on `demucs_svc`:
 - `GET /jobs/{job_id}` returns job status, percent, message, and recent remote output tail
 - `GET /jobs/{job_id}/result` returns the final ZIP payload once the job completes
 - `DELETE /jobs/{job_id}` requests remote cancellation and subprocess termination
+- `DELETE /jobs/{job_id}/artifacts` deletes retained remote input/output files for a terminal job
+- `GET /io` reports the current size and file count of the remote `incoming/` and `output/` trees
+- `DELETE /io` deletes all remote Demucs IO scratch files once no jobs are active
 
 The main app polls the remote job server-side and republishes the latest Demucs step progress through the existing local transports:
 
@@ -115,3 +141,11 @@ configurable in runtime settings through `demucs_poll_interval_seconds`.
 When WhisperX lyrics alignment is requested, the remote job's `Aligning lyrics` phase is surfaced as its own local `whisperx` stage so the browser can apply the optimistic progress helper there instead of letting the Demucs bar stall at the end of the separation run.
 
 Browsers do not connect directly to the Demucs host. Remote job ids are intentionally live-only and are not persisted in SQLite. On restart, any interrupted local task is restarted from the beginning with a fresh remote Demucs job.
+
+After a task reaches durable local success, the main app best-effort calls `DELETE /jobs/{job_id}/artifacts`
+to retire the corresponding remote Demucs `incoming/` and `output/` directories. Failed tasks skip this
+call so remote artifacts remain available until the Demucs service's normal retention cleanup or manual
+intervention.
+
+When the main app verifies that no remote Demucs jobs remain active, it can also call `DELETE /io`
+to remove every remaining scratch file under the Demucs IO workspace in one pass.

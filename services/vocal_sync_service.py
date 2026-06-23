@@ -175,7 +175,8 @@ class VocalSyncService:
         demucs_progress_callback: Callable[[int, str, dict | None], None] | None = None,
         demucs_log_callback: Callable[[str, str], None] | None = None,
         before_finalize: Callable[[], None] | None = None,
-    ) -> VocalSyncSession:
+        demucs_output_dir: Path | None = None,
+    ) -> tuple[VocalSyncSession, str | None]:
         media_item = self.validate_media_item_for_prepare(db, media_item_id)
         self._check_demucs_available()
         session_id = str(uuid.uuid4())
@@ -207,6 +208,7 @@ class VocalSyncService:
             demucs_progress_callback=demucs_progress_callback,
             demucs_log_callback=demucs_log_callback,
             before_finalize=before_finalize,
+            demucs_output_dir=demucs_output_dir,
         )
 
     async def prepare_from_upload(
@@ -226,13 +228,14 @@ class VocalSyncService:
         source_path = session_dir / f"source{ext}"
         with source_path.open("wb") as target:
             shutil.copyfileobj(source_file, target)
-        return await self._prepare_from_source(
+        session, _remote_job_id = await self._prepare_from_source(
             media_item=media_item,
             source_path=source_path,
             session_id=session_id,
             source_kind="upload",
             source_ref=source_filename,
         )
+        return session
 
     async def prepare_from_staged_upload(
         self,
@@ -245,7 +248,8 @@ class VocalSyncService:
         demucs_progress_callback: Callable[[int, str, dict | None], None] | None = None,
         demucs_log_callback: Callable[[str, str], None] | None = None,
         before_finalize: Callable[[], None] | None = None,
-    ) -> VocalSyncSession:
+        demucs_output_dir: Path | None = None,
+    ) -> tuple[VocalSyncSession, str | None]:
         media_item = self.validate_media_item_for_prepare(db, media_item_id)
         self.validate_upload_source_filename(source_filename)
         self._check_demucs_available()
@@ -264,6 +268,7 @@ class VocalSyncService:
             demucs_progress_callback=demucs_progress_callback,
             demucs_log_callback=demucs_log_callback,
             before_finalize=before_finalize,
+            demucs_output_dir=demucs_output_dir,
         )
 
     async def _prepare_from_source(
@@ -278,11 +283,13 @@ class VocalSyncService:
         demucs_progress_callback: Callable[[int, str, dict | None], None] | None = None,
         demucs_log_callback: Callable[[str, str], None] | None = None,
         before_finalize: Callable[[], None] | None = None,
-    ) -> VocalSyncSession:
+        demucs_output_dir: Path | None = None,
+    ) -> tuple[VocalSyncSession, str | None]:
         session_dir = self._session_dir(session_id)
         media_path = self._local_media_path(media_item)
         demucs_response = await self.demucs_client.separate_vocals(
             source_path,
+            output_dir=demucs_output_dir,
             cancel_event=cancel_event,
             progress_callback=demucs_progress_callback,
             log_callback=demucs_log_callback,
@@ -341,7 +348,7 @@ class VocalSyncService:
             session_id,
             offset_seconds,
         )
-        return self._session_from_manifest(manifest)
+        return self._session_from_manifest(manifest), demucs_response.job_id
 
     @classmethod
     def write_task_manifest(cls, task_id: int, payload: dict[str, Any]) -> None:

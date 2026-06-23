@@ -113,6 +113,38 @@ class DemucsJobStatusResponse(BaseModel):
     aligned_lyrics_path: str | None = None
 
 
+class DemucsJobArtifactDeleteResponse(BaseModel):
+    job_id: str
+    status: Literal["completed", "failed", "canceled"]
+    detail: str
+
+
+class DemucsIoUsageResponse(BaseModel):
+    io_root: str
+    incoming_root: str
+    output_root: str
+    total_bytes: int
+    incoming_bytes: int
+    output_bytes: int
+    total_files: int
+    incoming_files: int
+    output_files: int
+    active_job_count: int
+    running_job_count: int
+    terminal_job_count: int
+    detail: str
+
+
+class DemucsIoCleanupResponse(BaseModel):
+    io_root: str
+    deleted_bytes: int
+    deleted_files: int
+    deleted_job_count: int
+    active_job_count: int
+    running_job_count: int
+    detail: str
+
+
 class DemucsMetricsJobResponse(BaseModel):
     job_id: str
     status: Literal["queued", "running"]

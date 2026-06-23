@@ -50,6 +50,15 @@ mdx: trained only on MusDB HQ, winning model on track A at the MDX challenge.
 ```
 - output as MP3 with specific bitrate e.g. 320, 256, 128
 
+### Service configuration
+
+`demucs_svc` reads its own environment variables and its own `.env` file under
+`demucs_svc/.env` by default. The main app `.env` is not used by the service.
+
+- `DEMUCS_IO_ROOT` controls the scratch root for `incoming/` and `output/`
+- `DEMUCS_ENV_FILE` can point the service at a different `.env` file
+- unset `DEMUCS_IO_ROOT` keeps the current default `demucs_svc/io`
+
 ## API Contract (Implemented)
 
 ### `GET /health`
