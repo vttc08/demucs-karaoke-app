@@ -1,16 +1,19 @@
 """Runtime settings service."""
+import logging
 import os
 import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
+from sqlalchemy.engine import make_url
 
 from config import EXPLICIT_SETTINGS_FIELDS, find_executable, settings
 from models import (
     DemucsGarbageCollectionResponse,
     DemucsHealthResponse,
     ProxyInfoResponse,
+    StorageUsageResponse,
     RuntimeSetting,
     RuntimeSettingsResponse,
     RuntimeSettingsUpdateRequest,
@@ -20,6 +23,8 @@ from models import (
 )
 from services.demucs_client import DemucsClient
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 
 class RuntimeSettingsService:
@@ -97,7 +102,9 @@ class RuntimeSettingsService:
 
     def get_proxy_info(self, proxy_url: str | None = None) -> ProxyInfoResponse:
         """Resolve public egress details through the configured proxy."""
-        proxy = self._validate_proxy_url(proxy_url if proxy_url is not None else settings.ytdlp_proxy_url)
+        proxy = self._validate_proxy_url(
+            proxy_url if proxy_url is not None else settings.ytdlp_proxy_url
+        )
         if not proxy:
             raise RuntimeError("ytdlp_proxy_url is required to check proxy info")
 
@@ -128,6 +135,29 @@ class RuntimeSettingsService:
             city=city,
             country=country,
             detail=detail,
+        )
+
+    def get_storage_usage(self) -> StorageUsageResponse:
+        """Estimate current disk usage for the media, cache, and SQLite database."""
+        media_bytes = self._path_size_bytes(settings.media_path)
+        cache_bytes = self._path_size_bytes(settings.cache_path)
+        database_path = self._resolve_sqlite_database_path(settings.database_url)
+        database_available = database_path is not None
+        database_bytes = self._path_size_bytes(database_path) if database_path is not None else None
+        total_bytes = media_bytes + cache_bytes + (database_bytes or 0)
+
+        return StorageUsageResponse(
+            media_bytes=media_bytes,
+            media_display=self._format_byte_size(media_bytes),
+            cache_bytes=cache_bytes,
+            cache_display=self._format_byte_size(cache_bytes),
+            database_bytes=database_bytes,
+            database_display=(
+                self._format_byte_size(database_bytes) if database_bytes is not None else None
+            ),
+            database_available=database_available,
+            total_bytes=total_bytes,
+            total_display=self._format_byte_size(total_bytes),
         )
 
     def _build_settings_response(
@@ -553,6 +583,84 @@ class RuntimeSettingsService:
         if candidate.exists():
             return str(candidate)
         return find_executable(value.split("/")[-1])
+
+    @staticmethod
+    def _path_size_bytes(path: Path | None) -> int:
+        """Return the total size of a file or directory tree in bytes."""
+        if path is None:
+            return 0
+        try:
+            if not path.exists():
+                return 0
+            if path.is_symlink():
+                return 0
+            if path.is_file():
+                return path.stat().st_size
+        except OSError:
+            return 0
+
+        total = 0
+        stack = [path]
+        while stack:
+            current = stack.pop()
+            try:
+                with os.scandir(current) as entries:
+                    for entry in entries:
+                        try:
+                            if entry.is_symlink():
+                                continue
+                            if entry.is_dir(follow_symlinks=False):
+                                stack.append(Path(entry.path))
+                                continue
+                            if entry.is_file(follow_symlinks=False):
+                                total += entry.stat(follow_symlinks=False).st_size
+                        except OSError:
+                            logger.warning(
+                                "Failed to inspect storage entry path=%s",
+                                entry.path,
+                            )
+            except OSError:
+                logger.warning("Failed to scan storage path=%s", current)
+        return total
+
+    @staticmethod
+    def _resolve_sqlite_database_path(database_url: str) -> Path | None:
+        """Resolve a file-backed SQLite database path when one exists."""
+        try:
+            parsed = make_url(database_url)
+        except Exception as error:
+            raise ValueError(f"Invalid database_url: {database_url}") from error
+
+        if parsed.get_backend_name() != "sqlite":
+            return None
+
+        database = (parsed.database or "").strip()
+        if not database or database == ":memory:":
+            return None
+
+        if parsed.query.get("mode") == "memory":
+            return None
+
+        if database.startswith("file:"):
+            return None
+
+        path = Path(database)
+        if not path.is_absolute():
+            path = path.resolve()
+        return path
+
+    @staticmethod
+    def _format_byte_size(size_bytes: int) -> str:
+        """Format a byte count for operator display."""
+        units = ("B", "KiB", "MiB", "GiB", "TiB", "PiB")
+        value = float(max(0, size_bytes))
+        unit_index = 0
+        while value >= 1024.0 and unit_index < len(units) - 1:
+            value /= 1024.0
+            unit_index += 1
+        if unit_index == 0:
+            return f"{int(value)} {units[unit_index]}"
+        return f"{value:.1f} {units[unit_index]}"
 
     def _validate_proxy_url(self, value: str) -> str:
         """Validate a proxy URL or normalize it to an empty string."""

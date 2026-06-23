@@ -9,6 +9,7 @@ from models import (
     DemucsHealthResponse,
     ProxyInfoRequest,
     ProxyInfoResponse,
+    StorageUsageResponse,
     RuntimeSettingsResponse,
     RuntimeSettingsUpdateRequest,
     WhisperXPreloadRequest,
@@ -46,6 +47,15 @@ def update_runtime_settings(
 def get_demucs_health():
     """Get current Demucs service health for configured API URL."""
     return runtime_settings_service.get_demucs_health()
+
+
+@router.get("/storage-usage", response_model=StorageUsageResponse)
+def get_storage_usage(_admin=Depends(require_admin_user)):
+    """Estimate local media, cache, and database storage usage."""
+    try:
+        return runtime_settings_service.get_storage_usage()
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error))
 
 
 @router.post("/demucs/gc", response_model=DemucsGarbageCollectionResponse)

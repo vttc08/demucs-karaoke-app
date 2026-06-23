@@ -2,6 +2,7 @@ const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
 const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
 const SETTINGS_API = appUrl("/api/settings/");
 const DEMUCS_HEALTH_API = appUrl("/api/settings/demucs-health");
+const STORAGE_USAGE_API = appUrl("/api/settings/storage-usage");
 const DEMUCS_GC_API = appUrl("/api/settings/demucs/gc");
 const PROXY_INFO_API = appUrl("/api/settings/proxy-info");
 const YTDLP_VERSION_API = appUrl("/api/settings/ytdlp/version");
@@ -25,6 +26,13 @@ const proxyInfoStatus = document.getElementById("proxy-info-status");
 const proxyInfoIpText = document.getElementById("proxy-info-ip-text");
 const proxyInfoOrgText = document.getElementById("proxy-info-org-text");
 const proxyInfoLocationText = document.getElementById("proxy-info-location-text");
+const checkStorageUsageBtn = document.getElementById("check-storage-usage-btn");
+const storageUsageStatus = document.getElementById("storage-usage-status");
+const storageUsageMediaText = document.getElementById("storage-usage-media-text");
+const storageUsageCacheText = document.getElementById("storage-usage-cache-text");
+const storageUsageDatabaseText = document.getElementById("storage-usage-database-text");
+const storageUsageDatabaseNote = document.getElementById("storage-usage-database-note");
+const storageUsageTotalText = document.getElementById("storage-usage-total-text");
 const whisperxAlignLanguageGroup = document.getElementById("whisperx-align-language-group");
 const engineStatusDot = document.getElementById("engine-status-dot");
 const engineStatusText = document.getElementById("engine-status-text");
@@ -163,6 +171,9 @@ function setFormState(disabled) {
     if (proxyInfoBtn) {
         proxyInfoBtn.disabled = disabled;
     }
+    if (checkStorageUsageBtn) {
+        checkStorageUsageBtn.disabled = disabled;
+    }
     if (demucsGcBtn) {
         demucsGcBtn.disabled = disabled;
     }
@@ -213,6 +224,15 @@ function setProxyInfoStatus(message, isError = false) {
     proxyInfoStatus.classList.toggle("text-on-surface-variant", !isError);
 }
 
+function setStorageUsageStatus(message, isError = false) {
+    if (!storageUsageStatus) {
+        return;
+    }
+    storageUsageStatus.textContent = message;
+    storageUsageStatus.classList.toggle("text-error", isError);
+    storageUsageStatus.classList.toggle("text-on-surface-variant", !isError);
+}
+
 function setDemucsGcStatus(message, isError = false) {
     if (!demucsGcStatus) {
         return;
@@ -241,6 +261,29 @@ function setProxyInfoValues(data) {
 function resetProxyInfoDisplay() {
     setProxyInfoValues({});
     setProxyInfoStatus(t("settings.proxy_info_idle"));
+}
+
+function setStorageUsageValues(data) {
+    if (storageUsageMediaText) {
+        storageUsageMediaText.textContent = data?.media_display || t("common.unknown");
+    }
+    if (storageUsageCacheText) {
+        storageUsageCacheText.textContent = data?.cache_display || t("common.unknown");
+    }
+    if (storageUsageDatabaseText) {
+        storageUsageDatabaseText.textContent = data?.database_available
+            ? (data.database_display || t("common.unknown"))
+            : t("common.na");
+    }
+    if (storageUsageDatabaseNote) {
+        storageUsageDatabaseNote.textContent = data?.database_available
+            ? ""
+            : t("settings.storage_usage_database_note");
+        storageUsageDatabaseNote.classList.toggle("hidden", Boolean(data?.database_available));
+    }
+    if (storageUsageTotalText) {
+        storageUsageTotalText.textContent = data?.total_display || t("common.unknown");
+    }
 }
 
 function setWhisperxAlignLanguageState(disabled) {
@@ -417,6 +460,29 @@ async function checkProxyInfo() {
         setProxyInfoStatus(String(error.message || t("settings.proxy_info_failed")), true);
     } finally {
         proxyInfoBtn.disabled = false;
+    }
+}
+
+async function checkStorageUsage() {
+    if (!checkStorageUsageBtn) {
+        return;
+    }
+
+    checkStorageUsageBtn.disabled = true;
+    setStorageUsageStatus(t("settings.storage_usage_loading"));
+    try {
+        const response = await fetch(STORAGE_USAGE_API);
+        if (!response.ok) {
+            const errorPayload = await response.json();
+            throw new Error(errorPayload.detail || t("settings.storage_usage_failed"));
+        }
+        const data = await response.json();
+        setStorageUsageValues(data);
+        setStorageUsageStatus(t("settings.storage_usage_loaded"));
+    } catch (error) {
+        setStorageUsageStatus(String(error.message || t("settings.storage_usage_failed")), true);
+    } finally {
+        checkStorageUsageBtn.disabled = false;
     }
 }
 
@@ -614,6 +680,9 @@ if (preloadWhisperxBtn) {
 }
 if (proxyInfoBtn) {
     proxyInfoBtn.addEventListener("click", checkProxyInfo);
+}
+if (checkStorageUsageBtn) {
+    checkStorageUsageBtn.addEventListener("click", checkStorageUsage);
 }
 if (demucsGcBtn) {
     demucsGcBtn.addEventListener("click", triggerDemucsGarbageCollection);

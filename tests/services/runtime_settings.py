@@ -1,6 +1,5 @@
+import os
 from .common import *
-
-
 
 def test_demucs_client_health_check_reports_degraded_payload():
     """Demucs health should parse degraded payload and surface detail."""
@@ -352,6 +351,107 @@ def test_runtime_settings_get_proxy_info_uses_configured_proxy():
         assert result.country == "CA"
     finally:
         settings.ytdlp_proxy_url = original_proxy
+
+def test_runtime_settings_get_storage_usage_estimates_file_sizes_and_sqlite_db(tmp_path):
+    """Storage usage should sum directory trees and a file-backed SQLite db."""
+    service = RuntimeSettingsService()
+    media_dir = tmp_path / "media"
+    cache_dir = tmp_path / "cache"
+    database_path = tmp_path / "karaoke.db"
+    media_dir.mkdir()
+    cache_dir.mkdir()
+    (media_dir / "song.mp4").write_bytes(b"a" * 10)
+    nested_dir = media_dir / "nested"
+    nested_dir.mkdir()
+    (nested_dir / "artwork.png").write_bytes(b"b" * 4)
+    (cache_dir / "working.tmp").write_bytes(b"c" * 7)
+    database_path.write_bytes(b"dbdata")
+
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    original_database_url = settings.database_url
+    try:
+        settings.media_path = media_dir
+        settings.cache_path = cache_dir
+        settings.database_url = f"sqlite:///{database_path}"
+
+        usage = service.get_storage_usage()
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+        settings.database_url = original_database_url
+
+    assert usage.media_bytes == 14
+    assert usage.cache_bytes == 7
+    assert usage.database_available is True
+    assert usage.database_bytes == 6
+    assert usage.total_bytes == 27
+    assert usage.media_display == "14 B"
+    assert usage.cache_display == "7 B"
+    assert usage.database_display == "6 B"
+    assert usage.total_display == "27 B"
+
+def test_runtime_settings_get_storage_usage_handles_missing_media_and_non_sqlite_db(tmp_path):
+    """Storage usage should tolerate missing paths and skip non-SQLite dbs."""
+    service = RuntimeSettingsService()
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    (cache_dir / "working.tmp").write_bytes(b"hello")
+
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    original_database_url = settings.database_url
+    try:
+        settings.media_path = tmp_path / "missing-media"
+        settings.cache_path = cache_dir
+        settings.database_url = "postgresql://user:pass@localhost/karaoke"
+
+        usage = service.get_storage_usage()
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+        settings.database_url = original_database_url
+
+    assert usage.media_bytes == 0
+    assert usage.cache_bytes == 5
+    assert usage.database_available is False
+    assert usage.database_bytes is None
+    assert usage.total_bytes == 5
+
+def test_runtime_settings_get_storage_usage_skips_unreadable_directory(tmp_path):
+    """Unreadable directories should not fail the storage usage probe."""
+    service = RuntimeSettingsService()
+    media_dir = tmp_path / "media"
+    cache_dir = tmp_path / "cache"
+    media_dir.mkdir()
+    cache_dir.mkdir()
+    (media_dir / "song.mp4").write_bytes(b"a" * 10)
+    (cache_dir / "working.tmp").write_bytes(b"b" * 8)
+
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    original_database_url = settings.database_url
+    original_scandir = os.scandir
+    try:
+        settings.media_path = media_dir
+        settings.cache_path = cache_dir
+        settings.database_url = "sqlite:///./temporary-storage-probe.db"
+
+        def fake_scandir(path):
+            if Path(path) == media_dir:
+                raise PermissionError("denied")
+            return original_scandir(path)
+
+        with patch("services.runtime_settings_service.os.scandir", side_effect=fake_scandir):
+            usage = service.get_storage_usage()
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+        settings.database_url = original_database_url
+
+    assert usage.media_bytes == 0
+    assert usage.cache_bytes == 8
+    assert usage.database_available is True
 
 def test_runtime_settings_update_settings_accepts_media_and_cache_paths(tmp_path):
     """Updating runtime settings should accept configurable media/cache paths."""

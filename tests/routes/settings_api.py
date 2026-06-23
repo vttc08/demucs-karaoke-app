@@ -37,6 +37,38 @@ def test_get_runtime_settings(client):
     assert "stage_lobby_media_path" in data
     assert "stage_vocals_volume_default" in data
 
+def test_get_storage_usage(client):
+    """Storage usage endpoint should return a live estimate for admins."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.settings.runtime_settings_service.get_storage_usage",
+        return_value={
+            "media_bytes": 123,
+            "media_display": "123 B",
+            "cache_bytes": 456,
+            "cache_display": "456 B",
+            "database_bytes": 789,
+            "database_display": "789 B",
+            "database_available": True,
+            "total_bytes": 1368,
+            "total_display": "1.3 KiB",
+        },
+    ):
+        response = client.get("/api/settings/storage-usage")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["media_bytes"] == 123
+    assert data["cache_bytes"] == 456
+    assert data["database_available"] is True
+    assert data["total_bytes"] == 1368
+
+def test_get_storage_usage_requires_admin(client):
+    """Storage usage endpoint should reject guests."""
+    response = client.get("/api/settings/storage-usage")
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
+
 def test_runtime_settings_api_requires_admin(client):
     """Settings management API should reject guests."""
     response = client.get("/api/settings/")

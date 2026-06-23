@@ -540,6 +540,20 @@ class ProxyInfoResponse(BaseModel):
     detail: str
 
 
+class StorageUsageResponse(BaseModel):
+    """Current disk usage estimate for karaoke storage locations."""
+
+    media_bytes: int
+    media_display: str
+    cache_bytes: int
+    cache_display: str
+    database_bytes: Optional[int] = None
+    database_display: Optional[str] = None
+    database_available: bool
+    total_bytes: int
+    total_display: str
+
+
 class DemucsRequest(BaseModel):
     """Request to Demucs service."""
 

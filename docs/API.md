@@ -1037,6 +1037,34 @@ endpoint reflects the latest saved UI configuration after the app has booted.
 
 ---
 
+### Get Storage Usage
+```
+GET /api/settings/storage-usage
+```
+
+Admin-only endpoint that estimates disk usage for the configured media directory, cache directory,
+and SQLite database file when `DATABASE_URL` uses a file-backed SQLite URL.
+
+**Response:**
+```json
+{
+  "media_bytes": 123456789,
+  "media_display": "117.7 MiB",
+  "cache_bytes": 98765432,
+  "cache_display": "94.2 MiB",
+  "database_bytes": 1048576,
+  "database_display": "1.0 MiB",
+  "database_available": true,
+  "total_bytes": 222222797,
+  "total_display": "211.8 MiB"
+}
+```
+
+When the configured database is not SQLite, `database_available` is `false`, `database_bytes`
+is `null`, and the UI should show `N/A` for the database row.
+
+---
+
 ### Update Runtime Settings
 ```
 PATCH /api/settings/

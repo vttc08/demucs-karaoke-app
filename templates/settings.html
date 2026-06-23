@@ -274,6 +274,37 @@
                         <input id="stage_vocals_volume_default" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="number" min="0" max="100" step="1" required />
                         <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.vocals_volume_default_detail') }}</span>
                     </label>
+                    <div class="rounded-xl border border-white/10 bg-surface-container-highest/20 p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.storage_usage_title') }}</p>
+                                <p id="storage-usage-status" class="text-xs text-on-surface-variant">{{ t('settings.storage_usage_idle') }}</p>
+                            </div>
+                            <button id="check-storage-usage-btn" type="button" class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60">
+                                <span class="material-symbols-outlined text-sm">storage</span>
+                                {{ t('settings.check_storage_usage') }}
+                            </button>
+                        </div>
+                        <dl class="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div class="rounded-lg bg-surface-container px-3 py-2">
+                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.storage_usage_media') }}</dt>
+                                <dd id="storage-usage-media-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
+                            </div>
+                            <div class="rounded-lg bg-surface-container px-3 py-2">
+                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.storage_usage_cache') }}</dt>
+                                <dd id="storage-usage-cache-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
+                            </div>
+                            <div class="rounded-lg bg-surface-container px-3 py-2">
+                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.storage_usage_database') }}</dt>
+                                <dd id="storage-usage-database-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
+                                <p id="storage-usage-database-note" class="mt-1 text-[11px] text-on-surface-variant hidden">{{ t('settings.storage_usage_database_note') }}</p>
+                            </div>
+                            <div class="rounded-lg bg-surface-container px-3 py-2">
+                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.storage_usage_total') }}</dt>
+                                <dd id="storage-usage-total-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
+                            </div>
+                        </dl>
+                    </div>
                 </div>
             </section>
 
