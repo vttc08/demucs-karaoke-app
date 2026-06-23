@@ -556,6 +556,27 @@ class ProcessingTaskService:
         await self._cancel_queue_and_media_side_effects(db, task)
         return task
 
+    async def retry_task(
+        self,
+        db: Session,
+        task_id: int,
+    ) -> ProcessingTask:
+        """Retry a failed task."""
+        task = self.get_task(db, task_id)
+        if task is None:
+            raise ValueError(f"Task not found: {task_id}")
+
+        if task.status != ProcessingTaskStatus.FAILED.value:
+            raise ValueError("Only failed tasks can be retried")
+
+        task.status = ProcessingTaskStatus.PENDING.value
+        task.last_error_summary = None
+        task.last_error_detail = None
+        task.updated_at = utc_now_naive()
+        db.commit()
+        db.refresh(task)
+        return task
+
     async def delete_canceled_task(self, db: Session, task_id: int) -> dict[str, int | None]:
         """Delete a canceled task and any orphaned rows it leaves behind."""
         task = self.get_task(db, task_id)
@@ -644,6 +665,30 @@ class ProcessingTaskService:
         if task_ids:
             db.commit()
         return task_ids
+    
+    def can_retry_task(
+        self,
+        db: Session,
+        task: ProcessingTask,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+    ) -> bool:
+        """Return whether the current viewer may retry the task."""
+        if is_admin:
+            return True
+        if task.status != ProcessingTaskStatus.FAILED.value:
+            return False
+        if task.target_queue_item_id is None:
+            return False
+        queue_item = (
+            db.query(QueueItem)
+            .filter(QueueItem.id == task.target_queue_item_id)
+            .first()
+        )
+        if queue_item is None:
+            return False
+        return True
 
     def can_cancel_task(
         self,
@@ -930,6 +975,11 @@ class TaskExecutionCoordinator:
                 return None
             cancel_event = context.get("cancel_event")
             return cancel_event if isinstance(cancel_event, threading.Event) else None
+        
+    def retry(self, task_id: int):
+        """Retry a task by canceling it and starting a new execution."""
+        self.cancel(task_id)
+        self.start(task_id)
 
 
 processing_task_service = ProcessingTaskService()

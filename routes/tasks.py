@@ -78,6 +78,32 @@ def get_task(
         raise HTTPException(status_code=404, detail="Task not found")
     return processing_task_service.to_response(task)
 
+@router.post("/{task_id}/retry", response_model=ProcessingTaskResponse)
+async def retry_task(
+    task_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Retry a failed task."""
+    task = processing_task_service.get_task(db, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    is_admin = get_admin_user(request, db) is not None
+    requester_id = _current_guest_id(request)
+
+    if not processing_task_service.can_retry_task(
+        db,
+        task,
+        is_admin=is_admin,
+        requester_id=requester_id,
+    ):
+        raise HTTPException(status_code=403, detail="Not allowed to retry this task")
+    
+    task_execution_coordinator.retry(task_id)
+    await processing_task_service.retry_task(db, task_id)
+    return processing_task_service.to_response(task)
+
 
 @router.post("/{task_id}/cancel", response_model=ProcessingTaskResponse)
 async def cancel_task(

@@ -922,6 +922,33 @@ function renderTaskList(tasks) {
                     </button>
                 </div>
                 `
+            : task.status === "failed"
+            ? `
+                <div class="mt-3 flex justify-end gap-3">
+                    <button
+                        type="button"
+                        data-action="cancel-task"
+                        class="inline-flex items-center gap-2 rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-task-id="${task.id}"
+                        title="${escapeHtml(t("common.cancel"))}"
+                        aria-label="${escapeHtml(t("common.cancel"))}"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">close</span>
+                        <span>${escapeHtml(t("common.cancel"))}</span>
+                    </button>
+                    <button
+                        type="button"
+                        data-action="retry-task"
+                        class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-task-id="${task.id}"
+                        title="${escapeHtml(t("common.retry"))}"
+                        aria-label="${escapeHtml(t("common.retry"))}"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">refresh</span>
+                        <span>${escapeHtml(t("common.retry"))}</span>
+                    </button>
+                </div>
+                `
             : `
                 <div class="mt-3 flex justify-end">
                     <button
@@ -929,11 +956,11 @@ function renderTaskList(tasks) {
                         data-action="cancel-task"
                         class="inline-flex items-center gap-2 rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-60"
                         data-task-id="${task.id}"
-                        title="${escapeHtml(t("media.cancel_task"))}"
-                        aria-label="${escapeHtml(t("media.cancel_task"))}"
+                        title="${escapeHtml(t("common.cancel"))}"
+                        aria-label="${escapeHtml(t("common.cancel"))}"
                     >
                         <span class="material-symbols-outlined text-[16px]">close</span>
-                        <span>${escapeHtml(t("media.cancel_task"))}</span>
+                        <span>${escapeHtml(t("common.cancel"))}</span>
                     </button>
                 </div>
                 `;
@@ -992,6 +1019,34 @@ async function refreshTaskList() {
     return taskRefreshPromise;
 }
 
+async function retryTask(taskId) {
+    if (!Number.isFinite(taskId) || taskId <= 0 || !isAdmin) {
+        return;
+    }
+    try {
+        const response = await fetch(appUrl(`/api/tasks/${taskId}/retry`), {
+            method: "POST",
+        });
+        if (!response.ok) {
+            let detail = t("media.retry_task_failed");
+            try {
+                const payload = await response.json();
+                if (payload?.detail) {
+                    detail = payload.detail;
+                }
+            } catch (_error) {
+                // Keep fallback text.
+            }
+            throw new Error(detail);
+        }
+
+        await refreshTaskList();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : t("media.retry_task_failed");
+        showToast(message);
+    }
+}
+
 async function cancelProcessingTask(button) {
     if (!button || !isAdmin) {
         return;
@@ -1014,7 +1069,7 @@ async function cancelProcessingTask(button) {
             method: "POST",
         });
         if (!response.ok) {
-            let detail = t("media.cancel_task_failed");
+            let detail = t("common.cancel_failed");
             try {
                 const payload = await response.json();
                 if (payload?.detail) {
@@ -1028,13 +1083,13 @@ async function cancelProcessingTask(button) {
 
         await refreshTaskList();
     } catch (error) {
-        const message = error instanceof Error ? error.message : t("media.cancel_task_failed");
+        const message = error instanceof Error ? error.message : t("common.cancel_failed");
         showToast(message);
         button.disabled = false;
         button.removeAttribute("aria-busy");
-        button.title = t("media.cancel_task");
-        button.setAttribute("aria-label", t("media.cancel_task"));
-        button.innerHTML = originalHtml || `<span class="material-symbols-outlined text-[16px]">close</span><span>${escapeHtml(t("media.cancel_task"))}</span>`;
+        button.title = t("common.cancel");
+        button.setAttribute("aria-label", t("common.cancel"));
+        button.innerHTML = originalHtml || `<span class="material-symbols-outlined text-[16px]">close</span><span>${escapeHtml(t("common.cancel"))}</span>`;
     }
 }
 
@@ -1846,6 +1901,15 @@ function handleActionClick(event) {
 
     if (action === "delete-task") {
         deleteProcessingTask(button);
+        return;
+    }
+
+    if (action === "retry-task") {
+        const taskId = Number(button.dataset.taskId || button.closest('[data-task-id]')?.dataset.taskId);
+        if (!Number.isFinite(taskId) || taskId <= 0) {
+            return;
+        }
+        retryTask(taskId);
         return;
     }
 
