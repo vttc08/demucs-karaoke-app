@@ -928,7 +928,7 @@
         .stage-chrome {
             width: 100%;
             display: grid;
-            grid-template-columns: repeat(6, minmax(0, 1fr));
+            grid-template-columns: repeat(7, minmax(0, 1fr));
             align-items: center;
             column-gap: 0.35rem;
             row-gap: 0.45rem;
@@ -1137,6 +1137,15 @@
                             <span class="material-symbols-outlined text-base">qr_code_2</span>
                             <span class="stage-control-label">{{ t('stage.qr') }}</span>
                         </button>
+                        <button
+                            id="zen-toggle-btn"
+                            class="stage-control-button stage-control-button--icon rounded-full bg-surface-container-high/75 text-sm font-semibold text-on-surface transition hover:bg-surface-container-highest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+                            aria-label="{{ t('stage.shortcuts_zen') }}"
+                            title="{{ t('stage.shortcuts_zen') }}"
+                        >
+                            <span class="material-symbols-outlined text-base">dashboard</span>
+                            <span class="stage-control-label"></span>
+                        </button>
                         <div class="stage-shortcuts-control">
                             <button
                                 id="stage-shortcuts-btn"
@@ -1178,6 +1187,10 @@
                                     <div class="stage-shortcuts-row">
                                         <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_qr') }}</span>
                                         <span class="stage-shortcuts-kbd">Q</span>
+                                    </div>
+                                    <div class="stage-shortcuts-row">
+                                        <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_zen') }}</span>
+                                        <span class="stage-shortcuts-kbd">Z</span>
                                     </div>
                                     <div class="stage-shortcuts-row">
                                         <span class="stage-shortcuts-row-desc">{{ t('stage.shortcuts_help_toggle') }}</span>
@@ -1540,8 +1553,10 @@ const fullscreenIcon = document.getElementById("fullscreen-icon");
 const qrOverlay = document.getElementById("stage-qr-overlay");
 const qrImage = document.getElementById("stage-qr-image");
 const stageMedia = document.querySelector(".stage-media");
+const stageControls = document.getElementById("stage-controls");
 const lyricsOverlay = document.getElementById("stage-lyrics-overlay");
 const lyricsLines = document.getElementById("stage-lyrics-lines");
+const zenToggleBtn = document.getElementById("zen-toggle-btn");
 const stageLyrics = new window.StageLyricsController({
     overlay: lyricsOverlay,
     lines: lyricsLines,
@@ -3598,6 +3613,18 @@ if (qrOverlay) {
     qrOverlay.addEventListener("pointercancel", endQrDrag);
 }
 
+if (zenToggleBtn) {
+    zenToggleBtn.addEventListener("click", () => {
+        if (!stageControls || !isFullscreenActive()) return;
+        const isControlsVisible = !stageControls.classList.contains("hidden");
+        if (isControlsVisible) {
+            stageControls.classList.add("hidden");
+        } else {
+            stageControls.classList.remove("hidden");
+        }
+    });
+}
+
 if (shortcutsBtn) {
     shortcutsBtn.addEventListener("click", () => {
         toggleShortcutsPanel();
@@ -3772,6 +3799,19 @@ window.addEventListener("keydown", async (event) => {
         event.preventDefault();
         await document.exitFullscreen();
     }
+
+    if (event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        // Zen mode toggle: hide/show stage controls
+        if (stageControls) {
+            const isControlsVisible = !stageControls.classList.contains("hidden");
+            if (isControlsVisible) {
+                stageControls.classList.add("hidden");
+            } else {
+                stageControls.classList.remove("hidden");
+            }
+        }
+    }
 });
 
 document.addEventListener("fullscreenchange", () => {
@@ -3782,6 +3822,9 @@ document.addEventListener("fullscreenchange", () => {
         updateLyricsForTime(getPrimaryCurrentTime());
     } else {
         setLyricsOverlayVisible(false);
+    }
+    if (!isFullscreenActive()) {
+        stageControls?.classList.remove("hidden");
     }
 });
 syncFullscreenState();
