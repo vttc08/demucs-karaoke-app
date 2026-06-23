@@ -32,6 +32,7 @@ async def resolve_lyrics(request: LyricsResolveRequest):
             title=request.title,
             artist=request.artist,
             youtube_title=request.youtube_title,
+            infer=request.infer,
         )
     except Exception as exc:
         logger.exception("Lyrics resolve failed title=%r artist=%r", request.title, request.artist)

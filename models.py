@@ -257,6 +257,7 @@ class LyricsResolveRequest(BaseModel):
     title: str
     artist: Optional[str] = None
     youtube_title: Optional[str] = None
+    infer: Optional[bool] = True
 
 
 class LyricsResolveResponse(BaseModel):

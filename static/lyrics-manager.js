@@ -254,6 +254,10 @@ class LyricsManager {
       payload.youtube_title = this.state.youtubeTitle;
     }
 
+    if (trigger == 'manual') {
+      payload.infer = false;
+    }
+
     try {
       const response = await fetch(`${this.apiBase}/api/lyrics/resolve`, {
         method: 'POST',

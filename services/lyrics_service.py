@@ -797,11 +797,15 @@ class LyricsService:
         title: str,
         artist: Optional[str] = None,
         youtube_title: Optional[str] = None,
+        infer: Optional[bool] = True,
     ) -> Optional[LyricsPayload]:
         """Resolve lyrics payload with provider fallback behavior."""
         lookup_title = (youtube_title or title).strip()
         logger.debug("Got YouTube title=%r artist=%r", lookup_title, artist)
-        inferred_song = await self.infer_song_metadata(title=lookup_title, artist=artist)
+        if infer:
+            inferred_song = await self.infer_song_metadata(title=lookup_title, artist=artist)
+        else:
+            inferred_song = InferredSong(title=lookup_title, artist=artist, source="input")
         if not inferred_song.title:
             return None
         if self._uses_runtime_provider_settings:
@@ -893,6 +897,7 @@ class LyricsService:
         title: str,
         artist: Optional[str] = None,
         youtube_title: Optional[str] = None,
+        infer: Optional[bool] = True,
     ) -> Optional[str]:
         """
         Fetch lyrics text for a song.
@@ -901,11 +906,12 @@ class LyricsService:
             title: Song title
             artist: Artist name (optional)
             youtube_title: Raw YouTube title to infer metadata from (optional)
+            infer: Whether to infer song metadata if not provided
 
         Returns:
             Lyrics text or None if not found
         """
-        payload = await self.resolve_lyrics(title=title, artist=artist, youtube_title=youtube_title)
+        payload = await self.resolve_lyrics(title=title, artist=artist, youtube_title=youtube_title, infer=infer)
         return payload.lyrics if payload else None
 
     def parse_lyrics_to_lines(self, lyrics: str) -> list[str]:
