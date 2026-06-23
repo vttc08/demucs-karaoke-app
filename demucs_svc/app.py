@@ -25,6 +25,7 @@ try:
     )
     from .jobs import DemucsJobState, DemucsJobStore, utc_now
     from .models import (
+        DemucsJobArtifactDeleteResponse,
         DemucsJobCreateResponse,
         DemucsGarbageCollectionResponse,
         DemucsMetricsJobResponse,
@@ -67,6 +68,7 @@ except ImportError:
     )
     from jobs import DemucsJobState, DemucsJobStore, utc_now
     from models import (
+        DemucsJobArtifactDeleteResponse,
         DemucsJobCreateResponse,
         DemucsGarbageCollectionResponse,
         DemucsMetricsJobResponse,
@@ -1023,6 +1025,28 @@ def cancel_job(job_id: str):
     if process is not None and process.poll() is None:
         process.terminate()
     return {"job_id": job_id, "status": "canceling"}
+
+
+@app.delete("/jobs/{job_id}/artifacts", response_model=DemucsJobArtifactDeleteResponse)
+def delete_job_artifacts(job_id: str):
+    try:
+        job = job_store.require(job_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Job not found") from error
+
+    if job.status in {"queued", "running"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Job is still active; cancel it before deleting artifacts",
+        )
+
+    job_store.delete(job_id)
+    _cleanup_job_files(job_id)
+    return DemucsJobArtifactDeleteResponse(
+        job_id=job_id,
+        status=job.status,
+        detail="Deleted Demucs job input/output artifacts",
+    )
 
 
 @app.post("/separate")

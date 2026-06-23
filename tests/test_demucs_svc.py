@@ -705,6 +705,63 @@ def test_cancel_job_marks_terminal(monkeypatch, tmp_path):
     assert status_payload["progress_message"] == "Cancel requested"
 
 
+def test_delete_job_artifacts_removes_terminal_job_and_io(monkeypatch, tmp_path):
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    job_id = "job-delete"
+    incoming_dir = demucs_app.INCOMING_ROOT / job_id
+    output_dir = demucs_app.OUTPUT_ROOT / job_id
+    incoming_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (incoming_dir / "input.wav").write_bytes(b"audio")
+    (output_dir / "stem.wav").write_bytes(b"stem")
+    demucs_app.job_store.create(
+        demucs_app.DemucsJobState(
+            job_id=job_id,
+            model="htdemucs",
+            device="cpu",
+            output_format="wav",
+            mp3_bitrate=None,
+            original_filename="input.wav",
+            status="completed",
+            finished_at=demucs_app.utc_now(),
+        )
+    )
+
+    client = TestClient(demucs_app.app)
+    response = client.delete(f"/jobs/{job_id}/artifacts")
+
+    assert response.status_code == 200
+    assert response.json()["detail"] == "Deleted Demucs job input/output artifacts"
+    assert demucs_app.job_store.get(job_id) is None
+    assert incoming_dir.exists() is False
+    assert output_dir.exists() is False
+
+
+def test_delete_job_artifacts_rejects_active_job(tmp_path, monkeypatch):
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    job_id = "job-active"
+    demucs_app.job_store.create(
+        demucs_app.DemucsJobState(
+            job_id=job_id,
+            model="htdemucs",
+            device="cpu",
+            output_format="wav",
+            mp3_bitrate=None,
+            original_filename="input.wav",
+            status="running",
+        )
+    )
+
+    client = TestClient(demucs_app.app)
+    response = client.delete(f"/jobs/{job_id}/artifacts")
+
+    assert response.status_code == 409
+    assert "still active" in response.json()["detail"]
+    assert demucs_app.job_store.get(job_id) is not None
+
+
 def test_separate_endpoint_defaults_to_wav(monkeypatch, tmp_path):
     monkeypatch.setattr(demucs_app, "_cuda_available", lambda: True)
 

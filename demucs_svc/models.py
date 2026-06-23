@@ -113,6 +113,12 @@ class DemucsJobStatusResponse(BaseModel):
     aligned_lyrics_path: str | None = None
 
 
+class DemucsJobArtifactDeleteResponse(BaseModel):
+    job_id: str
+    status: Literal["completed", "failed", "canceled"]
+    detail: str
+
+
 class DemucsMetricsJobResponse(BaseModel):
     job_id: str
     status: Literal["queued", "running"]

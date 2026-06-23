@@ -126,6 +126,29 @@ def test_demucs_client_trigger_garbage_collection_posts_request_and_parses_respo
     assert result.executed_mode == "full"
     assert result.whisperx_unloaded == {"transcription_models": 1, "align_models": 1}
 
+
+def test_demucs_client_delete_job_artifacts_uses_artifact_endpoint():
+    class FakeResponse:
+        status_code = 200
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+    seen = {}
+
+    def fake_delete(url, timeout):
+        seen["url"] = url
+        seen["timeout"] = timeout
+        return FakeResponse()
+
+    with patch("services.demucs_client.httpx.delete", side_effect=fake_delete):
+        client = DemucsClient(api_url="http://127.0.0.1:8001")
+        client.delete_job_artifacts("job-123")
+
+    assert seen["url"] == "http://127.0.0.1:8001/jobs/job-123/artifacts"
+    assert seen["timeout"] == DemucsClient.DELETE_TIMEOUT_SECONDS
+
 def test_runtime_settings_get_settings_is_non_blocking():
     """Settings snapshot should not call external health checks."""
     service = RuntimeSettingsService()

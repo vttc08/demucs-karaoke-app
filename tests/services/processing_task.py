@@ -523,6 +523,125 @@ def test_karaoke_alignment_requires_json_before_replacing_media(db_session, tmp_
     assert not (media_root / "align-song.json").exists()
 
 
+def test_process_karaoke_success_deletes_remote_demucs_job(db_session, tmp_path, monkeypatch):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    source_media = media_root / "source.mp3"
+    source_media.write_bytes(b"source")
+    no_vocals = cache_root / "demucs_outputs" / "1" / "no_vocals.wav"
+    vocals = cache_root / "demucs_outputs" / "1" / "vocals.wav"
+    no_vocals.parent.mkdir(parents=True, exist_ok=True)
+    no_vocals.write_bytes(b"no vocals")
+    vocals.write_bytes(b"vocals")
+
+    media = MediaItem(title="Song", file_stem="song", media_path="/media/source.mp3", missing=False)
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="library_media",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PROCESSING.value,
+        stage="demucs",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    service = KaraokeService()
+    service._separate_vocals_with_retry = AsyncMock(
+        return_value=DemucsResponse(
+            job_id="job-success",
+            no_vocals_path=str(no_vocals),
+            vocals_path=str(vocals),
+        )
+    )
+    service.demucs_client.delete_job_artifacts = Mock()
+
+    with patch.object(processing_task_service, "set_stage", AsyncMock()), patch.object(
+        processing_task_service, "emit_progress", AsyncMock()
+    ), patch.object(processing_task_service, "set_status", AsyncMock()):
+        asyncio.run(
+            service._process_karaoke(
+                db_session,
+                task,
+                queue_item=None,
+                media_item=media,
+                video_path=source_media,
+                audio_path=source_media,
+            )
+        )
+
+    service.demucs_client.delete_job_artifacts.assert_called_once_with("job-success")
+
+
+def test_process_karaoke_failure_before_done_keeps_remote_demucs_job(db_session, tmp_path, monkeypatch):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    source_media = media_root / "source.mp3"
+    source_media.write_bytes(b"source")
+    no_vocals = cache_root / "demucs_outputs" / "1" / "no_vocals.wav"
+    vocals = cache_root / "demucs_outputs" / "1" / "vocals.wav"
+    no_vocals.parent.mkdir(parents=True, exist_ok=True)
+    no_vocals.write_bytes(b"no vocals")
+    vocals.write_bytes(b"vocals")
+
+    media = MediaItem(title="Song", file_stem="song", media_path="/media/source.mp3", missing=False)
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="library_media",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PROCESSING.value,
+        stage="demucs",
+    )
+    db_session.add(task)
+    db_session.commit()
+    db_session.refresh(task)
+
+    service = KaraokeService()
+    service._separate_vocals_with_retry = AsyncMock(
+        return_value=DemucsResponse(
+            job_id="job-failure",
+            no_vocals_path=str(no_vocals),
+            vocals_path=str(vocals),
+        )
+    )
+    service.demucs_client.delete_job_artifacts = Mock()
+
+    with patch.object(processing_task_service, "set_stage", AsyncMock()), patch.object(
+        processing_task_service, "emit_progress", AsyncMock()
+    ), patch.object(service, "_install_karaoke_outputs", side_effect=RuntimeError("copy failed")):
+        with pytest.raises(RuntimeError, match="copy failed"):
+            asyncio.run(
+                service._process_karaoke(
+                    db_session,
+                    task,
+                    queue_item=None,
+                    media_item=media,
+                    video_path=source_media,
+                    audio_path=source_media,
+                )
+            )
+
+    service.demucs_client.delete_job_artifacts.assert_not_called()
+
+
 def test_alignment_cancel_cleanup_preserves_durable_media(db_session, tmp_path, monkeypatch):
     """Alignment task cleanup should remove scratch files only, not library media."""
     media_root = tmp_path / "media"

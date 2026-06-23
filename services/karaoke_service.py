@@ -375,7 +375,7 @@ class KaraokeService:
             status=ProcessingTaskStatus.PROCESSING.value,
             stage="whisperx",
         )
-        aligned_lyrics_path = await self.demucs_client.align_lyrics(
+        aligned_lyrics_path, remote_job_id = await self.demucs_client.align_lyrics(
             vocals_path,
             output_dir=self._task_cache_dir("demucs_outputs", task.id),
             lyrics_text=lyrics_text,
@@ -411,6 +411,7 @@ class KaraokeService:
             progress_label_key="task.ready",
             progress_percent=100,
         )
+        self._cleanup_remote_demucs_job(remote_job_id, task_id=task.id, stage="whisperx")
 
     async def _prepare_karaoke_inputs(
         self,
@@ -726,6 +727,7 @@ class KaraokeService:
             progress_label_key="task.ready",
             progress_percent=100,
         )
+        self._cleanup_remote_demucs_job(demucs_response.job_id, task_id=task.id, stage="demucs")
 
     @staticmethod
     def _existing_media_file(item: QueueItem) -> Path | None:
@@ -1091,6 +1093,28 @@ class KaraokeService:
         )
         self._remove_task_cache_dirs(task, categories=categories)
 
+    def _cleanup_remote_demucs_job(self, job_id: str | None, *, task_id: int, stage: str) -> None:
+        if not job_id:
+            return
+        try:
+            self.demucs_client.delete_job_artifacts(job_id)
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            logger.warning(
+                "Failed to delete remote Demucs job artifacts task_id=%s stage=%s job_id=%s status_code=%s",
+                task_id,
+                stage,
+                job_id,
+                status_code,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to delete remote Demucs job artifacts task_id=%s stage=%s job_id=%s",
+                task_id,
+                stage,
+                job_id,
+            )
+
     @staticmethod
     def _remove_task_cache_dirs(
         task: ProcessingTask,
@@ -1193,7 +1217,7 @@ class KaraokeService:
             progress_step_index=1,
             progress_step_total=3,
         )
-        session = await self.vocal_sync_service.prepare_from_youtube(
+        session, remote_job_id = await self.vocal_sync_service.prepare_from_youtube(
             db,
             media_item.id,
             youtube_id,
@@ -1258,6 +1282,7 @@ class KaraokeService:
             progress_step_index=3,
             progress_step_total=3,
         )
+        self._cleanup_remote_demucs_job(remote_job_id, task_id=task.id, stage="demucs")
 
     async def _process_media_vocal_sync_prepare_upload_task(
         self,
@@ -1289,7 +1314,7 @@ class KaraokeService:
                 progress_step_index=1,
                 progress_step_total=2,
             )
-            session = await self.vocal_sync_service.prepare_from_staged_upload(
+            session, remote_job_id = await self.vocal_sync_service.prepare_from_staged_upload(
                 db,
                 media_item.id,
                 source_filename=source_filename,
@@ -1339,6 +1364,7 @@ class KaraokeService:
                 progress_step_index=2,
                 progress_step_total=2,
             )
+            self._cleanup_remote_demucs_job(remote_job_id, task_id=task.id, stage="demucs")
         finally:
             self.vocal_sync_service.cleanup_task_source(task.id)
 

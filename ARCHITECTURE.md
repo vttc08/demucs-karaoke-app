@@ -232,6 +232,10 @@ The stage page uses a websocket-first model:
   `cache/audio/`, `cache/processed/`, and `cache/demucs_outputs/`. Successful tasks remove only their
   own subdirectories after durable media paths are committed; failed task artifacts remain for
   manual diagnosis. Referenced lyrics and generated thumbnail caches are excluded from this cleanup.
+- Remote `demucs_svc` scratch keeps per-job `incoming/` and `output/` directories after terminal
+  completion. The main app explicitly retires those artifacts with `DELETE /jobs/{job_id}/artifacts`
+  only after the local durable flow succeeds; failed tasks skip explicit remote cleanup and rely on
+  remote retention expiry or manual deletion instead.
 - Stage playback is sidecar-first (not browser multi-audio-track MP4 selection):
   - `<video>` plays `media_path`
   - optional hidden `<audio>` plays `vocals_path`

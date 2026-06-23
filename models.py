@@ -557,6 +557,7 @@ class DemucsRequest(BaseModel):
 class DemucsResponse(BaseModel):
     """Response from Demucs service."""
 
+    job_id: Optional[str] = None
     no_vocals_path: str
     vocals_path: Optional[str] = None
     aligned_lyrics_path: Optional[str] = None

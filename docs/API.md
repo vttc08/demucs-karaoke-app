@@ -1128,6 +1128,9 @@ The Demucs service response ZIP still contains the standard `no_vocals` and `voc
 The main app polls `GET /jobs/{job_id}` about once per second while a remote Demucs job is running,
 then fetches `GET /jobs/{job_id}/result` after the job reaches `completed`. The interval is
 configurable through `demucs_poll_interval_seconds` in runtime settings.
+After the main app has durably committed the returned stems or aligned lyrics locally, it can call
+`DELETE /jobs/{job_id}/artifacts` to remove the corresponding retained remote `incoming/` and `output/`
+directories. This is separate from cancellation so failed jobs can keep their artifacts for later diagnosis.
 
 For existing guide vocals, the main app can use the Demucs align-only job API:
 
@@ -1135,6 +1138,7 @@ For existing guide vocals, the main app can use the Demucs align-only job API:
 - `GET /jobs/{job_id}` returns the same status payload used by separation jobs.
 - `GET /align-jobs/{job_id}/result` returns `aligned_lyrics.json` directly.
 - `DELETE /jobs/{job_id}` cancels the alignment job when it is still active.
+- `DELETE /jobs/{job_id}/artifacts` deletes retained terminal-job IO once the caller no longer needs it.
 
 ### Demucs Observability and Maintenance
 

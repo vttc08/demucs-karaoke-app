@@ -125,6 +125,7 @@ Remote Demucs execution now uses an async job contract on `demucs_svc`:
 - `GET /jobs/{job_id}` returns job status, percent, message, and recent remote output tail
 - `GET /jobs/{job_id}/result` returns the final ZIP payload once the job completes
 - `DELETE /jobs/{job_id}` requests remote cancellation and subprocess termination
+- `DELETE /jobs/{job_id}/artifacts` deletes retained remote input/output files for a terminal job
 
 The main app polls the remote job server-side and republishes the latest Demucs step progress through the existing local transports:
 
@@ -138,3 +139,8 @@ configurable in runtime settings through `demucs_poll_interval_seconds`.
 When WhisperX lyrics alignment is requested, the remote job's `Aligning lyrics` phase is surfaced as its own local `whisperx` stage so the browser can apply the optimistic progress helper there instead of letting the Demucs bar stall at the end of the separation run.
 
 Browsers do not connect directly to the Demucs host. Remote job ids are intentionally live-only and are not persisted in SQLite. On restart, any interrupted local task is restarted from the beginning with a fresh remote Demucs job.
+
+After a task reaches durable local success, the main app best-effort calls `DELETE /jobs/{job_id}/artifacts`
+to retire the corresponding remote Demucs `incoming/` and `output/` directories. Failed tasks skip this
+call so remote artifacts remain available until the Demucs service's normal retention cleanup or manual
+intervention.
