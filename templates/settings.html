@@ -304,6 +304,15 @@
                                 <dd id="storage-usage-total-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
                             </div>
                         </dl>
+                        <div class="mt-4 flex flex-wrap items-center gap-3">
+                            <button id="cleanup-storage-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-error/30 bg-error/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-error transition hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-60">
+                                <span class="material-symbols-outlined text-sm">delete_sweep</span>
+                                {{ t('settings.cleanup_storage') }}
+                            </button>
+                            <p id="storage-cleanup-status" class="text-xs text-on-surface-variant">
+                                {{ t('settings.storage_cleanup_idle') }}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </section>

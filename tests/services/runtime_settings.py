@@ -453,6 +453,91 @@ def test_runtime_settings_get_storage_usage_skips_unreadable_directory(tmp_path)
     assert usage.cache_bytes == 8
     assert usage.database_available is True
 
+def test_runtime_settings_cleanup_storage_preserves_thumbnails_and_cleans_db(db_session, tmp_path, monkeypatch):
+    """Storage cleanup should preserve media-thumbnails and delete stale rows."""
+    service = RuntimeSettingsService()
+    cache_root = tmp_path / "cache"
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    scratch_dir = cache_root / "ytdlp" / "123"
+    scratch_dir.mkdir(parents=True)
+    scratch_file = scratch_dir / "download.part"
+    scratch_file.write_bytes(b"scratch-data")
+    processed_dir = cache_root / "processed" / "456"
+    processed_dir.mkdir(parents=True)
+    processed_file = processed_dir / "output.tmp"
+    processed_file.write_bytes(b"processed")
+    thumbnails_dir = cache_root / "media-thumbnails"
+    thumbnails_dir.mkdir(parents=True)
+    thumbnail_file = thumbnails_dir / "keep.jpg"
+    thumbnail_file.write_bytes(b"thumb")
+
+    missing_media = MediaItem(
+        title="Missing",
+        file_stem="missing",
+        media_path="/media/missing.mp4",
+        missing=True,
+    )
+    kept_media = MediaItem(
+        title="Kept",
+        file_stem="kept",
+        media_path="/media/kept.mp4",
+        missing=False,
+    )
+    db_session.add_all([missing_media, kept_media])
+    db_session.commit()
+
+    queue_item = QueueItem(
+        media_id=missing_media.id,
+        position=1,
+        requested_karaoke=False,
+        status=QueueStatus.PENDING.value,
+    )
+    done_task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="library_media",
+        target_queue_item_id=None,
+        target_media_item_id=kept_media.id,
+        status=ProcessingTaskStatus.DONE.value,
+        stage="finished",
+    )
+    missing_task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="library_media",
+        target_media_item_id=missing_media.id,
+        status=ProcessingTaskStatus.PENDING.value,
+        stage="queued",
+    )
+    db_session.add_all([queue_item, done_task, missing_task])
+    db_session.commit()
+    done_task_id = done_task.id
+    missing_task_id = missing_task.id
+    queue_item_id = queue_item.id
+    missing_media_id = missing_media.id
+    kept_media_id = kept_media.id
+
+    result = service.cleanup_storage(db_session)
+
+    assert result.cache_deleted_files == 2
+    assert result.cache_deleted_bytes == len(b"scratch-data") + len(b"processed")
+    assert result.db_deleted_done_tasks == 1
+    assert result.db_deleted_missing_queue_items == 1
+    assert result.db_deleted_missing_processing_tasks == 1
+    assert result.db_deleted_missing_media_items == 1
+    assert "missing media items" in result.detail
+    assert scratch_file.exists() is False
+    assert processed_file.exists() is False
+    assert not scratch_dir.exists()
+    assert not processed_dir.exists()
+    assert thumbnail_file.exists()
+    assert thumbnails_dir.exists()
+    assert db_session.query(ProcessingTask).filter(ProcessingTask.id == done_task_id).first() is None
+    assert db_session.query(ProcessingTask).filter(ProcessingTask.id == missing_task_id).first() is None
+    assert db_session.query(QueueItem).filter(QueueItem.id == queue_item_id).first() is None
+    assert db_session.query(MediaItem).filter(MediaItem.id == missing_media_id).first() is None
+    assert db_session.query(MediaItem).filter(MediaItem.id == kept_media_id).first() is not None
+
 def test_runtime_settings_update_settings_accepts_media_and_cache_paths(tmp_path):
     """Updating runtime settings should accept configurable media/cache paths."""
     service = RuntimeSettingsService()

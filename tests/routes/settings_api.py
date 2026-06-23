@@ -69,6 +69,35 @@ def test_get_storage_usage_requires_admin(client):
     assert response.status_code == 403
     assert response.json()["detail"] == "Admin session required"
 
+def test_cleanup_storage(client):
+    """Storage cleanup endpoint should return a cleanup summary for admins."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.settings.runtime_settings_service.cleanup_storage",
+        return_value={
+            "cache_deleted_files": 12,
+            "cache_deleted_bytes": 3456,
+            "db_deleted_done_tasks": 3,
+            "db_deleted_missing_queue_items": 2,
+            "db_deleted_missing_processing_tasks": 1,
+            "db_deleted_missing_media_items": 4,
+            "detail": "Deleted 12 cache files, 3 done tasks, and 4 missing media items",
+        },
+    ):
+        response = client.post("/api/settings/storage-cleanup")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cache_deleted_files"] == 12
+    assert data["db_deleted_done_tasks"] == 3
+    assert data["db_deleted_missing_media_items"] == 4
+
+def test_cleanup_storage_requires_admin(client):
+    """Storage cleanup endpoint should reject guests."""
+    response = client.post("/api/settings/storage-cleanup")
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin session required"
+
 def test_runtime_settings_api_requires_admin(client):
     """Settings management API should reject guests."""
     response = client.get("/api/settings/")

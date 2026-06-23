@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
+from sqlalchemy import text
 from sqlalchemy.engine import make_url
 
 from config import EXPLICIT_SETTINGS_FIELDS, find_executable, settings
@@ -13,6 +14,7 @@ from models import (
     DemucsGarbageCollectionResponse,
     DemucsHealthResponse,
     ProxyInfoResponse,
+    StorageCleanupResponse,
     StorageUsageResponse,
     RuntimeSetting,
     RuntimeSettingsResponse,
@@ -158,6 +160,52 @@ class RuntimeSettingsService:
             database_available=database_available,
             total_bytes=total_bytes,
             total_display=self._format_byte_size(total_bytes),
+        )
+
+    def cleanup_storage(self, db: Session) -> StorageCleanupResponse:
+        """Delete cache scratch files and stale database rows."""
+        cache_deleted_files, cache_deleted_bytes = self._cleanup_cache_root(settings.cache_path)
+
+        deleted_done_tasks = db.execute(
+            text("DELETE FROM processing_tasks WHERE status = 'done'")
+        ).rowcount or 0
+        deleted_missing_queue_items = db.execute(
+            text(
+                """
+                DELETE FROM queue_items
+                WHERE media_id IN (
+                    SELECT id FROM media_items WHERE missing = 1
+                )
+                """
+            )
+        ).rowcount or 0
+        deleted_missing_processing_tasks = db.execute(
+            text(
+                """
+                DELETE FROM processing_tasks
+                WHERE target_media_item_id IN (
+                    SELECT id FROM media_items WHERE missing = 1
+                )
+                """
+            )
+        ).rowcount or 0
+        deleted_missing_media_items = db.execute(
+            text("DELETE FROM media_items WHERE missing = 1")
+        ).rowcount or 0
+        db.commit()
+
+        detail = (
+            f"Deleted {cache_deleted_files} cache files, "
+            f"{deleted_done_tasks} done tasks, and {deleted_missing_media_items} missing media items"
+        )
+        return StorageCleanupResponse(
+            cache_deleted_files=cache_deleted_files,
+            cache_deleted_bytes=cache_deleted_bytes,
+            db_deleted_done_tasks=deleted_done_tasks,
+            db_deleted_missing_queue_items=deleted_missing_queue_items,
+            db_deleted_missing_processing_tasks=deleted_missing_processing_tasks,
+            db_deleted_missing_media_items=deleted_missing_media_items,
+            detail=detail,
         )
 
     def _build_settings_response(
@@ -622,6 +670,62 @@ class RuntimeSettingsService:
             except OSError:
                 logger.warning("Failed to scan storage path=%s", current)
         return total
+
+    @staticmethod
+    def _cleanup_cache_root(cache_root: Path) -> tuple[int, int]:
+        """Delete cache files while preserving the media-thumbnails directory."""
+        if not cache_root.exists():
+            return 0, 0
+
+        deleted_files = 0
+        deleted_bytes = 0
+        for child in cache_root.iterdir():
+            if child.name == "media-thumbnails":
+                continue
+            child_files, child_bytes = RuntimeSettingsService._delete_path_tree(child)
+            deleted_files += child_files
+            deleted_bytes += child_bytes
+        return deleted_files, deleted_bytes
+
+    @staticmethod
+    def _delete_path_tree(path: Path) -> tuple[int, int]:
+        """Delete a file tree and return deleted file count and bytes."""
+        if not path.exists():
+            return 0, 0
+
+        if path.is_symlink() or path.is_file():
+            try:
+                size = path.stat().st_size
+            except OSError:
+                size = 0
+            try:
+                path.unlink()
+            except OSError:
+                logger.warning("Failed to delete cache file path=%s", path)
+                return 0, 0
+            return 1, size
+
+        if not path.is_dir():
+            return 0, 0
+
+        deleted_files = 0
+        deleted_bytes = 0
+        try:
+            entries = list(path.iterdir())
+        except OSError:
+            logger.warning("Failed to list cache directory path=%s", path)
+            return 0, 0
+
+        for child in entries:
+            child_files, child_bytes = RuntimeSettingsService._delete_path_tree(child)
+            deleted_files += child_files
+            deleted_bytes += child_bytes
+
+        try:
+            path.rmdir()
+        except OSError:
+            logger.warning("Failed to remove cache directory path=%s", path)
+        return deleted_files, deleted_bytes
 
     @staticmethod
     def _resolve_sqlite_database_path(database_url: str) -> Path | None:

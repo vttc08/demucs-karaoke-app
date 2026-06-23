@@ -9,6 +9,7 @@ from models import (
     DemucsHealthResponse,
     ProxyInfoRequest,
     ProxyInfoResponse,
+    StorageCleanupResponse,
     StorageUsageResponse,
     RuntimeSettingsResponse,
     RuntimeSettingsUpdateRequest,
@@ -54,6 +55,18 @@ def get_storage_usage(_admin=Depends(require_admin_user)):
     """Estimate local media, cache, and database storage usage."""
     try:
         return runtime_settings_service.get_storage_usage()
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+
+@router.post("/storage-cleanup", response_model=StorageCleanupResponse)
+def cleanup_storage(
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Delete cache scratch files and stale database rows."""
+    try:
+        return runtime_settings_service.cleanup_storage(db)
     except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error))
 

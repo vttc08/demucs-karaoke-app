@@ -1065,6 +1065,34 @@ is `null`, and the UI should show `N/A` for the database row.
 
 ---
 
+### Clean Storage
+```
+POST /api/settings/storage-cleanup
+```
+
+Admin-only endpoint that deletes cache scratch files under the configured cache directory while
+preserving `media-thumbnails/`, then removes stale database rows. The cleanup removes:
+- files and directories under `cache/` except `media-thumbnails/`
+- `processing_tasks` rows with `status = 'done'`
+- queue rows that point at `media_items` marked missing
+- `processing_tasks` rows that point at `media_items` marked missing
+- `media_items` rows where `missing = 1`
+
+**Response:**
+```json
+{
+  "cache_deleted_files": 12,
+  "cache_deleted_bytes": 3456,
+  "db_deleted_done_tasks": 3,
+  "db_deleted_missing_queue_items": 2,
+  "db_deleted_missing_processing_tasks": 1,
+  "db_deleted_missing_media_items": 4,
+  "detail": "Deleted 12 cache files, 3 done tasks, and 4 missing media items"
+}
+```
+
+---
+
 ### Update Runtime Settings
 ```
 PATCH /api/settings/

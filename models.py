@@ -554,6 +554,18 @@ class StorageUsageResponse(BaseModel):
     total_display: str
 
 
+class StorageCleanupResponse(BaseModel):
+    """Summary of cache and database cleanup work."""
+
+    cache_deleted_files: int
+    cache_deleted_bytes: int
+    db_deleted_done_tasks: int
+    db_deleted_missing_queue_items: int
+    db_deleted_missing_processing_tasks: int
+    db_deleted_missing_media_items: int
+    detail: str
+
+
 class DemucsRequest(BaseModel):
     """Request to Demucs service."""
 

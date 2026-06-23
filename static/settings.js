@@ -3,6 +3,7 @@ const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {})
 const SETTINGS_API = appUrl("/api/settings/");
 const DEMUCS_HEALTH_API = appUrl("/api/settings/demucs-health");
 const STORAGE_USAGE_API = appUrl("/api/settings/storage-usage");
+const STORAGE_CLEANUP_API = appUrl("/api/settings/storage-cleanup");
 const DEMUCS_GC_API = appUrl("/api/settings/demucs/gc");
 const PROXY_INFO_API = appUrl("/api/settings/proxy-info");
 const YTDLP_VERSION_API = appUrl("/api/settings/ytdlp/version");
@@ -33,6 +34,8 @@ const storageUsageCacheText = document.getElementById("storage-usage-cache-text"
 const storageUsageDatabaseText = document.getElementById("storage-usage-database-text");
 const storageUsageDatabaseNote = document.getElementById("storage-usage-database-note");
 const storageUsageTotalText = document.getElementById("storage-usage-total-text");
+const storageCleanupBtn = document.getElementById("cleanup-storage-btn");
+const storageCleanupStatus = document.getElementById("storage-cleanup-status");
 const whisperxAlignLanguageGroup = document.getElementById("whisperx-align-language-group");
 const engineStatusDot = document.getElementById("engine-status-dot");
 const engineStatusText = document.getElementById("engine-status-text");
@@ -106,6 +109,21 @@ function showSaveFeedback(message, isError = false) {
     }, 2800);
 }
 
+function formatBytes(bytes) {
+    const value = Number(bytes);
+    if (!Number.isFinite(value) || value < 0) {
+        return "0 B";
+    }
+    const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+    let amount = value;
+    let unitIndex = 0;
+    while (amount >= 1024 && unitIndex < units.length - 1) {
+        amount /= 1024;
+        unitIndex += 1;
+    }
+    return unitIndex === 0 ? `${Math.round(amount)} ${units[unitIndex]}` : `${amount.toFixed(1)} ${units[unitIndex]}`;
+}
+
 function persistEngineStatus(state, detail) {
     try {
         localStorage.setItem(
@@ -174,6 +192,9 @@ function setFormState(disabled) {
     if (checkStorageUsageBtn) {
         checkStorageUsageBtn.disabled = disabled;
     }
+    if (storageCleanupBtn) {
+        storageCleanupBtn.disabled = disabled;
+    }
     if (demucsGcBtn) {
         demucsGcBtn.disabled = disabled;
     }
@@ -231,6 +252,15 @@ function setStorageUsageStatus(message, isError = false) {
     storageUsageStatus.textContent = message;
     storageUsageStatus.classList.toggle("text-error", isError);
     storageUsageStatus.classList.toggle("text-on-surface-variant", !isError);
+}
+
+function setStorageCleanupStatus(message, isError = false) {
+    if (!storageCleanupStatus) {
+        return;
+    }
+    storageCleanupStatus.textContent = message;
+    storageCleanupStatus.classList.toggle("text-error", isError);
+    storageCleanupStatus.classList.toggle("text-on-surface-variant", !isError);
 }
 
 function setDemucsGcStatus(message, isError = false) {
@@ -486,6 +516,46 @@ async function checkStorageUsage() {
     }
 }
 
+async function cleanupStorage() {
+    if (!storageCleanupBtn) {
+        return;
+    }
+
+    storageCleanupBtn.disabled = true;
+    setStorageCleanupStatus(t("settings.storage_cleanup_running"));
+    try {
+        const response = await fetch(STORAGE_CLEANUP_API, {
+            method: "POST",
+        });
+        if (!response.ok) {
+            const errorPayload = await response.json();
+            throw new Error(errorPayload.detail || t("settings.storage_cleanup_failed"));
+        }
+        const data = await response.json();
+        setStorageCleanupStatus(
+            t("settings.storage_cleanup_done", {
+                cache_files: data.cache_deleted_files ?? 0,
+                cache_bytes: formatBytes(data.cache_deleted_bytes ?? 0),
+                tasks: data.db_deleted_done_tasks ?? 0,
+                missing_media: data.db_deleted_missing_media_items ?? 0,
+            }),
+        );
+        showSaveFeedback(
+            t("settings.storage_cleanup_feedback", {
+                cache_files: data.cache_deleted_files ?? 0,
+                missing_media: data.db_deleted_missing_media_items ?? 0,
+            }),
+            false,
+        );
+        await checkStorageUsage();
+    } catch (error) {
+        setStorageCleanupStatus(String(error.message || t("settings.storage_cleanup_failed")), true);
+        showSaveFeedback(String(error.message || t("settings.storage_cleanup_failed")), true);
+    } finally {
+        storageCleanupBtn.disabled = false;
+    }
+}
+
 function applySettingsToForm(data) {
     fields.demucs_api_url.value = data.demucs_api_url || "";
     fields.demucs_model.value = data.demucs_model || "htdemucs";
@@ -683,6 +753,9 @@ if (proxyInfoBtn) {
 }
 if (checkStorageUsageBtn) {
     checkStorageUsageBtn.addEventListener("click", checkStorageUsage);
+}
+if (storageCleanupBtn) {
+    storageCleanupBtn.addEventListener("click", cleanupStorage);
 }
 if (demucsGcBtn) {
     demucsGcBtn.addEventListener("click", triggerDemucsGarbageCollection);
