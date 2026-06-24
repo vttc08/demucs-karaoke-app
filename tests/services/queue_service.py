@@ -220,6 +220,28 @@ def test_queue_service_add_to_queue_stores_whisperx_language_override(db_session
     assert stored.whisperx_align_language_override == "zh"
     assert result.whisperx_align_language_override == "zh"
 
+def test_queue_service_add_to_queue_stores_requested_lyrics_alignment(db_session):
+    """Queue items should persist explicit WhisperX alignment requests."""
+    service = QueueService()
+
+    result = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="lyrics-align",
+            title="Lyrics Align Song",
+            artist="Artist",
+            is_karaoke=True,
+            lyrics_text="[00:01.00]Hello lyrics",
+            lyrics_format="lrc",
+            align_lyrics=True,
+        ),
+    )
+
+    stored = db_session.query(QueueItem).filter(QueueItem.id == result.id).first()
+    assert stored is not None
+    assert stored.requested_lyrics_alignment is True
+    assert stored.media.lyrics_path and stored.media.lyrics_path.endswith(".lrc")
+
 def test_queue_service_get_queue_sets_can_remove_for_owner_and_admin(db_session):
     """Queue responses should expose remove permissions for the current viewer."""
     service = QueueService()

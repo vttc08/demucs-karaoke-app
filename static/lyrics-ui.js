@@ -44,6 +44,7 @@ class LyricsUIAdapter {
       uploadBtn: 'uploadBtn',
       fileInput: 'fileInput',
       googleLink: 'googleLink',
+      whisperxLanguageInput: 'whisperxLanguageInput',
       panel: 'panel',
     };
 
@@ -142,6 +143,12 @@ class LyricsUIAdapter {
       this.elements.fileInput.addEventListener('change', handler);
       this.eventListeners.push({ element: this.elements.fileInput, event: 'change', handler });
     }
+
+    if (this.elements.whisperxLanguageInput) {
+      const handler = (e) => this.manager.setWhisperxAlignLanguageOverride(e.target.value);
+      this.elements.whisperxLanguageInput.addEventListener('input', handler);
+      this.eventListeners.push({ element: this.elements.whisperxLanguageInput, event: 'input', handler });
+    }
   }
 
   /**
@@ -169,6 +176,7 @@ class LyricsUIAdapter {
     this.updateUploadButton(state);
     this.updatePanelVisibility(state.lyricsEnabled);
     this.updateMetadataInputs(state);
+    this.updateWhisperxLanguageInput(state);
     this.updateTextareaState(state);
     this.updateInputDisabledState(state.lyricsEnabled);
     this.updateGoogleSearchLink();
@@ -276,6 +284,21 @@ class LyricsUIAdapter {
   }
 
   /**
+   * Keep optional WhisperX override input in sync with manager state.
+   */
+  updateWhisperxLanguageInput(state) {
+    if (!this.elements.whisperxLanguageInput) return;
+
+    const value = state.whisperxAlignLanguageOverride || '';
+    if (this.elements.whisperxLanguageInput.value !== value) {
+      this.elements.whisperxLanguageInput.value = value;
+    }
+    const enabled = Boolean(state.lyricsEnabled && state.alignLyricsRequested);
+    this.elements.whisperxLanguageInput.disabled = !enabled;
+    this.elements.whisperxLanguageInput.classList.toggle('opacity-60', !enabled);
+  }
+
+  /**
    * Update input disabled state
    */
   updateInputDisabledState(lyricsEnabled) {
@@ -322,6 +345,9 @@ class LyricsUIAdapter {
     }
     if (this.elements.textarea) {
       this.elements.textarea.value = '';
+    }
+    if (this.elements.whisperxLanguageInput) {
+      this.elements.whisperxLanguageInput.value = '';
     }
     this.manager.reset();
   }

@@ -570,6 +570,9 @@ def test_karaoke_service_resolves_whisperx_alignment_settings_override():
 
         override_item = QueueItem(whisperx_align_language_override="JA")
         assert service._resolve_whisperx_alignment_settings(override_item) == ("ja", False)
+        assert service._resolve_whisperx_alignment_settings(
+            whisperx_align_language_override="ZH"
+        ) == ("zh", False)
         assert service._resolve_whisperx_alignment_settings(None) == ("en", True)
     finally:
         settings.whisperx_align_language = original_align_language

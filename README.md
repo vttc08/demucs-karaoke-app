@@ -117,7 +117,7 @@ and `/static/...`.
      - Local matches are preferred in results; duplicate YouTube matches are hidden
      - Tap **Add** on a YouTube result to open the queue configuration interaction
      - Tap **Add** on a local library result to enqueue it immediately as a local file
-     - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal title/artist inputs, manual search, a Google search link, an editable lyrics box, lyrics file upload, and an optional WhisperX language override before adding to queue; resolved metadata is saved back into the media entry before queueing
+     - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal the prominent WhisperX word-alignment toggle, title/artist inputs, manual search, a Google search link, an editable lyrics box, lyrics file upload, and an optional WhisperX language override before adding to queue; resolved metadata is saved back into the media entry before queueing
      - Confirm to add to queue
      - Queue items show who requested them
       - Open **Lyrics Viewer** from the queue page to read current-song lyrics on phone/secondary display
@@ -179,7 +179,7 @@ and `/static/...`.
           - Use **Add to Queue** to enqueue a local media row through the existing queue API
           - Guests can browse and queue items only; edit, scan, upload, and delete controls are admin-only
           - Admin users can use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
-          - The edit modal can enable **AI Karaoke** for single-track media when Demucs is online; saving creates a monitored media-processing task
+          - The edit modal can enable **AI Karaoke** for single-track media when Demucs is online; saving creates a monitored media-processing task, and WhisperX lyrics alignment can use a per-save language override
           - Existing multi-track items show AI Karaoke as enabled but locked, preventing duplicate separation work
           - Admin users can use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
           - Lyrics sidecars are classified by suffix: `.lrc` and `.txt` stay under the normal lyrics badge, while WhisperX word-aligned `.json` sidecars get a separate badge
@@ -196,7 +196,7 @@ See [docs/vocal-sync.md](docs/vocal-sync.md) for the Add Vocals workflow and off
 
 6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
         - Upload MP3, MP4, WebM, MKV, MOV, AVI, M4V, or ZIP bundles into the media library with title and artist metadata
-        - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use, and the lyrics file picker accepts `.lrc`, `.txt`, or WhisperX `.json`
+        - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use, the lyrics file picker accepts `.lrc`, `.txt`, or WhisperX `.json`, and WhisperX alignment can use a per-upload language override
         - **AI Karaoke** is available only while Demucs is online and can process uploads whether or not **Add to queue** is enabled
         - Queued AI uploads use the queue preparation task; non-queued AI uploads create a media-library karaoke task
         - If Demucs becomes unavailable during submission, the upload is still saved and optionally queued without karaoke processing

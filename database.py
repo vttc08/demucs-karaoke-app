@@ -207,6 +207,8 @@ def _ensure_processing_tasks_columns(bind_engine=None):
         statements.append("ALTER TABLE processing_tasks ADD COLUMN last_error_summary TEXT")
     if "last_error_detail" not in columns:
         statements.append("ALTER TABLE processing_tasks ADD COLUMN last_error_detail TEXT")
+    if "whisperx_align_language_override" not in columns:
+        statements.append("ALTER TABLE processing_tasks ADD COLUMN whisperx_align_language_override TEXT")
     if "started_at" not in columns:
         statements.append("ALTER TABLE processing_tasks ADD COLUMN started_at DATETIME")
     if "finished_at" not in columns:

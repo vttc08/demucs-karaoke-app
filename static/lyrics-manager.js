@@ -27,6 +27,7 @@ class LyricsManager {
       artist: '',
       youtubeTitle: '',
       alignLyricsRequested: false,
+      whisperxAlignLanguageOverride: '',
     };
     
     this.listeners = [];
@@ -81,6 +82,7 @@ class LyricsManager {
     this.state.artist = '';
     this.state.youtubeTitle = '';
     this.state.alignLyricsRequested = false;
+    this.state.whisperxAlignLanguageOverride = '';
     this.notifyListeners();
   }
 
@@ -197,6 +199,16 @@ class LyricsManager {
    */
   setAlignLyricsRequested(requested) {
     this.state.alignLyricsRequested = Boolean(requested);
+    this.notifyListeners();
+  }
+
+  /**
+   * Set optional per-submission WhisperX language override.
+   */
+  setWhisperxAlignLanguageOverride(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    this.state.whisperxAlignLanguageOverride =
+      normalized === 'auto' || normalized === 'default' ? '' : normalized;
     this.notifyListeners();
   }
 
@@ -378,11 +390,16 @@ class LyricsManager {
       return null;
     }
 
-    return {
+    const alignLyrics = Boolean(this.state.alignLyricsRequested);
+    const payload = {
       lyrics_text: lyricsText,
       lyrics_format: this.state.format,
-      align_lyrics: Boolean(this.state.alignLyricsRequested),
+      align_lyrics: alignLyrics,
     };
+    if (alignLyrics && this.state.whisperxAlignLanguageOverride) {
+      payload.whisperx_align_language_override = this.state.whisperxAlignLanguageOverride;
+    }
+    return payload;
   }
 
   /**

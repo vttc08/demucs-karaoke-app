@@ -147,6 +147,7 @@ class ProcessingTask(Base):
     attempt_count = Column(Integer, nullable=False, default=0)
     last_error_summary = Column(String, nullable=True)
     last_error_detail = Column(String, nullable=True)
+    whisperx_align_language_override = Column(String, nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(
         DateTime, default=utc_now, onupdate=utc_now, nullable=False

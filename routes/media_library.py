@@ -133,6 +133,15 @@ def _validate_alignment_request(
         raise HTTPException(status_code=400, detail="WhisperX alignment requires plain text or LRC lyrics")
 
 
+def _normalize_whisperx_align_language_override(value: object) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise HTTPException(status_code=400, detail="whisperx_align_language_override must be a string or null")
+    normalized = " ".join(value.split()).strip().lower()
+    return normalized if normalized not in {"", "auto", "default"} else None
+
+
 def _is_zip_root_entry(filename: str) -> bool:
     normalized = filename.replace("\\", "/").strip()
     if not normalized or normalized.endswith("/"):
@@ -223,6 +232,7 @@ async def upload_media(
     lyrics_text: str | None = Form(None),
     lyrics_format: str | None = Form(None),
     align_lyrics: bool = Form(False),
+    whisperx_align_language_override: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     """Upload a new media file and create a library entry."""
@@ -242,12 +252,16 @@ async def upload_media(
     karaoke_task_id = None
     karaoke_warning = None
     karaoke_warning_detail = None
+    whisperx_override = _normalize_whisperx_align_language_override(
+        whisperx_align_language_override
+    )
 
     if ext == ".zip":
         karaoke_requested = False
         alignment_requested = False
         lyrics_text = None
         lyrics_format = None
+        whisperx_override = None
     elif alignment_requested:
         karaoke_requested = True
 
@@ -332,6 +346,9 @@ async def upload_media(
                         artist=media_item.artist,
                         is_karaoke=karaoke_requested and karaoke_available,
                         align_lyrics=alignment_requested and karaoke_available,
+                        whisperx_align_language_override=(
+                            whisperx_override if alignment_requested and karaoke_available else None
+                        ),
                     ),
                 )
                 await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
@@ -347,7 +364,11 @@ async def upload_media(
                     karaoke_started = bool(karaoke_task_id)
                 elif karaoke_requested and karaoke_available:
                     task = (
-                        processing_task_service.get_or_create_media_karaoke_align_task(db, media_item.id)
+                        processing_task_service.get_or_create_media_karaoke_align_task(
+                            db,
+                            media_item.id,
+                            whisperx_align_language_override=whisperx_override,
+                        )
                         if alignment_requested
                         else processing_task_service.get_or_create_media_task(db, media_item.id)
                     )
@@ -711,6 +732,9 @@ def rename_media_item(
     align_lyrics = payload.get("align_lyrics", False)
     if not isinstance(align_lyrics, bool):
         raise HTTPException(status_code=400, detail="align_lyrics must be a boolean")
+    whisperx_override = _normalize_whisperx_align_language_override(
+        payload.get("whisperx_align_language_override")
+    )
     _validate_alignment_request(
         align_lyrics=align_lyrics,
         lyrics_text=lyrics_text,
@@ -760,9 +784,17 @@ def rename_media_item(
             if karaoke_available:
                 try:
                     if align_lyrics and media_item.vocals_path and media_item.vocals_path.strip():
-                        task = processing_task_service.get_or_create_media_lyrics_align_task(db, item_id)
+                        task = processing_task_service.get_or_create_media_lyrics_align_task(
+                            db,
+                            item_id,
+                            whisperx_align_language_override=whisperx_override,
+                        )
                     elif align_lyrics:
-                        task = processing_task_service.get_or_create_media_karaoke_align_task(db, item_id)
+                        task = processing_task_service.get_or_create_media_karaoke_align_task(
+                            db,
+                            item_id,
+                            whisperx_align_language_override=whisperx_override,
+                        )
                     else:
                         task = processing_task_service.get_or_create_media_task(db, item_id)
                     task_execution_coordinator.start(task.id)

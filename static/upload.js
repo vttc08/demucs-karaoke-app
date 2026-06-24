@@ -89,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
             googleLink: '#upload-lyrics-google-btn',
             uploadBtn: '#upload-lyrics-upload-btn',
             fileInput: '#upload-lyrics-file',
+            whisperxLanguageInput: '#upload-lyrics-whisperx-language-code',
             panel: '#upload-lyrics-form-section'
         });
         lyricsUIAdapter.initialize();
@@ -325,6 +326,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 formData.append('lyrics_text', lyricsPayload.lyrics_text);
                 formData.append('lyrics_format', lyricsPayload.lyrics_format);
                 formData.append('align_lyrics', Boolean(lyricsPayload.align_lyrics));
+                if (lyricsPayload.whisperx_align_language_override) {
+                    formData.append(
+                        'whisperx_align_language_override',
+                        lyricsPayload.whisperx_align_language_override
+                    );
+                }
             }
         }
 

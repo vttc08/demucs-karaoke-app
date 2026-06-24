@@ -20,7 +20,7 @@ This project currently uses two services:
 2. Demucs service
 - receives audio processing request
 - runs demucs two-stem vocals separation
-- optionally runs WhisperX forced alignment when lyrics are supplied
+- optionally runs WhisperX forced alignment when lyrics are supplied and alignment is requested
 - returns a ZIP payload containing both `no_vocals` and `vocals` stems, plus `aligned_lyrics.json` when alignment was performed
 
 ## Test layout
@@ -79,6 +79,9 @@ This project currently uses two services:
   libraries are absent, the workflow still prepares the review session and falls back to `0.00` so
   the admin can do manual sync. Review sessions live under `cache/vocal_sync/` until the admin
   commits a `/media/<stem>.vocals.wav` sidecar.
+- Queue items store per-song WhisperX language overrides on `queue_items`; standalone media-library
+  karaoke/alignment tasks store per-task overrides on `processing_tasks` so `/upload` and `/media`
+  can apply one-off language choices without changing `/settings` defaults.
 
 ## Real-time queue update architecture
 

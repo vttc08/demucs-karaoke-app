@@ -494,6 +494,21 @@
                         <span id="queue-config-lyrics-state" class="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.idle') }}</span>
                     </div>
 
+                    <div id="queue-config-align-card" class="rounded-2xl border border-primary/30 bg-primary/10 p-3 shadow-[0_0_20px_rgba(0,242,255,0.08)] sm:p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-primary text-lg">graphic_eq</span>
+                                    <span class="text-sm font-black text-on-surface">{{ t('queue.whisperx_align_title') }}</span>
+                                </div>
+                                <p id="queue-config-align-detail" class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">{{ t('queue.whisperx_align_detail') }}</p>
+                            </div>
+                            <button id="queue-config-align-toggle" type="button" role="switch" aria-checked="true" class="inline-flex h-7 w-12 flex-none shrink-0 items-center rounded-full bg-primary p-1 transition-colors">
+                                <span class="h-5 w-5 translate-x-5 rounded-full bg-white transition-transform"></span>
+                            </button>
+                        </div>
+                    </div>
+
                     <label class="flex flex-col gap-2">
                         <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.whisperx_language_override') }}</span>
                         <input

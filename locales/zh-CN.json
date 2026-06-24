@@ -387,6 +387,8 @@
   "queue.lyrics_already_detail": "这看起来已经是歌词视频，因此默认不搜索歌词。",
   "queue.lyrics_detail": "加入队列前解析带时间轴的歌词。",
   "queue.lyrics_resolving": "歌词仍在解析中",
+  "queue.whisperx_align_title": "WhisperX 逐词对齐",
+  "queue.whisperx_align_detail": "将这些歌词发送到 Demucs，由 WhisperX 生成逐词时间轴。",
   "queue.offline": "离线",
   "queue.live": "实时",
   "queue.no_one_here": "还没有人",

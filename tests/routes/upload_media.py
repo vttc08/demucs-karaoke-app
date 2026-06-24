@@ -16,6 +16,7 @@ def test_upload_page_loads(client):
     assert "Infer from filename" in response.text
     assert 'accept=".mp3,.mp4,.webm,.mkv,.mov,.avi,.m4v,.zip"' in response.text
     assert 'accept=".lrc,.txt,.json"' in response.text
+    assert 'id="upload-lyrics-whisperx-language-code"' in response.text
 
 def test_upload_media_saves_file_and_queues_item(client, tmp_path):
     """Uploaded media should be saved, catalogued, and queued when requested."""
@@ -142,6 +143,7 @@ def test_upload_media_alignment_request_marks_queue_item(client, tmp_path):
                     "align_lyrics": "true",
                     "lyrics_text": "[00:01.00]Uploaded line",
                     "lyrics_format": "lrc",
+                    "whisperx_align_language_override": "JA",
                 },
                 files={"file": ("align-upload.mp4", b"video-bytes", "video/mp4")},
             )
@@ -157,6 +159,7 @@ def test_upload_media_alignment_request_marks_queue_item(client, tmp_path):
             assert queue_item is not None
             assert queue_item.requested_karaoke is True
             assert queue_item.requested_lyrics_alignment is True
+            assert queue_item.whisperx_align_language_override == "ja"
             assert queue_item.media.lyrics_path == f"/media/{expected_stem}.lrc"
     finally:
         settings.media_path = original_media
@@ -184,6 +187,52 @@ def test_upload_media_alignment_rejects_json_lyrics(client, tmp_path):
         assert "plain text or LRC" in response.json()["detail"]
     finally:
         settings.media_path = original_media
+
+def test_upload_media_standalone_alignment_stores_whisperx_override(client, tmp_path):
+    """Standalone upload alignment tasks should keep the per-submission language override."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        healthy = DemucsHealthResponse(api_url="http://demucs", healthy=True, detail="ok")
+        with (
+            patch(
+                "routes.media_library.runtime_settings_service.get_demucs_health",
+                return_value=healthy,
+            ),
+            patch("routes.media_library.task_execution_coordinator.start") as mock_start,
+        ):
+            response = client.post(
+                "/api/media/upload",
+                data={
+                    "title": "Standalone Align",
+                    "add_to_queue": "false",
+                    "align_lyrics": "true",
+                    "lyrics_text": "Plain line",
+                    "lyrics_format": "txt",
+                    "whisperx_align_language_override": "ZH",
+                },
+                files={"file": ("standalone-align.mp3", b"audio-bytes", "audio/mpeg")},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["queued"] is False
+        assert payload["karaoke_started"] is True
+        mock_start.assert_called_once_with(payload["karaoke_task_id"])
+        with TestingSessionLocal() as db:
+            task = db.query(ProcessingTask).filter(
+                ProcessingTask.id == payload["karaoke_task_id"]
+            ).one()
+            assert task.task_type == "media_karaoke_align"
+            assert task.whisperx_align_language_override == "zh"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
 
 def test_upload_media_persists_json_lyrics_sidecar(client, tmp_path):
     """Uploaded WhisperX JSON should persist as a reusable sidecar."""
@@ -619,6 +668,7 @@ def test_media_management_page_shows_edit_controls_for_admin(client):
     assert b'data-action="scan-library"' in response.content
     assert b'data-action="upload-media"' in response.content
     assert b'data-action="open-trim-editor"' in response.content
+    assert b'id="media-edit-lyrics-whisperx-language-code"' in response.content
     assert b'data-action="download-media-package"' in response.content
     assert b"File Management" in response.content
     assert b'id="media-file-management-panel"' in response.content
@@ -1317,6 +1367,7 @@ def test_media_edit_alignment_with_existing_vocals_creates_align_task(client, tm
                     "align_lyrics": True,
                     "lyrics_text": "[00:01.00]Line",
                     "lyrics_format": "lrc",
+                    "whisperx_align_language_override": "KO",
                 },
             )
 
@@ -1332,6 +1383,7 @@ def test_media_edit_alignment_with_existing_vocals_creates_align_task(client, tm
             ).one()
             assert task.task_type == "media_lyrics_align"
             assert task.target_media_item_id == media_id
+            assert task.whisperx_align_language_override == "ko"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
@@ -1374,6 +1426,7 @@ def test_media_edit_alignment_without_vocals_creates_karaoke_align_task(client, 
                     "align_lyrics": True,
                     "lyrics_text": "Plain line",
                     "lyrics_format": "txt",
+                    "whisperx_align_language_override": "FR",
                 },
             )
 
@@ -1387,6 +1440,7 @@ def test_media_edit_alignment_without_vocals_creates_karaoke_align_task(client, 
             ).one()
             assert task.task_type == "media_karaoke_align"
             assert task.target_media_item_id == media_id
+            assert task.whisperx_align_language_override == "fr"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache

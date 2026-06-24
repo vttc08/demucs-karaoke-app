@@ -56,6 +56,7 @@ function initializeMediaEditLyricsManager() {
         googleLink: '#media-edit-lyrics-google-btn',
         uploadBtn: '#media-edit-lyrics-upload-btn',
         fileInput: '#media-edit-lyrics-file',
+        whisperxLanguageInput: '#media-edit-lyrics-whisperx-language-code',
         panel: '#media-edit-lyrics-form-section'
     });
     lyricsUIAdapter.initialize();
@@ -1592,6 +1593,9 @@ async function saveEditModal(event) {
         if ((lyricsPayloadChanged || alignRequested) && currentLyricsState?.lyricsEnabled && currentLyricsText) {
             requestBody.lyrics_text = currentLyricsText;
             requestBody.lyrics_format = currentLyricsFormat;
+            if (alignRequested && currentLyricsState.whisperxAlignLanguageOverride) {
+                requestBody.whisperx_align_language_override = currentLyricsState.whisperxAlignLanguageOverride;
+            }
         }
 
         const response = await fetch(appUrl(`/api/media/${Number(activeEditItemId)}`), {
