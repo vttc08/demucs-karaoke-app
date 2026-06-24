@@ -37,6 +37,7 @@ env/
 .env
 .mcp.json
 .codex/
+.wrangler/
 
 # Database
 *.db

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -15,7 +16,7 @@ STATIC_DOCS_DIR = ROOT / "static" / "docs"
 
 def run_mkdocs_build() -> None:
     subprocess.run(
-        ["uv", "run", "mkdocs", "build", "--clean"],
+        [sys.executable, "-m", "mkdocs", "build", "--clean", "-f", "mkdocs.yml"],
         cwd=DOCS_SITE_DIR,
         check=True,
     )
