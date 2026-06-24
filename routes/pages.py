@@ -36,6 +36,7 @@ stage_lobby_service = StageLobbyService()
 media_trim_service = MediaTrimService()
 auth_service = AuthService()
 _VIDEO_SUFFIXES = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
+_DOCS_ROOT = "/help"
 
 
 def app_url(path: str | None) -> str:
@@ -52,6 +53,25 @@ def app_url(path: str | None) -> str:
     return f"{base_path}{path}"
 
 
+def build_docs_url(locale: str | None = None, path: str | None = None) -> str:
+    """Build a docs-site URL for the given locale and optional page path."""
+    active_locale = normalize_locale(locale) or locale or "en"
+    docs_locale = active_locale.split("-", 1)[0].lower()
+    docs_root = f"{_DOCS_ROOT}/" if docs_locale == "en" else f"{_DOCS_ROOT}/{docs_locale}/"
+    normalized_path = (path or "").strip("/")
+    if normalized_path:
+        return f"{docs_root}{normalized_path}/"
+    return docs_root
+
+
+@pass_context
+def docs_url(context, path: str | None = None, locale: str | None = None) -> str:
+    """Build a docs URL using the active request locale unless overridden."""
+    request = context.get("request")
+    active_locale = locale or resolve_locale(request)
+    return app_url(build_docs_url(active_locale, path))
+
+
 def is_active_path(request: Request, path: str) -> bool:
     """Return whether the current request is on an app-local path."""
     current_path = request.url.path
@@ -61,6 +81,7 @@ def is_active_path(request: Request, path: str) -> bool:
 
 templates.env.globals["app_url"] = app_url
 templates.env.globals["is_active_path"] = is_active_path
+templates.env.globals["docs_url"] = docs_url
 templates.env.filters["public_url"] = app_url
 
 

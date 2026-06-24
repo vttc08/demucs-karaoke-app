@@ -1,4 +1,5 @@
 from .common import *
+from routes.pages import build_docs_url
 
 
 
@@ -371,11 +372,32 @@ def test_settings_page_loads_for_admin(client):
     assert b"Log out" in response.content
     assert b">Save<" in response.content
     assert b">Refresh<" in response.content
+    assert 'href="/help/"' in response.text
+    assert 'aria-label="Open documentation"' in response.text
     assert b"Admin Access" not in response.content
     assert 'aria-label="Settings"' in response.text
     assert 'aria-label="Media"' in response.text
     assert 'aria-label="Upload"' not in response.text
     assert "shield_person" not in response.text
+
+
+def test_settings_page_uses_localized_docs_path_for_zh(client):
+    """Settings docs button should follow the active locale."""
+    authenticate_admin_client(client)
+
+    response = client.get("/settings", cookies={LOCALE_COOKIE: "zh-CN"})
+
+    assert response.status_code == 200
+    assert 'href="/help/zh/"' in response.text
+    assert 'aria-label="打开文档"' in response.text
+
+
+def test_build_docs_url_uses_primary_language_slug():
+    """Docs URLs should stay locale-driven and root English at /help/."""
+    assert build_docs_url("en") == "/help/"
+    assert build_docs_url("zh-CN") == "/help/zh/"
+    assert build_docs_url("fr-FR") == "/help/fr/"
+    assert build_docs_url("en", "getting-started/overview") == "/help/getting-started/overview/"
 
 def test_admin_login_rejects_invalid_credentials(client):
     """Admin login should not grant access without valid DB credentials."""

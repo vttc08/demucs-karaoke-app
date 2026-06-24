@@ -479,6 +479,7 @@
   "queue_lyrics.plain_mode": "滚动",
   "settings.admin_session": "管理员会话",
   "settings.admin_settings": "设置",
+  "settings.docs_help": "打开文档",
   "settings.cache_path": "缓存路径",
   "settings.check_version": "检查版本",
   "settings.description": "管理卡拉 OK 处理、存储路径、搜索行为和舞台链接。保存后的更改会立即应用到新请求。",
