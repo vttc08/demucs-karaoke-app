@@ -706,12 +706,21 @@ def test_cancel_job_marks_terminal(monkeypatch, tmp_path):
     class FakeProcess:
         def __init__(self):
             self.terminated = False
+            self.killed = False
 
         def poll(self):
-            return None
+            return None if not self.killed else 1
 
         def terminate(self):
             self.terminated = True
+
+        def wait(self, timeout=None):
+            if not self.killed:
+                raise demucs_app.subprocess.TimeoutExpired(["fake"], timeout or 0)
+            return 1
+
+        def kill(self):
+            self.killed = True
 
     process = FakeProcess()
 
@@ -731,6 +740,7 @@ def test_cancel_job_marks_terminal(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(demucs_app, "_start_job", fake_start_job)
+    monkeypatch.setattr(demucs_app, "_run_garbage_collection", lambda **_: None)
 
     client = TestClient(demucs_app.app)
     created = client.post(
@@ -741,8 +751,71 @@ def test_cancel_job_marks_terminal(monkeypatch, tmp_path):
     cancel_response = client.delete(f"/jobs/{job_id}")
     assert cancel_response.status_code == 202
     assert process.terminated is True
+    assert process.killed is True
     status_payload = client.get(f"/jobs/{job_id}").json()
-    assert status_payload["progress_message"] == "Cancel requested"
+    assert status_payload["status"] == "canceled"
+    assert status_payload["progress_message"] == "Canceled"
+
+
+def test_cancel_alignment_job_terminates_process_and_cleans_io(monkeypatch, tmp_path):
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    demucs_app.INCOMING_ROOT.mkdir(parents=True, exist_ok=True)
+    demucs_app.OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(demucs_runner, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_runner, "OUTPUT_ROOT", tmp_path / "output")
+    monkeypatch.setattr(demucs_app, "_run_garbage_collection", lambda **_: None)
+
+    class FakeProcess:
+        def __init__(self):
+            self.terminated = False
+
+        def is_alive(self):
+            return not self.terminated
+
+        def terminate(self):
+            self.terminated = True
+
+        def join(self, timeout=None):
+            return None
+
+    process = FakeProcess()
+
+    def fake_start_alignment_job(payload, original_filename, config):
+        job_id, incoming_dir, output_dir, _input_path = demucs_runner.prepare_job_input(payload, original_filename)
+        (incoming_dir / "input.wav").write_bytes(b"audio")
+        (output_dir / "partial.tmp").write_bytes(b"partial")
+        return demucs_app.job_store.create(
+            demucs_app.DemucsJobState(
+                job_id=job_id,
+                model=config.model,
+                device=config.device,
+                output_format=config.output_format,
+                mp3_bitrate=config.mp3_bitrate,
+                original_filename=original_filename,
+                status="running",
+                job_kind="lyrics_alignment",
+                process=process,
+            )
+        )
+
+    monkeypatch.setattr(demucs_app, "_start_alignment_job", fake_start_alignment_job)
+
+    client = TestClient(demucs_app.app)
+    created = client.post(
+        "/align-jobs",
+        data={"lyrics_text": "hello", "device": "cpu"},
+        files={"file": ("vocals.wav", b"audio", "audio/wav")},
+    )
+    job_id = created.json()["job_id"]
+
+    response = client.delete(f"/jobs/{job_id}")
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "canceled"
+    assert process.terminated is True
+    assert not (demucs_app.INCOMING_ROOT / job_id).exists()
+    assert not (demucs_app.OUTPUT_ROOT / job_id).exists()
 
 
 def test_delete_job_artifacts_removes_terminal_job_and_io(monkeypatch, tmp_path):

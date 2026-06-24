@@ -436,7 +436,7 @@ The stage page uses a websocket-first model:
   - `task_type` (`queue_prepare`, `media_karaoke`, `media_karaoke_align`, `media_lyrics_align`)
   - `source_kind` (`youtube`, `library_media`, `uploaded_media`)
   - target linkage to queue and/or media rows
-  - coarse durable `status` (`pending`, `downloading`, `processing`, `done`, `failed`)
+  - coarse durable `status` (`pending`, `downloading`, `processing`, `done`, `failed`, `canceled`)
   - coarse `stage` (`download`, `extract_audio`, `demucs`, `finalize`, etc.)
   - retry metadata (`attempt_count`)
   - terminal failure summaries (`last_error_summary`, `last_error_detail`)
@@ -466,6 +466,7 @@ The stage page uses a websocket-first model:
   - local ffmpeg extraction/remux restart from the beginning
   - Demucs work restarts from the beginning of that stage
 - The app does not currently attempt byte-range or partial-percentage resume.
+- Manual retry moves terminal `failed` or `canceled` task rows back to `pending` and starts the same task id again.
 
 ## Runtime outbound proxy flow
 

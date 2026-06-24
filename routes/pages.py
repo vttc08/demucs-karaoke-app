@@ -53,6 +53,24 @@ def app_url(path: str | None) -> str:
     return f"{base_path}{path}"
 
 
+def static_asset_url(path: str) -> str:
+    """Build a static asset URL with an mtime cache-buster when the file exists."""
+    url = app_url(path)
+    normalized = path.strip()
+    if not normalized.startswith("/static/"):
+        return url
+
+    relative_path = normalized.removeprefix("/static/")
+    asset_path = Path(__file__).resolve().parent.parent / "static" / relative_path
+    try:
+        version = asset_path.stat().st_mtime_ns
+    except OSError:
+        return url
+
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}v={version}"
+
+
 def build_docs_url(locale: str | None = None, path: str | None = None) -> str:
     """Build a docs-site URL for the given locale and optional page path."""
     active_locale = normalize_locale(locale) or locale or "en"
@@ -80,6 +98,7 @@ def is_active_path(request: Request, path: str) -> bool:
 
 
 templates.env.globals["app_url"] = app_url
+templates.env.globals["static_asset_url"] = static_asset_url
 templates.env.globals["is_active_path"] = is_active_path
 templates.env.globals["docs_url"] = docs_url
 templates.env.filters["public_url"] = app_url

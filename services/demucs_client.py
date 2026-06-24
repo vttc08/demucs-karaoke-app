@@ -121,6 +121,20 @@ class DemucsClient:
             seen_lines.add(line)
             callback("remote", line)
 
+    async def _cancel_remote_job(
+        self,
+        client: httpx.AsyncClient,
+        job_id: str,
+        log_callback: LogCallback | None = None,
+    ) -> None:
+        try:
+            await client.delete(f"{self.api_url}/jobs/{job_id}", timeout=self.DELETE_TIMEOUT_SECONDS)
+            if log_callback is not None:
+                log_callback("remote", f"Requested remote Demucs cancellation for job {job_id}")
+        except Exception as error:
+            if log_callback is not None:
+                log_callback("remote", f"Failed to request remote Demucs cancellation for job {job_id}: {error}")
+
     async def separate_vocals(
         self,
         audio_path: Path,
@@ -172,11 +186,15 @@ class DemucsClient:
                 str(payload.get("progress_message") or "Queued"),
                 {"job_id": job_id, "status": payload.get("status")},
             )
+            if log_callback is not None:
+                log_callback("remote", f"Started remote Demucs job {job_id}")
 
+            remote_cancel_requested = False
             try:
                 while True:
                     if cancel_event is not None and cancel_event.is_set():
-                        await client.delete(f"{self.api_url}/jobs/{job_id}")
+                        await self._cancel_remote_job(client, job_id, log_callback)
+                        remote_cancel_requested = True
                         raise asyncio.CancelledError()
 
                     status_response = await client.get(f"{self.api_url}/jobs/{job_id}")
@@ -239,12 +257,13 @@ class DemucsClient:
                         else settings.demucs_poll_interval_seconds
                     )
                     await asyncio.sleep(poll_interval)
+            except asyncio.CancelledError:
+                if not remote_cancel_requested:
+                    await self._cancel_remote_job(client, job_id, log_callback)
+                raise
             except Exception:
-                if cancel_event is not None and cancel_event.is_set():
-                    try:
-                        await client.delete(f"{self.api_url}/jobs/{job_id}")
-                    except Exception:
-                        pass
+                if cancel_event is not None and cancel_event.is_set() and not remote_cancel_requested:
+                    await self._cancel_remote_job(client, job_id, log_callback)
                 raise
 
     async def align_lyrics(
@@ -301,11 +320,15 @@ class DemucsClient:
                 str(payload.get("progress_message") or "Queued"),
                 {"job_id": job_id, "status": payload.get("status")},
             )
+            if log_callback is not None:
+                log_callback("remote", f"Started remote WhisperX alignment job {job_id}")
 
+            remote_cancel_requested = False
             try:
                 while True:
                     if cancel_event is not None and cancel_event.is_set():
-                        await client.delete(f"{self.api_url}/jobs/{job_id}")
+                        await self._cancel_remote_job(client, job_id, log_callback)
+                        remote_cancel_requested = True
                         raise asyncio.CancelledError()
 
                     status_response = await client.get(f"{self.api_url}/jobs/{job_id}")
@@ -354,12 +377,13 @@ class DemucsClient:
                         else settings.demucs_poll_interval_seconds
                     )
                     await asyncio.sleep(poll_interval)
+            except asyncio.CancelledError:
+                if not remote_cancel_requested:
+                    await self._cancel_remote_job(client, job_id, log_callback)
+                raise
             except Exception:
-                if cancel_event is not None and cancel_event.is_set():
-                    try:
-                        await client.delete(f"{self.api_url}/jobs/{job_id}")
-                    except Exception:
-                        pass
+                if cancel_event is not None and cancel_event.is_set() and not remote_cancel_requested:
+                    await self._cancel_remote_job(client, job_id, log_callback)
                 raise
 
     def preload_whisperx_models(

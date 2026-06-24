@@ -1,6 +1,7 @@
 import gc
 import json
 import logging
+import multiprocessing
 import shutil
 import subprocess
 import sys
@@ -321,6 +322,55 @@ def _cleanup_job_files(job_id: str) -> None:
             shutil.rmtree(path, ignore_errors=True)
 
 
+def _process_is_running(process) -> bool:
+    if process is None:
+        return False
+    poll = getattr(process, "poll", None)
+    if callable(poll):
+        return poll() is None
+    is_alive = getattr(process, "is_alive", None)
+    if callable(is_alive):
+        return bool(is_alive())
+    return False
+
+
+def _wait_for_process(process, timeout: float | None = None):
+    wait = getattr(process, "wait", None)
+    if callable(wait):
+        return wait(timeout=timeout) if timeout is not None else wait()
+    join = getattr(process, "join", None)
+    if callable(join):
+        join(timeout)
+        exitcode = getattr(process, "exitcode", None)
+        return 0 if exitcode is None else exitcode
+    return None
+
+
+def _terminate_process(process, *, grace_seconds: float = 5.0) -> None:
+    if process is None or not _process_is_running(process):
+        return
+
+    terminate = getattr(process, "terminate", None)
+    if callable(terminate):
+        terminate()
+
+    try:
+        _wait_for_process(process, timeout=grace_seconds)
+    except subprocess.TimeoutExpired:
+        pass
+
+    if not _process_is_running(process):
+        return
+
+    kill = getattr(process, "kill", None)
+    if callable(kill):
+        kill()
+        try:
+            _wait_for_process(process, timeout=grace_seconds)
+        except subprocess.TimeoutExpired:
+            pass
+
+
 def _folder_usage(path: Path) -> tuple[int, int]:
     total_bytes = 0
     file_count = 0
@@ -438,7 +488,7 @@ def _select_gc_mode(snapshot: dict[str, object]) -> str:
 def _run_garbage_collection(
     *,
     requested_mode: Literal["adaptive", "partial", "cuda", "full"] = "adaptive",
-    triggered_by: Literal["manual", "scheduled", "job_completion"] = "manual",
+    triggered_by: Literal["manual", "scheduled", "job_completion", "cancellation"] = "manual",
 ) -> DemucsGarbageCollectionResponse:
     if not _gc_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Garbage collection already in progress")
@@ -578,10 +628,91 @@ def _align_lyrics(
     return aligned_path
 
 
+class _JobCanceled(Exception):
+    """Internal sentinel used when a remote job is canceled cooperatively."""
+
+
+def _alignment_child_entry(
+    config: SeparateConfig,
+    vocals_path_raw: str,
+    output_dir_raw: str,
+    error_path_raw: str,
+) -> None:
+    try:
+        _preload_whisperx_models(config)
+        _align_lyrics(
+            config=config,
+            vocals_path=Path(vocals_path_raw),
+            output_dir=Path(output_dir_raw),
+        )
+    except Exception as error:
+        Path(error_path_raw).write_text(str(error), encoding="utf-8")
+        raise
+
+
+def _align_lyrics_in_child_process(
+    job_id: str,
+    *,
+    config: SeparateConfig,
+    vocals_path: Path,
+    output_dir: Path,
+) -> Path | None:
+    if not config.lyrics_text:
+        return None
+
+    aligned_path = output_dir / "aligned_lyrics.json"
+    error_path = output_dir / "alignment_error.txt"
+    if error_path.exists():
+        error_path.unlink()
+
+    process = multiprocessing.Process(
+        target=_alignment_child_entry,
+        args=(config, str(vocals_path), str(output_dir), str(error_path)),
+        daemon=True,
+        name=f"demucs-align-worker-{job_id}",
+    )
+    process.start()
+    job_store.update(job_id, process=process)
+
+    while _process_is_running(process):
+        job = job_store.require(job_id)
+        if job.cancel_requested:
+            _terminate_process(process)
+            raise _JobCanceled()
+        time.sleep(0.25)
+
+    job = job_store.require(job_id)
+    if job.cancel_requested or job.status == "canceled":
+        raise _JobCanceled()
+
+    exitcode = getattr(process, "exitcode", 0)
+    if exitcode not in (0, None):
+        detail = (
+            error_path.read_text(encoding="utf-8").strip()
+            if error_path.exists()
+            else f"WhisperX alignment exited with status {exitcode}"
+        )
+        raise RuntimeError(detail)
+    if not aligned_path.exists():
+        raise RuntimeError("Aligned lyrics were not created")
+    return aligned_path
+
+
 def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
     start = time.time()
     output_dir = OUTPUT_ROOT / job_id
-    _preload_whisperx_models(config)
+    job = job_store.require(job_id)
+    if job.cancel_requested or job.status == "canceled":
+        job_store.update(
+            job_id,
+            status="canceled",
+            finished_at=utc_now(),
+            duration_ms=0,
+            progress_message="Canceled",
+            process=None,
+        )
+        _cleanup_job_files(job_id)
+        return
     cmd = _build_command(input_path, output_dir, config)
     process = subprocess.Popen(
         cmd,
@@ -611,10 +742,10 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
 
             job = job_store.require(job_id)
             if job.cancel_requested:
-                process.terminate()
+                _terminate_process(process)
                 break
 
-        return_code = process.wait()
+        return_code = _wait_for_process(process)
         duration_ms = int((time.time() - start) * 1000)
         job = job_store.require(job_id)
         no_vocals_path, vocals_path = build_expected_output_paths(job_id, input_path, config)
@@ -643,7 +774,8 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
                 progress_percent=95,
                 progress_message="Aligning lyrics",
             )
-            aligned_lyrics_path = _align_lyrics(
+            aligned_lyrics_path = _align_lyrics_in_child_process(
+                job_id,
                 config=config,
                 vocals_path=vocals_path,
                 output_dir=output_dir,
@@ -661,6 +793,17 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
             aligned_lyrics_path=str(aligned_lyrics_path) if aligned_lyrics_path else None,
             process=None,
         )
+    except _JobCanceled:
+        duration_ms = int((time.time() - start) * 1000)
+        job_store.update(
+            job_id,
+            status="canceled",
+            finished_at=utc_now(),
+            duration_ms=duration_ms,
+            progress_message="Canceled",
+            process=None,
+        )
+        _cleanup_job_files(job_id)
     except Exception as error:
         duration_ms = int((time.time() - start) * 1000)
         job_store.update(
@@ -710,7 +853,9 @@ def _run_alignment_job(job_id: str, input_path: Path, config: SeparateConfig) ->
     start = time.time()
     output_dir = OUTPUT_ROOT / job_id
     try:
-        _preload_whisperx_models(config)
+        job = job_store.require(job_id)
+        if job.cancel_requested or job.status == "canceled":
+            raise _JobCanceled()
         job_store.update(
             job_id,
             status="running",
@@ -720,7 +865,8 @@ def _run_alignment_job(job_id: str, input_path: Path, config: SeparateConfig) ->
         )
         if not config.lyrics_text:
             raise RuntimeError("lyrics_text is required for alignment")
-        aligned_lyrics_path = _align_lyrics(
+        aligned_lyrics_path = _align_lyrics_in_child_process(
+            job_id,
             config=config,
             vocals_path=input_path,
             output_dir=output_dir,
@@ -736,6 +882,17 @@ def _run_alignment_job(job_id: str, input_path: Path, config: SeparateConfig) ->
             progress_percent=100,
             progress_message="Completed",
             aligned_lyrics_path=str(aligned_lyrics_path),
+            process=None,
+        )
+    except _JobCanceled:
+        duration_ms = int((time.time() - start) * 1000)
+        job_store.update(
+            job_id,
+            status="canceled",
+            finished_at=utc_now(),
+            duration_ms=duration_ms,
+            progress_message="Canceled",
+            process=None,
         )
     except Exception as error:
         duration_ms = int((time.time() - start) * 1000)
@@ -746,6 +903,7 @@ def _run_alignment_job(job_id: str, input_path: Path, config: SeparateConfig) ->
             duration_ms=duration_ms,
             error_detail=str(error),
             progress_message="Failed",
+            process=None,
         )
     finally:
         try:
@@ -1094,15 +1252,27 @@ def cancel_job(job_id: str):
     if job.status in {"completed", "failed", "canceled"}:
         return {"job_id": job_id, "status": job.status}
 
+    started_at = job.started_at or utc_now()
+    duration_ms = int((utc_now() - started_at).total_seconds() * 1000)
     job_store.update(
         job_id,
         cancel_requested=True,
-        progress_message="Cancel requested",
+        status="canceled",
+        finished_at=utc_now(),
+        duration_ms=max(0, duration_ms),
+        progress_message="Canceled",
     )
     process = job.process
-    if process is not None and process.poll() is None:
-        process.terminate()
-    return {"job_id": job_id, "status": "canceling"}
+    _terminate_process(process)
+    job_store.update(job_id, process=None)
+    _cleanup_job_files(job_id)
+    try:
+        _run_garbage_collection(requested_mode="adaptive", triggered_by="cancellation")
+    except HTTPException:
+        pass
+    except Exception:
+        logger.exception("Post-cancel Demucs garbage collection failed job_id=%s", job_id)
+    return {"job_id": job_id, "status": "canceled"}
 
 
 @app.delete("/jobs/{job_id}/artifacts", response_model=DemucsJobArtifactDeleteResponse)

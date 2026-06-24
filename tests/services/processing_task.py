@@ -385,6 +385,132 @@ def test_processing_task_cancel_permissions_and_cascade_ids(db_session):
     assert media_follow_on_task.status == ProcessingTaskStatus.CANCELED.value
     assert media_queue.status == QueueStatus.PENDING.value
 
+
+def test_processing_task_retry_accepts_failed_and_canceled_tasks(db_session):
+    """Retry should move terminal failed/canceled tasks back to pending."""
+    media = MediaItem(
+        title="Retry Media",
+        file_stem="retry-media",
+        media_path="/media/retry-media.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    failed_task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="library_media",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.FAILED.value,
+        stage="demucs",
+        last_error_summary="remote failed",
+        last_error_detail="remote detail",
+        started_at=datetime(2026, 1, 1),
+        finished_at=datetime(2026, 1, 2),
+    )
+    canceled_task = ProcessingTask(
+        task_type="media_lyrics_align",
+        source_kind="library_media",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.CANCELED.value,
+        stage="demucs",
+        last_error_summary="old error",
+        last_error_detail="old detail",
+        started_at=datetime(2026, 1, 3),
+        finished_at=datetime(2026, 1, 4),
+    )
+    db_session.add_all([failed_task, canceled_task])
+    db_session.commit()
+    db_session.refresh(failed_task)
+    db_session.refresh(canceled_task)
+
+    asyncio.run(
+        processing_task_service.emit_progress(
+            canceled_task.id,
+            progress_percent=95,
+            progress_label="Canceled",
+            status=ProcessingTaskStatus.CANCELED.value,
+            stage="demucs",
+        )
+    )
+
+    asyncio.run(processing_task_service.retry_task(db_session, failed_task.id))
+    asyncio.run(processing_task_service.retry_task(db_session, canceled_task.id))
+
+    db_session.refresh(failed_task)
+    db_session.refresh(canceled_task)
+    canceled_snapshot = task_stream_manager.snapshot_now(canceled_task.id)
+
+    for task in (failed_task, canceled_task):
+        assert task.status == ProcessingTaskStatus.PENDING.value
+        assert task.stage == "queued"
+        assert task.last_error_summary is None
+        assert task.last_error_detail is None
+        assert task.started_at is None
+        assert task.finished_at is None
+
+    assert canceled_snapshot is not None
+    assert canceled_snapshot["status"] == ProcessingTaskStatus.PENDING.value
+    assert canceled_snapshot["stage"] == "queued"
+    assert canceled_snapshot["progress_percent"] is None
+
+    asyncio.run(task_stream_manager.clear_task(failed_task.id))
+    asyncio.run(task_stream_manager.clear_task(canceled_task.id))
+
+
+def test_processing_task_retry_rejects_active_and_done_tasks_even_for_admin(db_session):
+    """Retry is limited to failed/canceled terminal tasks."""
+    tasks = [
+        ProcessingTask(
+            task_type="media_karaoke",
+            source_kind="library_media",
+            target_media_item_id=1,
+            status=status.value,
+            stage=status.value,
+        )
+        for status in (
+            ProcessingTaskStatus.PENDING,
+            ProcessingTaskStatus.DOWNLOADING,
+            ProcessingTaskStatus.PROCESSING,
+            ProcessingTaskStatus.DONE,
+        )
+    ]
+    db_session.add_all(tasks)
+    db_session.commit()
+
+    for task in tasks:
+        db_session.refresh(task)
+        assert processing_task_service.can_retry_task(
+            db_session,
+            task,
+            is_admin=True,
+        ) is False
+        with pytest.raises(ValueError, match="Only failed or canceled tasks can be retried"):
+            asyncio.run(processing_task_service.retry_task(db_session, task.id))
+
+
+def test_task_execution_coordinator_cancel_sets_event_without_canceling_async_task():
+    """Remote Demucs cleanup relies on cooperative cancel_event handling."""
+    from services.processing_task_service import TaskExecutionCoordinator
+
+    coordinator = TaskExecutionCoordinator()
+    cancel_event = threading.Event()
+    fake_task = Mock()
+    fake_task.done.return_value = False
+    fake_loop = Mock()
+    coordinator._task_contexts[123] = {
+        "cancel_event": cancel_event,
+        "loop": fake_loop,
+        "task": fake_task,
+    }
+
+    assert coordinator.cancel(123) is True
+
+    assert cancel_event.is_set() is True
+    fake_loop.call_soon_threadsafe.assert_not_called()
+
+
 def test_karaoke_progress_callback_throttles_to_about_once_per_second():
     """yt-dlp progress callbacks should not emit queue updates every tick."""
     service = KaraokeService()

@@ -84,7 +84,7 @@ async def retry_task(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Retry a failed task."""
+    """Retry a failed or canceled task."""
     task = processing_task_service.get_task(db, task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -100,8 +100,8 @@ async def retry_task(
     ):
         raise HTTPException(status_code=403, detail="Not allowed to retry this task")
     
-    task_execution_coordinator.retry(task_id)
-    await processing_task_service.retry_task(db, task_id)
+    task = await processing_task_service.retry_task(db, task_id)
+    task_execution_coordinator.start(task_id)
     return processing_task_service.to_response(task)
 
 
