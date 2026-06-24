@@ -1,0 +1,11 @@
+{% macro icon_link_button(href, icon, label, title=None, classes='') -%}
+<a
+    href="{{ href }}"
+    class="inline-flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 {{ classes }}"
+    aria-label="{{ title or label }}"
+    title="{{ title or label }}"
+>
+    <span class="material-symbols-outlined text-sm leading-none">{{ icon }}</span>
+    <span class="sr-only">{{ label }}</span>
+</a>
+{%- endmacro %}

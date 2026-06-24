@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 840" role="img" aria-label="Docs demo illustration">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#1f2937"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0b1120"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="840" rx="36" fill="url(#bg)"/>
+  <circle cx="180" cy="130" r="92" fill="#0f766e" opacity="0.45"/>
+  <circle cx="770" cy="356" r="130" fill="#7c3aed" opacity="0.22"/>
+  <circle cx="660" cy="704" r="102" fill="#06b6d4" opacity="0.12"/>
+  <rect x="126" y="96" width="708" height="326" rx="26" fill="url(#panel)" stroke="#334155" stroke-width="3"/>
+  <rect x="166" y="148" width="276" height="20" rx="10" fill="url(#accent)"/>
+  <rect x="166" y="188" width="384" height="14" rx="7" fill="#64748b"/>
+  <rect x="166" y="220" width="318" height="14" rx="7" fill="#475569"/>
+  <rect x="166" y="272" width="622" height="86" rx="18" fill="#111827" stroke="#334155"/>
+  <rect x="198" y="298" width="128" height="16" rx="8" fill="#e2e8f0"/>
+  <rect x="198" y="324" width="210" height="12" rx="6" fill="#64748b"/>
+  <path d="M640 305 676 285 712 305 694 338 658 338Z" fill="#f59e0b"/>
+  <path d="M705 288 721 315 690 315Z" fill="#22c55e"/>
+  <text x="166" y="394" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="700">Markdown, images, and bilingual links</text>
+
+  <rect x="126" y="466" width="708" height="260" rx="28" fill="#0b1120" stroke="#334155" stroke-width="3"/>
+  <text x="166" y="522" fill="#e2e8f0" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" font-weight="700">Works in every deployment</text>
+  <text x="166" y="556" fill="#94a3b8" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18">FastAPI embed, GitHub Pages, and Cloudflare Pages</text>
+
+  <g>
+    <rect x="166" y="594" width="178" height="84" rx="18" fill="#111827" stroke="#475569"/>
+    <rect x="188" y="616" width="40" height="40" rx="12" fill="#00f2ff" opacity="0.18"/>
+    <path d="M201 626h14v20h-14z" fill="#67e8f9"/>
+    <text x="242" y="632" fill="#e2e8f0" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="700">FastAPI</text>
+    <text x="242" y="658" fill="#94a3b8" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14">Mount at /help</text>
+  </g>
+
+  <g>
+    <rect x="391" y="594" width="178" height="84" rx="18" fill="#111827" stroke="#475569"/>
+    <rect x="413" y="616" width="40" height="40" rx="12" fill="#22c55e" opacity="0.18"/>
+    <path d="M424 628h18l-3 16h-12z" fill="#86efac"/>
+    <text x="467" y="632" fill="#e2e8f0" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="700">GitHub Pages</text>
+    <text x="467" y="658" fill="#94a3b8" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14">Deploy from repo</text>
+  </g>
+
+  <g>
+    <rect x="616" y="594" width="178" height="84" rx="18" fill="#111827" stroke="#475569"/>
+    <rect x="638" y="616" width="40" height="40" rx="12" fill="#8b5cf6" opacity="0.18"/>
+    <path d="M649 628h18v16h-18z" fill="#c4b5fd"/>
+    <text x="692" y="632" fill="#e2e8f0" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="18" font-weight="700">Cloudflare</text>
+    <text x="692" y="658" fill="#94a3b8" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14">Auto-deploy</text>
+  </g>
+
+  <text x="166" y="762" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" font-weight="600">Responsive, localizable, and safe to embed anywhere.</text>
+</svg>

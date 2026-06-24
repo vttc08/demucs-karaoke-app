@@ -479,6 +479,7 @@
   "queue_lyrics.plain_mode": "Scroll",
   "settings.admin_session": "Admin session",
   "settings.admin_settings": "Settings",
+  "settings.docs_help": "Open documentation",
   "settings.cache_path": "Cache Path",
   "settings.check_version": "Check version",
   "settings.description": "Manage karaoke processing, storage paths, search behavior, and stage links. Saved changes apply to new requests immediately.",

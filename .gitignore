@@ -37,6 +37,7 @@ env/
 .env
 .mcp.json
 .codex/
+.wrangler/
 
 # Database
 *.db
@@ -65,3 +66,5 @@ logs/
 Thumbs.db
 
 .artifacts/
+static/docs/
+docs-site/site/
