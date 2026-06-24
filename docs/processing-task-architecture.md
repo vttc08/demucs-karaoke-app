@@ -142,6 +142,13 @@ When WhisperX lyrics alignment is requested, the remote job's `Aligning lyrics` 
 
 Browsers do not connect directly to the Demucs host. Remote job ids are intentionally live-only and are not persisted in SQLite. On restart, any interrupted local task is restarted from the beginning with a fresh remote Demucs job.
 
+Task cancellation is cooperative in the main app: the local worker sets a cancellation event and
+lets the Demucs client send `DELETE /jobs/{job_id}` before the worker unwinds. The remote Demucs
+service treats cancellation as terminal, terminates the active process, escalates to kill when a
+process does not exit promptly, removes that job's remote IO files, and runs adaptive garbage
+collection. WhisperX alignment runs in a child process so align-only jobs and separation jobs with
+lyrics can be canceled while GPU inference is active.
+
 After a task reaches durable local success, the main app best-effort calls `DELETE /jobs/{job_id}/artifacts`
 to retire the corresponding remote Demucs `incoming/` and `output/` directories. Failed tasks skip this
 call so remote artifacts remain available until the Demucs service's normal retention cleanup or manual

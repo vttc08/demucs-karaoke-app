@@ -385,6 +385,28 @@ def test_processing_task_cancel_permissions_and_cascade_ids(db_session):
     assert media_follow_on_task.status == ProcessingTaskStatus.CANCELED.value
     assert media_queue.status == QueueStatus.PENDING.value
 
+
+def test_task_execution_coordinator_cancel_sets_event_without_canceling_async_task():
+    """Remote Demucs cleanup relies on cooperative cancel_event handling."""
+    from services.processing_task_service import TaskExecutionCoordinator
+
+    coordinator = TaskExecutionCoordinator()
+    cancel_event = threading.Event()
+    fake_task = Mock()
+    fake_task.done.return_value = False
+    fake_loop = Mock()
+    coordinator._task_contexts[123] = {
+        "cancel_event": cancel_event,
+        "loop": fake_loop,
+        "task": fake_task,
+    }
+
+    assert coordinator.cancel(123) is True
+
+    assert cancel_event.is_set() is True
+    fake_loop.call_soon_threadsafe.assert_not_called()
+
+
 def test_karaoke_progress_callback_throttles_to_about_once_per_second():
     """yt-dlp progress callbacks should not emit queue updates every tick."""
     service = KaraokeService()

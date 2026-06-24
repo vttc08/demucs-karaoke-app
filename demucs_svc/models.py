@@ -180,7 +180,7 @@ class DemucsMetricsResponse(BaseModel):
 class DemucsGarbageCollectionResponse(BaseModel):
     requested_mode: Literal["adaptive", "partial", "cuda", "full"]
     executed_mode: Literal["partial", "cuda", "full"]
-    triggered_by: Literal["manual", "scheduled", "job_completion"]
+    triggered_by: Literal["manual", "scheduled", "job_completion", "cancellation"]
     detail: str
     active_job_count: int
     running_job_count: int

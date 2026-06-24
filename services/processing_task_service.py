@@ -945,7 +945,7 @@ class TaskExecutionCoordinator:
                 self._task_contexts.pop(task_id, None)
 
     def cancel(self, task_id: int) -> bool:
-        """Request cancellation for a running or queued task."""
+        """Request cooperative cancellation for a running or queued task."""
         with self._lock:
             context = self._task_contexts.get(task_id)
             if context is None:
@@ -953,10 +953,6 @@ class TaskExecutionCoordinator:
             cancel_event = context.get("cancel_event")
             if isinstance(cancel_event, threading.Event):
                 cancel_event.set()
-            loop = context.get("loop")
-            task = context.get("task")
-            if loop is not None and task is not None and not task.done():
-                loop.call_soon_threadsafe(task.cancel)
             return True
 
     def cancel_many(self, task_ids: list[int]) -> list[int]:
