@@ -7,7 +7,7 @@ use_directory_urls: true
 theme:
   name: material
   logo: assets/images/logo.png
-  favicon: assets/images/favicon.png
+  favicon: assets/images/logo.png
   font:
     text: Inter
     code: JetBrains Mono
@@ -52,6 +52,7 @@ markdown_extensions:
   - pymdownx.superfences
 
 nav:
+  - Back to App: '../../../../'
   - Home: index.md
   - Getting Started:
       - Overview: getting-started/overview.md

@@ -1,6 +1,8 @@
 # Demucs Karaoke App Documentation
 
-Welcome to the documentation for Demucs Karaoke App.
+Welcome to the documentation for Demucs Karaoke App. If you are viewing this page from within the app, you can return to the app by clicking the button below.
+
+[Back to Karaoke App](../../../../){ .md-button }
 
 ## Start here
 
