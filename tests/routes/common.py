@@ -78,6 +78,7 @@ def client():
     original_ytdlp_proxy_url = settings.ytdlp_proxy_url
     original_lyrics_provider_netease_enabled = settings.lyrics_provider_netease_enabled
     original_lyrics_provider_lrclib_enabled = settings.lyrics_provider_lrclib_enabled
+    original_lyrics_provider_custom_paths = settings.lyrics_provider_custom_paths
     original_ffmpeg_path = settings.ffmpeg_path
     original_media_path = settings.media_path
     original_cache_path = settings.cache_path
@@ -117,6 +118,7 @@ def client():
     settings.ytdlp_proxy_url = original_ytdlp_proxy_url
     settings.lyrics_provider_netease_enabled = original_lyrics_provider_netease_enabled
     settings.lyrics_provider_lrclib_enabled = original_lyrics_provider_lrclib_enabled
+    settings.lyrics_provider_custom_paths = original_lyrics_provider_custom_paths
     settings.ffmpeg_path = original_ffmpeg_path
     settings.media_path = original_media_path
     settings.cache_path = original_cache_path

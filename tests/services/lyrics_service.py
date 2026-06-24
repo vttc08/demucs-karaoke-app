@@ -38,6 +38,93 @@ def test_lyrics_service_default_provider_order_respects_runtime_toggles():
 
     assert provider_names == ["musixmatch", "lrclib"]
 
+def test_lyrics_service_custom_provider_participates_in_fallback_pool(tmp_path):
+    """Custom providers should join the fallback pool without changing built-in defaults."""
+    original_token = settings.musixmatch_token
+    original_netease_enabled = settings.lyrics_provider_netease_enabled
+    original_lrclib_enabled = settings.lyrics_provider_lrclib_enabled
+    original_custom_paths = settings.lyrics_provider_custom_paths
+    provider_file = tmp_path / "hello_provider.py"
+    provider_file.write_text(
+        """
+class LyricsProvider:
+    name = "hello"
+
+    async def fetch(self, inferred_song, **kwargs):
+        return "Hello from custom lyrics"
+""",
+        encoding="utf-8",
+    )
+    try:
+        settings.musixmatch_token = ""
+        settings.lyrics_provider_netease_enabled = False
+        settings.lyrics_provider_lrclib_enabled = False
+        settings.lyrics_provider_custom_paths = str(provider_file)
+        service = LyricsService()
+        payload = asyncio.run(
+            service.resolve_lyrics(title="Song Title", artist="Artist", infer=False)
+        )
+    finally:
+        settings.musixmatch_token = original_token
+        settings.lyrics_provider_netease_enabled = original_netease_enabled
+        settings.lyrics_provider_lrclib_enabled = original_lrclib_enabled
+        settings.lyrics_provider_custom_paths = original_custom_paths
+
+    assert payload is not None
+    assert payload.provider == "hello"
+    assert payload.lyrics == "Hello from custom lyrics"
+    assert payload.is_synced is False
+
+
+def test_lyrics_service_skips_custom_loader_when_musixmatch_resolves(monkeypatch):
+    """Musixmatch should still short-circuit before the custom provider loader runs."""
+    from services import lyrics_types as shared_lyrics_types
+    from services import lyrics_providers as lp_module
+
+    original_token = settings.musixmatch_token
+    original_netease_enabled = settings.lyrics_provider_netease_enabled
+    original_lrclib_enabled = settings.lyrics_provider_lrclib_enabled
+    original_custom_paths = settings.lyrics_provider_custom_paths
+
+    async def fake_musixmatch_fetch(self, inferred_song, **kwargs):
+        return shared_lyrics_types.LyricsPayload(
+            lyrics="[00:00.00]Hello",
+            is_synced=True,
+            provider="musixmatch",
+            inferred_song=shared_lyrics_types.InferredSong(
+                title=inferred_song.title,
+                artist=inferred_song.artist,
+                source=inferred_song.source,
+            ),
+            provider_score=120.0,
+        )
+
+    try:
+        settings.musixmatch_token = "token123"
+        settings.lyrics_provider_netease_enabled = False
+        settings.lyrics_provider_lrclib_enabled = False
+        settings.lyrics_provider_custom_paths = "unused-provider.py"
+        monkeypatch.setattr(lp_module.MusixmatchLyricsProvider, "fetch", fake_musixmatch_fetch)
+        monkeypatch.setattr(
+            "services.lyrics_service.load_custom_lyrics_providers",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("custom provider loader should not run when Musixmatch resolves")
+            ),
+        )
+        service = LyricsService()
+        payload = asyncio.run(
+            service.resolve_lyrics(title="Song Title", artist="Artist", infer=False)
+        )
+    finally:
+        settings.musixmatch_token = original_token
+        settings.lyrics_provider_netease_enabled = original_netease_enabled
+        settings.lyrics_provider_lrclib_enabled = original_lrclib_enabled
+        settings.lyrics_provider_custom_paths = original_custom_paths
+
+    assert payload is not None
+    assert payload.provider == "musixmatch"
+    assert payload.is_synced is True
+
 def test_netease_provider_prefers_cjk_candidate_and_rejects_low_confidence():
     """Candidate selector should avoid unrelated songs and pick CJK-near matches."""
     from services import lyrics_providers as lp_module

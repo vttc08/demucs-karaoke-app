@@ -271,9 +271,10 @@ When karaoke mode is enabled:
 
 Lyrics lookup behavior:
 - Musixmatch is tried first when configured.
-- If Musixmatch misses, the remaining providers run concurrently and the highest-scoring result wins.
+- If Musixmatch misses, NetEase, LRCLib, and any custom providers from `LYRICS_PROVIDER_CUSTOM_PATHS` run concurrently and the highest-scoring result wins.
 - Debug output shows the selected provider score plus provider-specific diagnostics for troubleshooting.
 - The queue modal can pre-resolve lyrics, let users replace them with manual synced text, and persist those lyrics as sidecars when the item is queued.
+- See [docs/custom_lyrics_providers.md](docs/custom_lyrics_providers.md) for the runtime custom-provider contract and a HelloWorld example.
 
 ## API Endpoints
 
@@ -383,12 +384,14 @@ karaoke/
 │   └── pages.py          # HTML pages
 ├── services/              # Business logic
 │   ├── queue_service.py
- │   ├── youtube_service.py
- │   ├── lyrics_service.py
- │   ├── lyrics_inference.py
- │   ├── lyrics_providers.py
- │   ├── karaoke_service.py
- │   └── demucs_client.py
+│   ├── youtube_service.py
+│   ├── lyrics_service.py
+│   ├── lyrics_inference.py
+│   ├── lyrics_types.py
+│   ├── lyrics_provider_loader.py
+│   ├── lyrics_providers.py
+│   ├── karaoke_service.py
+│   └── demucs_client.py
 ├── adapters/              # External tool wrappers
 │   ├── ytdlp.py
 │   └── ffmpeg.py

@@ -689,7 +689,7 @@
   "upload.connecting": "Connecting...",
   "upload.drop_select": "Drop file here or tap to select",
   "upload.infer_failed": "Could not infer metadata from filename",
-  "upload.infer_filename": "Infer from filename",
+  "upload.infer_filename": "Infer from file",
   "upload.ingest": "Ingest Media",
   "upload.ingest_detail": "Upload MP3, MP4, WebM, MKV, MOV, AVI, or M4V files to save them to the media library and optionally add them to the queue.",
   "upload.leave_unknown": "Leave blank if unknown",
