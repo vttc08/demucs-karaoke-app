@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-label="Docs demo illustration">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#1f2937"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="540" rx="36" fill="url(#bg)"/>
+  <circle cx="195" cy="145" r="92" fill="#0f766e" opacity="0.45"/>
+  <circle cx="760" cy="392" r="130" fill="#7c3aed" opacity="0.22"/>
+  <rect x="126" y="116" width="708" height="308" rx="26" fill="#0b1120" stroke="#334155" stroke-width="3"/>
+  <rect x="166" y="168" width="276" height="20" rx="10" fill="url(#accent)"/>
+  <rect x="166" y="208" width="384" height="14" rx="7" fill="#64748b"/>
+  <rect x="166" y="240" width="318" height="14" rx="7" fill="#475569"/>
+  <rect x="166" y="290" width="622" height="86" rx="18" fill="#111827" stroke="#334155"/>
+  <rect x="198" y="316" width="128" height="16" rx="8" fill="#e2e8f0"/>
+  <rect x="198" y="342" width="210" height="12" rx="6" fill="#64748b"/>
+  <path d="M640 323 676 303 712 323 694 356 658 356Z" fill="#f59e0b"/>
+  <path d="M705 306 721 333 690 333Z" fill="#22c55e"/>
+  <text x="166" y="408" fill="#cbd5e1" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="700">Markdown, images, and bilingual links</text>
+</svg>

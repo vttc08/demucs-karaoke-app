@@ -65,3 +65,5 @@ logs/
 Thumbs.db
 
 .artifacts/
+static/docs/
+docs-site/site/

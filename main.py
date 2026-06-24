@@ -107,9 +107,17 @@ def create_app() -> FastAPI:
     settings.ensure_paths()
 
     base_path = settings.karaoke_base_path
+    docs_dir = Path("static/docs")
+    docs_assets_dir = docs_dir / "assets"
 
     # Mount static files and include all route groups under the same public prefix.
     created_app.mount(f"{base_path}/static", StaticFiles(directory="static"), name="static")
+
+    if docs_assets_dir.exists():
+        created_app.mount("/assets", StaticFiles(directory=docs_assets_dir), name="docs-assets")
+
+    if docs_dir.exists():
+        created_app.mount(f"{base_path}/help", StaticFiles(directory=docs_dir, html=True), name="help")
 
     created_app.include_router(media_files.router, prefix=base_path)
     created_app.include_router(media_library.router, prefix=base_path)

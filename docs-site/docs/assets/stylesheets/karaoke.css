@@ -1,0 +1,21 @@
+:root {
+  --md-primary-fg-color: #111827;
+  --md-accent-fg-color: #7c3aed;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #0f172a;
+  --md-default-fg-color: #e5e7eb;
+  --md-typeset-a-color: #a78bfa;
+}
+
+.md-header,
+.md-tabs {
+  background: #111827;
+}
+
+.md-typeset .admonition,
+.md-typeset details,
+.md-typeset table:not([class]) {
+  border-radius: 14px;
+}
