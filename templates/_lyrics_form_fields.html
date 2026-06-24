@@ -4,6 +4,7 @@
    - Inputs have id: lyrics-title, lyrics-artist
    - Buttons have id: lyrics-search-btn, lyrics-upload-btn, lyrics-google-link
    - Hidden file input: lyrics-file
+   - Optional WhisperX override input has id: lyrics-whisperx-language-code
    - All elements should be disabled when lyrics not enabled
    
    Usage:
@@ -22,6 +23,7 @@
      uploadBtn: '#lyrics-upload-btn',
      fileInput: '#lyrics-file',
      googleLink: '#lyrics-google-link',
+     whisperxLanguageInput: '#lyrics-whisperx-language-code',
      ...
    });
 #}
@@ -46,6 +48,22 @@
     />
   </label>
 </div>
+
+<label class="flex flex-col gap-2">
+  <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.whisperx_language_override') }}</span>
+  <input
+    id="lyrics-whisperx-language-code"
+    type="text"
+    inputmode="text"
+    autocomplete="off"
+    spellcheck="false"
+    maxlength="16"
+    class="w-full max-w-xs rounded-xl bg-surface-container-highest px-3 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-primary/30 disabled:opacity-60"
+    placeholder="{{ t('lyrics.whisperx_language_override_placeholder') }}"
+    disabled
+  />
+  <p class="text-[11px] leading-tight text-on-surface-variant sm:text-xs">{{ t('lyrics.whisperx_language_override_detail') }}</p>
+</label>
 
 <div class="flex flex-wrap items-center gap-2">
   <button 

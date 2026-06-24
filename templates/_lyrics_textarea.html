@@ -11,6 +11,9 @@
    const adapter = new LyricsUIAdapter(manager, {
      textarea: '#lyrics-textarea',
      providerLabel: '#lyrics-provider',
+     // WhisperX override lives in _lyrics_form_fields.html when alignment is enabled.
+     // Page-specific automation, such as upload autopilot, should drive the shared manager
+     // and leave this editor as the review step before final submission.
      ...
    });
 #}

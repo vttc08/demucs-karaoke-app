@@ -1378,6 +1378,13 @@ GET /settings
 
 Responsive settings UI for runtime configuration.
 
+### Upload Page (Mobile/Desktop)
+```
+GET /upload
+```
+
+Media-library upload form. The client-side **Autopilot** action does not submit the form; it sequences the existing upload controls by inferring filename metadata, enabling AI karaoke and lyrics sync, resolving lyrics, and enabling WhisperX alignment so the user can review before uploading.
+
 ---
 
 ## Error Responses

@@ -322,6 +322,7 @@ class KaraokeService:
             video_path=video_path,
             audio_path=audio_path,
             align_lyrics=align_lyrics,
+            whisperx_align_language_override=task.whisperx_align_language_override,
             cancel_event=cancel_event,
         )
 
@@ -375,14 +376,17 @@ class KaraokeService:
             status=ProcessingTaskStatus.PROCESSING.value,
             stage="whisperx",
         )
+        align_language, detect_language = self._resolve_whisperx_alignment_settings(
+            whisperx_align_language_override=task.whisperx_align_language_override
+        )
         aligned_lyrics_path, remote_job_id = await self.demucs_client.align_lyrics(
             vocals_path,
             output_dir=self._task_cache_dir("demucs_outputs", task.id),
             lyrics_text=lyrics_text,
             lyrics_format=lyrics_format,
             transcription_model=settings.whisperx_transcription_model,
-            align_language=settings.whisperx_align_language,
-            detect_language=settings.whisperx_detect_language,
+            align_language=align_language,
+            detect_language=detect_language,
             use_synced_lyrics=settings.whisperx_use_synced_lyrics,
             whisperx_preload_models=settings.whisperx_preload_models,
             cancel_event=cancel_event,
@@ -590,6 +594,7 @@ class KaraokeService:
         video_path: Path,
         audio_path: Path,
         align_lyrics: bool = False,
+        whisperx_align_language_override: str | None = None,
         cancel_event: threading.Event | None = None,
     ):
         await self._raise_if_canceled(cancel_event, task.id)
@@ -610,6 +615,7 @@ class KaraokeService:
             audio_path,
             align_lyrics=align_lyrics,
             task_id=task.id,
+            whisperx_align_language_override=whisperx_align_language_override,
             progress_step_index=3,
             progress_step_total=4,
             cancel_event=cancel_event,
@@ -863,10 +869,17 @@ class KaraokeService:
         return target_path
 
     @staticmethod
-    def _resolve_whisperx_alignment_settings(queue_item: QueueItem | None) -> tuple[str | None, bool]:
-        """Return the WhisperX language settings for one queue item."""
+    def _resolve_whisperx_alignment_settings(
+        queue_item: QueueItem | None = None,
+        *,
+        whisperx_align_language_override: str | None = None,
+    ) -> tuple[str | None, bool]:
+        """Return the WhisperX language settings for one queue item or media task."""
         align_language = settings.whisperx_align_language
         detect_language = settings.whisperx_detect_language
+        task_override = (whisperx_align_language_override or "").strip().lower()
+        if task_override:
+            return task_override, False
         if queue_item is None:
             return align_language, detect_language
 
@@ -883,6 +896,7 @@ class KaraokeService:
         *,
         align_lyrics: bool,
         task_id: int,
+        whisperx_align_language_override: str | None = None,
         progress_step_index: int,
         progress_step_total: int,
         cancel_event: threading.Event | None = None,
@@ -895,7 +909,10 @@ class KaraokeService:
         )
         if align_lyrics and not lyrics_text:
             raise RuntimeError("Plain or LRC lyrics are required for lyrics alignment")
-        align_language, detect_language = self._resolve_whisperx_alignment_settings(queue_item)
+        align_language, detect_language = self._resolve_whisperx_alignment_settings(
+            queue_item,
+            whisperx_align_language_override=whisperx_align_language_override,
+        )
 
         async def run_demucs(target_audio_path: Path):
             demucs_kwargs = {

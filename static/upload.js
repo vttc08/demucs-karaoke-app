@@ -27,6 +27,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let selectedFile = null;
     const inferMetadataBtn = document.getElementById('infer-metadata-btn');
+    const uploadAutopilotBtn = document.getElementById('upload-autopilot-btn');
+    let autopilotRunning = false;
 
     // --- Lyrics Manager Setup ---
     let lyricsManager = null;
@@ -38,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const uploadLyricsAlignToggle = document.getElementById('upload-lyrics-align-toggle');
     const uploadLyricsAlignStatus = document.getElementById('upload-lyrics-align-status');
     let demucsHealth = { healthy: false, detail: t('karaoke.checking_availability') };
+    let demucsHealthPromise = null;
 
     function applyDemucsAvailability() {
         if (!uploadAiToggle) return;
@@ -73,6 +76,19 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         }
         applyDemucsAvailability();
+        return demucsHealth;
+    }
+
+    function ensureDemucsHealth() {
+        if (demucsHealth.healthy) {
+            return Promise.resolve(demucsHealth);
+        }
+        if (!demucsHealthPromise) {
+            demucsHealthPromise = refreshDemucsHealth().finally(() => {
+                demucsHealthPromise = null;
+            });
+        }
+        return demucsHealthPromise;
     }
 
     function initializeUploadLyricsManager() {
@@ -89,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
             googleLink: '#upload-lyrics-google-btn',
             uploadBtn: '#upload-lyrics-upload-btn',
             fileInput: '#upload-lyrics-file',
+            whisperxLanguageInput: '#upload-lyrics-whisperx-language-code',
             panel: '#upload-lyrics-form-section'
         });
         lyricsUIAdapter.initialize();
@@ -163,12 +180,86 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Metadata inference failed:', error);
             showToast(t('upload.infer_failed'), true);
         } finally {
-            inferMetadataBtn.disabled = false;
+            if (!autopilotRunning) {
+                inferMetadataBtn.disabled = false;
+            }
         }
     }
 
     async function applyInferredMetadata(filename) {
         await inferMetadataViaAPI(filename);
+    }
+
+    function dispatchCheckboxChange(toggle, checked) {
+        if (!toggle || toggle.checked === checked) return;
+        toggle.checked = checked;
+        toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function setAutopilotBusy(busy) {
+        autopilotRunning = busy;
+        if (uploadAutopilotBtn) {
+            uploadAutopilotBtn.disabled = busy;
+        }
+        if (inferMetadataBtn) {
+            inferMetadataBtn.disabled = busy;
+        }
+    }
+
+    async function runUploadAutopilot() {
+        if (autopilotRunning) return;
+        if (!selectedFile) {
+            showToast(t('upload.select_file'), true);
+            return;
+        }
+
+        const ext = selectedFile.name.split('.').pop().toLowerCase();
+        if (archiveExtensions.has(ext)) {
+            showToast(t('upload.autopilot_zip_unsupported'), true);
+            return;
+        }
+
+        setAutopilotBusy(true);
+        try {
+            await applyInferredMetadata(selectedFile.name);
+
+            await ensureDemucsHealth();
+            if (!demucsHealth.healthy || !uploadAiToggle || uploadAiToggle.disabled) {
+                showToast(t('upload.autopilot_demucs_unavailable', { detail: demucsHealth.detail }), true);
+                return;
+            }
+
+            dispatchCheckboxChange(uploadAiToggle, true);
+            initializeUploadLyricsManager();
+            dispatchCheckboxChange(uploadLyricsToggle, true);
+            syncUploadLyricsMetadata();
+
+            if (!lyricsManager) {
+                showToast(t('lyrics.search_failed'), true);
+                return;
+            }
+
+            await lyricsManager.resolve('manual');
+            const state = lyricsManager.getState();
+            if (!(state.text || '').trim()) {
+                showToast(t('upload.autopilot_no_lyrics'), true);
+                return;
+            }
+
+            updateUploadLyricsAlignmentControls();
+            if (!uploadLyricsAlignToggle || uploadLyricsAlignToggle.disabled) {
+                showToast(t('upload.autopilot_alignment_unavailable'), true);
+                return;
+            }
+
+            dispatchCheckboxChange(uploadLyricsAlignToggle, true);
+            showToast(t('upload.autopilot_ready'));
+        } catch (error) {
+            console.error('Upload autopilot failed:', error);
+            showToast(t('upload.autopilot_failed'), true);
+        } finally {
+            setAutopilotBusy(false);
+        }
     }
 
     if (inferMetadataBtn) {
@@ -177,6 +268,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (selectedFile) {
                 applyInferredMetadata(selectedFile.name);
             }
+        });
+    }
+    if (uploadAutopilotBtn) {
+        uploadAutopilotBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            runUploadAutopilot();
         });
     }
 
@@ -325,6 +422,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 formData.append('lyrics_text', lyricsPayload.lyrics_text);
                 formData.append('lyrics_format', lyricsPayload.lyrics_format);
                 formData.append('align_lyrics', Boolean(lyricsPayload.align_lyrics));
+                if (lyricsPayload.whisperx_align_language_override) {
+                    formData.append(
+                        'whisperx_align_language_override',
+                        lyricsPayload.whisperx_align_language_override
+                    );
+                }
             }
         }
 
@@ -428,5 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     applyDemucsAvailability();
-    refreshDemucsHealth();
+    demucsHealthPromise = refreshDemucsHealth().finally(() => {
+        demucsHealthPromise = null;
+    });
 });

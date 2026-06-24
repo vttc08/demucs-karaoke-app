@@ -81,17 +81,50 @@ class ProcessingTaskService:
         db.refresh(task)
         return task
 
-    def get_or_create_media_task(self, db: Session, media_item_id: int) -> ProcessingTask:
+    def get_or_create_media_task(
+        self,
+        db: Session,
+        media_item_id: int,
+        *,
+        whisperx_align_language_override: str | None = None,
+    ) -> ProcessingTask:
         """Return an existing active media karaoke task or create one."""
-        return self._get_or_create_media_task(db, media_item_id, task_type="media_karaoke")
+        return self._get_or_create_media_task(
+            db,
+            media_item_id,
+            task_type="media_karaoke",
+            whisperx_align_language_override=whisperx_align_language_override,
+        )
 
-    def get_or_create_media_karaoke_align_task(self, db: Session, media_item_id: int) -> ProcessingTask:
+    def get_or_create_media_karaoke_align_task(
+        self,
+        db: Session,
+        media_item_id: int,
+        *,
+        whisperx_align_language_override: str | None = None,
+    ) -> ProcessingTask:
         """Return an existing active media separation+alignment task or create one."""
-        return self._get_or_create_media_task(db, media_item_id, task_type="media_karaoke_align")
+        return self._get_or_create_media_task(
+            db,
+            media_item_id,
+            task_type="media_karaoke_align",
+            whisperx_align_language_override=whisperx_align_language_override,
+        )
 
-    def get_or_create_media_lyrics_align_task(self, db: Session, media_item_id: int) -> ProcessingTask:
+    def get_or_create_media_lyrics_align_task(
+        self,
+        db: Session,
+        media_item_id: int,
+        *,
+        whisperx_align_language_override: str | None = None,
+    ) -> ProcessingTask:
         """Return an existing active media lyrics alignment task or create one."""
-        return self._get_or_create_media_task(db, media_item_id, task_type="media_lyrics_align")
+        return self._get_or_create_media_task(
+            db,
+            media_item_id,
+            task_type="media_lyrics_align",
+            whisperx_align_language_override=whisperx_align_language_override,
+        )
 
     def create_media_vocal_sync_prepare_task(
         self,
@@ -188,7 +221,11 @@ class ProcessingTaskService:
         media_item_id: int,
         *,
         task_type: str,
+        whisperx_align_language_override: str | None = None,
     ) -> ProcessingTask:
+        normalized_override = self._normalize_whisperx_align_language_override(
+            whisperx_align_language_override
+        )
         active = (
             db.query(ProcessingTask)
             .filter(
@@ -201,6 +238,10 @@ class ProcessingTaskService:
             .first()
         )
         if active is not None:
+            if active.whisperx_align_language_override != normalized_override:
+                active.whisperx_align_language_override = normalized_override
+                db.commit()
+                db.refresh(active)
             return active
 
         media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
@@ -210,6 +251,7 @@ class ProcessingTaskService:
             task_type=task_type,
             source_kind="library_media" if not media_item.youtube_id else "uploaded_media",
             target_media_item_id=media_item_id,
+            whisperx_align_language_override=normalized_override,
             status=ProcessingTaskStatus.PENDING.value,
             stage="queued",
         )
@@ -217,6 +259,13 @@ class ProcessingTaskService:
         db.commit()
         db.refresh(task)
         return task
+
+    @staticmethod
+    def _normalize_whisperx_align_language_override(value: str | None) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = " ".join(value.split()).strip().lower()
+        return normalized if normalized not in {"", "auto", "default"} else None
 
     def list_tasks(
         self,
