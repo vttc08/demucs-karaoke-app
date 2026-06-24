@@ -561,6 +561,87 @@ def test_delete_canceled_task_route_removes_orphaned_media_and_task(client, tmp_
     finally:
         settings.media_path = original_media
 
+
+def test_retry_canceled_media_task_route_resets_and_starts_task(client):
+    """Admins should be able to retry a canceled media Demucs/WhisperX task."""
+    authenticate_admin_client(client)
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Retry Canceled Media",
+            file_stem="retry-canceled-media",
+            media_path="/media/retry-canceled-media.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        task = ProcessingTask(
+            task_type="media_lyrics_align",
+            source_kind="library_media",
+            target_media_item_id=media.id,
+            status=ProcessingTaskStatus.CANCELED.value,
+            stage="demucs",
+            last_error_summary="old cancel",
+            last_error_detail="old detail",
+        )
+        db.add(task)
+        db.commit()
+        task_id = task.id
+
+    with patch("routes.tasks.task_execution_coordinator.start") as mock_start:
+        response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == task_id
+    assert payload["status"] == ProcessingTaskStatus.PENDING.value
+    assert payload["stage"] == "queued"
+    assert payload["last_error_summary"] is None
+    mock_start.assert_called_once_with(task_id)
+
+    with TestingSessionLocal() as db:
+        refreshed = db.query(ProcessingTask).filter(ProcessingTask.id == task_id).first()
+        assert refreshed is not None
+        assert refreshed.status == ProcessingTaskStatus.PENDING.value
+        assert refreshed.stage == "queued"
+        assert refreshed.finished_at is None
+
+    asyncio.run(task_stream_manager.clear_task(task_id))
+
+
+def test_retry_active_task_route_rejects_without_starting(client):
+    """Retry should not start active tasks, even for admins."""
+    authenticate_admin_client(client)
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Active Retry Media",
+            file_stem="active-retry-media",
+            media_path="/media/active-retry-media.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        task = ProcessingTask(
+            task_type="media_karaoke",
+            source_kind="library_media",
+            target_media_item_id=media.id,
+            status=ProcessingTaskStatus.PROCESSING.value,
+            stage="demucs",
+        )
+        db.add(task)
+        db.commit()
+        task_id = task.id
+
+    with patch("routes.tasks.task_execution_coordinator.start") as mock_start:
+        response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 403
+    mock_start.assert_not_called()
+
+
 def test_add_to_queue_uses_guest_cookies_for_requester(client):
     """Queue add should expose requester label from guest cookies."""
     client.cookies.set("karaoke_guest_id", "guest-123")
@@ -852,3 +933,4 @@ def test_media_management_page_renders_progress_stage_for_finalize_tasks(client)
     assert response.status_code == 200
     assert f'data-task-id="{task.id}"' in response.text
     assert 'data-task-progress-stage="finalize"' in response.text
+    assert '/static/media_management.js?v=' in response.text

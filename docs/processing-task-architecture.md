@@ -34,6 +34,7 @@ Cancellation is a first-class terminal state:
 - media rows are marked missing again so the item can be queued afresh
 - partially downloaded cache artifacts and generated outputs are removed during cleanup
 - local `media_karaoke` and uploaded/library queue tasks preserve their original durable media file; only scratch and task-owned temporary outputs are removed
+- canceled tasks can be retried while their task row still exists, using the same retry path as failed tasks
 
 ## Live State
 
@@ -95,6 +96,7 @@ manifest remain under `cache/vocal_sync/` and `cache/vocal_sync_tasks/` until co
 - `GET /api/tasks/{task_id}`
 - `GET /api/tasks/stream`
 - `GET /api/tasks/{task_id}/stream`
+- `POST /api/tasks/{task_id}/retry`
 - `POST /api/tasks/{task_id}/cancel`
 
 The summary stream is for task list refreshes. The per-task stream is for admin log inspection on `/media`.

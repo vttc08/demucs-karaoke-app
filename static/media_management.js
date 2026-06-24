@@ -908,7 +908,18 @@ function renderTaskList(tasks) {
             : `<span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${task.status === 'canceled' ? 'border-error/30 bg-error/10 text-error' : 'text-on-surface-variant'}">${escapeHtml(getTaskStatusLabel(task.status))}</span>`;
         const actionHtml = task.status === "canceled"
             ? `
-                <div class="mt-3 flex justify-end">
+                <div class="mt-3 flex justify-end gap-3">
+                    <button
+                        type="button"
+                        data-action="retry-task"
+                        class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
+                        data-task-id="${task.id}"
+                        title="${escapeHtml(t("common.retry"))}"
+                        aria-label="${escapeHtml(t("common.retry"))}"
+                    >
+                        <span class="material-symbols-outlined text-[16px]">refresh</span>
+                        <span>${escapeHtml(t("common.retry"))}</span>
+                    </button>
                     <button
                         type="button"
                         data-action="delete-task"
@@ -924,18 +935,7 @@ function renderTaskList(tasks) {
                 `
             : task.status === "failed"
             ? `
-                <div class="mt-3 flex justify-end gap-3">
-                    <button
-                        type="button"
-                        data-action="cancel-task"
-                        class="inline-flex items-center gap-2 rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-60"
-                        data-task-id="${task.id}"
-                        title="${escapeHtml(t("common.cancel"))}"
-                        aria-label="${escapeHtml(t("common.cancel"))}"
-                    >
-                        <span class="material-symbols-outlined text-[16px]">close</span>
-                        <span>${escapeHtml(t("common.cancel"))}</span>
-                    </button>
+                <div class="mt-3 flex justify-end">
                     <button
                         type="button"
                         data-action="retry-task"
