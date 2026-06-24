@@ -18,7 +18,7 @@ except ImportError:  # pragma: no cover - optional dependency
     _AES = None
 
 from config import settings
-from services import lyrics_service as ls_module
+from services import lyrics_types as ls_module
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ class LRCLibLyricsProvider:
     def __init__(self, base_url: Optional[str] = None):
         self.base_url = (base_url or settings.lrclib_api_url).rstrip("/")
 
-    async def fetch(self, inferred_song: ls_module.InferredSong) -> Optional[ls_module.LyricsPayload]:
+    async def fetch(self, inferred_song: ls_module.InferredSong, **kwargs: Any) -> Optional[ls_module.LyricsPayload]:
         queries = self._build_queries(inferred_song)
         best_entry: dict | None = None
         best_score: float | None = None
@@ -170,7 +170,7 @@ class MusixmatchLyricsProvider:
             "cookie": "x-mxm-token-guid=",
         }
 
-    async def fetch(self, inferred_song: ls_module.InferredSong) -> Optional[ls_module.LyricsPayload]:
+    async def fetch(self, inferred_song: ls_module.InferredSong, **kwargs: Any) -> Optional[ls_module.LyricsPayload]:
         if not self.token or not inferred_song.title.strip():
             return None
 
@@ -433,7 +433,7 @@ class NeteaseLyricsProvider:
             "User-Agent": _NETEASE_USER_AGENT,
         }
 
-    async def fetch(self, inferred_song: ls_module.InferredSong) -> Optional[ls_module.LyricsPayload]:
+    async def fetch(self, inferred_song: ls_module.InferredSong, **kwargs: Any) -> Optional[ls_module.LyricsPayload]:
         if not inferred_song.title.strip():
             return None
 

@@ -395,10 +395,12 @@ The stage page uses a websocket-first model:
 ## Lyrics inference and provider flow
 
 - Lyrics logic is modularized into:
-  - `services/lyrics_service.py`: shared contracts (`InferredSong`, `LyricsPayload`, provider/inferrer protocols), orchestration (`LyricsService.resolve_lyrics`), and cue parsing utilities
+  - `services/lyrics_types.py`: shared contracts and payload dataclasses used by providers, the service, and custom modules
+  - `services/lyrics_service.py`: orchestration (`LyricsService.resolve_lyrics`) and cue parsing utilities
   - `services/lyrics_inference.py`: metadata inference (`YouTubeTitleInferrer`) to normalize noisy YouTube titles into title/artist pairs
-- `services/lyrics_providers.py`: provider implementations (`MusixmatchLyricsProvider`, `NeteaseLyricsProvider`, `LRCLibLyricsProvider`)
-- Provider order is Musixmatch first (when `MUSIXMATCH_TOKEN` is configured), then NetEase, then LRCLib fallback.
+  - `services/lyrics_providers.py`: built-in provider implementations (`MusixmatchLyricsProvider`, `NeteaseLyricsProvider`, `LRCLibLyricsProvider`)
+  - `services/lyrics_provider_loader.py`: importlib-based loader for user-defined provider modules configured through `LYRICS_PROVIDER_CUSTOM_PATHS`
+- Provider order is Musixmatch first (when `MUSIXMATCH_TOKEN` is configured), then NetEase and LRCLib plus any loaded custom providers in the fallback pool.
 - Resolution behavior is Musixmatch-first, then concurrent fallback search across the remaining providers with score-based selection of the best payload.
 - Synced lyrics are persisted as `.lrc` sidecars for stage overlay cue parsing.
 - Unsynced lyrics can still be persisted as sidecars for future/manual overlay handling.

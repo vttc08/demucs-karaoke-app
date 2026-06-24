@@ -11,3 +11,4 @@ from tests.services.lyrics_presets import *  # noqa: F401,F403
 from tests.services.stage_lobby import *  # noqa: F401,F403
 from tests.services.media_trim import *  # noqa: F401,F403
 from tests.services.vocal_sync import *  # noqa: F401,F403
+from tests.services.lyrics_provider_loader import *  # noqa: F401,F403

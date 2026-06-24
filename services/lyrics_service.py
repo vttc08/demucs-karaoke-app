@@ -13,6 +13,8 @@ from typing import Any, Optional, Protocol
 import httpx
 
 from config import settings
+from services import lyrics_types as shared_lyrics_types
+from services.lyrics_provider_loader import load_custom_lyrics_providers
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +39,7 @@ _MUSIXMATCH_PARAMS = {
     "app_id": "web-desktop-app-v1.0",
 }
 _MUSIXMATCH_DISCLAIMER_RE = re.compile(r"not\s+for\s+commercial\s+use", re.IGNORECASE)
+_SYNCED_LYRICS_HINT_RE = re.compile(r"(?m)^\s*\[\d{1,3}:\d{2}(?:\.\d{1,3})?\]")
 
 
 def build_httpx_client_kwargs(timeout: float) -> dict[str, Any]:
@@ -81,7 +84,7 @@ class LyricsProvider(Protocol):
 
     name: str
 
-    async def fetch(self, inferred_song: InferredSong) -> Optional[LyricsPayload]:
+    async def fetch(self, inferred_song: InferredSong, **kwargs: Any) -> Optional[LyricsPayload | str]:
         """Fetch lyrics for inferred metadata."""
 
 
@@ -764,6 +767,8 @@ class LyricsService:
             lastfm_api_key=settings.lastfm_api_key
         )
         self._uses_runtime_provider_settings = providers is None
+        self._custom_provider_paths: str = ""
+        self._custom_providers_cache: list[LyricsProvider] = []
         if providers is not None:
             self.providers = providers
             return
@@ -780,6 +785,21 @@ class LyricsService:
         if settings.lyrics_provider_lrclib_enabled:
             default_providers.append(LRCLibLyricsProvider())
         return default_providers
+
+    def _get_custom_providers(self) -> list[LyricsProvider]:
+        custom_paths = settings.lyrics_provider_custom_paths.strip()
+        if not custom_paths:
+            self._custom_provider_paths = ""
+            self._custom_providers_cache = []
+            return []
+
+        if custom_paths == self._custom_provider_paths:
+            return self._custom_providers_cache
+
+        providers = load_custom_lyrics_providers(custom_paths)
+        self._custom_provider_paths = custom_paths
+        self._custom_providers_cache = providers
+        return providers
 
     async def infer_song_metadata(self, title: str, artist: Optional[str] = None) -> InferredSong:
         """Infer normalized metadata for downstream lyrics providers."""
@@ -817,7 +837,11 @@ class LyricsService:
 
         for provider in musixmatch_providers:
             logger.debug("Searching provider=%s with query=%r", provider.name, debug_query)
-            payload = await provider.fetch(inferred_song)
+            payload = await provider.fetch(
+                inferred_song,
+                title=inferred_song.title,
+                artist=inferred_song.artist,
+            )
             if payload:
                 logger.debug(
                     "Found lyrics provider=%s synced=%s title=%r artist=%r",
@@ -834,52 +858,86 @@ class LyricsService:
                     inferred_song.title,
                     inferred_song.artist,
                     payload.is_synced,
-                )
+                    )
                 return payload
             logger.debug("Provider %s lyrics not found query=%r", provider.name, debug_query)
 
-        if fallback_providers:
-            async def _fetch_provider(provider: LyricsProvider):
-                logger.debug("Searching provider=%s with query=%r", provider.name, debug_query)
+        custom_providers = self._get_custom_providers() if self._uses_runtime_provider_settings else []
+        fallback_entries = [(provider, False) for provider in fallback_providers]
+        fallback_entries.extend((provider, True) for provider in custom_providers)
+        if fallback_entries:
+            async def _fetch_provider(provider: LyricsProvider, is_custom: bool):
+                logger.debug(
+                    "Searching provider=%s custom=%s with query=%r",
+                    provider.name,
+                    is_custom,
+                    debug_query,
+                )
                 try:
-                    return provider, await provider.fetch(inferred_song)
+                    result = await provider.fetch(
+                        inferred_song,
+                        title=inferred_song.title,
+                        artist=inferred_song.artist,
+                    )
+                    return provider, is_custom, result
                 except Exception as exc:  # pragma: no cover - defensive logging
-                    return provider, exc
+                    return provider, is_custom, exc
 
-            results = await asyncio.gather(*(_fetch_provider(provider) for provider in fallback_providers))
-            payloads: list[LyricsPayload] = []
-            for provider, result in results:
+            results = await asyncio.gather(
+                *(_fetch_provider(provider, is_custom) for provider, is_custom in fallback_entries)
+            )
+            payloads: list[tuple[LyricsProvider, bool, LyricsPayload]] = []
+            for provider, is_custom, result in results:
                 if isinstance(result, Exception):
                     logger.error(
-                        "Lyrics provider raised provider=%s title=%r artist=%r",
+                        "Lyrics provider raised provider=%s custom=%s title=%r artist=%r",
                         provider.name,
+                        is_custom,
                         inferred_song.title,
                         inferred_song.artist,
                         exc_info=(type(result), result, result.__traceback__),
                     )
                     continue
-                if result:
-                    payloads.append(result)
+                normalized_payload = self._normalize_provider_result(
+                    provider=provider,
+                    inferred_song=inferred_song,
+                    result=result,
+                )
+                if normalized_payload:
+                    payloads.append((provider, is_custom, normalized_payload))
                 else:
-                    logger.debug("Provider %s lyrics not found query=%r", provider.name, debug_query)
+                    logger.debug(
+                        "Provider %s lyrics not found query=%r custom=%s",
+                        provider.name,
+                        debug_query,
+                        is_custom,
+                    )
 
             if payloads:
-                best_payload = max(payloads, key=self._score_payload)
+                _best_provider, best_is_custom, best_payload = max(
+                    payloads,
+                    key=lambda item: (
+                        self._score_payload(item[2]),
+                        0 if item[1] else 1,
+                    ),
+                )
                 logger.debug(
-                    "Found lyrics provider=%s synced=%s title=%r artist=%r",
+                    "Found lyrics provider=%s synced=%s title=%r artist=%r custom=%s",
                     best_payload.provider,
                     best_payload.is_synced,
                     best_payload.inferred_song.title,
                     best_payload.inferred_song.artist,
+                    best_is_custom,
                 )
                 logger.info(
-                    "Lyrics resolved provider=%s score=%s source=%s title=%r artist=%r synced=%s",
+                    "Lyrics resolved provider=%s score=%s source=%s title=%r artist=%r synced=%s custom=%s",
                     best_payload.provider,
                     self._score_payload(best_payload),
                     inferred_song.source,
                     inferred_song.title,
                     inferred_song.artist,
                     best_payload.is_synced,
+                    best_is_custom,
                 )
                 return best_payload
 
@@ -927,6 +985,30 @@ class LyricsService:
         if isinstance(selected_score, (int, float)):
             return float(selected_score)
         return 0.0
+
+    def _normalize_provider_result(
+        self,
+        provider: LyricsProvider,
+        inferred_song: InferredSong,
+        result: object,
+    ) -> Optional[LyricsPayload]:
+        if isinstance(result, shared_lyrics_types.LyricsPayload):
+            return result
+        if isinstance(result, str):
+            lyrics_text = result.strip()
+            if not lyrics_text:
+                return None
+            return LyricsPayload(
+                lyrics=lyrics_text,
+                is_synced=self._looks_like_synced_lyrics(lyrics_text),
+                provider=provider.name,
+                inferred_song=inferred_song,
+            )
+        return None
+
+    @staticmethod
+    def _looks_like_synced_lyrics(lyrics_text: str) -> bool:
+        return bool(_SYNCED_LYRICS_HINT_RE.search(lyrics_text))
 
     @staticmethod
     def _build_debug_query(inferred_song: InferredSong) -> str:

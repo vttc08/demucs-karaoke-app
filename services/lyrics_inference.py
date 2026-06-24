@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Optional
 
-from services import lyrics_service as ls_module
+from services import lyrics_types as ls_module
 
 logger = logging.getLogger(__name__)
 
