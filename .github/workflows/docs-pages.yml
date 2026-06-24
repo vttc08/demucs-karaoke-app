@@ -3,7 +3,6 @@ name: Deploy docs site
 on:
   push:
     branches:
-      - feat/documentation
       - main
     paths:
       - docs-site/**
