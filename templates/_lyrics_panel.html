@@ -7,6 +7,7 @@
    - #lyrics-panel: main container (hidden/shown based on lyrics enabled)
    - #lyrics-state: status badge (idle, loading, resolved, error, manual)
    - #lyrics-help: help text that changes based on state
+   - #lyrics-autopilot-btn: optional page-specific automation button
    - #lyrics-whisperx-language-code: optional per-submission WhisperX language override
    
    Usage:
@@ -30,7 +31,13 @@
       </div>
       <p class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">{{ t('lyrics.lookup_detail') }}</p>
     </div>
-    <span id="lyrics-state" class="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.idle') }}</span>
+    <div class="flex shrink-0 items-center gap-2">
+      <button type="button" id="lyrics-autopilot-btn" class="hidden items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-surface transition-all hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+        <span class="material-symbols-outlined text-sm">rocket_launch</span>
+        {{ t('upload.autopilot') }}
+      </button>
+      <span id="lyrics-state" class="rounded-full bg-on-surface/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.idle') }}</span>
+    </div>
   </div>
 
   <!-- Form fields (title, artist, action buttons) -->

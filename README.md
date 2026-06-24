@@ -197,6 +197,7 @@ See [docs/vocal-sync.md](docs/vocal-sync.md) for the Add Vocals workflow and off
 6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
         - Upload MP3, MP4, WebM, MKV, MOV, AVI, M4V, or ZIP bundles into the media library with title and artist metadata
         - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use, the lyrics file picker accepts `.lrc`, `.txt`, or WhisperX `.json`, and WhisperX alignment can use a per-upload language override
+        - Use **Autopilot** after selecting a media file to infer metadata, enable AI karaoke and lyrics sync, search lyrics, then turn on WhisperX alignment; it stops before upload so the result can be reviewed
         - **AI Karaoke** is available only while Demucs is online and can process uploads whether or not **Add to queue** is enabled
         - Queued AI uploads use the queue preparation task; non-queued AI uploads create a media-library karaoke task
         - If Demucs becomes unavailable during submission, the upload is still saved and optionally queued without karaoke processing

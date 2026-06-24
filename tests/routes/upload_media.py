@@ -13,6 +13,7 @@ def test_upload_page_loads(client):
     assert "(optional)" in response.text
     assert not re.search(r'<input[^>]*id="artist-name"[^>]*required', response.text)
     assert 'id="infer-metadata-btn"' in response.text
+    assert 'id="upload-autopilot-btn"' in response.text
     assert "Infer from filename" in response.text
     assert 'accept=".mp3,.mp4,.webm,.mkv,.mov,.avi,.m4v,.zip"' in response.text
     assert 'accept=".lrc,.txt,.json"' in response.text

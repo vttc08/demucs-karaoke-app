@@ -64,10 +64,16 @@
                         />
                     </div>
                 </div>
-                <button type="button" id="infer-metadata-btn" class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest/30 px-4 py-2 text-secondary font-bold text-on-surface-variant transition-all hover:bg-surface-container-highest/50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
-                    <span class="material-symbols-outlined text-base">auto_fix_high</span>
-                    {{ t('upload.infer_filename') }}
-                </button>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" id="infer-metadata-btn" class="inline-flex items-center gap-2 rounded-full bg-surface-container-highest/30 px-4 py-2 text-secondary font-bold text-on-surface-variant transition-all hover:bg-surface-container-highest/50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                        <span class="material-symbols-outlined text-base">auto_fix_high</span>
+                        {{ t('upload.infer_filename') }}
+                    </button>
+                    <button type="button" id="upload-autopilot-btn" class="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-black uppercase tracking-wider text-surface shadow-[0_0_18px_rgba(0,242,255,0.25)] transition-all hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                        <span class="material-symbols-outlined text-base">rocket_launch</span>
+                        {{ t('upload.autopilot') }}
+                    </button>
+                </div>
             </div>
 
             <!-- Lyrics Panel -->
