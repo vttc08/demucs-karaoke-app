@@ -1,7 +1,9 @@
 """Runtime settings service."""
 import logging
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -50,6 +52,7 @@ class RuntimeSettingsService:
     DEMUCS_DIRECT_MEDIA_MAX_MB_RANGE = (0, 5000)
     DEMUCS_POLL_INTERVAL_SECONDS_RANGE = (0.25, 10.0)
     PROXY_INFO_TIMEOUT_SECONDS = 10.0
+    YTDLP_PIP_MANAGED_ERROR = "You installed yt-dlp with pip or using the wheel from PyPi"
     PERSISTED_SETTING_FIELDS = (
         "demucs_api_url",
         "demucs_model",
@@ -816,6 +819,47 @@ class RuntimeSettingsService:
             raise RuntimeError("yt-dlp version check returned empty output")
         return YtDlpVersionResponse(version=version, binary_path=settings.ytdlp_path)
 
+    def _resolve_ytdlp_python_executable(self) -> str:
+        """Return the Python executable that owns the configured yt-dlp install."""
+        ytdlp_path = Path(settings.ytdlp_path)
+        try:
+            with ytdlp_path.open("rb") as handle:
+                shebang = handle.readline(256).decode("utf-8", errors="ignore").strip()
+        except OSError:
+            return sys.executable
+
+        if shebang.startswith("#!"):
+            interpreter = shebang[2:].strip().split(" ", 1)[0]
+            if interpreter:
+                return interpreter
+        return sys.executable
+
+    def _update_ytdlp_via_package_manager(self) -> subprocess.CompletedProcess[str]:
+        """Update yt-dlp with the package manager used by the active install."""
+        python_executable = self._resolve_ytdlp_python_executable()
+        if shutil.which("uv"):
+            cmd = ["uv", "pip", "install", "--upgrade", "yt-dlp", "--python", python_executable]
+        else:
+            cmd = [python_executable, "-m", "pip", "install", "--upgrade", "yt-dlp"]
+
+        try:
+            return subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=self.YTDLP_COMMAND_TIMEOUT_SECONDS,
+            )
+        except FileNotFoundError as error:
+            raise RuntimeError("yt-dlp package-manager update tool not found") from error
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("yt-dlp package-manager update timed out") from error
+        except subprocess.CalledProcessError as error:
+            stderr = (error.stderr or "").strip()
+            raise RuntimeError(
+                f"yt-dlp package-manager update failed: {stderr or 'unknown error'}"
+            ) from error
+
     def update_ytdlp(self) -> YtDlpUpdateResponse:
         """Run `yt-dlp -U` and return update summary."""
         before = self.get_ytdlp_version()
@@ -834,11 +878,22 @@ class RuntimeSettingsService:
             raise RuntimeError("yt-dlp update timed out") from error
         except subprocess.CalledProcessError as error:
             stderr = (error.stderr or "").strip()
-            raise RuntimeError(f"yt-dlp update failed: {stderr or 'unknown error'}") from error
+            if self.YTDLP_PIP_MANAGED_ERROR in stderr:
+                logger.info(
+                    "yt-dlp update fell back to package-manager install binary=%s python=%s",
+                    settings.ytdlp_path,
+                    self._resolve_ytdlp_python_executable(),
+                )
+                result = self._update_ytdlp_via_package_manager()
+            else:
+                raise RuntimeError(f"yt-dlp update failed: {stderr or 'unknown error'}") from error
 
         after = self.get_ytdlp_version()
-        detail = ((result.stdout or "").strip() or "yt-dlp update command completed")[:500]
         updated = before.version != after.version
+        if updated:
+            detail = ((result.stdout or "").strip() or "yt-dlp update command completed")[:500]
+        else:
+            detail = f"yt-dlp is up to date ({after.version})"
         return YtDlpUpdateResponse(
             before_version=before.version,
             after_version=after.version,

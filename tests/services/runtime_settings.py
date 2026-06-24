@@ -1,4 +1,6 @@
 import os
+import subprocess
+
 from .common import *
 
 def test_demucs_client_health_check_reports_degraded_payload():
@@ -782,6 +784,74 @@ def test_runtime_settings_update_ytdlp_reports_up_to_date():
     assert result.updated is False
     assert result.before_version == "2026.03.15"
     assert result.after_version == "2026.03.15"
+
+def test_runtime_settings_update_ytdlp_falls_back_for_pip_managed_install():
+    """yt-dlp update should fall back to package-manager installs when needed."""
+    service = RuntimeSettingsService()
+    pip_managed_error = subprocess.CalledProcessError(
+        returncode=1,
+        cmd=["/usr/bin/yt-dlp", "-U"],
+        stderr=(
+            "Current version: stable@2025.02.19 from yt-dlp/yt-dlp\n"
+            "Latest version: stable@2026.06.09 from yt-dlp/yt-dlp\n"
+            "ERROR: You installed yt-dlp with pip or using the wheel from PyPi; "
+            "Use that to update"
+        ),
+    )
+
+    with patch.object(
+        RuntimeSettingsService,
+        "get_ytdlp_version",
+        side_effect=[
+            Mock(version="2025.02.19", binary_path="/usr/bin/yt-dlp"),
+            Mock(version="2026.06.09", binary_path="/usr/bin/yt-dlp"),
+        ],
+    ):
+        with patch("services.runtime_settings_service.shutil.which", return_value=None):
+            with patch("services.runtime_settings_service.subprocess.run") as mock_run:
+                mock_run.side_effect = [
+                    pip_managed_error,
+                    Mock(stdout="Successfully installed yt-dlp-2026.6.9"),
+                ]
+                result = service.update_ytdlp()
+
+    assert result.updated is True
+    assert result.before_version == "2025.02.19"
+    assert result.after_version == "2026.06.09"
+    assert "Successfully installed" in result.detail
+    assert mock_run.call_count == 2
+    assert mock_run.call_args_list[1].args[0][1:4] == ["-m", "pip", "install"]
+
+def test_runtime_settings_update_ytdlp_falls_back_for_pip_managed_install_without_new_version():
+    """Fallback updates that do not change the version should report up to date."""
+    service = RuntimeSettingsService()
+    pip_managed_error = subprocess.CalledProcessError(
+        returncode=1,
+        cmd=["/usr/bin/yt-dlp", "-U"],
+        stderr="ERROR: You installed yt-dlp with pip or using the wheel from PyPi; Use that to update",
+    )
+
+    with patch.object(
+        RuntimeSettingsService,
+        "get_ytdlp_version",
+        side_effect=[
+            Mock(version="2026.06.09", binary_path="/usr/bin/yt-dlp"),
+            Mock(version="2026.06.09", binary_path="/usr/bin/yt-dlp"),
+        ],
+    ):
+        with patch("services.runtime_settings_service.shutil.which", return_value=None):
+            with patch("services.runtime_settings_service.subprocess.run") as mock_run:
+                mock_run.side_effect = [
+                    pip_managed_error,
+                    Mock(stdout="Requirement already satisfied: yt-dlp"),
+                ]
+                result = service.update_ytdlp()
+
+    assert result.updated is False
+    assert result.before_version == "2026.06.09"
+    assert result.after_version == "2026.06.09"
+    assert result.detail == "yt-dlp is up to date (2026.06.09)"
+    assert mock_run.call_count == 2
 
 def test_runtime_settings_update_settings_accepts_concurrent_search_toggle():
     """Runtime settings should accept concurrent search boolean updates."""

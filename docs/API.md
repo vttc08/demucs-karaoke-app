@@ -1302,7 +1302,7 @@ Returns the version from `yt-dlp --version` using current configured `ytdlp_path
 POST /api/settings/ytdlp/update
 ```
 
-Runs `yt-dlp -U` and returns before/after version comparison.
+Runs `yt-dlp -U` for release-binary installs and falls back to an in-environment package update when yt-dlp reports a pip/wheel-managed install.
 
 **Response:**
 ```json

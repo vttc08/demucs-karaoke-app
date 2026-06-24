@@ -166,7 +166,7 @@ and `/static/...`.
        - Configure **Stage Lobby Media URL** (`/media/...` or `/cache/...`) for empty-queue loop playback
        - Configure the stage QR overlay URL for the fullscreen stage view; QR size and placement are adjusted per device on `/stage`
        - Configure the default vocals volume used when `/stage` or `/queue` loads after a restart
-       - Check current yt-dlp version and run in-place update (`yt-dlp -U`) from UI
+       - Check current yt-dlp version and update from UI; release binaries use `yt-dlp -U`, while pip/uv installs fall back to an in-environment package update
       - Apply settings immediately without restarting the app (for processing/runtime behavior)
        - Persist changes to the database so settings survive app reloads and restarts
        - View real-time Demucs engine health (online/offline with detail)
@@ -405,7 +405,9 @@ karaoke/
 ### yt-dlp issues
 ```bash
 # Update yt-dlp
-pip install --upgrade yt-dlp
+uv pip install --upgrade yt-dlp
+# or, inside the same Python environment
+python -m pip install --upgrade yt-dlp
 ```
 
 For karaoke mode, this app downloads source audio directly from yt-dlp formats (instead of yt-dlp ffmpeg postprocessing), which avoids `ffprobe/ffmpeg not found` during the audio-download step.
