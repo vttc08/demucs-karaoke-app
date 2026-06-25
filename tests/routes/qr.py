@@ -27,8 +27,9 @@ def test_qr_endpoint_emits_standard_not_micro_qr(client):
     cameras cannot scan. Byte-equality against the make_qr reference fails if the
     route regresses to segno.make.
     """
-    response = client.get("/api/qr", params={"data": "127.0.0.1", "size": 320})
+    data, size = "127.0.0.1", 320
+    response = client.get("/api/qr", params={"data": data, "size": size})
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
     assert response.headers.get("cache-control") == "no-cache"
-    assert response.content == _expected_qr_png("127.0.0.1", 320)
+    assert response.content == _expected_qr_png(data, size)
