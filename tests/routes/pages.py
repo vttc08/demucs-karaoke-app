@@ -353,7 +353,7 @@ def test_stage_qr_fallback_builds_full_url_not_bare_hostname(client):
         response = client.get("/stage")
     assert response.status_code == 200
     assert b"return window.location.hostname;" not in response.content
-    assert b"window.location.origin" in response.content
+    assert b'appUrl("/queue"), window.location.origin' in response.content
 
 
 def test_stage_page_renders_audio_mode_for_current_mp3(client, tmp_path):
