@@ -648,7 +648,7 @@
   "settings.parallel_search": "并行 YouTube 搜索",
   "settings.parallel_search_detail": "同时搜索原始查询和卡拉 OK 变体。",
   "settings.qr_url": "舞台二维码 URL",
-  "settings.qr_url_detail": "可选。用于舞台视图二维码浮层。留空时默认使用本页面的完整地址（含端口）。请设置局域网地址（如 http://192.168.1.10:8000/queue），以便手机可以访问。",
+  "settings.qr_url_detail": "可选。用于舞台视图二维码浮层。留空时默认使用当前主机名。",
   "settings.lobby_media_path": "舞台大厅媒体 URL",
   "settings.lobby_media_path_detail": "可选。队列为空时循环播放的 /media/... 或 /cache/... URL。",
   "settings.vocals_volume_default": "默认人声音量",
