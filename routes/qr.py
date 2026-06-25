@@ -1,9 +1,9 @@
 """QR code generation endpoint using a local library."""
 from io import BytesIO
 
+import segno
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from segno import make as make_qr
 
 router = APIRouter(prefix="/api", tags=["qr"])
 
@@ -30,7 +30,11 @@ def generate_qr_code(
 ) -> StreamingResponse:
     """Return a PNG QR code for the requested data."""
     try:
-        qr = make_qr(data, error="m")
+        # Use make_qr (not segno.make) so short payloads such as "127.0.0.1" or
+        # "localhost" always produce a standard QR with three finder patterns.
+        # segno.make would downgrade them to a Micro QR (one finder pattern),
+        # which looks like a partial code and most phone cameras cannot scan.
+        qr = segno.make_qr(data, error="m")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -48,4 +52,8 @@ def generate_qr_code(
         light="#ffffff",
     )
     buffer.seek(0)
-    return StreamingResponse(buffer, media_type="image/png")
+    return StreamingResponse(
+        buffer,
+        media_type="image/png",
+        headers={"Cache-Control": "no-cache"},
+    )

@@ -9,3 +9,4 @@ from tests.routes.websocket import *  # noqa: F401,F403
 from tests.routes.media_trim import *  # noqa: F401,F403
 from tests.routes.vocal_sync import *  # noqa: F401,F403
 from tests.routes.subtitles import *  # noqa: F401,F403
+from tests.routes.qr import *  # noqa: F401,F403
