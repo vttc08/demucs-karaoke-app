@@ -3281,7 +3281,10 @@ function resolveStageQrUrl() {
     if (configured) {
         return configured;
     }
-    return window.location.hostname;
+    // Fall back to this page's full address (scheme + host + port + queue path)
+    // so the QR encodes a scannable link. A bare hostname drops the port and is
+    // not treated as a URL by phone cameras. appUrl() preserves KARAOKE_BASE_PATH.
+    return new URL(window.KaraokeURLs.appUrl("/queue"), window.location.origin).href;
 }
 
 function clampNumber(value, min, max, fallback) {
