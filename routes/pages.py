@@ -436,15 +436,32 @@ async def media_subtitles_page(
     )
     if admin is None:
         return RedirectResponse(url=app_url("/login"), status_code=302)
+    locale = resolve_locale(request)
 
     try:
         media_item, media_file, lyrics_file = subtitle_workflow_service.get_editable_media(db, item_id)
-    except (SubtitleWorkflowNotFoundError, SubtitleWorkflowConflictError):
-        return RedirectResponse(url=app_url("/media"), status_code=302)
+    except (SubtitleWorkflowNotFoundError, SubtitleWorkflowConflictError) as exc:
+        if isinstance(exc, SubtitleWorkflowConflictError):
+            detail = translate(locale, "subtitle.not_available_detail")
+        else:
+            detail = translate(locale, "subtitle.not_found_detail")
+        return templates.TemplateResponse(
+            "media_subtitles.html",
+            {
+                "request": request,
+                "subtitle_error": {
+                    "title": translate(locale, "subtitle.not_available"),
+                    "detail": detail,
+                    "back_url": app_url("/media"),
+                    "history_back": translate(locale, "subtitle.go_back_previous"),
+                },
+            },
+            status_code=404,
+        )
 
     media_suffix = Path(media_item.media_path).suffix.lower()
     is_video = media_suffix in _VIDEO_SUFFIXES
-    docs_target = app_url(build_docs_url(resolve_locale(request)))
+    docs_target = app_url(build_docs_url(locale))
     return templates.TemplateResponse(
         "media_subtitles.html",
         {

@@ -23,8 +23,8 @@ The subtitle editor is an admin-only workflow for round-tripping synced JSON lyr
 - If a karaoke line extends beyond its final word, the final `{\k}` duration is expanded to fill the line.
 - If a user shortens a karaoke line in Aegisub, the import path clamps any word timing that now runs past the line end.
 - If a word is missing from the edited SRT, the import path keeps the remaining words and rebuilds the segment from what is still present.
+- When a media item does not have synced JSON lyrics, `/media-subtitles/{item_id}` returns a 404 page with a back button instead of silently redirecting to `/media`.
 
 ## Authoritative source
 
 The current notebook notes in `docs/subtitles.ipynb` are the source of truth for the ASS and SRT conversion behavior.
-

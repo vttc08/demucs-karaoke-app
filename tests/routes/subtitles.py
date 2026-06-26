@@ -64,6 +64,60 @@ def test_media_subtitles_page_renders_admin_shell(client, tmp_path, monkeypatch)
     assert 'data-subtitle-upload-form="srt"' in response.text
 
 
+def test_media_subtitles_page_shows_404_when_synced_lyrics_are_missing(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    media_file.write_bytes(b"video")
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path=None,
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.get(f"/media-subtitles/{media_id}")
+
+    assert response.status_code == 404
+    assert "Subtitle workflow unavailable" in response.text
+    assert "This media item does not have synced JSON lyrics" in response.text
+    assert "history.back()" in response.text
+    assert "/media" in response.text
+
+
+def test_media_subtitles_page_shows_404_when_lyrics_sidecar_is_missing(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    lyrics_file = tmp_path / "song.json"
+    media_file.write_bytes(b"video")
+    lyrics_file.unlink(missing_ok=True)
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path="/media/song.json",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.get(f"/media-subtitles/{media_id}")
+
+    assert response.status_code == 404
+    assert "Subtitle workflow unavailable" in response.text
+    assert "could not be found" in response.text
+
+
 def test_subtitle_export_routes_return_downloads(client):
     authenticate_admin_client(client)
     with patch(
@@ -110,4 +164,3 @@ def test_subtitle_preview_and_upload_routes_forward_uploads(client):
     assert upload_response.json()["lyrics_path"] == "/media/song.json"
     preview_upload.assert_called_once()
     replace_upload.assert_called_once()
-
