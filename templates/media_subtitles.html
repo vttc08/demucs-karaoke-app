@@ -119,6 +119,7 @@
                         <span>{{ t('subtitle.preview') }}</span>
                     </button>
                 </div>
+                <p class="hidden rounded-2xl border border-white/10 bg-surface-container-high/30 px-3 py-2 text-sm font-semibold text-on-surface-variant" data-subtitle-message-box="ass" role="status" aria-live="polite"></p>
                 <p class="text-xs font-medium text-on-surface-variant">{{ t('subtitle.ass_note') }}</p>
                 <div class="hidden rounded-2xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning" data-subtitle-preview-box="ass"></div>
             </form>
@@ -186,13 +187,13 @@
                         <span>{{ t('subtitle.preview') }}</span>
                     </button>
                 </div>
+                <p class="hidden rounded-2xl border border-white/10 bg-surface-container-high/30 px-3 py-2 text-sm font-semibold text-on-surface-variant" data-subtitle-message-box="srt" role="status" aria-live="polite"></p>
                 <p class="text-xs font-medium text-on-surface-variant">{{ t('subtitle.srt_note') }}</p>
                 <div class="hidden rounded-2xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning" data-subtitle-preview-box="srt"></div>
             </form>
         </article>
     </section>
 
-    <p id="subtitle-message" class="min-h-5 text-sm font-semibold text-on-surface-variant" role="status" aria-live="polite"></p>
 </main>
 {% endblock %}
 

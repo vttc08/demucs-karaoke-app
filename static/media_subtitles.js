@@ -4,7 +4,6 @@
 
     const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
     const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
-    const message = document.getElementById("subtitle-message");
     const filesRoot = document.getElementById("subtitle-associated-files");
     const refreshFilesBtn = document.getElementById("subtitle-refresh-files");
 
@@ -15,11 +14,21 @@
 
     const selectedFiles = new Map();
 
-    function setMessage(text = "", isError = false) {
-        if (!message) return;
-        message.textContent = text;
-        message.classList.toggle("text-error", Boolean(isError));
-        message.classList.toggle("text-on-surface-variant", !isError);
+    function getMessageBox(format) {
+        return document.querySelector(`[data-subtitle-message-box="${format}"]`);
+    }
+
+    function setMessage(format, text = "", isError = false) {
+        const box = getMessageBox(format);
+        if (!box) return;
+        box.textContent = text;
+        box.classList.toggle("hidden", !text);
+        box.classList.toggle("border-error/30", Boolean(isError));
+        box.classList.toggle("bg-error/10", Boolean(isError));
+        box.classList.toggle("text-error", Boolean(isError));
+        box.classList.toggle("text-on-surface-variant", !isError);
+        box.classList.toggle("border-white/10", !isError);
+        box.classList.toggle("bg-surface-container-high/30", !isError);
     }
 
     function escapeText(value) {
@@ -42,6 +51,12 @@
         if (normalizedExtension === "txt") return t("media.file_lyrics_txt");
         if (normalizedExtension === "srt") return t("subtitle.file_srt");
         return t("media.file_lyrics");
+    }
+
+    function formatReplaceLabel(format) {
+        return String(format || "").toLowerCase() === "ass"
+            ? t("subtitle.ass_label")
+            : t("subtitle.srt_label");
     }
 
     function formatWarning(warning) {
@@ -169,7 +184,7 @@
 
     async function previewSelectedFile(format, file) {
         if (!file) return;
-        setMessage(t("subtitle.previewing"), false);
+        setMessage(format, t("subtitle.previewing"), false);
         try {
             const formData = new FormData();
             formData.append("file", file, file.name);
@@ -178,20 +193,26 @@
                 body: formData,
             });
             renderPreviewBox(format, payload.preview);
-            setMessage(t("subtitle.preview_ready"));
+            setMessage(format, t("subtitle.preview_ready"));
         } catch (error) {
             renderPreviewBox(format, null);
-            setMessage(error instanceof Error ? error.message : t("subtitle.request_failed"), true);
+            setMessage(format, error instanceof Error ? error.message : t("subtitle.request_failed"), true);
         }
     }
 
     async function submitSelectedFile(format, file, button) {
         if (!file) {
-            setMessage(t("subtitle.choose_file_first"), true);
+            setMessage(format, t("subtitle.choose_file_first"), true);
+            return;
+        }
+        const kindLabel = formatReplaceLabel(format);
+        const confirmed = window.confirm(t("subtitle.confirm_replace", { kind: kindLabel }));
+        if (!confirmed) {
+            setMessage(format, t("subtitle.replace_canceled"), false);
             return;
         }
         button.disabled = true;
-        setMessage(t("subtitle.uploading"), false);
+        setMessage(format, t("subtitle.uploading"), false);
         try {
             const formData = new FormData();
             formData.append("file", file, file.name);
@@ -199,11 +220,20 @@
                 method: "POST",
                 body: formData,
             });
-            setMessage(t("subtitle.upload_complete"));
+            setMessage(format, t("subtitle.upload_complete_refreshing", { kind: kindLabel }), false);
             renderPreviewBox(format, payload.preview);
+            selectedFiles.delete(format);
+            const form = document.querySelector(`[data-subtitle-upload-form="${format}"]`);
+            const input = form?.querySelector('input[type="file"]');
+            if (input) {
+                input.value = "";
+            }
             await loadAssociatedFiles();
+            window.setTimeout(() => {
+                window.location.reload();
+            }, 2200);
         } catch (error) {
-            setMessage(error instanceof Error ? error.message : t("subtitle.request_failed"), true);
+            setMessage(format, error instanceof Error ? error.message : t("subtitle.request_failed"), true);
         } finally {
             button.disabled = false;
         }
