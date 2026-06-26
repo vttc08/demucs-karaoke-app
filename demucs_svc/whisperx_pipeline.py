@@ -420,7 +420,7 @@ def _realign_with_sequence(
     ]
 
 
-def _rebuild_synced_segments(
+def _rebuild_segments(
     original_segments: list[ParsedLyricSegment],
     aligned_words: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -492,11 +492,10 @@ def align_lyrics(
     )
 
     aligned_segments = list(aligned.get("segments") or [])
-    if parsed_is_synced:
-        words = [word for segment in aligned_segments for word in segment.get("words", [])]
-        rebuilt = _rebuild_synced_segments(parsed_segments, words)
-        if rebuilt:
-            return rebuilt
+    words = [word for segment in aligned_segments for word in segment.get("words", [])]
+    rebuilt = _rebuild_segments(parsed_segments, words)
+    if rebuilt:
+        return rebuilt
     return aligned_segments
 
 

@@ -23,6 +23,7 @@ from routes import (
     qr as qr_routes,
     search,
     settings as settings_routes,
+    media_subtitles,
     tasks as task_routes,
     vocal_sync,
 )
@@ -129,6 +130,7 @@ def create_app() -> FastAPI:
     created_app.include_router(search.router, prefix=base_path)
     created_app.include_router(settings_routes.router, prefix=base_path)
     created_app.include_router(task_routes.router, prefix=base_path)
+    created_app.include_router(media_subtitles.router, prefix=base_path)
     created_app.include_router(vocal_sync.router, prefix=base_path)
 
     @created_app.get(f"{base_path}/health")

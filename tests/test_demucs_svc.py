@@ -358,6 +358,62 @@ def test_align_lyrics_rebuilds_synced_lrc_lines_with_filtered_tokens(monkeypatch
     ]
 
 
+def test_align_lyrics_rebuilds_unsynced_plain_text_lines(monkeypatch):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+
+    seen_transcript = {}
+
+    def fake_align(transcript, *args, **kwargs):
+        seen_transcript["transcript"] = transcript
+        return {
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": 1.0,
+                    "text": "flattened",
+                    "words": [
+                        {"word": "Hello", "start": 0.0, "end": 0.2, "score": 0.91},
+                        {"word": "world", "start": 0.2, "end": 0.5, "score": 0.87},
+                        {"word": "Second", "start": 0.5, "end": 0.7, "score": 0.86},
+                        {"word": "line", "start": 0.7, "end": 1.0, "score": 0.84},
+                    ],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(whisperx_pipeline, "pylrc", SimpleNamespace(parse=lambda text: []))
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "whisperx",
+        SimpleNamespace(
+            load_audio=lambda path: [0.0] * 16000,
+            load_align_model=lambda language_code, device: (
+                {"language_code": language_code},
+                {"language_code": language_code},
+            ),
+            align=fake_align,
+        ),
+    )
+
+    aligned = whisperx_pipeline.align_lyrics(
+        Path("input.wav"),
+        "Hello world\nSecond line",
+        lyrics_format="txt",
+        transcription_model="tiny",
+        align_language="en",
+        detect_language=False,
+        use_synced_lyrics=False,
+        device="cpu",
+        compute_type=None,
+    )
+
+    assert seen_transcript["transcript"] == [{"text": "Hello world Second line", "start": 0.0, "end": 1.0}]
+    assert [(segment["start"], segment["end"], segment["text"]) for segment in aligned] == [
+        (0.0, 0.5, "Hello world"),
+        (0.5, 1.0, "Second line"),
+    ]
+
+
 def test_separate_config_clears_mp3_bitrate_for_wav():
     config = demucs_models.SeparateConfig(output_format="wav", mp3_bitrate=256)
     assert config.output_format == "wav"
