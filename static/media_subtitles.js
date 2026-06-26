@@ -10,7 +10,6 @@
 
     const mediaId = Number(root.dataset.mediaId);
     const filesUrl = root.dataset.filesUrl || "";
-    const packageUrl = root.dataset.packageUrl || "";
     const previewUrl = root.dataset.previewUrl || "";
     const uploadUrl = root.dataset.uploadUrl || "";
 
@@ -35,10 +34,10 @@
     function formatKindLabel(kind, extension = "") {
         const normalizedKind = String(kind || "").toLowerCase();
         const normalizedExtension = String(extension || "").toLowerCase();
-        if (normalizedKind === "main") return t("media.file_main");
-        if (normalizedKind === "vocals") return t("media.file_vocals");
+        if (normalizedKind === "main") return t("subtitle.file_video");
+        if (normalizedKind === "vocals") return t("subtitle.file_vocals");
         if (normalizedKind !== "lyrics") return normalizedKind || t("common.unknown");
-        if (normalizedExtension === "json") return t("media.file_lyrics_json");
+        if (normalizedExtension === "json") return t("subtitle.file_json");
         if (normalizedExtension === "lrc") return t("media.file_lyrics_lrc");
         if (normalizedExtension === "txt") return t("media.file_lyrics_txt");
         if (normalizedExtension === "srt") return t("subtitle.file_srt");
@@ -139,7 +138,7 @@
             card.className = "rounded-2xl border border-white/10 bg-surface-container-high/30 p-3";
 
             const header = document.createElement("div");
-            header.className = "flex items-start justify-between gap-3";
+            header.className = "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2";
 
             const meta = document.createElement("div");
             meta.className = "min-w-0";
@@ -147,15 +146,18 @@
             label.className = "text-[10px] font-black uppercase tracking-[0.18em] text-primary";
             label.textContent = formatKindLabel(kind, extension);
             const filename = document.createElement("p");
-            filename.className = "mt-1 break-all text-sm font-semibold text-on-surface";
+            filename.className = "mt-1 break-words text-sm font-semibold text-on-surface";
             filename.textContent = String(file.filename || "");
             meta.appendChild(label);
             meta.appendChild(filename);
 
             const download = document.createElement("a");
-            download.className = "inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-surface-container-highest/70 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110";
+            download.className = "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-surface-container-highest/70 text-on-surface hover:brightness-110";
             download.href = appUrl(`/api/media/${mediaId}/files/${encodeURIComponent(kind)}/download`);
-            download.textContent = t("common.download");
+            const kindLabel = formatKindLabel(kind, extension);
+            download.innerHTML = '<span class="material-symbols-outlined text-[18px]">download</span>';
+            download.title = t("subtitle.download_kind", { kind: kindLabel || t("common.download") });
+            download.setAttribute("aria-label", t("subtitle.download_kind", { kind: kindLabel || t("common.download") }));
 
             header.appendChild(meta);
             header.appendChild(download);
