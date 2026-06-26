@@ -14,6 +14,10 @@ def test_subtitle_routes_require_admin(client):
         "/api/media/42/subtitles/upload",
         files={"file": ("edited.srt", b"", "text/plain")},
     ).status_code == 403
+    assert client.post(
+        "/api/media/42/subtitles/raw-upload",
+        files={"file": ("edited.lrc", b"", "text/plain")},
+    ).status_code == 403
     response = client.get("/media-subtitles/42", follow_redirects=False)
     assert response.status_code == 302
     assert response.headers["location"] == "/login"
@@ -62,6 +66,8 @@ def test_media_subtitles_page_renders_admin_shell(client, tmp_path, monkeypatch)
     assert "Lyrics Editor" in response.text
     assert 'data-subtitle-upload-form="ass"' in response.text
     assert 'data-subtitle-upload-form="srt"' in response.text
+    assert 'data-subtitle-upload-form="raw"' in response.text
+    assert "Replace lyrics file" in response.text
 
 
 def test_media_subtitles_page_shows_404_when_synced_lyrics_are_missing(client, tmp_path, monkeypatch):
@@ -163,4 +169,25 @@ def test_subtitle_preview_and_upload_routes_forward_uploads(client):
     assert preview_response.json()["preview"]["warning_count"] == 1
     assert upload_response.json()["lyrics_path"] == "/media/song.json"
     preview_upload.assert_called_once()
+    replace_upload.assert_called_once()
+
+
+def test_subtitle_raw_upload_route_forwards_uploads(client):
+    authenticate_admin_client(client)
+    with patch(
+        "routes.media_subtitles.subtitle_workflow_service.replace_raw_upload",
+        return_value={
+            "status": "ok",
+            "media_id": 42,
+            "lyrics_path": "/media/song.lrc",
+            "replacement_kind": "raw",
+        },
+    ) as replace_upload:
+        upload_response = client.post(
+            "/api/media/42/subtitles/raw-upload",
+            files={"file": ("edited.lrc", b"content", "text/plain")},
+        )
+
+    assert upload_response.status_code == 200
+    assert upload_response.json()["lyrics_path"] == "/media/song.lrc"
     replace_upload.assert_called_once()

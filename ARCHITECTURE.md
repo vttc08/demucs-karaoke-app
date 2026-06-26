@@ -66,8 +66,10 @@ This project currently uses two services:
 - The edit modal also links to the admin-only `/media-subtitles/{item_id}` page. It exports
   server-rendered ASS/SRT files from the current JSON lyrics sidecar, previews edited uploads for
   overlap warnings, and converts the chosen subtitle file back into the canonical JSON sidecar on
-  commit. When a media item does not have synced JSON lyrics, the page renders a 404 error view
-  with a back action instead of silently redirecting to `/media`.
+  commit. The same page also has a raw overwrite lane for `.txt`, `.lrc`, and `.json` uploads that
+  writes the file as-is with no parsing or conversion. When a media item does not have synced JSON
+  lyrics, the page renders a 404 error view with a back action instead of silently redirecting to
+  `/media`.
 - The media edit modal also exposes a compact file-manifest panel backed by `/api/media/{item_id}/files`
   plus per-file download/delete and ZIP download endpoints so admins can inspect or remove sidecars
   before re-running separation/alignment work. The manifest only includes files that still exist on

@@ -479,6 +479,7 @@ async def media_subtitles_page(
                 "srt_export_url": app_url(f"/api/media/{media_item.id}/subtitles/srt"),
                 "preview_url": app_url(f"/api/media/{media_item.id}/subtitles/preview"),
                 "upload_url": app_url(f"/api/media/{media_item.id}/subtitles/upload"),
+                "raw_upload_url": app_url(f"/api/media/{media_item.id}/subtitles/raw-upload"),
                 "files_url": app_url(f"/api/media/{media_item.id}/files"),
                 "package_url": app_url(f"/api/media/{media_item.id}/download"),
                 "docs_url": docs_target,

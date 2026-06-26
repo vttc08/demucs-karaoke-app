@@ -11,6 +11,7 @@
     const filesUrl = root.dataset.filesUrl || "";
     const previewUrl = root.dataset.previewUrl || "";
     const uploadUrl = root.dataset.uploadUrl || "";
+    const rawUploadUrl = root.dataset.rawUploadUrl || "";
 
     const selectedFiles = new Map();
 
@@ -54,9 +55,10 @@
     }
 
     function formatReplaceLabel(format) {
-        return String(format || "").toLowerCase() === "ass"
-            ? t("subtitle.ass_label")
-            : t("subtitle.srt_label");
+        const normalized = String(format || "").toLowerCase();
+        if (normalized === "ass") return t("subtitle.ass_label");
+        if (normalized === "srt") return t("subtitle.srt_label");
+        return t("subtitle.raw_label");
     }
 
     function formatWarning(warning) {
@@ -200,27 +202,36 @@
         }
     }
 
-    async function submitSelectedFile(format, file, button) {
+    async function submitSelectedFile(format, file, button, actionUrl) {
         if (!file) {
             setMessage(format, t("subtitle.choose_file_first"), true);
             return;
         }
+        const targetUrl = actionUrl || uploadUrl;
+        const normalizedFormat = String(format || "").toLowerCase();
         const kindLabel = formatReplaceLabel(format);
-        const confirmed = window.confirm(t("subtitle.confirm_replace", { kind: kindLabel }));
+        const confirmed = window.confirm(
+            normalizedFormat === "raw"
+                ? t("subtitle.confirm_raw_replace", { kind: kindLabel })
+                : t("subtitle.confirm_replace", { kind: kindLabel })
+        );
         if (!confirmed) {
             setMessage(format, t("subtitle.replace_canceled"), false);
             return;
         }
         button.disabled = true;
-        setMessage(format, t("subtitle.uploading"), false);
+        setMessage(format, normalizedFormat === "raw" ? t("subtitle.uploading_raw") : t("subtitle.uploading"), false);
         try {
             const formData = new FormData();
             formData.append("file", file, file.name);
-            const payload = await fetchJson(uploadUrl, {
+            const payload = await fetchJson(targetUrl, {
                 method: "POST",
                 body: formData,
             });
-            setMessage(format, t("subtitle.upload_complete_refreshing", { kind: kindLabel }), false);
+            const successKey = normalizedFormat === "raw"
+                ? "subtitle.raw_upload_complete_refreshing"
+                : "subtitle.upload_complete_refreshing";
+            setMessage(format, t(successKey, { kind: kindLabel }), false);
             renderPreviewBox(format, payload.preview);
             selectedFiles.delete(format);
             const form = document.querySelector(`[data-subtitle-upload-form="${format}"]`);
@@ -243,10 +254,15 @@
         const file = input.files?.[0] || null;
         if (file) {
             selectedFiles.set(format, file);
-            previewSelectedFile(format, file);
+            if (String(format || "").toLowerCase() === "raw") {
+                setMessage(format, t("subtitle.raw_selected", { name: file.name }), false);
+            } else {
+                previewSelectedFile(format, file);
+            }
         } else {
             selectedFiles.delete(format);
             renderPreviewBox(format, null);
+            setMessage(format, "", false);
         }
     }
 
@@ -258,6 +274,7 @@
         const previewTrigger = form.querySelector(`[data-subtitle-preview-trigger="${format}"]`);
         const previewBox = form.querySelector(`[data-subtitle-preview-box="${format}"]`);
         const submitButton = form.querySelector('button[type="submit"]');
+        const actionUrl = String(format || "").toLowerCase() === "raw" ? (rawUploadUrl || uploadUrl) : uploadUrl;
 
         if (input) {
             input.addEventListener("change", () => handleFileSelection(format, input));
@@ -296,7 +313,7 @@
             event.preventDefault();
             const file = selectedFiles.get(format) || input?.files?.[0] || null;
             if (submitButton) {
-                submitSelectedFile(format, file, submitButton);
+                submitSelectedFile(format, file, submitButton, actionUrl);
             }
         });
     }
@@ -309,5 +326,6 @@
 
     bindDropzone("ass");
     bindDropzone("srt");
+    bindDropzone("raw");
     loadAssociatedFiles();
 })();

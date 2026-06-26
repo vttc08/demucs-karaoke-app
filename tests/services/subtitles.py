@@ -114,6 +114,42 @@ def test_preview_and_replace_uploaded_srt_back_to_json(db_session, tmp_path, mon
     assert saved_payload["segments"][1]["text"] == "Again"
 
 
+def test_replace_uploaded_raw_lyrics_overwrites_file_without_processing(db_session, tmp_path, monkeypatch):
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+
+    media_file = media_root / "song.mp4"
+    original_lyrics_file = media_root / "song.json"
+    media_file.write_bytes(b"video")
+    original_lyrics_file.write_text(json.dumps(_make_json_payload()), encoding="utf-8")
+
+    media = MediaItem(
+        title="Song",
+        artist="Artist",
+        media_path="/media/song.mp4",
+        lyrics_path="/media/song.json",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    raw_text = "Line one\nLine two\n"
+
+    result = SubtitleWorkflowService().replace_raw_upload(
+        db_session,
+        media.id,
+        UploadFile(file=BytesIO(raw_text.encode("utf-8")), filename="edited.lrc"),
+    )
+
+    assert result["replacement_kind"] == "raw"
+    assert result["source_format"] == "lrc"
+    assert result["lyrics_path"] == "/media/song.lrc"
+    assert (media_root / "song.lrc").read_text(encoding="utf-8") == raw_text
+    assert not original_lyrics_file.exists()
+
+
 def test_preview_reports_overlap_warnings_for_ass(db_session, tmp_path, monkeypatch):
     media_root = tmp_path / "media"
     media_root.mkdir()
@@ -154,4 +190,3 @@ def test_preview_reports_overlap_warnings_for_ass(db_session, tmp_path, monkeypa
 
     assert preview["preview"]["warning_count"] == 1
     assert preview["preview"]["warnings"][0]["type"] == "overlap"
-

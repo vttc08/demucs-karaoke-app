@@ -97,3 +97,21 @@ async def upload_subtitles(
         logger.exception("Subtitle upload failed media_id=%s filename=%s", item_id, file.filename)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+
+@router.post("/raw-upload")
+async def upload_raw_lyrics(
+    item_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Replace the current lyrics sidecar with a raw .txt, .lrc, or .json upload."""
+    try:
+        return subtitle_workflow_service.replace_raw_upload(db, item_id, file)
+    except SubtitleWorkflowNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SubtitleWorkflowConflictError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Subtitle raw upload failed media_id=%s filename=%s", item_id, file.filename)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

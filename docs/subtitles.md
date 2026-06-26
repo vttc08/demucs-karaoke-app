@@ -16,6 +16,13 @@ The subtitle editor is an admin-only workflow for round-tripping synced JSON lyr
 - The notebook uses `i * 10` for the marker index so users can insert lines between existing segments later.
 - SubtitleEdit is the preferred editor when the goal is word-level reshaping instead of karaoke timing.
 
+## Raw overwrite path
+
+- Use the bottom upload box when you want to replace the current lyrics sidecar with a plain `.txt`, `.lrc`, or `.json` file.
+- The upload is written as-is. There is no parsing, conversion, or preview step.
+- The current lyrics file is overwritten in place and the uploaded suffix becomes the active sidecar extension.
+- The page still asks for confirmation first because the action is irreversible.
+
 ## Edge cases
 
 - Overlapping segments are warned about, but they do not block upload.
