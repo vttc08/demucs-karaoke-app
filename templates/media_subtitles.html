@@ -91,32 +91,30 @@
 
     <section class="grid gap-4 xl:grid-cols-2">
         <article class="glass-card overflow-hidden rounded-3xl border border-white/10 p-4 sm:p-5">
-            <div class="flex items-start gap-4">
-                <img src="{{ static_asset_url('/static/ssa.png') }}" alt="{{ t('subtitle.ass_card_image_alt') }}" class="h-24 w-24 shrink-0 rounded-2xl border border-white/10 object-cover shadow-lg shadow-black/20 sm:h-28 sm:w-28">
-                <div class="min-w-0 flex-1">
+            <div class="grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-start">
+                <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-primary">{{ t('subtitle.recommended') }}</span>
                         <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('subtitle.ass_title') }}</h3>
                     </div>
                     <p class="mt-2 text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.ass_summary') }}</p>
                     <p class="mt-2 text-sm font-semibold text-on-surface">{{ t('subtitle.desktop_only') }}</p>
+                    <div class="mt-4">
+                        <p class="text-[11px] font-black uppercase tracking-[0.18em] text-primary">{{ t('subtitle.supported_ops') }}</p>
+                        <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
+                            <li>• {{ t('subtitle.ass_supported_1') }}</li>
+                            <li>• {{ t('subtitle.ass_supported_2') }}</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4">
+                        <p class="text-[11px] font-black uppercase tracking-[0.18em] text-error">{{ t('subtitle.unsupported_ops') }}</p>
+                        <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
+                            <li>• {{ t('subtitle.ass_unsupported_1') }}</li>
+                            <li>• {{ t('subtitle.ass_unsupported_2') }}</li>
+                        </ul>
+                    </div>
                 </div>
-            </div>
-            <div class="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-                <div class="rounded-2xl border border-white/10 bg-surface-container-high/30 p-3">
-                    <p class="text-[11px] font-black uppercase tracking-[0.18em] text-primary">{{ t('subtitle.supported_ops') }}</p>
-                    <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
-                        <li>• {{ t('subtitle.ass_supported_1') }}</li>
-                        <li>• {{ t('subtitle.ass_supported_2') }}</li>
-                    </ul>
-                </div>
-                <div class="rounded-2xl border border-white/10 bg-surface-container-high/30 p-3">
-                    <p class="text-[11px] font-black uppercase tracking-[0.18em] text-error">{{ t('subtitle.unsupported_ops') }}</p>
-                    <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
-                        <li>• {{ t('subtitle.ass_unsupported_1') }}</li>
-                        <li>• {{ t('subtitle.ass_unsupported_2') }}</li>
-                    </ul>
-                </div>
+                <img src="{{ static_asset_url('/static/ssa.png') }}" alt="{{ t('subtitle.ass_card_image_alt') }}" class="w-full aspect-[1223/485] object-contain">
             </div>
             <div class="mt-4 flex flex-wrap gap-2">
                 <a href="https://aegisub.org/downloads/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
@@ -159,32 +157,30 @@
         </article>
 
         <article class="glass-card overflow-hidden rounded-3xl border border-white/10 p-4 sm:p-5">
-            <div class="flex items-start gap-4">
-                <img src="{{ static_asset_url('/static/srt.png') }}" alt="{{ t('subtitle.srt_card_image_alt') }}" class="h-24 w-24 shrink-0 rounded-2xl border border-white/10 object-cover shadow-lg shadow-black/20 sm:h-28 sm:w-28">
-                <div class="min-w-0 flex-1">
+            <div class="grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-start">
+                <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="rounded-full border border-secondary/30 bg-secondary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-secondary">{{ t('subtitle.alternate') }}</span>
                         <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('subtitle.srt_title') }}</h3>
                     </div>
                     <p class="mt-2 text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.srt_summary') }}</p>
                     <p class="mt-2 text-sm font-semibold text-on-surface">{{ t('subtitle.desktop_only') }}</p>
+                    <div class="mt-4">
+                        <p class="text-[11px] font-black uppercase tracking-[0.18em] text-secondary">{{ t('subtitle.supported_ops') }}</p>
+                        <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
+                            <li>• {{ t('subtitle.srt_supported_1') }}</li>
+                            <li>• {{ t('subtitle.srt_supported_2') }}</li>
+                        </ul>
+                    </div>
+                    <div class="mt-4">
+                        <p class="text-[11px] font-black uppercase tracking-[0.18em] text-error">{{ t('subtitle.unsupported_ops') }}</p>
+                        <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
+                            <li>• {{ t('subtitle.srt_unsupported_1') }}</li>
+                            <li>• {{ t('subtitle.srt_unsupported_2') }}</li>
+                        </ul>
+                    </div>
                 </div>
-            </div>
-            <div class="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-                <div class="rounded-2xl border border-white/10 bg-surface-container-high/30 p-3">
-                    <p class="text-[11px] font-black uppercase tracking-[0.18em] text-secondary">{{ t('subtitle.supported_ops') }}</p>
-                    <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
-                        <li>• {{ t('subtitle.srt_supported_1') }}</li>
-                        <li>• {{ t('subtitle.srt_supported_2') }}</li>
-                    </ul>
-                </div>
-                <div class="rounded-2xl border border-white/10 bg-surface-container-high/30 p-3">
-                    <p class="text-[11px] font-black uppercase tracking-[0.18em] text-error">{{ t('subtitle.unsupported_ops') }}</p>
-                    <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
-                        <li>• {{ t('subtitle.srt_unsupported_1') }}</li>
-                        <li>• {{ t('subtitle.srt_unsupported_2') }}</li>
-                    </ul>
-                </div>
+                <img src="{{ static_asset_url('/static/srt.png') }}" alt="{{ t('subtitle.srt_card_image_alt') }}" class="w-full aspect-[1375/415] object-contain">
             </div>
             <div class="mt-4 flex flex-wrap gap-2">
                 <a href="https://github.com/SubtitleEdit/subtitleedit/releases" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
