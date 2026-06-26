@@ -99,20 +99,11 @@
                     </div>
                     <p class="mt-2 text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.ass_summary') }}</p>
                     <p class="mt-2 text-sm font-semibold text-on-surface">{{ t('subtitle.desktop_only') }}</p>
-                    <div class="mt-4">
-                        <p class="text-[11px] font-black uppercase tracking-[0.18em] text-primary">{{ t('subtitle.supported_ops') }}</p>
-                        <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
-                            <li>• {{ t('subtitle.ass_supported_1') }}</li>
-                            <li>• {{ t('subtitle.ass_supported_2') }}</li>
-                        </ul>
-                    </div>
-                    <div class="mt-4">
-                        <p class="text-[11px] font-black uppercase tracking-[0.18em] text-error">{{ t('subtitle.unsupported_ops') }}</p>
-                        <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
-                            <li>• {{ t('subtitle.ass_unsupported_1') }}</li>
-                            <li>• {{ t('subtitle.ass_unsupported_2') }}</li>
-                        </ul>
-                    </div>
+                    <ul class="mt-4 space-y-2 text-sm text-on-surface-variant">
+                        <li>• {{ t('subtitle.ass_supported_1') }}</li>
+                        <li>• {{ t('subtitle.ass_supported_2') }}</li>
+                        <li>• {{ t('subtitle.ass_supported_3') }}</li>
+                    </ul>
                 </div>
                 <img src="{{ static_asset_url('/static/ssa.png') }}" alt="{{ t('subtitle.ass_card_image_alt') }}" class="w-full aspect-[1223/485] object-contain">
             </div>
@@ -165,20 +156,11 @@
                     </div>
                     <p class="mt-2 text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.srt_summary') }}</p>
                     <p class="mt-2 text-sm font-semibold text-on-surface">{{ t('subtitle.desktop_only') }}</p>
-                    <div class="mt-4">
-                        <p class="text-[11px] font-black uppercase tracking-[0.18em] text-secondary">{{ t('subtitle.supported_ops') }}</p>
-                        <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
-                            <li>• {{ t('subtitle.srt_supported_1') }}</li>
-                            <li>• {{ t('subtitle.srt_supported_2') }}</li>
-                        </ul>
-                    </div>
-                    <div class="mt-4">
-                        <p class="text-[11px] font-black uppercase tracking-[0.18em] text-error">{{ t('subtitle.unsupported_ops') }}</p>
-                        <ul class="mt-2 space-y-2 text-sm text-on-surface-variant">
-                            <li>• {{ t('subtitle.srt_unsupported_1') }}</li>
-                            <li>• {{ t('subtitle.srt_unsupported_2') }}</li>
-                        </ul>
-                    </div>
+                    <ul class="mt-4 space-y-2 text-sm text-on-surface-variant">
+                        <li>• {{ t('subtitle.srt_supported_1') }}</li>
+                        <li>• {{ t('subtitle.srt_supported_2') }}</li>
+                        <li>• {{ t('subtitle.srt_supported_3') }}</li>
+                    </ul>
                 </div>
                 <img src="{{ static_asset_url('/static/srt.png') }}" alt="{{ t('subtitle.srt_card_image_alt') }}" class="w-full aspect-[1375/415] object-contain">
             </div>
