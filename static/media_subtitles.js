@@ -11,7 +11,6 @@
     const filesUrl = root.dataset.filesUrl || "";
     const previewUrl = root.dataset.previewUrl || "";
     const uploadUrl = root.dataset.uploadUrl || "";
-    const rawUploadUrl = root.dataset.rawUploadUrl || "";
 
     const selectedFiles = new Map();
 
@@ -58,7 +57,7 @@
         const normalized = String(format || "").toLowerCase();
         if (normalized === "ass") return t("subtitle.ass_label");
         if (normalized === "srt") return t("subtitle.srt_label");
-        return t("subtitle.raw_label");
+        return normalized.toUpperCase();
     }
 
     function formatWarning(warning) {
@@ -208,19 +207,14 @@
             return;
         }
         const targetUrl = actionUrl || uploadUrl;
-        const normalizedFormat = String(format || "").toLowerCase();
         const kindLabel = formatReplaceLabel(format);
-        const confirmed = window.confirm(
-            normalizedFormat === "raw"
-                ? t("subtitle.confirm_raw_replace", { kind: kindLabel })
-                : t("subtitle.confirm_replace", { kind: kindLabel })
-        );
+        const confirmed = window.confirm(t("subtitle.confirm_replace", { kind: kindLabel }));
         if (!confirmed) {
             setMessage(format, t("subtitle.replace_canceled"), false);
             return;
         }
         button.disabled = true;
-        setMessage(format, normalizedFormat === "raw" ? t("subtitle.uploading_raw") : t("subtitle.uploading"), false);
+        setMessage(format, t("subtitle.uploading"), false);
         try {
             const formData = new FormData();
             formData.append("file", file, file.name);
@@ -228,10 +222,7 @@
                 method: "POST",
                 body: formData,
             });
-            const successKey = normalizedFormat === "raw"
-                ? "subtitle.raw_upload_complete_refreshing"
-                : "subtitle.upload_complete_refreshing";
-            setMessage(format, t(successKey, { kind: kindLabel }), false);
+            setMessage(format, t("subtitle.upload_complete_refreshing", { kind: kindLabel }), false);
             renderPreviewBox(format, payload.preview);
             selectedFiles.delete(format);
             const form = document.querySelector(`[data-subtitle-upload-form="${format}"]`);
@@ -254,11 +245,7 @@
         const file = input.files?.[0] || null;
         if (file) {
             selectedFiles.set(format, file);
-            if (String(format || "").toLowerCase() === "raw") {
-                setMessage(format, t("subtitle.raw_selected", { name: file.name }), false);
-            } else {
-                previewSelectedFile(format, file);
-            }
+            previewSelectedFile(format, file);
         } else {
             selectedFiles.delete(format);
             renderPreviewBox(format, null);
@@ -274,7 +261,7 @@
         const previewTrigger = form.querySelector(`[data-subtitle-preview-trigger="${format}"]`);
         const previewBox = form.querySelector(`[data-subtitle-preview-box="${format}"]`);
         const submitButton = form.querySelector('button[type="submit"]');
-        const actionUrl = String(format || "").toLowerCase() === "raw" ? (rawUploadUrl || uploadUrl) : uploadUrl;
+        const actionUrl = uploadUrl;
 
         if (input) {
             input.addEventListener("change", () => handleFileSelection(format, input));
@@ -326,6 +313,5 @@
 
     bindDropzone("ass");
     bindDropzone("srt");
-    bindDropzone("raw");
     loadAssociatedFiles();
 })();

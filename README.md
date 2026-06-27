@@ -8,7 +8,7 @@ Lightweight AI-powered karaoke application for home use.
 - **Stage Page**: Auto-play queue with karaoke mode
 - **Karaoke Mode**: Vocal removal + optional sidecar lyrics overlay
 - **Queue Lyrics Viewer**: Phone-friendly lyrics page for the currently playing song (synced + unsynced, line-based cues, aligned JSON preferred when AI karaoke returns it)
-- **Subtitle Workflow**: Admin-only ASS/Aegisub and SRT/SubtitleEdit editor for round-tripping synced JSON lyrics, plus a raw overwrite lane for plain `.txt` / `.lrc` / `.json` lyrics
+- **Subtitle Workflow**: Admin-only ASS/Aegisub and SRT/SubtitleEdit editor for round-tripping synced JSON lyrics
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
 - **Live Queue Presence**: Queue page shows active guests and join toasts in real time

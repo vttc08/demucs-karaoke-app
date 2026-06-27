@@ -52,7 +52,6 @@
     data-srt-export-url="{{ subtitle_info.srt_export_url }}"
     data-preview-url="{{ subtitle_info.preview_url }}"
     data-upload-url="{{ subtitle_info.upload_url }}"
-    data-raw-upload-url="{{ subtitle_info.raw_upload_url }}"
     data-files-url="{{ subtitle_info.files_url }}"
     data-package-url="{{ subtitle_info.package_url }}"
     data-docs-url="{{ subtitle_info.docs_url }}"
@@ -219,38 +218,6 @@
                 <div class="hidden rounded-2xl border border-warning/30 bg-warning/10 p-3 text-sm text-warning" data-subtitle-preview-box="srt"></div>
             </form>
         </article>
-    </section>
-
-    <section class="glass-card overflow-hidden rounded-3xl border border-error/20 bg-error/5 p-4 sm:p-5">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div class="min-w-0">
-                <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-error">{{ t('subtitle.raw_upload_label') }}</p>
-                <h3 class="mt-1 font-headline text-xl font-black tracking-tight text-on-surface sm:text-2xl">{{ t('subtitle.raw_upload_title') }}</h3>
-                <p class="mt-2 max-w-3xl text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.raw_upload_detail') }}</p>
-            </div>
-            <div class="inline-flex items-center gap-2 self-start rounded-full border border-error/30 bg-error/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-error">
-                <span class="material-symbols-outlined text-[16px]">warning</span>
-                <span>{{ t('subtitle.raw_upload_irreversible') }}</span>
-            </div>
-        </div>
-        <form class="mt-4 space-y-3" data-subtitle-upload-form="raw">
-            <label class="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-error/30 bg-surface-container-high/30 px-4 py-6 text-center transition hover:bg-error/10" data-subtitle-dropzone="raw">
-                <input type="file" class="hidden" name="file" accept=".txt,.lrc,.json">
-                <span class="material-symbols-outlined text-3xl text-error">upload_file</span>
-                <div>
-                    <p class="text-sm font-black uppercase tracking-wider text-on-surface">{{ t('subtitle.raw_drop') }}</p>
-                    <p class="mt-1 text-xs text-on-surface-variant">{{ t('subtitle.raw_drop_hint') }}</p>
-                </div>
-            </label>
-            <div class="flex flex-wrap items-center gap-2">
-                <button type="submit" class="inline-flex items-center gap-2 rounded-full border border-error/30 bg-error px-4 py-2 text-[11px] font-black uppercase tracking-wider text-surface hover:brightness-110">
-                    <span class="material-symbols-outlined text-[16px]">save</span>
-                    <span>{{ t('subtitle.raw_replace') }}</span>
-                </button>
-            </div>
-            <p class="hidden rounded-2xl border border-white/10 bg-surface-container-high/30 px-3 py-2 text-sm font-semibold text-on-surface-variant" data-subtitle-message-box="raw" role="status" aria-live="polite"></p>
-            <p class="text-xs font-medium text-on-surface-variant">{{ t('subtitle.raw_upload_note') }}</p>
-        </form>
     </section>
 
 </main>

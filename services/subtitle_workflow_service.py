@@ -23,7 +23,6 @@ _ASS_KARAOKE_TAG_RE = re.compile(r"\{\\k(\d+)\}([^\{]*)")
 _SRT_SEGMENT_MARKER_RE = re.compile(r"^\s*//wx:(\d+)//\s*", re.IGNORECASE)
 _ALLOWED_UPLOAD_SUFFIXES = {".ass", ".ssa", ".srt"}
 _ALLOWED_SOURCE_SUFFIXES = {".json"}
-_ALLOWED_RAW_UPLOAD_SUFFIXES = {".json", ".lrc", ".txt"}
 
 
 class SubtitleWorkflowError(ValueError):
@@ -118,51 +117,6 @@ class SubtitleWorkflowService:
             "source_format": source_format,
             "warnings": all_warnings,
             "preview": self._preview_summary(normalized_segments, all_warnings),
-        }
-
-    def replace_raw_upload(self, db: Session, media_item_id: int, upload_file: UploadFile) -> dict[str, object]:
-        """Replace the current lyrics sidecar with a raw text upload without conversion."""
-        media_item, media_file, lyrics_file = self.get_editable_media(db, media_item_id)
-        filename = Path(upload_file.filename or "").name
-        suffix = Path(filename).suffix.lower()
-        if suffix not in _ALLOWED_RAW_UPLOAD_SUFFIXES:
-            raise SubtitleWorkflowConflictError("Supported raw uploads are .json, .lrc, and .txt")
-
-        try:
-            upload_file.file.seek(0)
-        except Exception:
-            pass
-        raw_bytes = upload_file.file.read()
-        if not isinstance(raw_bytes, (bytes, bytearray)):
-            raw_bytes = bytes(raw_bytes or b"")
-
-        target_path = media_file.with_suffix(suffix)
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(delete=False, dir=target_path.parent, suffix=suffix) as handle:
-            temp_path = Path(handle.name)
-            handle.write(raw_bytes)
-            handle.flush()
-
-        try:
-            temp_path.replace(target_path)
-            if lyrics_file != target_path and lyrics_file.exists():
-                lyrics_file.unlink(missing_ok=True)
-        except Exception:
-            temp_path.unlink(missing_ok=True)
-            raise
-        finally:
-            temp_path.unlink(missing_ok=True)
-
-        media_item.lyrics_path = self.queue_service.build_media_url(target_path)
-        media_item.updated_at = utc_now()
-        db.commit()
-        db.refresh(media_item)
-        return {
-            "status": "ok",
-            "media_id": media_item.id,
-            "lyrics_path": media_item.lyrics_path,
-            "source_format": suffix.lstrip("."),
-            "replacement_kind": "raw",
         }
 
     def _load_json_segments(self, media_item: MediaItem) -> list[dict[str, Any]]:
