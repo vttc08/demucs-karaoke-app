@@ -564,7 +564,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
 
                 command = payload.get("command")
                 source = payload.get("source", "unknown")
-                if command not in {"play", "pause", "skip", "seek", "resync", "set_vocals_enabled", "set_vocals_volume", "set_lyrics_enabled", "apply_lyrics_settings"}:
+                if command not in {"play", "pause", "skip", "seek", "seek_relative", "resync", "set_vocals_enabled", "set_vocals_volume", "set_lyrics_enabled", "apply_lyrics_settings"}:
                     await manager.send_personal_message(
                         {
                             "type": "error",
@@ -710,6 +710,38 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         source=source,
                         is_paused=is_paused if isinstance(is_paused, bool) else None,
                         broadcast_state=True,
+                    )
+                elif command == "seek_relative":
+                    raw_offset_seconds = payload.get("offset_seconds")
+                    if not isinstance(raw_offset_seconds, (int, float)):
+                        await manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "data": {"detail": "seek_relative requires numeric offset_seconds"},
+                                "timestamp": asyncio.get_event_loop().time(),
+                            },
+                            websocket,
+                        )
+                        continue
+                    offset_seconds = float(raw_offset_seconds)
+                    if not math.isfinite(offset_seconds):
+                        await manager.send_personal_message(
+                            {
+                                "type": "error",
+                                "data": {"detail": "offset_seconds must be finite"},
+                                "timestamp": asyncio.get_event_loop().time(),
+                            },
+                            websocket,
+                        )
+                        continue
+                    is_paused = payload.get("is_paused")
+                    extra_data = {"offset_seconds": offset_seconds}
+                    if isinstance(is_paused, bool):
+                        extra_data["is_paused"] = is_paused
+                    await manager.broadcast_stage_control_command(
+                        command=command,
+                        source=source,
+                        extra_data=extra_data,
                     )
                 elif command == "resync":
                     extra_data = {"sync_version": manager.next_stage_sync_version()}

@@ -123,7 +123,7 @@ and `/static/...`.
      - Queue items show who requested them
       - Open **Lyrics Viewer** from the queue page to read current-song lyrics on phone/secondary display
      - Admins can use remote stage controls for any current song; guests can use them only while their own queued song is playing
-     - Queue remote controls include `play/pause`, `skip`, `resync`, and a `+5` forward seek button driven by the live stage playback clock
+     - Queue remote controls include `play/pause`, `skip`, `resync`, and a `+5` relative forward seek button handled by the active stage player
      - Admin queue controls can target connected stage displays, apply shared lyric presets, and adjust lyric text size/max width without changing each display's browser-local defaults
      - When an admin queues a song as a live guest from the queue presence list, that guest becomes the owner for later stage controls and queue-item actions; manual typed queue-as names remain display-only
     - Admin users can clear queued songs, remove individual queued items, and move non-playing queue items up or down

@@ -16,7 +16,7 @@ class ConnectionManager:
 
     QUEUE_EVENT_ROLES = frozenset({"queue", "stage"})
     STAGE_STATE_ROLES = frozenset({"queue", "stage", "lyrics_viewer"})
-    STAGE_CLOCK_ROLES = frozenset({"queue", "stage", "lyrics_viewer"})
+    STAGE_CLOCK_ROLES = frozenset({"lyrics_viewer"})
 
     def __init__(self):
         self.active_connections: list[Any] = []
@@ -47,11 +47,13 @@ class ConnectionManager:
     async def disconnect(self, websocket: Any):
         """Remove a WebSocket connection and update live presence state."""
         left_payload = None
+        notify_clock_subscribers = False
         async with self._lock:
             if websocket in self.active_connections:
                 self.active_connections.remove(websocket)
 
             context = self._connection_context.pop(websocket, None)
+            notify_clock_subscribers = context is not None and context.get("role") == "lyrics_viewer"
             if context and context.get("page") == "queue":
                 guest_id = context.get("guest_id")
                 tab_id = context.get("tab_id")
@@ -78,6 +80,8 @@ class ConnectionManager:
             await self.broadcast_queue_presence_event("user_left", left_payload)
         if context and context.get("page") == "stage":
             await self.broadcast_stage_presence_snapshot()
+        if notify_clock_subscribers:
+            await self.broadcast_stage_clock_subscribers_update()
 
     async def send_personal_message(self, message: dict, websocket: Any):
         """Send a message to a specific connection."""
@@ -143,10 +147,60 @@ class ConnectionManager:
 
     async def set_connection_role(self, websocket: Any, role: str):
         """Assign a logical websocket role used for targeted broadcasts."""
+        notify_clock_subscribers = False
         async with self._lock:
             context = self._connection_context.get(websocket, {}).copy()
+            previous_role = context.get("role")
             context["role"] = role
             self._connection_context[websocket] = context
+            notify_clock_subscribers = (
+                previous_role != role
+                and (previous_role == "lyrics_viewer" or role == "lyrics_viewer")
+            )
+
+        if role == "stage":
+            await self.send_stage_clock_subscribers_update(websocket)
+        if notify_clock_subscribers:
+            await self.broadcast_stage_clock_subscribers_update()
+
+    async def get_stage_clock_subscriber_count(self) -> int:
+        """Return the number of connected clients that need live playback clock ticks."""
+        async with self._lock:
+            return sum(
+                1
+                for connection in self.active_connections
+                if self._connection_context.get(connection, {}).get("role") == "lyrics_viewer"
+            )
+
+    async def _stage_clock_subscribers_payload(self) -> dict[str, Any]:
+        count = await self.get_stage_clock_subscriber_count()
+        return {
+            "lyrics_viewer_count": count,
+            "clock_enabled": count > 0,
+        }
+
+    async def send_stage_clock_subscribers_update(self, websocket: Any):
+        """Send live clock demand state to one stage client."""
+        await self.send_personal_message(
+            {
+                "type": "stage_clock_subscribers_update",
+                "data": await self._stage_clock_subscribers_payload(),
+                "timestamp": self._timestamp(),
+            },
+            websocket,
+        )
+
+    async def broadcast_stage_clock_subscribers_update(self):
+        """Tell stage clients whether any lyrics viewer currently needs clock ticks."""
+        targets = await self._get_connections_by_roles({"stage"})
+        await self._broadcast_to_connections(
+            {
+                "type": "stage_clock_subscribers_update",
+                "data": await self._stage_clock_subscribers_payload(),
+                "timestamp": self._timestamp(),
+            },
+            targets,
+        )
 
     def get_stage_presence_snapshot(self) -> list[dict[str, Any]]:
         """Return a stable snapshot of active stage displays."""
@@ -508,7 +562,7 @@ class ConnectionManager:
         )
 
     async def broadcast_stage_time_update(self, source: str = "unknown"):
-        """Broadcast the authoritative playback clock to stage and lyrics viewers."""
+        """Broadcast the authoritative playback clock to lyrics viewers."""
         state = self.get_stage_state()
         targets = await self._get_connections_by_roles(self.STAGE_CLOCK_ROLES)
         await self._broadcast_to_connections(
