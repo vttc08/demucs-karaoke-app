@@ -21,6 +21,8 @@ def test_lyrics_presets_api_crud(client):
                 "customFontFamily": '"Noto Sans SC", sans-serif',
                 "sizeVw": 4.2,
                 "activeColor": "#ff00aa",
+                "backgroundMediaPath": "/media/brand-loop.mp4",
+                "backgroundMediaOpacityPct": 72,
             },
         },
     )
@@ -29,6 +31,8 @@ def test_lyrics_presets_api_crud(client):
     assert created["name"] == "Pink TV"
     assert created["settings"]["fontPreset"] == "custom"
     assert created["settings"]["activeColor"] == "#ff00aa"
+    assert created["settings"]["backgroundMediaPath"] == "/media/brand-loop.mp4"
+    assert created["settings"]["backgroundMediaOpacityPct"] == 72
 
     list_response = client.get("/api/lyrics-presets/")
     assert list_response.status_code == 200
@@ -46,6 +50,8 @@ def test_lyrics_presets_api_crud(client):
                 "fontPreset": "readable_cjk",
                 "sizeVw": 5.1,
                 "textColor": "#eeeeee",
+                "backgroundMediaPath": "https://example.com/brand.mp4",
+                "backgroundMediaOpacityPct": 200,
             },
         },
     )
@@ -55,6 +61,8 @@ def test_lyrics_presets_api_crud(client):
     assert updated["settings"]["fontPreset"] == "readable_cjk"
     assert updated["settings"]["sizeVw"] == 5.1
     assert updated["settings"]["textColor"] == "#eeeeee"
+    assert updated["settings"]["backgroundMediaPath"] == ""
+    assert updated["settings"]["backgroundMediaOpacityPct"] == 100
 
     delete_response = client.delete(f"/api/lyrics-presets/{created['id']}")
     assert delete_response.status_code == 200
@@ -74,4 +82,3 @@ def test_lyrics_presets_api_rejects_invalid_payload(client):
     )
     assert response.status_code == 400
     assert "lyric setting" in response.json()["detail"]
-

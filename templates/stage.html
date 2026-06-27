@@ -670,6 +670,27 @@
         display: none !important;
     }
 
+    .stage-lyrics-background {
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: none;
+        overflow: hidden;
+        pointer-events: none;
+        background: #000;
+        opacity: var(--stage-lyrics-background-opacity, 1);
+    }
+
+    .stage-media.is-fullscreen .stage-lyrics-background.is-visible {
+        display: block;
+    }
+
+    .stage-lyrics-background-media {
+        height: 100%;
+        width: 100%;
+        object-fit: cover;
+    }
+
     .stage-lyrics-lines {
         width: min(var(--stage-lyrics-lines-width, 100vw), calc(100vw - (clamp(1rem, 4vw, 5rem) * 2)));
         max-width: none;
@@ -1061,6 +1082,19 @@
                 <source src="{{ current.vocals_path|public_url if current and current.vocals_path else '' }}">
             </audio>
 
+            <div id="stage-lyrics-background" class="stage-lyrics-background" aria-hidden="true">
+                <img id="stage-lyrics-background-image" class="stage-lyrics-background-media hidden" alt="" />
+                <video
+                    id="stage-lyrics-background-video"
+                    class="stage-lyrics-background-media hidden"
+                    autoplay
+                    muted
+                    loop
+                    playsinline
+                    preload="auto"
+                ></video>
+            </div>
+
             <div id="stage-lyrics-overlay" class="stage-lyrics-overlay hidden" aria-live="polite">
                 <div id="stage-lyrics-lines" class="stage-lyrics-lines"></div>
             </div>
@@ -1343,6 +1377,18 @@
                                             <option value="none">{{ t('stage.lyrics_animation_none') }}</option>
                                         </select>
                                     </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_background_media') }}</span>
+                                        <input id="stage-lyrics-background-media" class="stage-lyrics-settings-input" type="text" placeholder="/media/brand-loop.mp4" />
+                                        <span class="text-[11px] leading-tight text-on-surface-variant">{{ t('stage.lyrics_background_media_hint') }}</span>
+                                    </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">
+                                            {{ t('stage.lyrics_background_opacity') }}
+                                            <span id="stage-lyrics-background-opacity-pct-value"></span>
+                                        </span>
+                                        <input id="stage-lyrics-background-opacity-pct" class="stage-lyrics-settings-input" type="range" min="10" max="100" step="1" />
+                                    </label>
                                 </div>
                                 <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_settings_json') }}</span>
@@ -1570,6 +1616,9 @@ const stageLyrics = new window.StageLyricsController({
     importExport: document.getElementById("stage-lyrics-settings-json"),
     fileInput: document.getElementById("stage-lyrics-settings-file"),
     status: document.getElementById("stage-lyrics-settings-status"),
+    backgroundLayer: document.getElementById("stage-lyrics-background"),
+    backgroundImage: document.getElementById("stage-lyrics-background-image"),
+    backgroundVideo: document.getElementById("stage-lyrics-background-video"),
     isFullscreenActive,
     t,
     onPanelVisibilityChange: (visible) => {
@@ -1599,6 +1648,9 @@ const stageLyrics = new window.StageLyricsController({
         neighborLineOpacityPct: document.getElementById("stage-lyrics-neighbor-line-opacity-pct"),
         neighborLineOpacityPctValue: document.getElementById("stage-lyrics-neighbor-line-opacity-pct-value"),
         animation: document.getElementById("stage-lyrics-animation"),
+        backgroundMediaPath: document.getElementById("stage-lyrics-background-media"),
+        backgroundMediaOpacityPct: document.getElementById("stage-lyrics-background-opacity-pct"),
+        backgroundMediaOpacityPctValue: document.getElementById("stage-lyrics-background-opacity-pct-value"),
     },
 });
 
@@ -3188,6 +3240,7 @@ function syncFullscreenState() {
     stageMedia.classList.toggle("is-fullscreen", active);
 
     if (active) {
+        stageLyrics.applyBackgroundSettings();
         showStageControls();
     } else {
         if (controlsHideTimer) {

@@ -23,11 +23,13 @@ def test_lyrics_preset_service_normalizes_settings_payload():
             "activeColor": "#123456",
             "outlineColor": "#abcdef",
             "outlineWidth": 99,
-            "previousLines": -1,
-            "nextLines": 6,
-            "animation": "spin",
-        }
-    )
+                "previousLines": -1,
+                "nextLines": 6,
+                "animation": "spin",
+                "backgroundMediaPath": "/media/brand-loop.mp4",
+                "backgroundMediaOpacityPct": 2,
+            }
+        )
 
     assert normalized == {
         "fontPreset": "readable_cjk",
@@ -43,6 +45,8 @@ def test_lyrics_preset_service_normalizes_settings_payload():
         "previousLines": 0,
         "nextLines": 3,
         "animation": "fade",
+        "backgroundMediaPath": "/media/brand-loop.mp4",
+        "backgroundMediaOpacityPct": 10,
     }
 
 
@@ -60,6 +64,8 @@ def test_lyrics_preset_service_crud_round_trip(db_session):
                 "sizeVw": 4.1,
                 "animation": "slide",
                 "activeColor": "#ff00aa",
+                "backgroundMediaPath": "/media/brand-loop.webm",
+                "backgroundMediaOpacityPct": 72,
             },
         ),
     )
@@ -68,6 +74,8 @@ def test_lyrics_preset_service_crud_round_trip(db_session):
     assert created.settings["fontPreset"] == "custom"
     assert created.settings["customFontFamily"] == '"Noto Sans SC", sans-serif'
     assert created.settings["activeColor"] == "#ff00aa"
+    assert created.settings["backgroundMediaPath"] == "/media/brand-loop.webm"
+    assert created.settings["backgroundMediaOpacityPct"] == 72
 
     listed = service.list_presets(db_session)
     assert [item.id for item in listed] == [created.id]

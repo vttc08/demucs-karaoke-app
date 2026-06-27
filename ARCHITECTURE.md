@@ -312,7 +312,12 @@ The stage page uses a websocket-first model:
   - nearby lines are shown above/below the active line according to browser-local stage lyrics settings
 - Stage lyric appearance is browser-local and stored in `localStorage` by `static/stage-lyrics.js`.
   The settings panel exposes CJK-safe font presets, size, colors, outline, line-window, animation,
-  reset, and JSON import/export without changing backend API payloads.
+  optional fullscreen background image/video media from `/media/...`, reset, and JSON import/export
+  without changing lyrics cue payloads.
+- Stage lyric background media is part of the same normalized settings object as shared lyric
+  presets. The browser renders it only in fullscreen, above the original stage video/audio hero and
+  below lyric text, as a muted looped video or cover-fit image. Missing files fail closed through
+  the media element `error` event and do not affect stage playback.
 - Stage lyric fonts are self-hosted under `static/fonts/` so fullscreen playback can render Chinese
   lyrics without depending on Google Fonts at runtime.
 

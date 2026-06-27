@@ -40,9 +40,26 @@ class LyricsPresetService:
         "previousLines": 1,
         "nextLines": 2,
         "animation": "fade",
+        "backgroundMediaPath": "",
+        "backgroundMediaOpacityPct": 100,
     }
     FONT_PRESETS = {"karaoke_cjk", "readable_cjk", "system_cjk", "serif_cjk", "custom"}
     ANIMATIONS = {"slide", "crop", "fade", "none"}
+    BACKGROUND_MEDIA_EXTENSIONS = {
+        ".avi",
+        ".avif",
+        ".gif",
+        ".jpeg",
+        ".jpg",
+        ".m4v",
+        ".mkv",
+        ".mov",
+        ".mp4",
+        ".png",
+        ".svg",
+        ".webm",
+        ".webp",
+    }
     SETTINGS_KEYS = set(DEFAULT_SETTINGS)
 
     def list_presets(self, db: Session) -> list[LyricsPresetResponse]:
@@ -144,6 +161,8 @@ class LyricsPresetService:
             "previousLines": self._round_number(raw_settings.get("previousLines"), 0, 3, self.DEFAULT_SETTINGS["previousLines"]),
             "nextLines": self._round_number(raw_settings.get("nextLines"), 0, 3, self.DEFAULT_SETTINGS["nextLines"]),
             "animation": self._normalize_animation(raw_settings.get("animation")),
+            "backgroundMediaPath": self._normalize_background_media_path(raw_settings.get("backgroundMediaPath")),
+            "backgroundMediaOpacityPct": self._round_number(raw_settings.get("backgroundMediaOpacityPct"), 10, 100, self.DEFAULT_SETTINGS["backgroundMediaOpacityPct"]),
         }
 
     def _to_response(self, row: LyricsPreset) -> LyricsPresetResponse:
@@ -187,6 +206,25 @@ class LyricsPresetService:
         if not isinstance(value, str):
             return ""
         return value.strip()[:max_length]
+
+    def _normalize_background_media_path(self, value: Any) -> str:
+        if not isinstance(value, str):
+            return ""
+        path = value.strip()
+        if not path or len(path) > 500:
+            return ""
+        if path.startswith(("http://", "https://", "ws://", "wss://", "//")):
+            return ""
+        if not path.startswith("/media/"):
+            return ""
+        if "\\" in path or ".." in path:
+            return ""
+
+        media_path = path.split("?", 1)[0].lower()
+        suffix = f".{media_path.rsplit('.', 1)[-1]}" if "." in media_path else ""
+        if suffix not in self.BACKGROUND_MEDIA_EXTENSIONS:
+            return ""
+        return path
 
     def _clamp_number(self, value: Any, minimum: float, maximum: float, fallback: float) -> float:
         try:

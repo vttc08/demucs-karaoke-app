@@ -65,7 +65,28 @@ class StageLyricsController {
     previousLines: 1,
     nextLines: 2,
     animation: "fade",
+    backgroundMediaPath: "",
+    backgroundMediaOpacityPct: 100,
   };
+
+  static BACKGROUND_IMAGE_EXTENSIONS = new Set([
+    ".avif",
+    ".gif",
+    ".jpeg",
+    ".jpg",
+    ".png",
+    ".svg",
+    ".webp",
+  ]);
+
+  static BACKGROUND_VIDEO_EXTENSIONS = new Set([
+    ".avi",
+    ".m4v",
+    ".mkv",
+    ".mov",
+    ".mp4",
+    ".webm",
+  ]);
 
   static SETTINGS_KEYS = new Set(Object.keys(StageLyricsController.DEFAULT_SETTINGS));
 
@@ -82,6 +103,9 @@ class StageLyricsController {
     this.importExport = options.importExport || null;
     this.fileInput = options.fileInput || null;
     this.status = options.status || null;
+    this.backgroundLayer = options.backgroundLayer || null;
+    this.backgroundImage = options.backgroundImage || null;
+    this.backgroundVideo = options.backgroundVideo || null;
     this.inputs = options.inputs || {};
     this.isFullscreenActive = options.isFullscreenActive || (() => false);
     this.onPanelVisibilityChange = options.onPanelVisibilityChange || (() => {});
@@ -100,7 +124,12 @@ class StageLyricsController {
     this.loadedFontFamilies = new Set();
     this.failedFontFamilies = new Set();
     this.pendingFontLoads = new Map();
+    this.currentBackgroundUrl = "";
+    this.currentBackgroundKind = "";
+    this.backgroundLoadFailed = false;
 
+    this.backgroundImage?.addEventListener("error", () => this.handleBackgroundMediaError());
+    this.backgroundVideo?.addEventListener("error", () => this.handleBackgroundMediaError());
     this.applySettings();
     this.syncSettingsUi();
     this.bindSettingsUi();
@@ -520,6 +549,8 @@ class StageLyricsController {
       animation: ["slide", "crop", "fade", "none"].includes(settings.animation)
         ? settings.animation
         : StageLyricsController.DEFAULT_SETTINGS.animation,
+      backgroundMediaPath: this.normalizeBackgroundMediaPath(settings.backgroundMediaPath),
+      backgroundMediaOpacityPct: Math.round(this.clampNumber(settings.backgroundMediaOpacityPct, 10, 100, StageLyricsController.DEFAULT_SETTINGS.backgroundMediaOpacityPct)),
     };
   }
 
@@ -534,6 +565,36 @@ class StageLyricsController {
   normalizeColor(value, fallback) {
     const color = String(value || "").trim();
     return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
+  }
+
+  normalizeBackgroundMediaPath(value) {
+    let path = String(value || "").trim();
+    if (!path) {
+      return "";
+    }
+    const basePath = String(window.KaraokeURLs?.basePath || "").replace(/\/+$/, "");
+    if (basePath && path.startsWith(`${basePath}/media/`)) {
+      path = path.slice(basePath.length);
+    }
+    if (/^(https?:|wss?:|ws:|\/\/)/i.test(path)) {
+      return "";
+    }
+    if (!path.startsWith("/media/")) {
+      return "";
+    }
+    try {
+      const url = new URL(path, window.location.origin);
+      if (url.origin !== window.location.origin || !url.pathname.startsWith("/media/")) {
+        return "";
+      }
+      path = `${url.pathname}${url.search}`;
+    } catch (_) {
+      return "";
+    }
+    if (path.includes("..") || path.includes("\\") || path.length > 500) {
+      return "";
+    }
+    return path;
   }
 
   saveSettings() {
@@ -588,8 +649,125 @@ class StageLyricsController {
     this.overlay.style.setProperty("--stage-lyrics-outline-color", this.settings.outlineColor);
     this.overlay.style.setProperty("--stage-lyrics-outline-width", `${this.settings.outlineWidth}px`);
     this.overlay.dataset.animation = this.reducedMotion ? "none" : this.settings.animation;
+    this.applyBackgroundSettings();
     void this.ensureFontStackLoaded(fontFamily);
     this.renderWindow();
+  }
+
+  applyBackgroundSettings() {
+    if (!this.backgroundLayer) {
+      return;
+    }
+
+    this.backgroundLayer.style.setProperty("--stage-lyrics-background-opacity", `${this.settings.backgroundMediaOpacityPct / 100}`);
+    const path = this.normalizeBackgroundMediaPath(this.settings.backgroundMediaPath);
+    const kind = this.getBackgroundMediaKind(path);
+    const url = path ? window.KaraokeURLs?.appUrl?.(path) || path : "";
+
+    if (!url || !kind) {
+      this.clearBackgroundMedia();
+      return;
+    }
+
+    if (url !== this.currentBackgroundUrl || kind !== this.currentBackgroundKind) {
+      this.backgroundLoadFailed = false;
+      this.currentBackgroundUrl = url;
+      this.currentBackgroundKind = kind;
+      if (kind === "video") {
+        this.showBackgroundVideo(url);
+      } else {
+        this.showBackgroundImage(url);
+      }
+    }
+
+    this.syncBackgroundVisibility();
+  }
+
+  getBackgroundMediaKind(path) {
+    const extension = this.getPathExtension(path);
+    if (StageLyricsController.BACKGROUND_VIDEO_EXTENSIONS.has(extension)) {
+      return "video";
+    }
+    if (StageLyricsController.BACKGROUND_IMAGE_EXTENSIONS.has(extension)) {
+      return "image";
+    }
+    return "";
+  }
+
+  getPathExtension(path) {
+    try {
+      const url = new URL(path, window.location.origin);
+      const pathname = url.pathname.toLowerCase();
+      return pathname.includes(".") ? `.${pathname.split(".").pop()}` : "";
+    } catch (_) {
+      const normalized = String(path || "").split("?")[0].toLowerCase();
+      return normalized.includes(".") ? `.${normalized.split(".").pop()}` : "";
+    }
+  }
+
+  showBackgroundVideo(url) {
+    if (!this.backgroundVideo) {
+      this.clearBackgroundMedia();
+      return;
+    }
+    this.hideBackgroundImage();
+    this.backgroundVideo.src = url;
+    this.backgroundVideo.load();
+    this.backgroundVideo.classList.remove("hidden");
+    this.backgroundVideo.play().catch(() => {
+      // Muted inline background videos should autoplay; if a browser blocks it,
+      // leave the source ready and let the next user gesture/fullscreen retry.
+    });
+  }
+
+  showBackgroundImage(url) {
+    if (!this.backgroundImage) {
+      this.clearBackgroundMedia();
+      return;
+    }
+    this.hideBackgroundVideo();
+    this.backgroundImage.src = url;
+    this.backgroundImage.classList.remove("hidden");
+  }
+
+  hideBackgroundImage() {
+    if (!this.backgroundImage) {
+      return;
+    }
+    this.backgroundImage.classList.add("hidden");
+    this.backgroundImage.removeAttribute("src");
+  }
+
+  hideBackgroundVideo() {
+    if (!this.backgroundVideo) {
+      return;
+    }
+    this.backgroundVideo.pause();
+    this.backgroundVideo.classList.add("hidden");
+    this.backgroundVideo.removeAttribute("src");
+    this.backgroundVideo.load();
+  }
+
+  clearBackgroundMedia() {
+    this.currentBackgroundUrl = "";
+    this.currentBackgroundKind = "";
+    this.backgroundLoadFailed = false;
+    this.hideBackgroundImage();
+    this.hideBackgroundVideo();
+    this.syncBackgroundVisibility();
+  }
+
+  handleBackgroundMediaError() {
+    this.backgroundLoadFailed = true;
+    this.syncBackgroundVisibility();
+  }
+
+  syncBackgroundVisibility() {
+    if (!this.backgroundLayer) {
+      return;
+    }
+    const visible = Boolean(this.currentBackgroundUrl && this.currentBackgroundKind && !this.backgroundLoadFailed);
+    this.backgroundLayer.classList.toggle("is-visible", visible);
   }
 
   async ensureFontStackLoaded(fontStack) {
@@ -814,6 +992,9 @@ class StageLyricsController {
     }
     if (this.inputs.outlineWidthValue) {
       this.inputs.outlineWidthValue.textContent = `${this.settings.outlineWidth}px`;
+    }
+    if (this.inputs.backgroundMediaOpacityPctValue) {
+      this.inputs.backgroundMediaOpacityPctValue.textContent = `${this.settings.backgroundMediaOpacityPct}%`;
     }
   }
 
