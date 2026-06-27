@@ -10,6 +10,8 @@ This document captures extension points for future lyric-style customization on 
 - Aligned JSON cues may include `words: [{word, start, end}]`; the stage progressively highlights
   completed/current words while leaving upcoming words in the configured base color. The crop mode
   uses a left-to-right clipped fill on the active word to mimic traditional karaoke.
+- Visible cues before the active cue are treated as played: plain lines keep the active color via
+  `.stage-lyric-line--played`, and word-aligned lines keep all rendered words highlighted.
 - When a cue gap exceeds four seconds, `/stage` inserts a short dot countdown before the next lyric
   line so long intros and interludes feel closer to karaoke-style timing prompts.
 - Timeline authority is `video.currentTime`.
@@ -45,6 +47,12 @@ This document captures extension points for future lyric-style customization on 
 2. **Line window behavior**
 - Previous and upcoming line counts are browser-configurable.
 - Single-line focus is available by setting both values to `0`.
+- `lineBehavior` controls how the visible line window advances:
+  - `rolling` keeps the active line in the current rolling window using `previousLines` and `nextLines`.
+  - `rolling_scroll` keeps the same rolling window bounds as `rolling`, but animates the window upward
+    smoothly when the active cue advances into the next row.
+  - `fixed_group` ignores `previousLines`, displays fixed chunks of `1 + nextLines` cues, and advances
+    only when the active cue leaves the current chunk.
 - The lyric row width now scales with the available stage viewport width instead of capping at a fixed pixel value, and the controller stores that width as a percentage setting for later UI exposure.
 - The surrounding line size and opacity are browser-configurable percentages relative to the active line, so the window can be tuned without changing cue payloads.
 
@@ -54,6 +62,8 @@ This document captures extension points for future lyric-style customization on 
   - `crop` for clipped word fill on aligned JSON tracks
   - `fade`
   - `none`
+- These are word-level/current-line animation settings; they do not control fixed-group or rolling line
+  window behavior such as `rolling_scroll`.
 - Reduced-motion mode disables motion while preserving lyric state.
 
 4. **Positioning and safe areas**

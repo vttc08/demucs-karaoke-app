@@ -64,6 +64,7 @@ class StageLyricsController {
     outlineWidth: 5,
     previousLines: 1,
     nextLines: 2,
+    lineBehavior: "rolling",
     animation: "fade",
     backgroundMediaEnabled: true,
     backgroundMediaPath: "",
@@ -129,6 +130,8 @@ class StageLyricsController {
     this.currentBackgroundKind = "";
     this.backgroundLoadFailed = false;
     this.backgroundEligible = false;
+    this.lineTransitionResetTimer = null;
+    this.lineGhostCleanupTimer = null;
 
     this.backgroundImage?.addEventListener("error", () => this.handleBackgroundMediaError());
     this.backgroundVideo?.addEventListener("error", () => this.handleBackgroundMediaError());
@@ -163,6 +166,7 @@ class StageLyricsController {
   }
 
   clear() {
+    this.clearLineTransitionArtifacts();
     if (this.lines) {
       this.lines.innerHTML = "";
     }
@@ -208,7 +212,7 @@ class StageLyricsController {
       return;
     }
 
-    const needsWindowRender = nextIndex !== this.activeCueIndex || !this.isCurrentCueRendered(nextIndex);
+    const needsWindowRender = this.shouldRenderWindowForCue(nextIndex);
     this.activeCueIndex = nextIndex;
     this.activeWordIndex = nextWordIndex;
 
@@ -328,7 +332,17 @@ class StageLyricsController {
       && activeIndex < this.visibleCueEnd;
   }
 
+  shouldRenderWindowForCue(nextIndex) {
+    if (!this.isCurrentCueRendered(nextIndex)) {
+      return true;
+    }
+    return this.settings.lineBehavior !== "fixed_group" && nextIndex !== this.activeCueIndex;
+  }
+
   getWindowBounds() {
+    if (this.settings.lineBehavior === "fixed_group") {
+      return this.getFixedGroupWindowBounds();
+    }
     if (this.activeCueIndex === -1) {
       return {
         start: 0,
@@ -344,6 +358,25 @@ class StageLyricsController {
     };
   }
 
+  getFixedGroupWindowBounds() {
+    const visibleCount = Math.max(1, 1 + this.settings.nextLines);
+    if (this.activeCueIndex === -1) {
+      return {
+        start: 0,
+        end: Math.min(this.cues.length, visibleCount),
+      };
+    }
+    if (typeof this.activeCueIndex !== "number") {
+      return { start: 0, end: 0 };
+    }
+
+    const start = Math.floor(this.activeCueIndex / visibleCount) * visibleCount;
+    return {
+      start,
+      end: Math.min(this.cues.length, start + visibleCount),
+    };
+  }
+
   renderWindow(currentTime = this.currentTime ?? 0) {
     if (!this.lines || !this.enabled || !this.cues.length) {
       this.clear();
@@ -351,6 +384,7 @@ class StageLyricsController {
     }
 
     const { start, end } = this.getWindowBounds();
+    const transitionPlan = this.buildLineTransitionPlan(start, end);
     this.visibleCueStart = start;
     this.visibleCueEnd = end;
     this.lines.innerHTML = "";
@@ -360,7 +394,161 @@ class StageLyricsController {
     }
 
     this.updateRenderedWords(currentTime);
+    this.applyLineTransitionPlan(transitionPlan);
     this.setOverlayVisible(end > start);
+  }
+
+  buildLineTransitionPlan(nextStart, nextEnd) {
+    if (!this.shouldAnimateRollingWindowTransition(nextStart, nextEnd)) {
+      this.clearLineTransitionArtifacts();
+      return null;
+    }
+
+    const renderedLines = Array.from(this.lines?.querySelectorAll(".stage-lyric-line") || []);
+    if (!renderedLines.length) {
+      this.clearLineTransitionArtifacts();
+      return null;
+    }
+
+    const positions = new Map();
+    const ghosts = [];
+    const containerRect = this.lines.getBoundingClientRect();
+    renderedLines.forEach((line) => {
+      const cueIndex = Number(line.dataset.cueIndex);
+      const rect = line.getBoundingClientRect();
+      positions.set(cueIndex, rect.top);
+      if (cueIndex < nextStart || cueIndex >= nextEnd) {
+        ghosts.push({
+          cueIndex,
+          node: line.cloneNode(true),
+          top: rect.top - containerRect.top,
+          height: rect.height,
+        });
+      }
+    });
+
+    const direction = nextStart > this.visibleCueStart ? 1 : -1;
+    const step = this.getLineTransitionStep(renderedLines);
+    return {
+      direction,
+      positions,
+      ghosts,
+      step,
+    };
+  }
+
+  shouldAnimateRollingWindowTransition(nextStart, nextEnd) {
+    if (this.reducedMotion || this.settings.lineBehavior !== "rolling_scroll") {
+      return false;
+    }
+    if (typeof this.visibleCueStart !== "number" || typeof this.visibleCueEnd !== "number") {
+      return false;
+    }
+    if (nextStart === this.visibleCueStart && nextEnd === this.visibleCueEnd) {
+      return false;
+    }
+    return Math.abs(nextStart - this.visibleCueStart) === 1
+      && Math.abs(nextEnd - this.visibleCueEnd) === 1;
+  }
+
+  getLineTransitionStep(renderedLines) {
+    const tops = renderedLines
+      .map((line) => line.getBoundingClientRect().top)
+      .sort((a, b) => a - b);
+    if (tops.length >= 2) {
+      const deltas = [];
+      for (let index = 1; index < tops.length; index += 1) {
+        const delta = tops[index] - tops[index - 1];
+        if (delta > 0) {
+          deltas.push(delta);
+        }
+      }
+      if (deltas.length) {
+        return deltas.reduce((sum, delta) => sum + delta, 0) / deltas.length;
+      }
+    }
+    return 48;
+  }
+
+  applyLineTransitionPlan(plan) {
+    this.clearLineTransitionArtifacts();
+    if (!plan || !this.lines) {
+      return;
+    }
+
+    const lines = Array.from(this.lines.querySelectorAll(".stage-lyric-line"));
+    lines.forEach((line) => {
+      const cueIndex = Number(line.dataset.cueIndex);
+      const rect = line.getBoundingClientRect();
+      const previousTop = plan.positions.get(cueIndex);
+      const offsetY = Number.isFinite(previousTop)
+        ? previousTop - rect.top
+        : plan.direction > 0
+          ? plan.step
+          : -plan.step;
+      line.style.setProperty("--stage-lyric-line-offset-y", `${offsetY}px`);
+    });
+
+    this.renderGhostLines(plan);
+    void this.lines.offsetHeight;
+
+    lines.forEach((line) => {
+      line.classList.add("stage-lyric-line--transitioning");
+      line.style.setProperty("--stage-lyric-line-offset-y", "0px");
+    });
+
+    window.requestAnimationFrame(() => {
+      this.lineTransitionResetTimer = window.setTimeout(() => {
+        this.lines?.querySelectorAll(".stage-lyric-line--transitioning").forEach((line) => {
+          line.classList.remove("stage-lyric-line--transitioning");
+          line.style.removeProperty("--stage-lyric-line-offset-y");
+        });
+        this.lineTransitionResetTimer = null;
+      }, 960);
+    });
+  }
+
+  renderGhostLines(plan) {
+    if (!this.lines || !plan?.ghosts?.length) {
+      return;
+    }
+
+    plan.ghosts.forEach((ghost) => {
+      const node = ghost.node;
+      node.classList.add("stage-lyric-line--ghost", "stage-lyric-line--transitioning");
+      node.classList.remove("stage-lyric-line--current");
+      node.style.top = `${ghost.top}px`;
+      node.style.height = `${ghost.height}px`;
+      node.style.setProperty("--stage-lyric-line-offset-y", "0px");
+      this.lines.appendChild(node);
+      void node.offsetHeight;
+      node.style.setProperty(
+        "--stage-lyric-line-offset-y",
+        `${plan.direction > 0 ? -plan.step : plan.step}px`,
+      );
+      node.style.opacity = "0";
+    });
+
+    this.lineGhostCleanupTimer = window.setTimeout(() => {
+      this.lines?.querySelectorAll(".stage-lyric-line--ghost").forEach((ghostNode) => ghostNode.remove());
+      this.lineGhostCleanupTimer = null;
+    }, 960);
+  }
+
+  clearLineTransitionArtifacts() {
+    if (this.lineTransitionResetTimer !== null) {
+      window.clearTimeout(this.lineTransitionResetTimer);
+      this.lineTransitionResetTimer = null;
+    }
+    if (this.lineGhostCleanupTimer !== null) {
+      window.clearTimeout(this.lineGhostCleanupTimer);
+      this.lineGhostCleanupTimer = null;
+    }
+    this.lines?.querySelectorAll(".stage-lyric-line--transitioning").forEach((line) => {
+      line.classList.remove("stage-lyric-line--transitioning");
+      line.style.removeProperty("--stage-lyric-line-offset-y");
+    });
+    this.lines?.querySelectorAll(".stage-lyric-line--ghost").forEach((ghostNode) => ghostNode.remove());
   }
 
   renderLine(cue, cueIndex) {
@@ -407,9 +595,11 @@ class StageLyricsController {
     lines.forEach((line) => {
       const cueIndex = Number(line.dataset.cueIndex);
       const isCurrent = cueIndex === this.activeCueIndex;
+      const isPlayed = typeof this.activeCueIndex === "number" && this.activeCueIndex >= 0 && cueIndex < this.activeCueIndex;
       const hasAlignedWords = line.dataset.aligned === "true";
       const isCountdown = line.dataset.countdown === "true";
       line.classList.toggle("stage-lyric-line--current", isCurrent);
+      line.classList.toggle("stage-lyric-line--played", isPlayed);
 
       if (!hasAlignedWords) {
         return;
@@ -422,6 +612,7 @@ class StageLyricsController {
       line.querySelectorAll(".stage-lyric-word").forEach((wordNode) => {
         const wordIndex = Number(wordNode.dataset.wordIndex);
         const isActiveWord = isCurrent && wordIndex === this.activeWordIndex;
+        const isPlayedWord = isPlayed || (isCurrent && wordIndex <= this.activeWordIndex);
         if (shouldCropWords) {
           const progress = wordIndex < this.activeWordIndex
             ? 1
@@ -435,8 +626,7 @@ class StageLyricsController {
         }
 
         wordNode.style.removeProperty("--stage-word-progress");
-        const highlighted = isCurrent && wordIndex <= this.activeWordIndex;
-        wordNode.classList.toggle("stage-lyric-word--highlighted", highlighted);
+        wordNode.classList.toggle("stage-lyric-word--highlighted", isPlayedWord);
         wordNode.classList.toggle("stage-lyric-word--active", isActiveWord);
       });
     });
@@ -548,6 +738,9 @@ class StageLyricsController {
       outlineWidth: Math.round(this.clampNumber(settings.outlineWidth, 2, 14, StageLyricsController.DEFAULT_SETTINGS.outlineWidth)),
       previousLines: Math.round(this.clampNumber(settings.previousLines, 0, 3, StageLyricsController.DEFAULT_SETTINGS.previousLines)),
       nextLines: Math.round(this.clampNumber(settings.nextLines, 0, 3, StageLyricsController.DEFAULT_SETTINGS.nextLines)),
+      lineBehavior: ["rolling", "rolling_scroll", "fixed_group"].includes(settings.lineBehavior)
+        ? settings.lineBehavior
+        : StageLyricsController.DEFAULT_SETTINGS.lineBehavior,
       animation: ["slide", "crop", "fade", "none"].includes(settings.animation)
         ? settings.animation
         : StageLyricsController.DEFAULT_SETTINGS.animation,
