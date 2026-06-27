@@ -671,6 +671,8 @@
   "stage.lyrics_animation_none": "None",
   "stage.lyrics_animation_slide": "Slide",
   "stage.lyrics_background_media": "Background media",
+  "stage.lyrics_background_enabled": "Background media enabled",
+  "stage.lyrics_background_short": "Background",
   "stage.lyrics_background_media_hint": "Use a /media/... image or video. It appears only in fullscreen behind lyrics.",
   "stage.lyrics_background_opacity": "Background opacity",
   "stage.lyrics_custom_font": "Custom font stack",

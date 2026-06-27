@@ -26,6 +26,7 @@ def test_lyrics_preset_service_normalizes_settings_payload():
                 "previousLines": -1,
                 "nextLines": 6,
                 "animation": "spin",
+                "backgroundMediaEnabled": False,
                 "backgroundMediaPath": "/media/brand-loop.mp4",
                 "backgroundMediaOpacityPct": 2,
             }
@@ -45,6 +46,7 @@ def test_lyrics_preset_service_normalizes_settings_payload():
         "previousLines": 0,
         "nextLines": 3,
         "animation": "fade",
+        "backgroundMediaEnabled": False,
         "backgroundMediaPath": "/media/brand-loop.mp4",
         "backgroundMediaOpacityPct": 10,
     }
@@ -64,6 +66,7 @@ def test_lyrics_preset_service_crud_round_trip(db_session):
                 "sizeVw": 4.1,
                 "animation": "slide",
                 "activeColor": "#ff00aa",
+                "backgroundMediaEnabled": False,
                 "backgroundMediaPath": "/media/brand-loop.webm",
                 "backgroundMediaOpacityPct": 72,
             },
@@ -74,6 +77,7 @@ def test_lyrics_preset_service_crud_round_trip(db_session):
     assert created.settings["fontPreset"] == "custom"
     assert created.settings["customFontFamily"] == '"Noto Sans SC", sans-serif'
     assert created.settings["activeColor"] == "#ff00aa"
+    assert created.settings["backgroundMediaEnabled"] is False
     assert created.settings["backgroundMediaPath"] == "/media/brand-loop.webm"
     assert created.settings["backgroundMediaOpacityPct"] == 72
 

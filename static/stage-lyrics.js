@@ -65,6 +65,7 @@ class StageLyricsController {
     previousLines: 1,
     nextLines: 2,
     animation: "fade",
+    backgroundMediaEnabled: true,
     backgroundMediaPath: "",
     backgroundMediaOpacityPct: 100,
   };
@@ -550,6 +551,7 @@ class StageLyricsController {
       animation: ["slide", "crop", "fade", "none"].includes(settings.animation)
         ? settings.animation
         : StageLyricsController.DEFAULT_SETTINGS.animation,
+      backgroundMediaEnabled: settings.backgroundMediaEnabled !== false,
       backgroundMediaPath: this.normalizeBackgroundMediaPath(settings.backgroundMediaPath),
       backgroundMediaOpacityPct: Math.round(this.clampNumber(settings.backgroundMediaOpacityPct, 10, 100, StageLyricsController.DEFAULT_SETTINGS.backgroundMediaOpacityPct)),
     };
@@ -661,7 +663,7 @@ class StageLyricsController {
     }
 
     this.backgroundLayer.style.setProperty("--stage-lyrics-background-opacity", `${this.settings.backgroundMediaOpacityPct / 100}`);
-    if (!this.backgroundEligible) {
+    if (!this.backgroundEligible || !this.settings.backgroundMediaEnabled) {
       this.clearBackgroundMedia();
       return;
     }
@@ -966,7 +968,12 @@ class StageLyricsController {
   }
 
   updateSettingFromInput(name, input) {
-    const value = input.type === "number" || input.type === "range" ? Number(input.value) : input.value;
+    let value = input.value;
+    if (input.type === "number" || input.type === "range") {
+      value = Number(input.value);
+    } else if (input.type === "checkbox") {
+      value = input.checked;
+    }
     const previousFontPreset = this.settings.fontPreset;
     this.settings = this.normalizeSettings({
       ...this.settings,
@@ -983,7 +990,11 @@ class StageLyricsController {
       if (!input || activeElement === input) {
         return;
       }
-      input.value = this.settings[name];
+      if (input.type === "checkbox") {
+        input.checked = Boolean(this.settings[name]);
+      } else {
+        input.value = this.settings[name];
+      }
     });
     if (this.inputs.customFontFamily) {
       this.inputs.customFontFamily.disabled = this.settings.fontPreset !== "custom";

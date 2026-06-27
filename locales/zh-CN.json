@@ -671,6 +671,8 @@
   "stage.lyrics_animation_none": "无",
   "stage.lyrics_animation_slide": "滑动",
   "stage.lyrics_background_media": "背景媒体",
+  "stage.lyrics_background_enabled": "启用背景媒体",
+  "stage.lyrics_background_short": "背景",
   "stage.lyrics_background_media_hint": "使用 /media/... 图片或视频。仅在全屏时显示在歌词后方。",
   "stage.lyrics_background_opacity": "背景透明度",
   "stage.lyrics_custom_font": "自定义字体栈",

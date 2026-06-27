@@ -677,7 +677,8 @@
         display: none;
         overflow: hidden;
         pointer-events: none;
-        background: #000;
+        /* Keep transparent image pixels see-through so the stage media can show through. */
+        background: transparent;
         opacity: var(--stage-lyrics-background-opacity, 1);
     }
 
@@ -1383,6 +1384,10 @@
                                         <span class="text-[11px] leading-tight text-on-surface-variant">{{ t('stage.lyrics_background_media_hint') }}</span>
                                     </label>
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_background_enabled') }}</span>
+                                        <input id="stage-lyrics-background-enabled" class="h-4 w-4 accent-primary" type="checkbox" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">
                                             {{ t('stage.lyrics_background_opacity') }}
                                             <span id="stage-lyrics-background-opacity-pct-value"></span>
@@ -1648,6 +1653,7 @@ const stageLyrics = new window.StageLyricsController({
         neighborLineOpacityPct: document.getElementById("stage-lyrics-neighbor-line-opacity-pct"),
         neighborLineOpacityPctValue: document.getElementById("stage-lyrics-neighbor-line-opacity-pct-value"),
         animation: document.getElementById("stage-lyrics-animation"),
+        backgroundMediaEnabled: document.getElementById("stage-lyrics-background-enabled"),
         backgroundMediaPath: document.getElementById("stage-lyrics-background-media"),
         backgroundMediaOpacityPct: document.getElementById("stage-lyrics-background-opacity-pct"),
         backgroundMediaOpacityPctValue: document.getElementById("stage-lyrics-background-opacity-pct-value"),
@@ -1778,6 +1784,9 @@ function sendLyricsSettingsAck(ok, payload = {}) {
 async function applyRemoteLyricsSettings(payload) {
     const presetId = Number.isInteger(payload?.preset_id) ? payload.preset_id : null;
     const allowOverride = payload?.override !== false;
+    const backgroundMediaEnabled = typeof payload?.background_media_enabled === "boolean"
+        ? payload.background_media_enabled
+        : null;
     try {
         if (typeof payload?.lyrics_enabled === "boolean") {
             setLyricsEnabled(payload.lyrics_enabled);
@@ -1812,6 +1821,10 @@ async function applyRemoteLyricsSettings(payload) {
                 nextSettings.lineWidthPct = payload.line_width_pct;
             }
         }
+        if (backgroundMediaEnabled !== null) {
+            nextSettings = nextSettings || stageLyrics.getSettingsSnapshot();
+            nextSettings.backgroundMediaEnabled = backgroundMediaEnabled;
+        }
 
         if (nextSettings) {
             stageLyrics.applySettingsObject(nextSettings, { persist: true });
@@ -1821,9 +1834,11 @@ async function applyRemoteLyricsSettings(payload) {
             override: allowOverride,
             size_vw: nextSettings?.sizeVw,
             line_width_pct: nextSettings?.lineWidthPct,
+            background_media_enabled: nextSettings?.backgroundMediaEnabled,
             applied_settings: nextSettings ? {
                 sizeVw: nextSettings.sizeVw,
                 lineWidthPct: nextSettings.lineWidthPct,
+                backgroundMediaEnabled: nextSettings.backgroundMediaEnabled,
             } : null,
         });
         stageLyrics.setStatus(t("stage.lyrics_remote_settings_applied"));

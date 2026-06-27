@@ -40,6 +40,7 @@ class LyricsPresetService:
         "previousLines": 1,
         "nextLines": 2,
         "animation": "fade",
+        "backgroundMediaEnabled": True,
         "backgroundMediaPath": "",
         "backgroundMediaOpacityPct": 100,
     }
@@ -161,6 +162,7 @@ class LyricsPresetService:
             "previousLines": self._round_number(raw_settings.get("previousLines"), 0, 3, self.DEFAULT_SETTINGS["previousLines"]),
             "nextLines": self._round_number(raw_settings.get("nextLines"), 0, 3, self.DEFAULT_SETTINGS["nextLines"]),
             "animation": self._normalize_animation(raw_settings.get("animation")),
+            "backgroundMediaEnabled": raw_settings.get("backgroundMediaEnabled") is not False,
             "backgroundMediaPath": self._normalize_background_media_path(raw_settings.get("backgroundMediaPath")),
             "backgroundMediaOpacityPct": self._round_number(raw_settings.get("backgroundMediaOpacityPct"), 10, 100, self.DEFAULT_SETTINGS["backgroundMediaOpacityPct"]),
         }

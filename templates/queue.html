@@ -181,15 +181,26 @@
                                 <p class="text-[11px] font-black uppercase tracking-widest text-on-surface-variant">{{ t('common.lyrics') }}</p>
                                 <p class="mt-0.5 truncate text-xs text-on-surface-variant">{{ t('queue.stage_lyrics_ready') }}</p>
                             </div>
-                            <label class="inline-flex items-center gap-3 rounded-full bg-surface-container-highest px-3 py-2">
-                                <span class="text-sm font-bold text-on-surface">{{ t('common.lyrics') }}</span>
-                                <input
-                                    id="stage-remote-lyrics-enabled-toggle"
-                                    type="checkbox"
-                                    class="h-4 w-4 accent-primary"
-                                    checked
-                                />
-                            </label>
+                            <div class="flex flex-wrap items-center justify-end gap-2">
+                                <label class="inline-flex items-center gap-3 rounded-full bg-surface-container-highest px-3 py-2">
+                                    <span class="text-sm font-bold text-on-surface">{{ t('common.lyrics') }}</span>
+                                    <input
+                                        id="stage-remote-lyrics-enabled-toggle"
+                                        type="checkbox"
+                                        class="h-4 w-4 accent-primary"
+                                        checked
+                                    />
+                                </label>
+                                <label class="inline-flex items-center gap-3 rounded-full bg-surface-container-highest px-3 py-2">
+                                    <span class="text-sm font-bold text-on-surface">{{ t('stage.lyrics_background_short') }}</span>
+                                    <input
+                                        id="stage-remote-lyrics-background-enabled-toggle"
+                                        type="checkbox"
+                                        class="h-4 w-4 accent-primary"
+                                        checked
+                                    />
+                                </label>
+                            </div>
                         </div>
                         <div class="flex items-center justify-between gap-3">
                             <div class="min-w-0">

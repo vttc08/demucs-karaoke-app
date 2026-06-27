@@ -16,8 +16,9 @@ This document captures extension points for future lyric-style customization on 
 - Appearance settings are stored per browser in `localStorage` under
   `karaoke_stage_lyrics_settings_v1` and can be downloaded, applied from the textarea, or uploaded as JSON.
 - Optional fullscreen lyric background media is stored in the same settings object as
-  `backgroundMediaPath` and `backgroundMediaOpacityPct`. The path is canonical `/media/...`; images
-  render as cover-fit `<img>` and videos render as muted autoplay loop `<video>` with no controls.
+  `backgroundMediaEnabled`, `backgroundMediaPath`, and `backgroundMediaOpacityPct`. The path is
+  canonical `/media/...`; images render as cover-fit `<img>` and videos render as muted autoplay loop
+  `<video>` with no controls.
   The layer appears only in fullscreen, above the original stage media and below `#stage-lyrics-overlay`.
   If the configured file is missing or unsupported, the layer hides and playback continues normally.
 - Stage display identity is also browser-local: `karaoke.stage.displayId` stays stable per browser and

@@ -597,6 +597,10 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                     if lyrics_enabled is not None and not isinstance(lyrics_enabled, bool):
                         await _send_ws_error(websocket, "lyrics_enabled must be boolean")
                         continue
+                    background_media_enabled = payload.get("background_media_enabled")
+                    if background_media_enabled is not None and not isinstance(background_media_enabled, bool):
+                        await _send_ws_error(websocket, "background_media_enabled must be boolean")
+                        continue
 
                     preset_id = payload.get("preset_id")
                     if preset_id is not None:
@@ -634,6 +638,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                     extra_data = {
                         "target_stage_id": target_stage_id,
                         "lyrics_enabled": lyrics_enabled,
+                        "background_media_enabled": background_media_enabled,
                         "preset_id": preset_id,
                         "override": payload.get("override") if isinstance(payload.get("override"), bool) else None,
                         "size_vw": size_vw,

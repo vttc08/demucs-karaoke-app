@@ -125,6 +125,7 @@ def test_websocket_targeted_lyrics_settings_requires_admin(client):
                         "source": "queue",
                         "target_stage_id": "stage-tv",
                         "lyrics_enabled": True,
+                        "background_media_enabled": False,
                         "size_vw": 4.5,
                         "line_width_pct": 85,
                     },
@@ -156,6 +157,7 @@ def test_websocket_targeted_lyrics_settings_auto_targets_single_stage(client):
                         "command": "apply_lyrics_settings",
                         "source": "queue",
                         "lyrics_enabled": False,
+                        "background_media_enabled": False,
                         "preset_id": preset_id,
                         "override": False,
                     },
@@ -168,6 +170,7 @@ def test_websocket_targeted_lyrics_settings_auto_targets_single_stage(client):
             assert command["data"]["command"] == "apply_lyrics_settings"
             assert command["data"]["target_stage_id"] == "stage-tv"
             assert command["data"]["lyrics_enabled"] is False
+            assert command["data"]["background_media_enabled"] is False
             assert command["data"]["preset_id"] == preset_id
             assert command["data"]["override"] is False
 
@@ -191,6 +194,7 @@ def test_websocket_targeted_lyrics_settings_override_keeps_manual_values(client)
                         "command": "apply_lyrics_settings",
                         "source": "queue",
                         "lyrics_enabled": True,
+                        "background_media_enabled": False,
                         "preset_id": preset_id,
                         "override": True,
                         "size_vw": 5.2,
@@ -205,6 +209,7 @@ def test_websocket_targeted_lyrics_settings_override_keeps_manual_values(client)
             assert command["data"]["command"] == "apply_lyrics_settings"
             assert command["data"]["target_stage_id"] == "stage-tv"
             assert command["data"]["override"] is True
+            assert command["data"]["background_media_enabled"] is False
             assert command["data"]["size_vw"] == 5.2
             assert command["data"]["line_width_pct"] == 90
 
