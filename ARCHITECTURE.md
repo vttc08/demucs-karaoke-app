@@ -7,6 +7,7 @@ This project currently uses two services:
 - serves mobile queue page, stage page, and settings page
 - serves media library management page (`/media`) with database-backed listing and CRUD actions
 - serves upload page (`/upload`) for saving uploaded MP3/MP4 files or ZIP imports into the media library and optionally queueing the new item
+- serves admin-only subtitle workflow page (`/media-subtitles/{item_id}`) for exporting ASS/SRT from JSON lyrics and importing edited files back into JSON
 - reconciles media library metadata with filesystem on startup and via manual scan API trigger
 - serves a static access-restricted gate page (`/access-restricted`) for reverse-proxy network checks
 - serves stage-focused presentation page
@@ -62,6 +63,11 @@ This project currently uses two services:
 - The edit modal links to the admin-only `/media-editor/{item_id}` page. It renders an immediate
   shell with the native browser media player, then hydrates duration and ffprobe I-frame timestamps
   asynchronously from `/api/media/{item_id}/trim-info` without introducing a frontend framework.
+- The edit modal also links to the admin-only `/media-subtitles/{item_id}` page. It exports
+  server-rendered ASS/SRT files from the current JSON lyrics sidecar, previews edited uploads for
+  overlap warnings, and converts the chosen subtitle file back into the canonical JSON sidecar on
+  commit. When a media item does not have synced JSON lyrics, the page renders a 404 error view
+  with a back action instead of silently redirecting to `/media`.
 - The media edit modal also exposes a compact file-manifest panel backed by `/api/media/{item_id}/files`
   plus per-file download/delete and ZIP download endpoints so admins can inspect or remove sidecars
   before re-running separation/alignment work. The manifest only includes files that still exist on

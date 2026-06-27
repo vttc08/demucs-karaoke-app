@@ -1944,6 +1944,13 @@ function handleActionClick(event) {
         return;
     }
 
+    if (action === "open-subtitle-editor") {
+        if (activeEditItemId) {
+            window.location.href = appUrl(`/media-subtitles/${activeEditItemId}`);
+        }
+        return;
+    }
+
     if (action === "open-vocals-editor") {
         if (activeEditItemId) {
             window.location.href = appUrl(`/media-vocals/${activeEditItemId}`);

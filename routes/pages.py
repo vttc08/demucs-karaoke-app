@@ -15,6 +15,11 @@ from services.media_library_service import MediaLibraryService
 from services.media_trim_service import MediaTrimService
 from services.processing_task_service import processing_task_service
 from services.runtime_settings_service import RuntimeSettingsService
+from services.subtitle_workflow_service import (
+    SubtitleWorkflowConflictError,
+    SubtitleWorkflowNotFoundError,
+    subtitle_workflow_service,
+)
 from services.stage_lobby_service import StageLobbyService
 from services.auth_service import ADMIN_SESSION_COOKIE, SESSION_DAYS, AuthService
 from services.i18n_service import (
@@ -414,6 +419,69 @@ async def media_vocals_page(
                 "media_url": media_item.media_path,
                 "has_video": is_video,
                 "has_vocals": bool(media_item.vocals_path and media_item.vocals_path.strip()),
+            },
+        },
+    )
+
+
+@router.get("/media-subtitles/{item_id}", response_class=HTMLResponse)
+async def media_subtitles_page(
+    item_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Admin-only subtitle workflow editor for one media item."""
+    admin = auth_service.get_admin_for_session(
+        db, request.cookies.get(ADMIN_SESSION_COOKIE)
+    )
+    if admin is None:
+        return RedirectResponse(url=app_url("/login"), status_code=302)
+    locale = resolve_locale(request)
+
+    try:
+        media_item, media_file, lyrics_file = subtitle_workflow_service.get_editable_media(db, item_id)
+    except (SubtitleWorkflowNotFoundError, SubtitleWorkflowConflictError) as exc:
+        if isinstance(exc, SubtitleWorkflowConflictError):
+            detail = translate(locale, "subtitle.not_available_detail")
+        else:
+            detail = translate(locale, "subtitle.not_found_detail")
+        return templates.TemplateResponse(
+            "media_subtitles.html",
+            {
+                "request": request,
+                "subtitle_error": {
+                    "title": translate(locale, "subtitle.not_available"),
+                    "detail": detail,
+                    "back_url": app_url("/media"),
+                    "history_back": translate(locale, "subtitle.go_back_previous"),
+                },
+            },
+            status_code=404,
+        )
+
+    media_suffix = Path(media_item.media_path).suffix.lower()
+    is_video = media_suffix in _VIDEO_SUFFIXES
+    docs_target = app_url(build_docs_url(locale))
+    return templates.TemplateResponse(
+        "media_subtitles.html",
+        {
+            "request": request,
+            "subtitle_info": {
+                "media_id": media_item.id,
+                "title": media_item.title,
+                "artist": media_item.artist,
+                "media_url": media_item.media_path,
+                "lyrics_url": media_item.lyrics_path,
+                "has_video": is_video,
+                "media_name": media_file.name,
+                "lyrics_name": lyrics_file.name,
+                "ass_export_url": app_url(f"/api/media/{media_item.id}/subtitles/ass"),
+                "srt_export_url": app_url(f"/api/media/{media_item.id}/subtitles/srt"),
+                "preview_url": app_url(f"/api/media/{media_item.id}/subtitles/preview"),
+                "upload_url": app_url(f"/api/media/{media_item.id}/subtitles/upload"),
+                "files_url": app_url(f"/api/media/{media_item.id}/files"),
+                "package_url": app_url(f"/api/media/{media_item.id}/download"),
+                "docs_url": docs_target,
             },
         },
     )

@@ -20,6 +20,7 @@ dependencies = [
     "requests>=2.33.1",
     "pycryptodome>=3.22.0",
     "pylrc>=0.1.2",
+    "pysubs2>=1.8.0",
     "srt>=3.5.3",
 ]
 

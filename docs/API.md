@@ -1205,6 +1205,10 @@ For existing guide vocals, the main app can use the Demucs align-only job API:
 - `GET /io` reports the current size of the remote Demucs IO workspace.
 - `DELETE /io` removes all retained Demucs scratch files after the caller verifies that no jobs are active.
 
+When alignment runs on unsynced plain-text lyrics, newline-separated lines are preserved as separate
+display segments in the rebuilt `aligned_lyrics.json`, while WhisperX still receives a single
+flattened transcript segment for alignment.
+
 ### Demucs Observability and Maintenance
 
 The remote Demucs service also exposes:
