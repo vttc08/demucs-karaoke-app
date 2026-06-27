@@ -69,17 +69,17 @@
                 <p class="truncate text-sm font-semibold text-primary">{{ subtitle_info.artist or t('common.unknown_artist') }}</p>
                 <p class="mt-2 max-w-3xl text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.associated_files_detail') }}</p>
             </div>
-            <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap items-center gap-1">
                 <a href="{{ subtitle_info.package_url }}" class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-primary hover:brightness-110">
-                    <span class="material-symbols-outlined text-[16px]">download</span>
-                    <span>{{ t('subtitle.download_package') }}</span>
+                    <span class="material-symbols-outlined text-[12px]">download</span>
+                    <span>{{ t('subtitle.download_zip') }}</span>
                 </a>
                 <a href="{{ subtitle_info.docs_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
-                    <span class="material-symbols-outlined text-[16px]">help</span>
+                    <span class="material-symbols-outlined text-[12px]">help</span>
                     <span>{{ t('subtitle.docs') }}</span>
                 </a>
-                <button id="subtitle-refresh-files" type="button" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
-                    <span class="material-symbols-outlined text-[16px]">refresh</span>
+                <button id="subtitle-refresh-files" type="button" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
+                    <span class="material-symbols-outlined text-[12px]">refresh</span>
                     <span>{{ t('common.refresh') }}</span>
                 </button>
             </div>
@@ -107,21 +107,29 @@
                 </div>
                 <img src="{{ static_asset_url('/static/ssa.png') }}" alt="{{ t('subtitle.ass_card_image_alt') }}" class="w-full aspect-[1223/485] object-contain">
             </div>
-            <div class="mt-4 flex flex-wrap gap-2">
-                <a href="https://aegisub.org/downloads/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
-                    <span class="material-symbols-outlined text-[16px]">download</span>
-                    <span>{{ t('subtitle.download_aegisub') }}</span>
-                </a>
-                <a href="{{ subtitle_info.ass_export_url }}" class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-primary hover:bg-primary/15">
-                    <span class="material-symbols-outlined text-[16px]">download</span>
-                    <span>{{ t('subtitle.download_ass') }}</span>
-                </a>
-                <a href="https://aegisub.org/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
-                    <span class="material-symbols-outlined text-[16px]">open_in_new</span>
-                    <span>{{ t('subtitle.app_home') }}</span>
-                </a>
+            <div class="mt-4 space-y-2">
+                <div class="flex flex-nowrap items-center gap-3 overflow-x-auto">
+                    <a href="https://aegisub.org/downloads/" target="_blank" rel="noopener noreferrer" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-on-surface hover:brightness-110" title="{{ t('subtitle.get_app_aegisub') }}" aria-label="{{ t('subtitle.get_app_aegisub') }}">
+                        <span class="material-symbols-outlined text-[16px]">install_mobile</span>
+                        <span>{{ t('subtitle.get_app_aegisub') }}</span>
+                    </a>
+                    <a href="https://aegisub.org/" target="_blank" rel="noopener noreferrer" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-on-surface hover:brightness-110">
+                        <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+                        <span>{{ t('subtitle.app_home') }}</span>
+                    </a>
+                    <a href="{{ subtitle_info.docs_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-on-surface hover:brightness-110">
+                        <span class="material-symbols-outlined text-[16px]">help</span>
+                        <span>{{ t('subtitle.docs') }}</span>
+                    </a>
+                </div>
+                <div class="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
+                    <a href="{{ subtitle_info.ass_export_url }}" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[12px] font-black uppercase tracking-[0.18em] text-primary hover:bg-primary/15" title="{{ t('subtitle.download_ass') }}" aria-label="{{ t('subtitle.download_ass') }}">
+                        <span class="material-symbols-outlined text-[16px]">download</span>
+                        <span>{{ t('subtitle.download_ass') }}</span>
+                    </a>
+                </div>
             </div>
-            <form class="mt-4 space-y-3" data-subtitle-upload-form="ass">
+            <form class="my-4 space-y-3" data-subtitle-upload-form="ass">
                 <input type="hidden" name="format" value="ass">
                 <label class="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-3 rounded-3xl border border-dashed border-primary/30 bg-primary/5 px-4 py-6 text-center transition hover:bg-primary/10" data-subtitle-dropzone="ass">
                     <input type="file" class="hidden" name="file" accept=".ass,.ssa">
@@ -132,7 +140,7 @@
                     </div>
                 </label>
                 <div class="flex flex-wrap items-center gap-2">
-                    <button type="submit" class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-primary hover:brightness-110">
+                    <button type="submit" class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary px-4 py-2 text-[12px] font-black uppercase tracking-wider text-on-primary hover:brightness-110">
                         <span class="material-symbols-outlined text-[16px]">save</span>
                         <span>{{ t('subtitle.replace_ass') }}</span>
                     </button>
@@ -164,19 +172,27 @@
                 </div>
                 <img src="{{ static_asset_url('/static/srt.png') }}" alt="{{ t('subtitle.srt_card_image_alt') }}" class="w-full aspect-[1375/415] object-contain">
             </div>
-            <div class="mt-4 flex flex-wrap gap-2">
-                <a href="https://github.com/SubtitleEdit/subtitleedit/releases" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
-                    <span class="material-symbols-outlined text-[16px]">download</span>
-                    <span>{{ t('subtitle.download_subtitleedit') }}</span>
-                </a>
-                <a href="{{ subtitle_info.srt_export_url }}" class="inline-flex items-center gap-2 rounded-full border border-secondary/30 bg-secondary/10 px-3 py-2 text-[11px] font-black uppercase tracking-wider text-secondary hover:bg-secondary/15">
-                    <span class="material-symbols-outlined text-[16px]">download</span>
-                    <span>{{ t('subtitle.download_srt') }}</span>
-                </a>
-                <a href="https://www.nikse.dk/subtitleedit/" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
-                    <span class="material-symbols-outlined text-[16px]">open_in_new</span>
-                    <span>{{ t('subtitle.app_home') }}</span>
-                </a>
+            <div class="my-4 space-y-2">
+                <div class="flex flex-nowrap items-center gap-3 overflow-x-auto">
+                    <a href="https://github.com/SubtitleEdit/subtitleedit/releases" target="_blank" rel="noopener noreferrer" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-on-surface hover:brightness-110" title="{{ t('subtitle.get_app_subtitleedit') }}" aria-label="{{ t('subtitle.get_app_subtitleedit') }}">
+                        <span class="material-symbols-outlined text-[16px]">install_mobile</span>
+                        <span>{{ t('subtitle.get_app_subtitleedit') }}</span>
+                    </a>
+                    <a href="https://www.nikse.dk/subtitleedit/" target="_blank" rel="noopener noreferrer" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-on-surface hover:brightness-110">
+                        <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+                        <span>{{ t('subtitle.app_home') }}</span>
+                    </a>
+                    <a href="{{ subtitle_info.docs_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-on-surface hover:brightness-110">
+                        <span class="material-symbols-outlined text-[16px]">help</span>
+                        <span>{{ t('subtitle.docs') }}</span>
+                    </a>
+                </div>
+                <div class="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
+                    <a href="{{ subtitle_info.srt_export_url }}" class="inline-flex shrink-0 items-center gap-2 rounded-full border border-secondary/30 bg-secondary/10 px-3 py-1.5 text-[12px] font-black uppercase tracking-[0.18em] text-secondary hover:bg-secondary/15" title="{{ t('subtitle.download_srt') }}" aria-label="{{ t('subtitle.download_srt') }}">
+                        <span class="material-symbols-outlined text-[16px]">download</span>
+                        <span>{{ t('subtitle.download_srt') }}</span>
+                    </a>
+                </div>
             </div>
             <form class="mt-4 space-y-3" data-subtitle-upload-form="srt">
                 <input type="hidden" name="format" value="srt">
