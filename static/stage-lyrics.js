@@ -127,6 +127,7 @@ class StageLyricsController {
     this.currentBackgroundUrl = "";
     this.currentBackgroundKind = "";
     this.backgroundLoadFailed = false;
+    this.backgroundEligible = false;
 
     this.backgroundImage?.addEventListener("error", () => this.handleBackgroundMediaError());
     this.backgroundVideo?.addEventListener("error", () => this.handleBackgroundMediaError());
@@ -660,6 +661,10 @@ class StageLyricsController {
     }
 
     this.backgroundLayer.style.setProperty("--stage-lyrics-background-opacity", `${this.settings.backgroundMediaOpacityPct / 100}`);
+    if (!this.backgroundEligible) {
+      this.clearBackgroundMedia();
+      return;
+    }
     const path = this.normalizeBackgroundMediaPath(this.settings.backgroundMediaPath);
     const kind = this.getBackgroundMediaKind(path);
     const url = path ? window.KaraokeURLs?.appUrl?.(path) || path : "";
@@ -755,6 +760,11 @@ class StageLyricsController {
     this.hideBackgroundImage();
     this.hideBackgroundVideo();
     this.syncBackgroundVisibility();
+  }
+
+  setBackgroundEligible(eligible) {
+    this.backgroundEligible = Boolean(eligible);
+    this.applyBackgroundSettings();
   }
 
   handleBackgroundMediaError() {
