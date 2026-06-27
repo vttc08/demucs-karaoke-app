@@ -121,6 +121,8 @@ let demucsHealth = { healthy: true, detail: t('settings.engine_unknown') };
 let modalSelection = null;
 let modalKaraokeEnabled = false;
 let modalAlignLyricsEnabled = false;
+let modalAlignLyricsAutoEnabled = false;
+let modalConfigInitializing = false;
 let queueToastTimer = null;
 let queuePresenceUsers = [];
 let queueAsEnabled = false;
@@ -554,10 +556,16 @@ function syncQueueConfigAlignControls() {
     const lyricsEnabled = Boolean(modalKaraokeEnabled && lyricsManager?.state.lyricsEnabled);
     const lyricsText = lyricsManager?.getSubmissionText() || '';
     const lyricsFormat = inferQueueConfigLyricsFormat();
+    const lyricsState = lyricsManager?.state.lyricsState || 'idle';
     const canAlign = queueConfigLyricsCanAlign();
 
-    if (!lyricsEnabled || !canAlign) {
-        modalAlignLyricsEnabled = false;
+    if (!lyricsEnabled || !demucsHealth.healthy || lyricsFormat === 'json') {
+        if (!modalConfigInitializing) {
+            modalAlignLyricsEnabled = false;
+            modalAlignLyricsAutoEnabled = false;
+        }
+    } else if (modalAlignLyricsAutoEnabled && lyricsEnabled) {
+        modalAlignLyricsEnabled = true;
     }
 
     if (queueConfigAlignToggle) {
@@ -976,7 +984,9 @@ async function openQueueConfigModal(resultElement, triggerButton) {
 
     const defaults = getModalDefaults();
     modalKaraokeEnabled = defaults.karaokeEnabled;
-    modalAlignLyricsEnabled = Boolean(defaults.karaokeEnabled && defaults.lyricsEnabled);
+    modalAlignLyricsAutoEnabled = Boolean(defaults.karaokeEnabled && defaults.lyricsEnabled);
+    modalAlignLyricsEnabled = modalAlignLyricsAutoEnabled;
+    modalConfigInitializing = true;
     lyricsManager.reset();
     lyricsManager.setMetadata(modalSelection.title || '', modalSelection.channel || '', modalSelection.title || '');
     lyricsManager.setEnabled(defaults.lyricsEnabled);
@@ -1010,6 +1020,16 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     }
     queueConfigSelectedQueueAsGuestId = getQueueAsLastGuestId() || null;
     syncQueueConfigModalUi();
+    modalConfigInitializing = false;
+    window.setTimeout(() => {
+        if (!modalSelection || !modalKaraokeEnabled || !lyricsManager?.state.lyricsEnabled) {
+            return;
+        }
+        if (modalAlignLyricsAutoEnabled) {
+            modalAlignLyricsEnabled = true;
+            syncQueueConfigAlignControls();
+        }
+    }, 0);
 
     if (lyricsManager.state.lyricsEnabled && modalKaraokeEnabled && lyricsManager.shouldAutoResolve()) {
         lyricsManager.resolve('auto').catch((error) => {
@@ -1039,6 +1059,8 @@ function closeQueueConfigModal() {
     modalSelection = null;
     modalKaraokeEnabled = false;
     modalAlignLyricsEnabled = false;
+    modalAlignLyricsAutoEnabled = false;
+    modalConfigInitializing = false;
 }
 
 function displaySearchResults(results) {
@@ -1196,6 +1218,16 @@ function syncQueueConfigModalUi() {
     syncQueueAsInQueueConfig();
 
     syncQueueConfirmState();
+    if (modalAlignLyricsAutoEnabled && modalKaraokeEnabled && lyricsManager?.state.lyricsEnabled) {
+        window.requestAnimationFrame(() => {
+            if (!modalSelection || !modalAlignLyricsAutoEnabled || !modalKaraokeEnabled || !lyricsManager?.state.lyricsEnabled) {
+                return;
+            }
+            modalAlignLyricsEnabled = true;
+            syncQueueConfigAlignControls();
+            syncQueueConfirmState();
+        });
+    }
 }
 
 async function submitQueueItem(selection, buttonElement, options = {}) {
@@ -1321,8 +1353,10 @@ if (queueConfigKaraokeToggle) {
         modalKaraokeEnabled = !modalKaraokeEnabled;
         if (!modalKaraokeEnabled) {
             modalAlignLyricsEnabled = false;
+            modalAlignLyricsAutoEnabled = false;
         } else if (lyricsManager?.state.lyricsEnabled) {
             modalAlignLyricsEnabled = true;
+            modalAlignLyricsAutoEnabled = true;
         }
         if (modalKaraokeEnabled && getModalTitleHints().karaokeLike) {
             showQueueToast(t('queue.karaoke_already'));
@@ -1335,6 +1369,7 @@ if (queueConfigAlignToggle) {
     queueConfigAlignToggle.addEventListener('click', () => {
         if (queueConfigAlignToggle.disabled || !lyricsManager) return;
         modalAlignLyricsEnabled = !modalAlignLyricsEnabled;
+        modalAlignLyricsAutoEnabled = modalAlignLyricsEnabled;
         syncQueueConfigModalUi();
     });
 }
@@ -1348,6 +1383,7 @@ if (queueConfigLyricsToggle) {
         }
         lyricsManager.setEnabled(newEnabled);
         modalAlignLyricsEnabled = Boolean(newEnabled);
+        modalAlignLyricsAutoEnabled = Boolean(newEnabled);
 
         if (newEnabled) {
             if (getModalTitleHints().lyricsLike) {

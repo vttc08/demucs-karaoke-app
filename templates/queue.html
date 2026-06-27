@@ -678,7 +678,7 @@
 <script>
     window.KARAOKE_STAGE_VOCALS_VOLUME_DEFAULT = {{ stage_vocals_volume_default | tojson }};
 </script>
-<script src="{{ app_url('/static/queue.js') }}"></script>
+<script src="{{ static_asset_url('/static/queue.js') }}"></script>
 <script>
 function getCookieValue(name) {
     const match = document.cookie
