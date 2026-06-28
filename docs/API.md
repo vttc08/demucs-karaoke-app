@@ -59,6 +59,7 @@ Allowed `command` values:
 - `skip`
 - `resync` (force stage client(s) to hard-recover local video/vocals alignment; optional numeric `seek_time` and boolean `is_paused`)
 - `seek` (requires numeric `seek_time` in seconds; optional boolean `is_paused`)
+- `seek_relative` (requires numeric `offset_seconds`; the stage player resolves the final timestamp locally)
 - `set_vocals_enabled` (requires boolean `vocals_enabled`)
 - `set_vocals_volume` (requires numeric `vocals_volume` between `0.0` and `1.0`)
 - `set_lyrics_enabled` (requires boolean `lyrics_enabled`)
@@ -84,11 +85,12 @@ Unauthorized commands return a websocket `error` event and are not broadcast.
 - Stage control:
   - `stage_control_command` with `{command, source}`, optional seek payload (`seek_time`, `is_paused`), and `sync_version` for resync commands
   - `stage_state_update` with `{current_time, is_paused, vocals_enabled, vocals_volume, lyrics_enabled, source}`
-  - `stage_time_update` with `{current_time, is_paused, source}`
+  - `stage_clock_subscribers_update` with `{lyrics_viewer_count, clock_enabled}` for stage clients
+  - `stage_time_update` with `{current_time, is_paused, source}` for lyrics viewers
 
 Event delivery is role-based:
 - `queue` clients receive queue lifecycle, lightweight progress, presence, and low-frequency stage state/control events.
-- `stage` clients receive queue lifecycle plus stage state/control/clock events, but not per-tick queue progress.
+- `stage` clients receive queue lifecycle plus stage state/control events and clock-subscriber demand, but not per-tick queue progress.
 - `lyrics_viewer` clients receive current-item changes plus stage state/clock events.
 
 **Client → server playback clock update:**
@@ -104,7 +106,7 @@ Event delivery is role-based:
 }
 ```
 
-The stage page sends this message from the active media element so lyrics viewers can follow the authoritative playback clock instead of a local timer.
+The stage page sends this message from the active media element so lyrics viewers can follow the authoritative playback clock instead of a local timer. Steady clock ticks are sent only while a `lyrics_viewer` client is connected.
 Only admin sessions may send `stage_time_update`.
 
 **Queue presence client message:**

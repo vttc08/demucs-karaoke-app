@@ -13,6 +13,8 @@ def receive_non_ping(websocket):
 def register_stage_websocket(websocket, stage_id: str, stage_name: str = "Projector"):
     """Subscribe and register a stage display websocket."""
     subscribe_websocket(websocket, "stage")
+    clock_state = receive_non_ping(websocket)
+    assert clock_state["type"] == "stage_clock_subscribers_update"
     websocket.send_json(
         {
             "type": "stage_presence_hello",
@@ -824,18 +826,24 @@ def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
             assert state_event["data"]["is_paused"] is False
             assert state_event["data"]["current_time"] == 42.5
 
-def test_websocket_stage_time_update_broadcasts_to_queue_and_lyrics_viewers(client):
-    """Stage time updates should refresh the shared playback clock for queue and lyrics viewers."""
+def test_websocket_stage_time_update_broadcasts_only_to_lyrics_viewers(client):
+    """Stage time updates should refresh lyrics viewers without noisy queue/stage fanout."""
     authenticate_admin_client(client)
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         subscribe_websocket(sender, "stage")
+        clock_state = receive_non_ping(sender)
+        assert clock_state["type"] == "stage_clock_subscribers_update"
+        assert clock_state["data"]["clock_enabled"] is False
         with client.websocket_connect("/api/queue/ws") as queue_receiver:
             queue_receiver.receive_json()
             subscribe_websocket(queue_receiver, "queue")
             with client.websocket_connect("/api/queue/ws") as lyrics_receiver:
                 lyrics_receiver.receive_json()
                 subscribe_websocket(lyrics_receiver, "lyrics_viewer")
+                clock_state = receive_non_ping(sender)
+                assert clock_state["type"] == "stage_clock_subscribers_update"
+                assert clock_state["data"]["clock_enabled"] is True
 
                 sender.send_json(
                     {
@@ -844,28 +852,56 @@ def test_websocket_stage_time_update_broadcasts_to_queue_and_lyrics_viewers(clie
                         "timestamp": 123,
                     }
                 )
+                sender.send_json(
+                    {
+                        "type": "stage_command",
+                        "data": {"command": "pause", "source": "stage"},
+                        "timestamp": 124,
+                    }
+                )
 
-                queue_event = queue_receiver.receive_json()
-                if queue_event["type"] == "ping":
-                    queue_receiver.send_json({"type": "pong"})
-                    queue_event = queue_receiver.receive_json()
-                assert queue_event["type"] == "stage_time_update"
-                assert queue_event["data"]["current_time"] == 18.25
-                assert queue_event["data"]["is_paused"] is True
+                queue_event = receive_non_ping(queue_receiver)
+                assert queue_event["type"] == "stage_control_command"
+                assert queue_event["data"]["command"] == "pause"
 
-                lyrics_event = lyrics_receiver.receive_json()
-                if lyrics_event["type"] == "ping":
-                    lyrics_receiver.send_json({"type": "pong"})
-                    lyrics_event = lyrics_receiver.receive_json()
+                stage_event = receive_non_ping(sender)
+                assert stage_event["type"] == "stage_control_command"
+                assert stage_event["data"]["command"] == "pause"
+
+                lyrics_event = receive_non_ping(lyrics_receiver)
                 assert lyrics_event["type"] == "stage_time_update"
                 assert lyrics_event["data"]["current_time"] == 18.25
                 assert lyrics_event["data"]["is_paused"] is True
+
+def test_websocket_stage_clock_subscriber_updates_follow_lyrics_viewers(client):
+    """Stage clients should know when steady playback clock ticks are useful."""
+    with client.websocket_connect("/api/queue/ws") as stage_socket:
+        assert stage_socket.receive_json()["type"] == "connected"
+        subscribe_websocket(stage_socket, "stage")
+
+        clock_state = receive_non_ping(stage_socket)
+        assert clock_state["type"] == "stage_clock_subscribers_update"
+        assert clock_state["data"] == {"lyrics_viewer_count": 0, "clock_enabled": False}
+
+        with client.websocket_connect("/api/queue/ws") as lyrics_socket:
+            assert lyrics_socket.receive_json()["type"] == "connected"
+            subscribe_websocket(lyrics_socket, "lyrics_viewer")
+
+            clock_state = receive_non_ping(stage_socket)
+            assert clock_state["type"] == "stage_clock_subscribers_update"
+            assert clock_state["data"] == {"lyrics_viewer_count": 1, "clock_enabled": True}
+
+        clock_state = receive_non_ping(stage_socket)
+        assert clock_state["type"] == "stage_clock_subscribers_update"
+        assert clock_state["data"] == {"lyrics_viewer_count": 0, "clock_enabled": False}
 
 def test_websocket_stage_time_update_requires_admin(client):
     """Guest clients should not be able to spoof authoritative stage time."""
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         subscribe_websocket(sender, "stage")
+        clock_state = receive_non_ping(sender)
+        assert clock_state["type"] == "stage_clock_subscribers_update"
         sender.send_json(
             {
                 "type": "stage_time_update",
@@ -902,6 +938,56 @@ def test_websocket_stage_command_seek_rejects_invalid_time(client):
         assert response["type"] == "error"
         assert "seek_time must be a non-negative finite number" in response["data"]["detail"]
 
+def test_websocket_stage_command_seek_relative_broadcasts_control_only(client):
+    """Relative seek commands should be resolved by the stage client."""
+    authenticate_admin_client(client)
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        subscribe_websocket(sender, "queue")
+        with client.websocket_connect("/api/queue/ws") as receiver:
+            receiver.receive_json()
+            subscribe_websocket(receiver, "stage")
+            clock_state = receive_non_ping(receiver)
+            assert clock_state["type"] == "stage_clock_subscribers_update"
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "seek_relative",
+                        "source": "queue",
+                        "offset_seconds": 5,
+                        "is_paused": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            control_event = receive_non_ping(receiver)
+            assert control_event["type"] == "stage_control_command"
+            assert control_event["data"]["command"] == "seek_relative"
+            assert control_event["data"]["source"] == "queue"
+            assert control_event["data"]["offset_seconds"] == 5
+            assert control_event["data"]["is_paused"] is False
+
+def test_websocket_stage_command_seek_relative_rejects_invalid_offset(client):
+    """Relative seek commands should require a finite numeric offset."""
+    authenticate_admin_client(client)
+    with client.websocket_connect("/api/queue/ws") as sender:
+        sender.receive_json()
+        subscribe_websocket(sender, "queue")
+        sender.send_json(
+            {
+                "type": "stage_command",
+                "data": {"command": "seek_relative", "source": "queue", "offset_seconds": "5"},
+                "timestamp": 123,
+            }
+        )
+
+        response = receive_non_ping(sender)
+        assert response["type"] == "error"
+        assert response["data"]["detail"] == "seek_relative requires numeric offset_seconds"
+
 def test_websocket_stage_command_resync_broadcasts_control(client):
     """Resync stage command should broadcast control command with a sync version."""
     authenticate_admin_client(client)
@@ -934,9 +1020,13 @@ def test_websocket_stage_command_resync_accepts_optional_timeline(client):
     with client.websocket_connect("/api/queue/ws") as sender:
         sender.receive_json()
         subscribe_websocket(sender, "stage")
+        clock_state = receive_non_ping(sender)
+        assert clock_state["type"] == "stage_clock_subscribers_update"
         with client.websocket_connect("/api/queue/ws") as receiver:
             receiver.receive_json()
             subscribe_websocket(receiver, "stage")
+            clock_state = receive_non_ping(receiver)
+            assert clock_state["type"] == "stage_clock_subscribers_update"
             sender.send_json(
                 {
                     "type": "stage_command",

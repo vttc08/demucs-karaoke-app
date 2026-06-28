@@ -2044,10 +2044,12 @@ let initialMultitrackResyncCompleted = !vocalsAvailable;
 let currentPrimaryKind = null;
 let currentPrimarySrc = null;
 let lastPlaybackStateBroadcastAt = 0;
+let stageClockEnabled = false;
 let isPlaybarScrubbing = false;
 let playbarPreviewTime = 0;
 let stageDisplayNameUpdateTimer = null;
 const SOFT_DRIFT_THRESHOLD_SECONDS = 0.12;
+const PLAYBACK_CLOCK_BROADCAST_INTERVAL_MS = 1000;
 const MEDIA_SEEK_TIMEOUT_MS = 1200;
 const MEDIA_READY_TIMEOUT_MS = 1200;
 const MEDIA_METADATA_TIMEOUT_MS = 1500;
@@ -2686,15 +2688,19 @@ function sendPlaybackTimeUpdate(force = false) {
         return;
     }
     updatePlaybarUi(primary.currentTime || 0);
+    if (!force && !stageClockEnabled) {
+        return;
+    }
     const now = performance.now();
-    if (!force && now - lastPlaybackStateBroadcastAt < 500) {
+    if (!force && now - lastPlaybackStateBroadcastAt < PLAYBACK_CLOCK_BROADCAST_INTERVAL_MS) {
         return;
     }
     lastPlaybackStateBroadcastAt = now;
+    const currentTime = primary.currentTime || 0;
     sendStageCommandRaw({
         type: "stage_time_update",
         data: {
-            current_time: primary.currentTime || 0,
+            current_time: force ? currentTime : Math.round(currentTime * 10) / 10,
             is_paused: primary.paused,
             source: "stage",
         },
@@ -3362,6 +3368,10 @@ function connectStageWebSocket() {
                 applyStageStateFromServer(initialStageState);
                 return;
             }
+            if (messageType === "stage_clock_subscribers_update") {
+                stageClockEnabled = Boolean(message?.data?.clock_enabled);
+                return;
+            }
             if (messageType === "current_item_changed") {
                 await refreshStageState();
                 return;
@@ -3407,6 +3417,17 @@ function connectStageWebSocket() {
                     if (typeof seekTime === "number" && Number.isFinite(seekTime)) {
                         const shouldPausePlayback = typeof remotePaused === "boolean" ? remotePaused : primary.paused;
                         await seekAndResyncPlayback(seekTime, shouldPausePlayback);
+                    }
+                } else if (command === "seek_relative") {
+                    const offsetSeconds = Number(message?.data?.offset_seconds);
+                    if (Number.isFinite(offsetSeconds)) {
+                        const duration = getPrimaryDuration();
+                        const currentTime = getPrimaryCurrentTime();
+                        const unclampedTime = Math.max(0, currentTime + offsetSeconds);
+                        const targetTime = duration > 0 ? Math.min(unclampedTime, duration) : unclampedTime;
+                        const remotePaused = message?.data?.is_paused;
+                        const shouldPausePlayback = typeof remotePaused === "boolean" ? remotePaused : primary.paused;
+                        await seekAndResyncPlayback(targetTime, shouldPausePlayback);
                     }
                 } else if (command === "play" && primary.paused) {
                     await ensureAudioGraph();

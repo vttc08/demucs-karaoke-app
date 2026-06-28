@@ -120,7 +120,8 @@ The stage page uses a websocket-first model:
 - `routes/queue.py` also accepts queue-page presence messages:
   - `presence_hello` for initial roster registration
   - `presence_update` when a guest renames themselves
-- `routes/queue.py` also accepts `seek` stage commands for synchronized timeline jumps across stage clients.
+- `routes/queue.py` also accepts `seek` stage commands for synchronized timeline jumps across stage clients,
+  and `seek_relative` commands for queue controls that should be resolved against the stage player's local clock.
 - `routes/queue.py` also accepts `resync` stage commands so remote controls can force hard local
   video/vocals recovery on stage clients. Resync broadcasts include a monotonic `sync_version`, and
   stage-originated resync may include `seek_time`/`is_paused` for a concrete recovery timeline.
@@ -143,13 +144,18 @@ The stage page uses a websocket-first model:
   requester label and do not transfer control.
 - `stage_time_update` messages are accepted only from admin sessions because they represent the
   authoritative stage playback clock.
-- Periodic playback clock updates are rebroadcast only to `stage` and `lyrics_viewer` clients.
+- Periodic playback clock updates are rebroadcast only to `lyrics_viewer` clients. Stage clients receive
+  `stage_clock_subscribers_update` when lyrics viewers connect or disconnect, so `/stage` only sends
+  steady clock ticks while a lyrics viewer is open.
 - For `play`/`pause`, the server broadcasts:
   - `stage_control_command`
   - `stage_state_update`
 - For `seek`, the server validates `seek_time` and broadcasts:
   - `stage_control_command` with `seek_time` (+ optional `is_paused`)
   - `stage_state_update` when paused state is included, now carrying `current_time`
+- For `seek_relative`, the server validates `offset_seconds` and broadcasts:
+  - `stage_control_command` with `offset_seconds` (+ optional `is_paused`)
+  The stage client resolves the final timestamp locally.
 - For `skip`, server-side queue skip logic runs and then broadcasts:
   - `stage_control_command`
   - `current_item_changed`
@@ -195,6 +201,8 @@ The stage page uses a websocket-first model:
 - Queue page now includes stage remote controls that send websocket `stage_command` messages.
 - Queue clients disable remote stage controls for guests unless the active queue item exposes
   `can_control_stage` for that viewer.
+- Queue clients send relative seek commands for the `+5` control instead of depending on the streamed
+  stage playback clock.
 - Queue page includes stage vocal-assist controls (toggle + volume slider) that send websocket
   mix commands and mirror live `stage_state_update` broadcasts.
 - Queue page includes a lyrics settings control. Admins can target one connected stage display,
@@ -205,7 +213,7 @@ The stage page uses a websocket-first model:
 - The queue lyrics viewer subscribes as `lyrics_viewer` and follows the authoritative playback clock
   from websocket `stage_time_update` events.
 - Stage page subscribes as `stage`, consumes websocket queue events and stage-control events, and
-  publishes authoritative playback clock updates at a throttled cadence for lyrics sync.
+  publishes authoritative playback clock updates at a throttled cadence only while a lyrics viewer is connected.
 - Stage page stores its display id/name and lyric appearance in `localStorage`. When it receives a
   targeted lyrics settings command, it fetches the named shared preset itself, merges the quick
   overrides, persists the result locally, and acknowledges the queue client.

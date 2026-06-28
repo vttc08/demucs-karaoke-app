@@ -2186,6 +2186,7 @@ class QueueWebSocket {
             case 'stage_presence_snapshot':
                 stageRemoteStageDisplays = Array.isArray(message.data?.stages) ? message.data.stages : [];
                 renderRemoteStageOptions();
+                updateStageRemoteSeekForwardUi();
                 break;
             case 'lyrics_settings_ack':
                 window.dispatchEvent(new CustomEvent('lyrics_settings_ack', { detail: message.data }));
@@ -2232,8 +2233,8 @@ function updateStageRemotePlayPauseUi() {
 function updateStageRemoteSeekForwardUi() {
     if (!stageRemoteSeekForwardBtn) return;
     const connected = !!(queueWebSocket && queueWebSocket.isConnected);
-    const hasKnownTime = typeof stageRemoteCurrentTime === 'number' && Number.isFinite(stageRemoteCurrentTime);
-    stageRemoteSeekForwardBtn.disabled = !connected || !stageRemoteCanControl || !hasKnownTime;
+    const hasConnectedStage = stageRemoteStageDisplays.length > 0;
+    stageRemoteSeekForwardBtn.disabled = !connected || !stageRemoteCanControl || !hasConnectedStage;
 }
 
 function updateStageRemoteVocalsUi() {
@@ -2603,16 +2604,12 @@ if (stageRemoteSeekForwardBtn) {
     stageRemoteSeekForwardBtn.addEventListener('click', () => {
         if (!queueWebSocket) return;
         if (!canSendStageControl()) return;
-        if (typeof stageRemoteCurrentTime !== 'number' || !Number.isFinite(stageRemoteCurrentTime)) {
-            alert(t('queue.stage_offline'));
-            return;
-        }
         const sent = queueWebSocket.send({
             type: 'stage_command',
             data: {
-                command: 'seek',
+                command: 'seek_relative',
                 source: 'queue',
-                seek_time: Math.max(0, stageRemoteCurrentTime + 5),
+                offset_seconds: 5,
                 is_paused: stageRemotePaused,
             },
             timestamp: Date.now(),
