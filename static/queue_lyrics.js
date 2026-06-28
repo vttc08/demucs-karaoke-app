@@ -47,6 +47,7 @@ const lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
 });
 
 let ws = null;
+let shouldReconnectSocket = true;
 let currentItem = null;
 let currentItemId = Number(main?.dataset.initialItemId || 0) || null;
 let isSynced = false;
@@ -1085,6 +1086,10 @@ function handleSocketMessage(message) {
 }
 
 function connectSocket() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+    }
+    shouldReconnectSocket = true;
     ws = new WebSocket(appWsUrl("/api/queue/ws"));
     setLiveStatus(t("queue_lyrics.connecting"));
 
@@ -1107,13 +1112,36 @@ function connectSocket() {
 
     ws.onclose = () => {
         setLiveStatus(t("queue.offline"), "offline");
-        window.setTimeout(connectSocket, 2000);
+        if (shouldReconnectSocket) {
+            window.setTimeout(connectSocket, 2000);
+        }
     };
 
     ws.onerror = () => {
         setLiveStatus(t("queue.offline"), "offline");
     };
 }
+
+function closeSocketBeforeUnload() {
+    shouldReconnectSocket = false;
+    if (!ws) {
+        return;
+    }
+    try {
+        ws.close(1000, "page unload");
+    } catch (_) {
+        // Best-effort shutdown only.
+    }
+}
+
+window.addEventListener("pagehide", closeSocketBeforeUnload);
+window.addEventListener("beforeunload", closeSocketBeforeUnload);
+window.addEventListener("pageshow", () => {
+    shouldReconnectSocket = true;
+    if (!ws || ws.readyState === WebSocket.CLOSED) {
+        connectSocket();
+    }
+});
 
 function getInferenceSeed() {
     const mediaPath = currentItem?.media_path || "";
