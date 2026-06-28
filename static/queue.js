@@ -2481,7 +2481,9 @@ function updateStageRemoteLyricsUi() {
         stageRemoteLyricsEnabledToggle.checked = stageRemoteLyricsEnabled;
     }
     if (stageRemoteLyricsBackgroundEnabledToggle) {
-        stageRemoteLyricsBackgroundEnabledToggle.disabled = !canOpenSettings || stageRemoteLyricsApplyPending;
+        stageRemoteLyricsBackgroundEnabledToggle.disabled = !canOpenSettings
+            || stageRemoteLyricsApplyPending
+            || !selectedStage;
         stageRemoteLyricsBackgroundEnabledToggle.checked = stageRemoteLyricsBackgroundEnabled;
     }
     if (stageRemoteLyricsSizeSlider) {
@@ -2645,6 +2647,44 @@ function sendStageLyricsEnabled(nextEnabled, { requireLyricsTrack = false } = {}
     return true;
 }
 
+function sendStageBackgroundEnabled(nextEnabled) {
+    if (!queueWebSocket) return false;
+    if (!canSendStageControl()) return false;
+
+    const selectedStage = getSelectedRemoteStage();
+    if (!selectedStage) {
+        setStageRemoteLyricsStatus(t('queue.stage_lyrics_choose_target'));
+        updateStageRemoteLyricsUi();
+        return false;
+    }
+
+    const sent = queueWebSocket.send({
+        type: 'stage_command',
+        data: {
+            command: 'set_background_media_enabled',
+            source: 'queue',
+            target_stage_id: selectedStage.stage_id,
+            background_media_enabled: Boolean(nextEnabled),
+        },
+        timestamp: Date.now(),
+    });
+    if (!sent) {
+        alert(t('queue.stage_offline'));
+        return false;
+    }
+
+    stageRemoteLyricsBackgroundEnabled = Boolean(nextEnabled);
+    stageRemoteLyricsApplyPending = true;
+    stageRemoteLyricsPendingStageId = selectedStage.stage_id;
+    setStageRemoteLyricsStatus(t('queue.stage_lyrics_applying', { name: getRemoteStageDisplayLabel(selectedStage) }));
+    updateStageRemoteLyricsUi();
+    window.clearTimeout(stageRemoteLyricsAckTimer);
+    stageRemoteLyricsAckTimer = window.setTimeout(() => {
+        clearRemoteLyricsApplyPending(t('queue.stage_lyrics_apply_timeout'));
+    }, 7000);
+    return true;
+}
+
 function sendRemoteLyricsApply({ override = false } = {}) {
     if (!queueWebSocket) return false;
     if (!canSendStageControl()) return false;
@@ -2732,6 +2772,12 @@ stageRemoteLyricsEnabledToggle?.addEventListener('change', () => {
     const nextEnabled = Boolean(stageRemoteLyricsEnabledToggle.checked);
     if (!sendStageLyricsEnabled(nextEnabled)) {
         stageRemoteLyricsEnabledToggle.checked = stageRemoteLyricsEnabled;
+    }
+});
+stageRemoteLyricsBackgroundEnabledToggle?.addEventListener('change', () => {
+    const nextEnabled = Boolean(stageRemoteLyricsBackgroundEnabledToggle.checked);
+    if (!sendStageBackgroundEnabled(nextEnabled)) {
+        stageRemoteLyricsBackgroundEnabledToggle.checked = stageRemoteLyricsBackgroundEnabled;
     }
 });
 stageRemoteLyricsSizeSlider?.addEventListener('input', updateRemoteLyricsSliderLabels);

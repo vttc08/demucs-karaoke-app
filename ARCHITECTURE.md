@@ -207,7 +207,9 @@ The stage page uses a websocket-first model:
   mix commands and mirror live `stage_state_update` broadcasts.
 - Queue page includes a lyrics settings control. Admins can target one connected stage display,
   select a shared lyric preset, adjust text size/max width, and apply that display-local style over
-  websocket; guests with stage-control permission still get the basic lyrics visibility toggle.
+  websocket; admins can also toggle the selected stage's background video directly without going
+  through preset override, and guests with stage-control permission still get the basic lyrics
+  visibility toggle.
 - Queue page also renders a live "Here Now" roster from presence events and shows requester labels on queue items.
 - Queue page updates live download/processing progress from `queue_item_progress` without waiting for a full queue refresh.
 - The queue lyrics viewer subscribes as `lyrics_viewer` and follows the authoritative playback clock

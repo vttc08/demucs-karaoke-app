@@ -2395,6 +2395,13 @@ function setLyricsEnabled(enabled) {
     }
 }
 
+function setBackgroundMediaEnabled(enabled) {
+    stageLyrics.applySettingsObject({
+        ...stageLyrics.getSettingsSnapshot(),
+        backgroundMediaEnabled: Boolean(enabled),
+    }, { persist: true });
+}
+
 function updateLyricsForTime(currentTime) {
     stageLyrics.updateForTime(currentTime);
 }
@@ -3013,6 +3020,9 @@ function applyStageStateFromServer(data) {
     } else {
         updateLyricsUi();
     }
+    if (typeof data.background_media_enabled === "boolean") {
+        setBackgroundMediaEnabled(data.background_media_enabled);
+    }
     updateVocalsUi();
     applyVocalsMix();
     if (vocalsAvailable && !isPrimaryPaused()) {
@@ -3396,6 +3406,18 @@ function connectStageWebSocket() {
                 const command = message?.data?.command;
                 if (command === "apply_lyrics_settings") {
                     await applyRemoteLyricsSettings(message?.data || {});
+                    return;
+                } else if (command === "set_background_media_enabled") {
+                    const nextEnabled = message?.data?.background_media_enabled;
+                    if (typeof nextEnabled === "boolean") {
+                        setBackgroundMediaEnabled(nextEnabled);
+                        sendLyricsSettingsAck(true, {
+                            background_media_enabled: nextEnabled,
+                            applied_settings: {
+                                ...stageLyrics.getSettingsSnapshot(),
+                            },
+                        });
+                    }
                     return;
                 }
                 const primary = getPrimaryPlayer();

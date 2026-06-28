@@ -132,6 +132,27 @@ async def _send_ws_error(websocket: WebSocket, detail: str) -> None:
     )
 
 
+async def _resolve_target_stage_id(
+    websocket: WebSocket,
+    manager_instance,
+    detail_prefix: str,
+    payload: dict,
+) -> str | None:
+    """Resolve a target stage id, falling back to the only connected display."""
+    target_stage_id = _normalize_stage_id(payload.get("target_stage_id"))
+    if not target_stage_id:
+        stages = manager_instance.get_stage_presence_snapshot()
+        if len(stages) == 1:
+            target_stage_id = stages[0]["stage_id"]
+        else:
+            await _send_ws_error(websocket, f"{detail_prefix} require a target stage")
+            return None
+    if not manager_instance.has_stage_display(target_stage_id):
+        await _send_ws_error(websocket, "Target stage is not connected")
+        return None
+    return target_stage_id
+
+
 @router.post("/", response_model=QueueItemResponse)
 async def add_to_queue(
     item: QueueItemCreate,
@@ -494,6 +515,11 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         "stage_id": stage_id,
                         "ok": bool(payload.get("ok")),
                         "preset_id": payload.get("preset_id") if isinstance(payload.get("preset_id"), int) else None,
+                        "override": payload.get("override") if isinstance(payload.get("override"), bool) else None,
+                        "size_vw": payload.get("size_vw") if isinstance(payload.get("size_vw"), (int, float)) else None,
+                        "line_width_pct": payload.get("line_width_pct") if isinstance(payload.get("line_width_pct"), int) else None,
+                        "background_media_enabled": payload.get("background_media_enabled") if isinstance(payload.get("background_media_enabled"), bool) else None,
+                        "applied_settings": payload.get("applied_settings") if isinstance(payload.get("applied_settings"), dict) else None,
                         "error": _normalize_presence_value(payload.get("error"), max_length=160),
                     }
                 )
@@ -564,7 +590,7 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
 
                 command = payload.get("command")
                 source = payload.get("source", "unknown")
-                if command not in {"play", "pause", "skip", "seek", "seek_relative", "resync", "set_vocals_enabled", "set_vocals_volume", "set_lyrics_enabled", "apply_lyrics_settings"}:
+                if command not in {"play", "pause", "skip", "seek", "seek_relative", "resync", "set_vocals_enabled", "set_vocals_volume", "set_lyrics_enabled", "set_background_media_enabled", "apply_lyrics_settings"}:
                     await manager.send_personal_message(
                         {
                             "type": "error",
@@ -580,17 +606,8 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                     if not is_admin:
                         await _send_ws_error(websocket, "Admin session required for lyrics settings")
                         continue
-
-                    target_stage_id = _normalize_stage_id(payload.get("target_stage_id"))
+                    target_stage_id = await _resolve_target_stage_id(websocket, manager, "Lyrics settings", payload)
                     if not target_stage_id:
-                        stages = manager.get_stage_presence_snapshot()
-                        if len(stages) == 1:
-                            target_stage_id = stages[0]["stage_id"]
-                        else:
-                            await _send_ws_error(websocket, "Lyrics settings require a target stage")
-                            continue
-                    if not manager.has_stage_display(target_stage_id):
-                        await _send_ws_error(websocket, "Target stage is not connected")
                         continue
 
                     lyrics_enabled = payload.get("lyrics_enabled")
@@ -649,6 +666,31 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
                         command=command,
                         source=source,
                         extra_data=extra_data,
+                        target_stage_id=target_stage_id,
+                    )
+                    continue
+
+                if command == "set_background_media_enabled":
+                    if not is_admin:
+                        await _send_ws_error(websocket, "Admin session required for background settings")
+                        continue
+
+                    target_stage_id = await _resolve_target_stage_id(websocket, manager, "Background settings", payload)
+                    if not target_stage_id:
+                        continue
+
+                    background_media_enabled = payload.get("background_media_enabled")
+                    if not isinstance(background_media_enabled, bool):
+                        await _send_ws_error(websocket, "set_background_media_enabled requires boolean background_media_enabled")
+                        continue
+
+                    await manager.broadcast_stage_control_command(
+                        command=command,
+                        source=source,
+                        extra_data={
+                            "target_stage_id": target_stage_id,
+                            "background_media_enabled": background_media_enabled,
+                        },
                         target_stage_id=target_stage_id,
                     )
                     continue

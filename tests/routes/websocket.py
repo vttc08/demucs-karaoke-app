@@ -140,6 +140,34 @@ def test_websocket_targeted_lyrics_settings_requires_admin(client):
             assert error["data"]["detail"] == "Admin session required for lyrics settings"
 
 
+def test_websocket_background_toggle_requires_admin(client):
+    """Remote background toggles should be admin-only."""
+    with client.websocket_connect("/api/queue/ws") as sender:
+        assert sender.receive_json()["type"] == "connected"
+        subscribe_websocket(sender, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            register_stage_websocket(stage_socket, "stage-tv", "TV")
+            receive_non_ping(sender)
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "set_background_media_enabled",
+                        "source": "queue",
+                        "target_stage_id": "stage-tv",
+                        "background_media_enabled": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            error = receive_non_ping(sender)
+            assert error["type"] == "error"
+            assert error["data"]["detail"] == "Admin session required for background settings"
+
+
 def test_websocket_targeted_lyrics_settings_auto_targets_single_stage(client):
     """A single connected stage can receive lyrics settings without explicit target id."""
     authenticate_admin_client(client)
@@ -305,7 +333,14 @@ def test_websocket_lyrics_settings_ack_forwards_to_queue_clients(client):
             stage_socket.send_json(
                 {
                     "type": "lyrics_settings_ack",
-                    "data": {"stage_id": "stage-tv", "ok": True, "preset_id": 1},
+                    "data": {
+                        "stage_id": "stage-tv",
+                        "ok": True,
+                        "preset_id": 1,
+                        "override": False,
+                        "background_media_enabled": False,
+                        "applied_settings": {"backgroundMediaEnabled": False},
+                    },
                     "timestamp": 123,
                 }
             )
@@ -315,6 +350,40 @@ def test_websocket_lyrics_settings_ack_forwards_to_queue_clients(client):
             assert ack["data"]["stage_id"] == "stage-tv"
             assert ack["data"]["ok"] is True
             assert ack["data"]["preset_id"] == 1
+            assert ack["data"]["override"] is False
+            assert ack["data"]["background_media_enabled"] is False
+            assert ack["data"]["applied_settings"]["backgroundMediaEnabled"] is False
+
+
+def test_websocket_stage_command_set_background_media_enabled_broadcasts_target_command(client):
+    """Background toggle should broadcast a targeted stage command."""
+    authenticate_admin_client(client)
+    with client.websocket_connect("/api/queue/ws") as sender:
+        assert sender.receive_json()["type"] == "connected"
+        subscribe_websocket(sender, "queue")
+        with client.websocket_connect("/api/queue/ws") as stage_socket:
+            assert stage_socket.receive_json()["type"] == "connected"
+            register_stage_websocket(stage_socket, "stage-tv", "TV")
+            receive_non_ping(sender)
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "set_background_media_enabled",
+                        "source": "queue",
+                        "target_stage_id": "stage-tv",
+                        "background_media_enabled": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            command = receive_non_ping(stage_socket)
+            assert command["type"] == "stage_control_command"
+            assert command["data"]["command"] == "set_background_media_enabled"
+            assert command["data"]["target_stage_id"] == "stage-tv"
+            assert command["data"]["background_media_enabled"] is False
 
 def test_websocket_presence_join_update_and_leave(client):
     """Presence lifecycle events should broadcast to other queue viewers."""
