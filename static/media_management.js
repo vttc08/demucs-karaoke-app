@@ -57,6 +57,10 @@ function initializeMediaEditLyricsManager() {
         uploadBtn: '#media-edit-lyrics-upload-btn',
         fileInput: '#media-edit-lyrics-file',
         whisperxLanguageInput: '#media-edit-lyrics-whisperx-language-code',
+        processLinesToggle: '#lyrics-process-lines-toggle',
+        processLinesDetail: '#lyrics-process-lines-detail',
+        maxLineLengthInput: '#lyrics-max-line-length',
+        maxLineLengthCjkInput: '#lyrics-max-line-length-cjk',
         panel: '#media-edit-lyrics-form-section'
     });
     lyricsUIAdapter.initialize();
@@ -224,6 +228,9 @@ function updateMediaEditLyricsControls() {
     const isLocked = Boolean(isSynced);
     const hasText = Boolean((state.text || "").trim());
     const canAlign = Boolean(isEnabled && hasText && !isLocked && demucsHealth.healthy);
+    if (!canAlign && state.processLyricsLines) {
+        lyricsManager.setLineProcessingSettings(false);
+    }
 
     if (editLyricsToggle) {
         editLyricsToggle.checked = isEnabled;
@@ -294,6 +301,7 @@ function setLoadedLyricsState(text, format, providerLabel) {
         isSynced: normalizedFormat === "json" || normalizedFormat === "lrc",
         lyricsState: "manual",
     });
+    lyricsManager.setLineProcessingSettings(false);
     activeEditLyricsBaselineHash = hashLyricsText(normalizedText);
     activeEditLyricsBaselineFormat = normalizedFormat;
     activeEditLyricsBaselineProvider = providerLabel;
@@ -310,6 +318,7 @@ function setLockedSyncedLyricsState() {
         isSynced: true,
         lyricsState: "manual",
     });
+    lyricsManager.setLineProcessingSettings(false);
     activeEditLyricsBaselineHash = "";
     activeEditLyricsBaselineFormat = "json";
     activeEditLyricsBaselineProvider = "";
@@ -1593,6 +1602,11 @@ async function saveEditModal(event) {
         if ((lyricsPayloadChanged || alignRequested) && currentLyricsState?.lyricsEnabled && currentLyricsText) {
             requestBody.lyrics_text = currentLyricsText;
             requestBody.lyrics_format = currentLyricsFormat;
+            requestBody.process_lyrics_lines = Boolean(currentLyricsState.processLyricsLines);
+            if (currentLyricsState.processLyricsLines) {
+                requestBody.max_line_length = currentLyricsState.maxLineLength;
+                requestBody.max_line_length_cjk = currentLyricsState.maxLineLengthCjk;
+            }
             if (alignRequested && currentLyricsState.whisperxAlignLanguageOverride) {
                 requestBody.whisperx_align_language_override = currentLyricsState.whisperxAlignLanguageOverride;
             }

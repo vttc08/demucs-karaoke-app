@@ -106,6 +106,10 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadBtn: '#upload-lyrics-upload-btn',
             fileInput: '#upload-lyrics-file',
             whisperxLanguageInput: '#upload-lyrics-whisperx-language-code',
+            processLinesToggle: '#lyrics-process-lines-toggle',
+            processLinesDetail: '#lyrics-process-lines-detail',
+            maxLineLengthInput: '#lyrics-max-line-length',
+            maxLineLengthCjkInput: '#lyrics-max-line-length-cjk',
             panel: '#upload-lyrics-form-section'
         });
         lyricsUIAdapter.initialize();
@@ -123,6 +127,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!canAlign && uploadLyricsAlignToggle.checked) {
             uploadLyricsAlignToggle.checked = false;
             lyricsManager.setAlignLyricsRequested(false);
+        }
+        if (!canAlign && state.processLyricsLines) {
+            lyricsManager.setLineProcessingSettings(false);
         }
         if (uploadLyricsAlignStatus) {
             if (!demucsHealth.healthy) {
@@ -422,6 +429,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 formData.append('lyrics_text', lyricsPayload.lyrics_text);
                 formData.append('lyrics_format', lyricsPayload.lyrics_format);
                 formData.append('align_lyrics', Boolean(lyricsPayload.align_lyrics));
+                formData.append('process_lyrics_lines', Boolean(lyricsPayload.process_lyrics_lines));
+                if (lyricsPayload.process_lyrics_lines) {
+                    formData.append('max_line_length', String(lyricsPayload.max_line_length));
+                    formData.append('max_line_length_cjk', String(lyricsPayload.max_line_length_cjk));
+                }
                 if (lyricsPayload.whisperx_align_language_override) {
                     formData.append(
                         'whisperx_align_language_override',

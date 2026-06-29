@@ -18,6 +18,7 @@ from models import (
     ProcessingTaskStatus,
     QueueItem,
     QueueStatus,
+    normalize_line_processing_settings,
 )
 from services.media_library_maintenance_service import MediaLibraryMaintenanceService
 from services.task_stream_service import task_stream_manager
@@ -87,6 +88,9 @@ class ProcessingTaskService:
         media_item_id: int,
         *,
         whisperx_align_language_override: str | None = None,
+        process_lyrics_lines: bool = False,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
     ) -> ProcessingTask:
         """Return an existing active media karaoke task or create one."""
         return self._get_or_create_media_task(
@@ -94,6 +98,9 @@ class ProcessingTaskService:
             media_item_id,
             task_type="media_karaoke",
             whisperx_align_language_override=whisperx_align_language_override,
+            process_lyrics_lines=process_lyrics_lines,
+            max_line_length=max_line_length,
+            max_line_length_cjk=max_line_length_cjk,
         )
 
     def get_or_create_media_karaoke_align_task(
@@ -102,6 +109,9 @@ class ProcessingTaskService:
         media_item_id: int,
         *,
         whisperx_align_language_override: str | None = None,
+        process_lyrics_lines: bool = False,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
     ) -> ProcessingTask:
         """Return an existing active media separation+alignment task or create one."""
         return self._get_or_create_media_task(
@@ -109,6 +119,9 @@ class ProcessingTaskService:
             media_item_id,
             task_type="media_karaoke_align",
             whisperx_align_language_override=whisperx_align_language_override,
+            process_lyrics_lines=process_lyrics_lines,
+            max_line_length=max_line_length,
+            max_line_length_cjk=max_line_length_cjk,
         )
 
     def get_or_create_media_lyrics_align_task(
@@ -117,6 +130,9 @@ class ProcessingTaskService:
         media_item_id: int,
         *,
         whisperx_align_language_override: str | None = None,
+        process_lyrics_lines: bool = False,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
     ) -> ProcessingTask:
         """Return an existing active media lyrics alignment task or create one."""
         return self._get_or_create_media_task(
@@ -124,6 +140,9 @@ class ProcessingTaskService:
             media_item_id,
             task_type="media_lyrics_align",
             whisperx_align_language_override=whisperx_align_language_override,
+            process_lyrics_lines=process_lyrics_lines,
+            max_line_length=max_line_length,
+            max_line_length_cjk=max_line_length_cjk,
         )
 
     def create_media_vocal_sync_prepare_task(
@@ -222,9 +241,21 @@ class ProcessingTaskService:
         *,
         task_type: str,
         whisperx_align_language_override: str | None = None,
+        process_lyrics_lines: bool = False,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
     ) -> ProcessingTask:
         normalized_override = self._normalize_whisperx_align_language_override(
             whisperx_align_language_override
+        )
+        (
+            normalized_process_lyrics_lines,
+            normalized_max_line_length,
+            normalized_max_line_length_cjk,
+        ) = normalize_line_processing_settings(
+            process_lyrics_lines,
+            max_line_length,
+            max_line_length_cjk,
         )
         active = (
             db.query(ProcessingTask)
@@ -240,8 +271,14 @@ class ProcessingTaskService:
         if active is not None:
             if active.whisperx_align_language_override != normalized_override:
                 active.whisperx_align_language_override = normalized_override
-                db.commit()
-                db.refresh(active)
+            if active.process_lyrics_lines != normalized_process_lyrics_lines:
+                active.process_lyrics_lines = normalized_process_lyrics_lines
+            if active.max_line_length != normalized_max_line_length:
+                active.max_line_length = normalized_max_line_length
+            if active.max_line_length_cjk != normalized_max_line_length_cjk:
+                active.max_line_length_cjk = normalized_max_line_length_cjk
+            db.commit()
+            db.refresh(active)
             return active
 
         media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
@@ -252,6 +289,9 @@ class ProcessingTaskService:
             source_kind="library_media" if not media_item.youtube_id else "uploaded_media",
             target_media_item_id=media_item_id,
             whisperx_align_language_override=normalized_override,
+            process_lyrics_lines=normalized_process_lyrics_lines,
+            max_line_length=normalized_max_line_length,
+            max_line_length_cjk=normalized_max_line_length_cjk,
             status=ProcessingTaskStatus.PENDING.value,
             stage="queued",
         )

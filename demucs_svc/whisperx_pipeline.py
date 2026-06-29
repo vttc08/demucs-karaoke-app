@@ -8,6 +8,10 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable
+try:
+    from .lyrics_line_processor import process_lyric_lines
+except ImportError:
+    from lyrics_line_processor import process_lyric_lines
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +83,18 @@ def _join_display_tokens(tokens: Iterable[str]) -> str:
     token_list = [token for token in tokens if token and token.strip()]
     if not token_list:
         return ""
-    if any(_is_cjk_token(token) for token in token_list):
-        return "".join(token_list)
-    return " ".join(token_list)
+    pieces: list[str] = []
+    previous_was_cjk = False
+    for token in token_list:
+        current_is_cjk = _is_cjk_token(token)
+        if not pieces:
+            pieces.append(token)
+        elif previous_was_cjk and current_is_cjk:
+            pieces.append(token)
+        else:
+            pieces.append(f" {token}")
+        previous_was_cjk = current_is_cjk
+    return "".join(pieces)
 
 
 def _lyric_tokens(text: str | None) -> list[str]:
@@ -200,6 +213,20 @@ def _flatten_segments(segments: list[ParsedLyricSegment], duration: float) -> li
 
 def _segments_to_dicts(segments: list[ParsedLyricSegment]) -> list[dict[str, Any]]:
     return [{"text": segment.text, "start": segment.start, "end": segment.end} for segment in segments]
+
+
+def _process_segments_for_display(
+    segments: list[ParsedLyricSegment],
+    *,
+    max_line_length: int,
+    max_line_length_cjk: int,
+) -> list[ParsedLyricSegment]:
+    processed_lines = process_lyric_lines(
+        [segment.text for segment in segments if segment.text and segment.text.strip()],
+        max_line_length=max_line_length,
+        max_line_length_cjk=max_line_length_cjk,
+    )
+    return [ParsedLyricSegment(text=line, start=0.0, end=0.0) for line in processed_lines if line]
 
 
 def _get_transcription_model(
@@ -448,6 +475,9 @@ def align_lyrics(
     align_language: str | None,
     detect_language: bool,
     use_synced_lyrics: bool,
+    process_lyrics_lines: bool,
+    max_line_length: int,
+    max_line_length_cjk: int,
     device: str,
     compute_type: str | None,
 ) -> list[dict[str, Any]]:
@@ -464,6 +494,16 @@ def align_lyrics(
 
     if not parsed_segments:
         return []
+
+    if process_lyrics_lines:
+        parsed_segments = _process_segments_for_display(
+            parsed_segments,
+            max_line_length=max_line_length,
+            max_line_length_cjk=max_line_length_cjk,
+        )
+        parsed_is_synced = False
+        if not parsed_segments:
+            return []
 
     if detect_language or not align_language:
         language_code = _detect_language(

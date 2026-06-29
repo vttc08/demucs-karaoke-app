@@ -71,6 +71,9 @@ class DemucsClient:
         detect_language: bool | None = None,
         use_synced_lyrics: bool | None = None,
         whisperx_preload_models: str | None = None,
+        process_lyrics_lines: bool | None = None,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
         compute_type: str | None = None,
     ) -> dict[str, str]:
         data = {
@@ -93,6 +96,12 @@ class DemucsClient:
             data["lyrics_text"] = lyrics_text
         if lyrics_format:
             data["lyrics_format"] = lyrics_format
+        if process_lyrics_lines is not None:
+            data["process_lyrics_lines"] = str(process_lyrics_lines).lower()
+        if max_line_length is not None:
+            data["max_line_length"] = str(max_line_length)
+        if max_line_length_cjk is not None:
+            data["max_line_length_cjk"] = str(max_line_length_cjk)
         if compute_type:
             data["compute_type"] = compute_type
         return data
@@ -147,6 +156,9 @@ class DemucsClient:
         detect_language: bool | None = None,
         use_synced_lyrics: bool | None = None,
         whisperx_preload_models: str | None = None,
+        process_lyrics_lines: bool | None = None,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
         compute_type: str | None = None,
         cancel_event: threading.Event | None = None,
         progress_callback: ProgressCallback | None = None,
@@ -174,6 +186,9 @@ class DemucsClient:
                         detect_language=detect_language,
                         use_synced_lyrics=use_synced_lyrics,
                         whisperx_preload_models=whisperx_preload_models,
+                        process_lyrics_lines=process_lyrics_lines,
+                        max_line_length=max_line_length,
+                        max_line_length_cjk=max_line_length_cjk,
                         compute_type=compute_type,
                     ),
                 )
@@ -278,6 +293,9 @@ class DemucsClient:
         detect_language: bool | None = None,
         use_synced_lyrics: bool | None = None,
         whisperx_preload_models: str | None = None,
+        process_lyrics_lines: bool | None = None,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
         compute_type: str | None = None,
         cancel_event: threading.Event | None = None,
         progress_callback: ProgressCallback | None = None,
@@ -308,6 +326,9 @@ class DemucsClient:
                         detect_language=detect_language,
                         use_synced_lyrics=use_synced_lyrics,
                         whisperx_preload_models=whisperx_preload_models,
+                        process_lyrics_lines=process_lyrics_lines,
+                        max_line_length=max_line_length,
+                        max_line_length_cjk=max_line_length_cjk,
                         compute_type=compute_type,
                     ),
                 )

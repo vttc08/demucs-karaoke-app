@@ -37,6 +37,7 @@ from config import settings
 
 # Test database
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
+TEST_DB_PATH = Path("test.db")
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
@@ -86,6 +87,9 @@ def client():
     original_stage_lobby_media_path = settings.stage_lobby_media_path
     settings.stage_vocals_volume_default = canonical_stage_vocals_volume_default
 
+    engine.dispose()
+    if TEST_DB_PATH.exists():
+        TEST_DB_PATH.unlink()
     Base.metadata.create_all(bind=engine)
     ensure_auxiliary_schema(engine)
     manager.active_connections.clear()
@@ -125,7 +129,9 @@ def client():
     settings.stage_qr_url = original_stage_qr_url
     settings.stage_lobby_media_path = original_stage_lobby_media_path
     settings.stage_vocals_volume_default = canonical_stage_vocals_volume_default
-    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    if TEST_DB_PATH.exists():
+        TEST_DB_PATH.unlink()
 
 
 def authenticate_admin_client(client: TestClient) -> str:

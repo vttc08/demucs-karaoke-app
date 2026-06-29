@@ -213,7 +213,11 @@ POST /api/queue/
   "queue_as_name": "Alex",
   "is_karaoke": true,
   "lyrics_text": "[00:01.00]Line 1",
-  "lyrics_format": "lrc"
+  "lyrics_format": "lrc",
+  "align_lyrics": true,
+  "process_lyrics_lines": true,
+  "max_line_length": 36,
+  "max_line_length_cjk": 12
 }
 ```
 
@@ -224,6 +228,8 @@ Queue payload can identify the target with either:
 
 If the `youtube_id` already exists in `media_items` with a usable local media file, the queue item is created against that existing media row and processing reuses the stored file instead of re-downloading the video again.
 When `lyrics_text` is supplied for karaoke items, the app persists it as a reusable lyrics sidecar under the cache directory so karaoke processing can skip a second lookup. `lyrics_format` is optional; if omitted, the app infers `.lrc` when timestamped lines are present, `.json` for WhisperX-style aligned payloads, and `.txt` otherwise.
+- `process_lyrics_lines` is an optional queue-only WhisperX override. When true, the server rewrites long plain/LRC lines before alignment using `max_line_length` (default `36`) and `max_line_length_cjk` (default `12`).
+- When line processing is enabled for synced LRC, the original line timestamps are intentionally ignored and WhisperX rebuilds timing from the rewrapped display lines.
 
 **Response:**
 ```json
@@ -398,6 +404,9 @@ Uploads a local media file or ZIP bundle into the library. The request is multip
 - `lyrics_text` (optional): lyrics text to persist as a reusable sidecar
 - `lyrics_format` (optional): `lrc`, `txt`, or `json`; inferred from text when omitted by queue/service paths
 - `align_lyrics` (optional, default `false`): request WhisperX word alignment from submitted plain/LRC lyrics. JSON lyrics are treated as already synced and are rejected for alignment.
+- `process_lyrics_lines` (optional, default `false`): rewrap lyrics into shorter display lines before WhisperX alignment
+- `max_line_length` (optional, default `36` when processing is enabled): max English line length for rewrapping
+- `max_line_length_cjk` (optional, default `12` when processing is enabled): max CJK line length for rewrapping
 
 **Response:**
 ```json
@@ -417,7 +426,7 @@ Uploads a local media file or ZIP bundle into the library. The request is multip
 ```
 
 When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued. Upload and media-edit lyrics are saved beside the media file as `<filename>.lrc` or `<filename>.txt` so library scans can rediscover them.
-When `align_lyrics` is true, the upload must include non-empty plain/LRC lyrics. Missing-vocals uploads run separation plus WhisperX alignment and later replace `lyrics_path` with the aligned JSON sidecar.
+When `align_lyrics` is true, the upload must include non-empty plain/LRC lyrics. Missing-vocals uploads run separation plus WhisperX alignment and later replace `lyrics_path` with the aligned JSON sidecar. When `process_lyrics_lines` is also true, the server applies the line-length rewrap before alignment and ignores any synced-LRC preservation for that submission.
 
 ZIP uploads are treated as import bundles. The archive must include exactly one main audio/video file and may also include matching same-stem `*.vocals.*`, `*.lrc` / `*.json`, and `*.png` / `*.jpg` / `*.jpeg` / `*.webp` sidecars. Unrelated files and folders inside the archive are ignored. Karaoke and lyric submission fields are ignored for ZIP imports because the archive is expected to already contain the desired tracks/metadata.
 
@@ -568,11 +577,12 @@ Updates the media row title and artist. When `rename_on_disk` is true, the serve
 }
 ```
 
-`lyrics_text`, `lyrics_format`, `is_karaoke`, and `align_lyrics` are optional. When `is_karaoke` is true, the
+`lyrics_text`, `lyrics_format`, `is_karaoke`, `align_lyrics`, and the line-processing fields are optional. When `is_karaoke` is true, the
 server starts a `media_karaoke` task only when the item is not already multi-track and Demucs is
 online. When `align_lyrics` is true, the server requires non-empty plain/LRC lyrics, saves them, then
 starts `media_lyrics_align` if `vocals_path` already exists or `media_karaoke_align` if separation is
-also needed. Rename and lyrics changes remain saved if the health check fails.
+also needed. When line processing is enabled, the same pre-alignment rewrap is applied to the queued
+media task. Rename and lyrics changes remain saved if the health check fails.
 
 **Response:**
 ```json

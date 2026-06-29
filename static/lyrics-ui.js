@@ -45,6 +45,10 @@ class LyricsUIAdapter {
       fileInput: 'fileInput',
       googleLink: 'googleLink',
       whisperxLanguageInput: 'whisperxLanguageInput',
+      processLinesToggle: 'processLinesToggle',
+      processLinesDetail: 'processLinesDetail',
+      maxLineLengthInput: 'maxLineLengthInput',
+      maxLineLengthCjkInput: 'maxLineLengthCjkInput',
       panel: 'panel',
     };
 
@@ -149,6 +153,43 @@ class LyricsUIAdapter {
       this.elements.whisperxLanguageInput.addEventListener('input', handler);
       this.eventListeners.push({ element: this.elements.whisperxLanguageInput, event: 'input', handler });
     }
+
+    if (this.elements.processLinesToggle) {
+      const handler = (e) => {
+        e.preventDefault();
+        if (this.elements.processLinesToggle.disabled) {
+          return;
+        }
+        const nextEnabled = !Boolean(this.manager.getState().processLyricsLines);
+        this.manager.setLineProcessingSettings(
+          nextEnabled,
+          this.elements.maxLineLengthInput?.value,
+          this.elements.maxLineLengthCjkInput?.value
+        );
+      };
+      this.elements.processLinesToggle.addEventListener('click', handler);
+      this.eventListeners.push({ element: this.elements.processLinesToggle, event: 'click', handler });
+    }
+
+    if (this.elements.maxLineLengthInput) {
+      const handler = (e) => this.manager.setLineProcessingSettings(
+        this.manager.getState().processLyricsLines,
+        e.target.value,
+        this.elements.maxLineLengthCjkInput?.value
+      );
+      this.elements.maxLineLengthInput.addEventListener('input', handler);
+      this.eventListeners.push({ element: this.elements.maxLineLengthInput, event: 'input', handler });
+    }
+
+    if (this.elements.maxLineLengthCjkInput) {
+      const handler = (e) => this.manager.setLineProcessingSettings(
+        this.manager.getState().processLyricsLines,
+        this.elements.maxLineLengthInput?.value,
+        e.target.value
+      );
+      this.elements.maxLineLengthCjkInput.addEventListener('input', handler);
+      this.eventListeners.push({ element: this.elements.maxLineLengthCjkInput, event: 'input', handler });
+    }
   }
 
   /**
@@ -177,6 +218,7 @@ class LyricsUIAdapter {
     this.updatePanelVisibility(state.lyricsEnabled);
     this.updateMetadataInputs(state);
     this.updateWhisperxLanguageInput(state);
+    this.updateLineProcessingControls(state);
     this.updateTextareaState(state);
     this.updateInputDisabledState(state.lyricsEnabled);
     this.updateGoogleSearchLink();
@@ -299,6 +341,62 @@ class LyricsUIAdapter {
   }
 
   /**
+   * Keep line-processing controls in sync with manager state.
+   */
+  updateLineProcessingControls(state) {
+    const hasControls = Boolean(
+      this.elements.processLinesToggle ||
+      this.elements.maxLineLengthInput ||
+      this.elements.maxLineLengthCjkInput
+    );
+    if (!hasControls) return;
+
+    const enabled = Boolean(state.lyricsEnabled && state.alignLyricsRequested && state.format !== 'json');
+    const processEnabled = Boolean(state.processLyricsLines);
+
+    if (this.elements.processLinesToggle) {
+      if (this.elements.processLinesToggle.getAttribute('aria-checked') !== String(processEnabled)) {
+        this.elements.processLinesToggle.setAttribute('aria-checked', String(processEnabled));
+      }
+      this.elements.processLinesToggle.disabled = !enabled;
+      this.elements.processLinesToggle.setAttribute('aria-disabled', String(!enabled));
+      this.elements.processLinesToggle.classList.toggle('opacity-60', !enabled);
+      this.elements.processLinesToggle.classList.toggle('cursor-not-allowed', !enabled);
+      this.elements.processLinesToggle.classList.toggle('bg-secondary', processEnabled && enabled);
+      this.elements.processLinesToggle.classList.toggle('bg-surface-container-highest', !processEnabled || !enabled);
+      const knob = this.elements.processLinesToggle.querySelector('span');
+      if (knob) {
+        knob.classList.toggle('translate-x-5', processEnabled);
+        knob.classList.toggle('translate-x-0', !processEnabled);
+      }
+    }
+
+    if (this.elements.maxLineLengthInput) {
+      if (String(this.elements.maxLineLengthInput.value || '') !== String(state.maxLineLength ?? 36)) {
+        this.elements.maxLineLengthInput.value = String(state.maxLineLength ?? 36);
+      }
+      this.elements.maxLineLengthInput.disabled = !enabled || !processEnabled;
+      this.elements.maxLineLengthInput.classList.toggle('opacity-60', this.elements.maxLineLengthInput.disabled);
+    }
+
+    if (this.elements.maxLineLengthCjkInput) {
+      if (String(this.elements.maxLineLengthCjkInput.value || '') !== String(state.maxLineLengthCjk ?? 12)) {
+        this.elements.maxLineLengthCjkInput.value = String(state.maxLineLengthCjk ?? 12);
+      }
+      this.elements.maxLineLengthCjkInput.disabled = !enabled || !processEnabled;
+      this.elements.maxLineLengthCjkInput.classList.toggle('opacity-60', this.elements.maxLineLengthCjkInput.disabled);
+    }
+
+    if (this.elements.processLinesDetail) {
+      if (!enabled && state.format === 'json') {
+        this.elements.processLinesDetail.textContent = this.t('queue.process_lyrics_lines_json_unsupported');
+      } else {
+        this.elements.processLinesDetail.textContent = this.t('queue.process_lyrics_lines_detail');
+      }
+    }
+  }
+
+  /**
    * Update input disabled state
    */
   updateInputDisabledState(lyricsEnabled) {
@@ -348,6 +446,23 @@ class LyricsUIAdapter {
     }
     if (this.elements.whisperxLanguageInput) {
       this.elements.whisperxLanguageInput.value = '';
+    }
+    if (this.elements.processLinesToggle) {
+      this.elements.processLinesToggle.setAttribute('aria-checked', 'false');
+      this.elements.processLinesToggle.setAttribute('aria-disabled', 'true');
+      this.elements.processLinesToggle.classList.remove('bg-secondary');
+      this.elements.processLinesToggle.classList.add('bg-surface-container-highest');
+      const knob = this.elements.processLinesToggle.querySelector('span');
+      if (knob) {
+        knob.classList.remove('translate-x-5');
+        knob.classList.add('translate-x-0');
+      }
+    }
+    if (this.elements.maxLineLengthInput) {
+      this.elements.maxLineLengthInput.value = '36';
+    }
+    if (this.elements.maxLineLengthCjkInput) {
+      this.elements.maxLineLengthCjkInput.value = '12';
     }
     this.manager.reset();
   }

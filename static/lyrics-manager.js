@@ -28,6 +28,9 @@ class LyricsManager {
       youtubeTitle: '',
       alignLyricsRequested: false,
       whisperxAlignLanguageOverride: '',
+      processLyricsLines: false,
+      maxLineLength: 36,
+      maxLineLengthCjk: 12,
     };
     
     this.listeners = [];
@@ -83,6 +86,9 @@ class LyricsManager {
     this.state.youtubeTitle = '';
     this.state.alignLyricsRequested = false;
     this.state.whisperxAlignLanguageOverride = '';
+    this.state.processLyricsLines = false;
+    this.state.maxLineLength = 36;
+    this.state.maxLineLengthCjk = 12;
     this.notifyListeners();
   }
 
@@ -209,6 +215,28 @@ class LyricsManager {
     const normalized = String(value || '').trim().toLowerCase();
     this.state.whisperxAlignLanguageOverride =
       normalized === 'auto' || normalized === 'default' ? '' : normalized;
+    this.notifyListeners();
+  }
+
+  /**
+   * Set optional line-processing settings used before WhisperX alignment.
+   */
+  setLineProcessingSettings(enabled, maxLineLength = 36, maxLineLengthCjk = 12) {
+    const parseLength = (value, fallback) => {
+      if (String(value ?? '').trim() === '') {
+        return fallback;
+      }
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) {
+        return fallback;
+      }
+      return Math.trunc(parsed);
+    };
+    this.state.processLyricsLines = Boolean(enabled);
+    if (this.state.processLyricsLines) {
+      this.state.maxLineLength = parseLength(maxLineLength, this.state.maxLineLength ?? 36);
+      this.state.maxLineLengthCjk = parseLength(maxLineLengthCjk, this.state.maxLineLengthCjk ?? 12);
+    }
     this.notifyListeners();
   }
 
@@ -395,9 +423,14 @@ class LyricsManager {
       lyrics_text: lyricsText,
       lyrics_format: this.state.format,
       align_lyrics: alignLyrics,
+      process_lyrics_lines: Boolean(this.state.processLyricsLines),
     };
     if (alignLyrics && this.state.whisperxAlignLanguageOverride) {
       payload.whisperx_align_language_override = this.state.whisperxAlignLanguageOverride;
+    }
+    if (this.state.processLyricsLines) {
+      payload.max_line_length = this.state.maxLineLength;
+      payload.max_line_length_cjk = this.state.maxLineLengthCjk;
     }
     return payload;
   }

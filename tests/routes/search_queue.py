@@ -167,6 +167,67 @@ def test_add_to_queue_persists_whisperx_language_override(client):
     assert stored is not None
     assert stored.whisperx_align_language_override == "ja"
 
+
+def test_add_to_queue_persists_line_processing_settings(client):
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "lineproc123",
+            "title": "Wrapped Song",
+            "artist": "Test Artist",
+            "is_karaoke": True,
+            "align_lyrics": True,
+            "process_lyrics_lines": True,
+            "max_line_length": 40,
+            "max_line_length_cjk": 14,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["process_lyrics_lines"] is True
+    assert data["max_line_length"] == 40
+    assert data["max_line_length_cjk"] == 14
+
+    with TestingSessionLocal() as db:
+        stored = db.query(QueueItem).filter(QueueItem.id == data["id"]).first()
+
+    assert stored is not None
+    assert stored.process_lyrics_lines is True
+    assert stored.max_line_length == 40
+    assert stored.max_line_length_cjk == 14
+
+
+def test_add_to_queue_ignores_line_processing_lengths_when_disabled(client):
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "lineproc-off",
+            "title": "Wrapped Song Off",
+            "process_lyrics_lines": False,
+            "max_line_length": -5,
+            "max_line_length_cjk": 0,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["process_lyrics_lines"] is False
+    assert data["max_line_length"] is None
+    assert data["max_line_length_cjk"] is None
+
+
+def test_add_to_queue_rejects_invalid_line_processing_lengths(client):
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "lineproc-bad",
+            "title": "Wrapped Song Bad",
+            "process_lyrics_lines": True,
+            "max_line_length": 0,
+            "max_line_length_cjk": 14,
+        },
+    )
+    assert response.status_code == 422
+
 def test_process_queue_item_returns_task_id(client):
     """Queue processing trigger should create or reuse a durable task id."""
     queue_response = client.post(

@@ -520,6 +520,47 @@
                         </div>
                     </div>
 
+                    <div id="queue-config-line-processing-card" class="rounded-2xl border border-secondary/25 bg-secondary/10 p-3 shadow-[0_0_20px_rgba(86,183,255,0.06)] sm:p-4">
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-secondary text-lg">format_line_spacing</span>
+                                    <span class="text-sm font-black text-on-surface">{{ t('queue.process_lyrics_lines_title') }}</span>
+                                </div>
+                                <p id="queue-config-line-processing-detail" class="mt-1 text-[11px] leading-tight text-on-surface-variant sm:text-xs">{{ t('queue.process_lyrics_lines_detail') }}</p>
+                            </div>
+                            <button id="queue-config-line-processing-toggle" type="button" role="switch" aria-checked="false" class="inline-flex h-7 w-12 flex-none shrink-0 items-center rounded-full bg-surface-container-highest p-1 transition-colors">
+                                <span class="h-5 w-5 translate-x-0 rounded-full bg-white transition-transform"></span>
+                            </button>
+                        </div>
+                        <div class="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
+                            <label class="flex min-w-0 flex-col gap-1.5">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant sm:text-[11px]">{{ t('queue.max_line_length') }}</span>
+                                <input
+                                    id="queue-config-max-line-length"
+                                    type="number"
+                                    min="1"
+                                    max="200"
+                                    step="1"
+                                    value="36"
+                                    class="w-full rounded-xl bg-surface-container-highest px-2.5 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-secondary/30 disabled:opacity-60 sm:px-3"
+                                />
+                            </label>
+                            <label class="flex min-w-0 flex-col gap-1.5">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant sm:text-[11px]">{{ t('queue.max_line_length_cjk') }}</span>
+                                <input
+                                    id="queue-config-max-line-length-cjk"
+                                    type="number"
+                                    min="1"
+                                    max="100"
+                                    step="1"
+                                    value="12"
+                                    class="w-full rounded-xl bg-surface-container-highest px-2.5 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-secondary/30 disabled:opacity-60 sm:px-3"
+                                />
+                            </label>
+                        </div>
+                    </div>
+
                     <label class="flex flex-col gap-2">
                         <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.whisperx_language_override') }}</span>
                         <input

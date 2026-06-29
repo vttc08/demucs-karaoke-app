@@ -157,6 +157,8 @@
                             <input id="upload-lyrics-align-toggle" type="checkbox" class="h-5 w-5 accent-primary disabled:cursor-not-allowed disabled:opacity-50" disabled />
                         </label>
 
+                        {% include '_lyrics_line_processing.html' with context %}
+
                         <label class="flex flex-col gap-1.5">
                             <span class="ml-1 text-[9px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.whisperx_language_override') }}</span>
                             <input

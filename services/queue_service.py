@@ -5,7 +5,7 @@ import re
 import shutil
 from pathlib import Path
 from typing import List, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 from sqlalchemy import func
 from models import MediaItem, ProcessingTask, QueueItem, QueueItemCreate, QueueItemResponse, QueueStatus
 from config import settings
@@ -133,6 +133,9 @@ class QueueService:
             whisperx_align_language_override=self._normalize_optional_metadata(
                 item.whisperx_align_language_override
             ),
+            process_lyrics_lines=bool(item.process_lyrics_lines),
+            max_line_length=item.max_line_length if item.process_lyrics_lines else None,
+            max_line_length_cjk=item.max_line_length_cjk if item.process_lyrics_lines else None,
             status=QueueStatus.PENDING,
         )
         db.add(db_item)
@@ -730,6 +733,11 @@ class QueueService:
         """Map queue row + related media row into API response."""
         media = item.media
         if media is None:
+            session = object_session(item)
+            if session is not None:
+                media = session.query(MediaItem).filter(MediaItem.id == item.media_id).first()
+                item.media = media
+        if media is None:
             raise RuntimeError(f"Queue item {item.id} is missing media relationship")
 
         media_path = self._normalize_media_field(media.media_path)
@@ -759,6 +767,9 @@ class QueueService:
             lyrics_path=lyrics_path,
             vocals_path=vocals_path,
             whisperx_align_language_override=item.whisperx_align_language_override,
+            process_lyrics_lines=bool(item.process_lyrics_lines),
+            max_line_length=item.max_line_length,
+            max_line_length_cjk=item.max_line_length_cjk,
             error=item.error,
             task_id=active_task.id if active_task is not None else None,
             processing_stage=(active_task.stage if active_task is not None else None),
