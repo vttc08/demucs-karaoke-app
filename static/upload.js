@@ -56,6 +56,24 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUploadLyricsAlignmentControls();
     }
 
+    function setSwitchToggleState(toggle, checked, disabled) {
+        if (!toggle) return;
+        toggle.disabled = Boolean(disabled);
+        toggle.setAttribute('aria-disabled', String(Boolean(disabled)));
+        if (toggle.getAttribute('aria-checked') !== String(Boolean(checked))) {
+            toggle.setAttribute('aria-checked', String(Boolean(checked)));
+        }
+        toggle.classList.toggle('opacity-60', Boolean(disabled));
+        toggle.classList.toggle('cursor-not-allowed', Boolean(disabled));
+        toggle.classList.toggle('bg-primary', Boolean(checked) && !disabled);
+        toggle.classList.toggle('bg-surface-container-highest', !Boolean(checked) || Boolean(disabled));
+        const knob = toggle.querySelector('span');
+        if (knob) {
+            knob.classList.toggle('translate-x-5', Boolean(checked));
+            knob.classList.toggle('translate-x-0', !Boolean(checked));
+        }
+    }
+
     async function refreshDemucsHealth() {
         if (uploadAiToggle) {
             uploadAiToggle.disabled = true;
@@ -123,14 +141,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const hasText = Boolean((state.text || '').trim());
         const jsonLyrics = state.format === 'json';
         const canAlign = Boolean(state.lyricsEnabled && hasText && !jsonLyrics && demucsHealth.healthy);
-        uploadLyricsAlignToggle.disabled = !canAlign;
-        if (!canAlign && uploadLyricsAlignToggle.checked) {
-            uploadLyricsAlignToggle.checked = false;
+        const alignRequested = Boolean(state.alignLyricsRequested);
+        if (!canAlign && alignRequested) {
             lyricsManager.setAlignLyricsRequested(false);
         }
         if (!canAlign && state.processLyricsLines) {
             lyricsManager.setLineProcessingSettings(false);
         }
+        setSwitchToggleState(uploadLyricsAlignToggle, Boolean(canAlign && alignRequested), !canAlign);
         if (uploadLyricsAlignStatus) {
             if (!demucsHealth.healthy) {
                 uploadLyricsAlignStatus.textContent = t('lyrics.align_demucs_unavailable');
@@ -259,7 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            dispatchCheckboxChange(uploadLyricsAlignToggle, true);
+            lyricsManager.setAlignLyricsRequested(true);
             showToast(t('upload.autopilot_ready'));
         } catch (error) {
             console.error('Upload autopilot failed:', error);
@@ -300,10 +318,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     if (uploadLyricsAlignToggle) {
-        uploadLyricsAlignToggle.addEventListener('change', () => {
+        uploadLyricsAlignToggle.addEventListener('click', (e) => {
+            e.preventDefault();
             initializeUploadLyricsManager();
             if (lyricsManager) {
-                lyricsManager.setAlignLyricsRequested(uploadLyricsAlignToggle.checked);
+                const currentState = lyricsManager.getState();
+                lyricsManager.setAlignLyricsRequested(!currentState.alignLyricsRequested);
             }
         });
     }

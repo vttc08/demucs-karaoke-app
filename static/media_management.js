@@ -67,6 +67,24 @@ function initializeMediaEditLyricsManager() {
     lyricsManager.on(() => updateMediaEditLyricsControls());
 }
 
+function setSwitchToggleState(toggle, checked, disabled) {
+    if (!toggle) return;
+    toggle.disabled = Boolean(disabled);
+    toggle.setAttribute("aria-disabled", String(Boolean(disabled)));
+    if (toggle.getAttribute("aria-checked") !== String(Boolean(checked))) {
+        toggle.setAttribute("aria-checked", String(Boolean(checked)));
+    }
+    toggle.classList.toggle("opacity-60", Boolean(disabled));
+    toggle.classList.toggle("cursor-not-allowed", Boolean(disabled));
+    toggle.classList.toggle("bg-primary", Boolean(checked) && !disabled);
+    toggle.classList.toggle("bg-surface-container-highest", !Boolean(checked) || Boolean(disabled));
+    const knob = toggle.querySelector("span");
+    if (knob) {
+        knob.classList.toggle("translate-x-5", Boolean(checked));
+        knob.classList.toggle("translate-x-0", !Boolean(checked));
+    }
+}
+
 function syncMediaEditLyricsMetadata() {
     if (!lyricsManager) return;
     lyricsManager.setMetadata(editTitleInput?.value || "", editArtistInput?.value || "", editTitleInput?.value || "");
@@ -271,11 +289,11 @@ function updateMediaEditLyricsControls() {
     }
 
     if (editLyricsAlignToggle) {
-        editLyricsAlignToggle.disabled = !canAlign;
-        if (!canAlign && editLyricsAlignToggle.checked) {
-            editLyricsAlignToggle.checked = false;
+        const alignRequested = Boolean(state.alignLyricsRequested);
+        if (!canAlign && alignRequested) {
             lyricsManager.setAlignLyricsRequested(false);
         }
+        setSwitchToggleState(editLyricsAlignToggle, Boolean(canAlign && alignRequested), !canAlign);
     }
     if (editLyricsAlignStatus) {
         if (isLocked) {
@@ -2043,10 +2061,12 @@ if (editLyricsToggle) {
     });
 }
 if (editLyricsAlignToggle) {
-    editLyricsAlignToggle.addEventListener("change", () => {
+    editLyricsAlignToggle.addEventListener("click", (event) => {
+        event.preventDefault();
         initializeMediaEditLyricsManager();
         if (lyricsManager) {
-            lyricsManager.setAlignLyricsRequested(editLyricsAlignToggle.checked);
+            const currentState = lyricsManager.getState();
+            lyricsManager.setAlignLyricsRequested(!currentState.alignLyricsRequested);
         }
     });
 }
