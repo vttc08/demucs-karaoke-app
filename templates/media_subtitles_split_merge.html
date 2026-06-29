@@ -7,7 +7,7 @@
 {{ t('subtitle.split_merge_page_title') }} - {{ t('subtitle.not_available') }}
 {% endif %}
 {% endblock %}
-{% block header_title %}{{ t('subtitle.split_merge_header') }}{% endblock %}
+{% block header_title %}{{ t('common.lyrics') }}{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ app_url('/static/media_editor.css') }}">
@@ -59,7 +59,7 @@
                     <span class="material-symbols-outlined text-[16px]">arrow_back</span>
                     <span>{{ t('subtitle.back_to_workflow') }}</span>
                 </a>
-                <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">{{ t('subtitle.split_merge_header') }}</p>
+                <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">{{ t('common.lyrics') }}</p>
                 <h2 class="mt-1 truncate font-headline text-2xl font-black tracking-tight text-on-surface sm:text-3xl">{{ subtitle_editor_info.title }}</h2>
                 <p class="truncate text-sm font-semibold text-primary">{{ subtitle_editor_info.artist or t('common.unknown_artist') }}</p>
                 <p class="mt-2 max-w-3xl text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.split_merge_detail') }}</p>
@@ -75,14 +75,14 @@
                 </button>
             </div>
         </div>
-        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <div class="mt-4 grid grid-cols-2 gap-2">
             <label class="flex min-w-0 flex-col gap-1.5">
-                <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant sm:text-[11px]">{{ t('subtitle.max_line_length') }}</span>
-                <input id="subtitle-max-line-length" type="number" min="1" max="200" step="1" value="36" class="w-full rounded-xl bg-surface-container-highest px-2.5 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-secondary/30 disabled:opacity-60 sm:px-3">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('subtitle.max_line_length') }}</span>
+                <input id="subtitle-max-line-length" type="number" min="1" max="200" step="1" value="36" class="w-full rounded-xl bg-surface-container-highest px-2 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-secondary/30 disabled:opacity-60">
             </label>
             <label class="flex min-w-0 flex-col gap-1.5">
-                <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant sm:text-[11px]">{{ t('subtitle.max_line_length_cjk') }}</span>
-                <input id="subtitle-max-line-length-cjk" type="number" min="1" max="100" step="1" value="12" class="w-full rounded-xl bg-surface-container-highest px-2.5 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-secondary/30 disabled:opacity-60 sm:px-3">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('subtitle.max_line_length_cjk') }}</span>
+                <input id="subtitle-max-line-length-cjk" type="number" min="1" max="100" step="1" value="12" class="w-full rounded-xl bg-surface-container-highest px-2 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-secondary/30 disabled:opacity-60">
             </label>
         </div>
         <div class="mt-4 flex flex-wrap gap-2">
@@ -92,7 +92,7 @@
             </button>
             <button id="subtitle-save-btn" type="button" class="inline-flex items-center gap-2 rounded-full border border-secondary/30 bg-secondary px-4 py-2 text-[11px] font-black uppercase tracking-wider text-surface-container-lowest hover:brightness-110">
                 <span class="material-symbols-outlined text-[12px]">save</span>
-                <span>{{ t('subtitle.save_changes') }}</span>
+                <span>{{ t('common.save') }}</span>
             </button>
             <p id="subtitle-status" class="ml-0 text-sm font-semibold text-on-surface-variant sm:ml-2"></p>
         </div>
