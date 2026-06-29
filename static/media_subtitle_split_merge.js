@@ -108,6 +108,10 @@
             .trim();
     }
 
+    function countDisplayChars(value) {
+        return Array.from(cleanText(value)).length;
+    }
+
     function splitIntoTokens(text) {
         return String(text || "").match(TOKEN_RE) || [];
     }
@@ -291,13 +295,13 @@
 
     function renderWordButtons(segmentIndex, segment) {
         const wrap = document.createElement("div");
-        wrap.className = "mt-3 flex flex-wrap gap-1.5";
+        wrap.className = "mt-2 flex flex-wrap gap-1.5";
 
         const words = Array.isArray(segment.words) ? segment.words : [];
         words.forEach((word, wordIndex) => {
             const button = document.createElement("button");
             button.type = "button";
-            button.className = "inline-flex min-h-9 items-center rounded-full border border-white/10 bg-surface-container-highest/80 px-3 py-1.5 text-sm font-semibold text-on-surface transition hover:border-primary/30 hover:bg-primary/10 active:scale-[0.99]";
+            button.className = "inline-flex items-center rounded border border-white/10 bg-surface-container-highest/80 px-2 py-0.5 text-sm font-semibold text-on-surface transition hover:border-primary/30 hover:bg-primary/10 active:scale-[0.99]";
             button.textContent = String(word.word || "");
             button.title = t("subtitle.split_after_word", { word: String(word.word || "") });
             button.addEventListener("click", () => splitSegmentAt(segmentIndex, wordIndex + 1));
@@ -307,9 +311,26 @@
         return wrap;
     }
 
+    function renderSegmentTextRow(segment) {
+        const row = document.createElement("div");
+        row.className = "mt-1.5 flex items-start gap-3";
+
+        const text = document.createElement("p");
+        text.className = "min-w-0 flex-1 text-sm leading-relaxed text-on-surface";
+        text.textContent = segment.text || "";
+
+        const counter = document.createElement("span");
+        counter.className = "shrink-0 whitespace-nowrap rounded-full border border-white/10 bg-surface-container-high px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] tabular-nums text-on-surface-variant";
+        counter.textContent = t("subtitle.char_count", { count: countDisplayChars(segment.text || "") });
+
+        row.appendChild(text);
+        row.appendChild(counter);
+        return row;
+    }
+
     function renderSegment(segment, index) {
         const card = document.createElement("article");
-        card.className = "rounded-3xl border border-white/10 bg-surface-container-high/30 p-4 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]";
+        card.className = "rounded-3xl border border-white/10 bg-surface-container-high/30 pb-2.5 p-4 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]";
 
         const header = document.createElement("div");
         header.className = "flex items-start justify-between gap-3";
@@ -335,12 +356,8 @@
         header.appendChild(meta);
         header.appendChild(mergeButton);
 
-        const text = document.createElement("p");
-        text.className = "mt-3 text-sm leading-relaxed text-on-surface";
-        text.textContent = segment.text || "";
-
         card.appendChild(header);
-        card.appendChild(text);
+        card.appendChild(renderSegmentTextRow(segment));
         card.appendChild(renderWordButtons(index, segment));
         return card;
     }
@@ -439,6 +456,10 @@
     async function saveCurrentSegments() {
         const maxLineLength = parseNumberInput(maxLineLengthInput, DEFAULT_MAX_LINE_LENGTH);
         const maxLineLengthCjk = parseNumberInput(maxLineLengthCjkInput, DEFAULT_MAX_LINE_LENGTH_CJK);
+        const confirmed = window.confirm(t("subtitle.confirm_replace", { kind: t("common.lyrics") }));
+        if (!confirmed) {
+            return;
+        }
         setStatus(t("subtitle.saving"), "neutral");
         saveButton.disabled = true;
         try {
