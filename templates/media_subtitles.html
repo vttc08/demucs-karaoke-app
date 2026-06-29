@@ -42,7 +42,7 @@
 {% else %}
 <main
     id="subtitle-workflow-page"
-    class="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 pb-12 pt-24 sm:px-6 lg:px-8"
+    class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 pb-12 pt-24 sm:px-6 lg:px-8"
     data-media-id="{{ subtitle_info.media_id }}"
     data-media-title="{{ subtitle_info.title }}"
     data-media-artist="{{ subtitle_info.artist or '' }}"
@@ -87,7 +87,20 @@
             <div class="rounded-2xl border border-white/10 bg-surface-container-high/30 p-3 text-sm text-on-surface-variant">{{ t('subtitle.files_loading') }}</div>
         </div>
     </section>
-
+    <section>
+        <article class="glass-card overflow-hidden rounded-3xl border border-white/10 p-4">
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="min-w-0">
+                    <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('subtitle.split_merge') }}</h3>
+                    <p class="mt-2 text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.split_merge_desc') }}</p>
+                </div>
+                <a href="{{ subtitle_info.split_merge_url }}" class="ml-auto inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-primary hover:brightness-110">
+                    <span class="material-symbols-outlined text-[12px]">open_in_new</span>
+                    <span>{{ t('subtitle.open_tool') }}</span>
+                </a>
+            </div>
+        </article>
+    </section>
     <section class="grid gap-4 xl:grid-cols-2">
         <article class="glass-card overflow-hidden rounded-3xl border border-white/10 p-4 sm:p-5">
             <div class="grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-start">

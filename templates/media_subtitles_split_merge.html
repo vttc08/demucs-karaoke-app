@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if subtitle_editor_info %}
+{{ t('subtitle.split_merge_page_title') }} - {{ subtitle_editor_info.title }}
+{% else %}
+{{ t('subtitle.split_merge_page_title') }} - {{ t('subtitle.not_available') }}
+{% endif %}
+{% endblock %}
+{% block header_title %}{{ t('subtitle.split_merge_header') }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ app_url('/static/media_editor.css') }}">
+{% endblock %}
+
+{% block content %}
+{% if subtitle_error %}
+<main class="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-4xl items-center px-4 pb-12 pt-24 sm:px-6 lg:px-8">
+    <section class="glass-card w-full overflow-hidden rounded-3xl border border-error/30 p-6 sm:p-8">
+        <div class="flex flex-col gap-4">
+            <div class="inline-flex items-center gap-2 self-start rounded-full border border-error/30 bg-error/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-error">
+                <span class="material-symbols-outlined text-[16px]">error</span>
+                <span>{{ t('common.failed') }}</span>
+            </div>
+            <div>
+                <h2 class="font-headline text-2xl font-black tracking-tight text-on-surface sm:text-3xl">{{ subtitle_error.title }}</h2>
+                <p class="mt-2 text-sm leading-relaxed text-on-surface-variant">{{ subtitle_error.detail }}</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="history.back()" class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-primary hover:brightness-110">
+                    <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                    <span>{{ subtitle_error.history_back }}</span>
+                </button>
+                <a href="{{ subtitle_error.back_url }}" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
+                    <span class="material-symbols-outlined text-[16px]">library_music</span>
+                    <span>{{ t('subtitle.back_to_media') }}</span>
+                </a>
+            </div>
+        </div>
+    </section>
+</main>
+{% else %}
+<main
+    id="subtitle-split-merge-page"
+    class="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 pb-12 pt-24 sm:px-6 lg:px-8"
+    data-media-id="{{ subtitle_editor_info.media_id }}"
+    data-media-title="{{ subtitle_editor_info.title }}"
+    data-media-artist="{{ subtitle_editor_info.artist or '' }}"
+    data-json-url="{{ subtitle_editor_info.json_url }}"
+    data-process-url="{{ subtitle_editor_info.process_url }}"
+    data-save-url="{{ subtitle_editor_info.save_url }}"
+    data-back-url="{{ subtitle_editor_info.back_url }}"
+    data-docs-url="{{ subtitle_editor_info.docs_url }}"
+>
+    <section class="glass-card overflow-hidden rounded-3xl border border-white/10 p-4 sm:p-5">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div class="min-w-0">
+                <a href="{{ subtitle_editor_info.back_url }}" class="mb-2 inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-primary hover:text-primary/80">
+                    <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                    <span>{{ t('subtitle.back_to_workflow') }}</span>
+                </a>
+                <p class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant">{{ t('subtitle.split_merge_header') }}</p>
+                <h2 class="mt-1 truncate font-headline text-2xl font-black tracking-tight text-on-surface sm:text-3xl">{{ subtitle_editor_info.title }}</h2>
+                <p class="truncate text-sm font-semibold text-primary">{{ subtitle_editor_info.artist or t('common.unknown_artist') }}</p>
+                <p class="mt-2 max-w-3xl text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.split_merge_detail') }}</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="{{ subtitle_editor_info.docs_url }}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
+                    <span class="material-symbols-outlined text-[12px]">help</span>
+                    <span>{{ t('subtitle.docs') }}</span>
+                </a>
+                <button id="subtitle-undo-btn" type="button" class="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-container-high px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-surface hover:brightness-110">
+                    <span class="material-symbols-outlined text-[12px]">undo</span>
+                    <span>{{ t('subtitle.undo') }}</span>
+                </button>
+            </div>
+        </div>
+        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <label class="flex min-w-0 flex-col gap-1.5">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant sm:text-[11px]">{{ t('subtitle.max_line_length') }}</span>
+                <input id="subtitle-max-line-length" type="number" min="1" max="200" step="1" value="36" class="w-full rounded-xl bg-surface-container-highest px-2.5 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-secondary/30 disabled:opacity-60 sm:px-3">
+            </label>
+            <label class="flex min-w-0 flex-col gap-1.5">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant sm:text-[11px]">{{ t('subtitle.max_line_length_cjk') }}</span>
+                <input id="subtitle-max-line-length-cjk" type="number" min="1" max="100" step="1" value="12" class="w-full rounded-xl bg-surface-container-highest px-2.5 py-2 text-sm text-on-surface outline-none ring-1 ring-transparent transition focus:ring-secondary/30 disabled:opacity-60 sm:px-3">
+            </label>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-2">
+            <button id="subtitle-process-btn" type="button" class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-primary hover:brightness-110">
+                <span class="material-symbols-outlined text-[12px]">magic_button</span>
+                <span>{{ t('subtitle.auto_process') }}</span>
+            </button>
+            <button id="subtitle-save-btn" type="button" class="inline-flex items-center gap-2 rounded-full border border-secondary/30 bg-secondary px-4 py-2 text-[11px] font-black uppercase tracking-wider text-surface-container-lowest hover:brightness-110">
+                <span class="material-symbols-outlined text-[12px]">save</span>
+                <span>{{ t('subtitle.save_changes') }}</span>
+            </button>
+            <p id="subtitle-status" class="ml-0 text-sm font-semibold text-on-surface-variant sm:ml-2"></p>
+        </div>
+    </section>
+
+    <section class="glass-card overflow-hidden rounded-3xl border border-white/10 p-4 sm:p-5">
+        <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('subtitle.segment_editor') }}</h3>
+                <p class="mt-2 text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.segment_editor_detail') }}</p>
+            </div>
+            <span id="subtitle-segment-count" class="rounded-full border border-white/10 bg-surface-container-high px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-on-surface-variant">0</span>
+        </div>
+        <div id="subtitle-segment-list" class="mt-4 grid gap-3"></div>
+    </section>
+</main>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ static_asset_url('/static/media_subtitle_split_merge.js') }}"></script>
+{% endblock %}

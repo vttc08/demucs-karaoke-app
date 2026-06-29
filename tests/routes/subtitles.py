@@ -118,6 +118,79 @@ def test_media_subtitles_page_shows_404_when_lyrics_sidecar_is_missing(client, t
     assert "could not be found" in response.text
 
 
+def test_media_subtitles_split_merge_page_renders_admin_shell(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    lyrics_file = tmp_path / "song.json"
+    media_file.write_bytes(b"video")
+    lyrics_file.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 0.0,
+                        "end": 1.0,
+                        "text": "Hello world",
+                        "words": [
+                            {"word": "Hello", "start": 0.0, "end": 0.5},
+                            {"word": "world", "start": 0.5, "end": 1.0},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path="/media/song.json",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.get(f"/media-subtitles/{media_id}/split-merge")
+
+    assert response.status_code == 200
+    assert 'id="subtitle-split-merge-page"' in response.text
+    assert "/static/media_subtitle_split_merge.js" in response.text
+    assert "Split/Merge Editor" in response.text
+    assert f'data-json-url="/api/media/{media_id}/subtitles/json"' in response.text
+    assert f'href="/media-subtitles/{media_id}"' in response.text
+
+
+def test_media_subtitles_split_merge_page_returns_404_shell_when_json_missing(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    media_file.write_bytes(b"video")
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path=None,
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.get(f"/media-subtitles/{media_id}/split-merge")
+
+    assert response.status_code == 404
+    assert "Subtitle workflow unavailable" in response.text
+    assert "This media item does not have synced JSON lyrics" in response.text
+    assert f'href="/media-subtitles/{media_id}"' in response.text
+
+
 def test_subtitle_export_routes_return_downloads(client):
     authenticate_admin_client(client)
     with patch(
@@ -165,3 +238,129 @@ def test_subtitle_preview_and_upload_routes_forward_uploads(client):
     preview_upload.assert_called_once()
     replace_upload.assert_called_once()
 
+
+def test_subtitle_json_process_and_save_routes_round_trip(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    lyrics_file = tmp_path / "song.json"
+    media_file.write_bytes(b"video")
+    lyrics_file.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 0.0,
+                        "end": 4.0,
+                        "text": "I can get em both I dont wanna choose",
+                        "words": [
+                            {"word": "I", "start": 0.0, "end": 0.1},
+                            {"word": "can", "start": 0.1, "end": 0.2},
+                            {"word": "get", "start": 0.2, "end": 0.3},
+                            {"word": "em", "start": 0.3, "end": 0.4},
+                            {"word": "both", "start": 0.4, "end": 0.5},
+                            {"word": "I", "start": 0.5, "end": 0.6},
+                            {"word": "dont", "start": 0.6, "end": 0.7},
+                            {"word": "wanna", "start": 0.7, "end": 0.8},
+                            {"word": "choose", "start": 0.8, "end": 0.9},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path="/media/song.json",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    json_response = client.get(f"/api/media/{media_id}/subtitles/json")
+    process_response = client.post(
+        f"/api/media/{media_id}/subtitles/process",
+        json={
+            "segments": json_response.json()["segments"],
+            "max_line_length": 12,
+            "max_line_length_cjk": 4,
+        },
+    )
+    save_response = client.post(
+        f"/api/media/{media_id}/subtitles/save",
+        json={
+            "segments": process_response.json()["segments"],
+            "max_line_length": 12,
+            "max_line_length_cjk": 4,
+        },
+    )
+
+    assert json_response.status_code == 200
+    assert json_response.json()["source_format"] == "json"
+    assert process_response.status_code == 200
+    assert [segment["text"] for segment in process_response.json()["segments"]] == [
+        "I can get em",
+        "both I",
+        "dont",
+        "wanna choose",
+    ]
+    assert save_response.status_code == 200
+    assert [segment["text"] for segment in save_response.json()["segments"]] == [
+        "I can get em",
+        "both I",
+        "dont",
+        "wanna choose",
+    ]
+    saved_payload = json.loads(lyrics_file.read_text(encoding="utf-8"))
+    assert [segment["text"] for segment in saved_payload["segments"]] == [
+        "I can get em",
+        "both I",
+        "dont",
+        "wanna choose",
+    ]
+
+
+def test_subtitle_json_endpoint_rejects_non_json_sidecars(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    lyrics_file = tmp_path / "song.lrc"
+    media_file.write_bytes(b"video")
+    lyrics_file.write_text("[00:00.00]Hello", encoding="utf-8")
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path="/media/song.lrc",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.get(f"/api/media/{media_id}/subtitles/json")
+
+    assert response.status_code == 409
+    assert "synced JSON lyrics" in response.json()["detail"]
+
+
+def test_subtitle_process_endpoint_validates_max_lengths(client):
+    authenticate_admin_client(client)
+    response = client.post(
+        "/api/media/42/subtitles/process",
+        json={
+            "segments": [],
+            "max_line_length": 0,
+            "max_line_length_cjk": 12,
+        },
+    )
+
+    assert response.status_code == 422

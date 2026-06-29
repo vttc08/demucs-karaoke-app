@@ -231,6 +231,34 @@ When `lyrics_text` is supplied for karaoke items, the app persists it as a reusa
 - `process_lyrics_lines` is an optional queue-only WhisperX override. When true, the server rewrites long plain/LRC lines before alignment using `max_line_length` (default `36`) and `max_line_length_cjk` (default `12`).
 - When line processing is enabled for synced LRC, the original line timestamps are intentionally ignored and WhisperX rebuilds timing from the rewrapped display lines.
 
+### Synced JSON Split/Merge Editor
+
+```
+GET /api/media/{item_id}/subtitles/json
+POST /api/media/{item_id}/subtitles/process
+POST /api/media/{item_id}/subtitles/save
+```
+
+The split/merge editor page at `/media-subtitles/{item_id}/split-merge` uses these endpoints to load, rewrap, and save synced JSON lyrics.
+
+`POST /api/media/{item_id}/subtitles/process` accepts:
+```json
+{
+  "segments": [
+    {
+      "start": 0,
+      "end": 1,
+      "text": "Hello world",
+      "words": [{"word": "Hello", "start": 0, "end": 0.5}]
+    }
+  ],
+  "max_line_length": 36,
+  "max_line_length_cjk": 12
+}
+```
+
+`POST /api/media/{item_id}/subtitles/save` accepts the same `segments` shape and writes the normalized JSON sidecar back to disk.
+
 **Response:**
 ```json
 {

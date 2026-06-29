@@ -16,6 +16,12 @@ The subtitle editor is an admin-only workflow for round-tripping synced JSON lyr
 - The notebook uses `i * 10` for the marker index so users can insert lines between existing segments later.
 - SubtitleEdit is the preferred editor when the goal is word-level reshaping instead of karaoke timing.
 
+## Split/Merge editor
+
+- `/media-subtitles/{item_id}/split-merge` opens the synced JSON split/merge editor for a single media item.
+- The editor can split a line after a selected word, merge a line with the next line, auto-rewrap the current JSON with the notebook-proven line processor, and save the result back to the JSON sidecar.
+- The editor is intentionally scoped to synced JSON lyrics. Plain text and LRC continue to use the queue or WhisperX alignment flows.
+
 ## Edge cases
 
 - Overlapping segments are warned about, but they do not block upload.
