@@ -23,9 +23,12 @@ router = APIRouter(prefix="/api/media/{item_id}/subtitles", tags=["subtitles"])
 
 
 class SubtitleEditorProcessRequest(BaseModel):
-    segments: list[dict] = Field(default_factory=list)
     max_line_length: int = Field(default=36, ge=1, le=200)
     max_line_length_cjk: int = Field(default=12, ge=1, le=100)
+
+
+class SubtitleEditorSaveRequest(BaseModel):
+    segments: list[dict] = Field(default_factory=list)
 
 
 def _subtitle_download_response(content: str, filename: str) -> Response:
@@ -60,10 +63,11 @@ def process_subtitle_json(
     db: Session = Depends(get_db),
     _admin=Depends(require_admin_user),
 ):
-    """Rewrap a synced JSON payload with deterministic line splitting."""
+    """Rewrap the persisted synced JSON lyrics with deterministic line splitting."""
     try:
-        segments = subtitle_editor_service.process_segments(
-            request.segments,
+        segments = subtitle_editor_service.process_saved_segments(
+            db,
+            item_id,
             max_line_length=request.max_line_length,
             max_line_length_cjk=request.max_line_length_cjk,
         )
@@ -79,7 +83,7 @@ def process_subtitle_json(
 @router.post("/save")
 def save_subtitle_json(
     item_id: int,
-    request: SubtitleEditorProcessRequest,
+    request: SubtitleEditorSaveRequest,
     db: Session = Depends(get_db),
     _admin=Depends(require_admin_user),
 ):

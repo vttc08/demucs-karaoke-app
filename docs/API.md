@@ -244,20 +244,12 @@ The split/merge editor page at `/media-subtitles/{item_id}/split-merge` uses the
 `POST /api/media/{item_id}/subtitles/process` accepts:
 ```json
 {
-  "segments": [
-    {
-      "start": 0,
-      "end": 1,
-      "text": "Hello world",
-      "words": [{"word": "Hello", "start": 0, "end": 0.5}]
-    }
-  ],
   "max_line_length": 36,
   "max_line_length_cjk": 12
 }
 ```
 
-`POST /api/media/{item_id}/subtitles/save` accepts the same `segments` shape and writes the normalized JSON sidecar back to disk.
+The process endpoint reloads the synced JSON lyrics from disk before applying deterministic rewrapping, so unsaved browser edits do not affect the result. The save endpoint accepts the `segments` shape shown by the editor and writes the normalized JSON sidecar back to disk.
 
 **Response:**
 ```json

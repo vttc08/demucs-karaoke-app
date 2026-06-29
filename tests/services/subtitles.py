@@ -259,3 +259,63 @@ def test_subtitle_editor_service_process_segments_wraps_english_cjk_and_mixed_li
         "再见",
     ]
     assert all(len(segment["text"]) <= 12 or any("\u4e00" <= char <= "\u9fff" for char in segment["text"]) for segment in processed)
+
+
+def test_subtitle_editor_service_process_saved_segments_rewraps_disk_state(db_session, tmp_path, monkeypatch):
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+
+    media_file = media_root / "song.mp4"
+    lyrics_file = media_root / "song.json"
+    media_file.write_bytes(b"video")
+    lyrics_file.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 0.0,
+                        "end": 1.0,
+                        "text": "I can get em both I dont wanna choose",
+                        "words": [
+                            {"word": "I", "start": 0.0, "end": 0.1},
+                            {"word": "can", "start": 0.1, "end": 0.2},
+                            {"word": "get", "start": 0.2, "end": 0.3},
+                            {"word": "em", "start": 0.3, "end": 0.4},
+                            {"word": "both", "start": 0.4, "end": 0.5},
+                            {"word": "I", "start": 0.5, "end": 0.6},
+                            {"word": "dont", "start": 0.6, "end": 0.7},
+                            {"word": "wanna", "start": 0.7, "end": 0.8},
+                            {"word": "choose", "start": 0.8, "end": 0.9},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    media = MediaItem(
+        title="Song",
+        artist="Artist",
+        media_path="/media/song.mp4",
+        lyrics_path="/media/song.json",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    processed = subtitle_editor_service.process_saved_segments(
+        db_session,
+        media.id,
+        max_line_length=12,
+        max_line_length_cjk=4,
+    )
+
+    assert [segment["text"] for segment in processed] == [
+        "I can get em",
+        "both I",
+        "dont",
+        "wanna choose",
+    ]

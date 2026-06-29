@@ -426,7 +426,10 @@
     async function processCurrentSegments() {
         const maxLineLength = parseNumberInput(maxLineLengthInput, DEFAULT_MAX_LINE_LENGTH);
         const maxLineLengthCjk = parseNumberInput(maxLineLengthCjkInput, DEFAULT_MAX_LINE_LENGTH_CJK);
-        const before = clone(state.segments);
+        const confirmed = window.confirm(t("subtitle.confirm_reprocess"));
+        if (!confirmed) {
+            return;
+        }
         setStatus(t("subtitle.processing"), "neutral");
         processButton.disabled = true;
         try {
@@ -436,13 +439,13 @@
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    segments: state.segments,
                     max_line_length: maxLineLength,
                     max_line_length_cjk: maxLineLengthCjk,
                 }),
             });
             state.segments = normalizeSegments(payload.segments || []);
-            await pushHistory(before, state.segments);
+            state.history = [];
+            safeStorageRemove();
             persistSession();
             render();
             setStatus(t("subtitle.process_complete"), "success");

@@ -326,6 +326,75 @@ def test_subtitle_json_process_and_save_routes_round_trip(client, tmp_path, monk
     ]
 
 
+def test_subtitle_process_endpoint_reloads_persisted_json_before_rewrapping(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    lyrics_file = tmp_path / "song.json"
+    media_file.write_bytes(b"video")
+    lyrics_file.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 0.0,
+                        "end": 1.0,
+                        "text": "I can get em both I dont wanna choose",
+                        "words": [
+                            {"word": "I", "start": 0.0, "end": 0.1},
+                            {"word": "can", "start": 0.1, "end": 0.2},
+                            {"word": "get", "start": 0.2, "end": 0.3},
+                            {"word": "em", "start": 0.3, "end": 0.4},
+                            {"word": "both", "start": 0.4, "end": 0.5},
+                            {"word": "I", "start": 0.5, "end": 0.6},
+                            {"word": "dont", "start": 0.6, "end": 0.7},
+                            {"word": "wanna", "start": 0.7, "end": 0.8},
+                            {"word": "choose", "start": 0.8, "end": 0.9},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path="/media/song.json",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.post(
+        f"/api/media/{media_id}/subtitles/process",
+        json={
+            "segments": [
+                {
+                    "start": 99.0,
+                    "end": 100.0,
+                    "text": "local browser edits should not matter",
+                    "words": [{"word": "local", "start": 99.0, "end": 99.5}],
+                }
+            ],
+            "max_line_length": 12,
+            "max_line_length_cjk": 4,
+        },
+    )
+
+    assert response.status_code == 200
+    assert [segment["text"] for segment in response.json()["segments"]] == [
+        "I can get em",
+        "both I",
+        "dont",
+        "wanna choose",
+    ]
+
+
 def test_subtitle_json_endpoint_rejects_non_json_sidecars(client, tmp_path, monkeypatch):
     authenticate_admin_client(client)
     monkeypatch.setattr(settings, "media_path", tmp_path)

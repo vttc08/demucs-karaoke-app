@@ -263,6 +263,7 @@
   "subtitle.undo": "Undo",
   "subtitle.segment_label": "Line {index}",
   "subtitle.char_count": "{count} chars",
+  "subtitle.confirm_reprocess": "Auto process will discard your unsaved local edits and rewrap the lyrics currently saved on disk. Continue?",
   "subtitle.merge_with_next": "Merge below",
   "subtitle.split_after_word": "Split after {word}",
   "subtitle.no_segments": "No synced segments are available yet.",

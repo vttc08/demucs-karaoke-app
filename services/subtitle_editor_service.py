@@ -126,20 +126,32 @@ class SubtitleEditorService:
         max_line_length_cjk: int,
     ) -> list[dict[str, Any]]:
         normalized = self._normalize_segments(segments)
-        if not normalized:
+        return self._rewrap_segments(normalized, max_line_length=max_line_length, max_line_length_cjk=max_line_length_cjk)
+
+    def process_saved_segments(
+        self,
+        db: Session,
+        media_item_id: int,
+        *,
+        max_line_length: int,
+        max_line_length_cjk: int,
+    ) -> list[dict[str, Any]]:
+        media_item, _lyrics_file = self._get_editable_media(db, media_item_id)
+        segments = self._load_segments(media_item)
+        return self._rewrap_segments(segments, max_line_length=max_line_length, max_line_length_cjk=max_line_length_cjk)
+
+    def _rewrap_segments(
+        self,
+        segments: list[dict[str, Any]],
+        *,
+        max_line_length: int,
+        max_line_length_cjk: int,
+    ) -> list[dict[str, Any]]:
+        if not segments:
             return []
 
-        display_segments = [
-            ParsedLyricSegment(
-                text=str(segment.get("text", "")).strip(),
-                start=float(segment.get("start", 0.0) or 0.0),
-                end=float(segment.get("end", 0.0) or 0.0),
-            )
-            for segment in normalized
-            if str(segment.get("text", "")).strip()
-        ]
         processed_lines = process_lyric_lines(
-            [segment.text for segment in display_segments],
+            [str(segment.get("text", "")).strip() for segment in segments if str(segment.get("text", "")).strip()],
             max_line_length=max_line_length,
             max_line_length_cjk=max_line_length_cjk,
         )
@@ -147,7 +159,7 @@ class SubtitleEditorService:
             return []
 
         processed_segments = [ParsedLyricSegment(text=line, start=0.0, end=0.0) for line in processed_lines]
-        aligned_words = [word for segment in normalized for word in list(segment.get("words") or [])]
+        aligned_words = [word for segment in segments for word in list(segment.get("words") or [])]
         if not aligned_words:
             return self._normalize_segments(
                 [
