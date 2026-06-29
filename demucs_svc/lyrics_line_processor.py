@@ -33,7 +33,7 @@ def _weighted_length(text: str, cjk_cost: float) -> float:
     total = 0.0
     for char in text:
         if char.isspace():
-            total += 0.5
+            total += 1.0
         elif _CJK_CHAR_RE.match(char):
             total += cjk_cost
         else:
@@ -55,8 +55,12 @@ def _line_profile(text: str, max_line_length: int, max_line_length_cjk: int) -> 
         return float(max_line_length), 1.0
     if ascii_chars == 0:
         return float(max_line_length_cjk), 1.0
-    mixed_limit = max(float(max_line_length_cjk) * 2.5, float(max_line_length_cjk) + 4.0)
-    return min(float(max_line_length), mixed_limit), 1.5
+    # Mixed English+CJK lines should not collapse to the strict CJK limit.
+    # Scale each CJK character to the English limit ratio so a mixed line is
+    # allowed to stay closer to the English cap while still counting CJK more
+    # heavily than ASCII.
+    cjk_cost = max(float(max_line_length) / float(max_line_length_cjk), 1.0)
+    return float(max_line_length), cjk_cost
 
 
 def _line_too_long(line: str, max_line_length: int, max_line_length_cjk: int) -> bool:
@@ -93,7 +97,7 @@ def _find_best_split_point(line: str, max_line_length: int, max_line_length_cjk:
     for index, char in enumerate(line):
         if char.isspace():
             last_space = index
-        weighted += 0.5 if char.isspace() else (cjk_cost if _CJK_CHAR_RE.match(char) else 1.0)
+        weighted += 1.0 if char.isspace() else (cjk_cost if _CJK_CHAR_RE.match(char) else 1.0)
         if weighted > limit:
             return last_space if last_space != -1 else max(1, index)
     return len(line)

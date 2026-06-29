@@ -590,6 +590,26 @@ def test_align_lyrics_processes_mixed_script_lines_without_cjk_over_split(monkey
     assert [segment["text"] for segment in aligned] == ["hello 中文", "friend again"]
 
 
+def test_process_lyric_lines_wraps_long_english_lines():
+    lyric_processor = importlib.import_module("demucs_svc.lyrics_line_processor")
+
+    processed = lyric_processor.process_lyric_lines(
+        [
+            "I can get 'em both, I don't wanna choose",
+            "I don't dance now, I make money moves",
+            "Look, I might just chill in some BAPE",
+            "Turns out, I'm rich, I'm rich, I'm rich",
+            "you can't fuck with me if you wanted to\"",
+        ],
+        max_line_length=36,
+        max_line_length_cjk=12,
+    )
+
+    assert processed[:2] == ["I can get 'em both,", "I don't wanna choose"]
+    assert all(len(line) <= 36 for line in processed)
+    assert len(processed) > 5
+
+
 def test_align_lyrics_processing_disables_synced_lrc_mode(monkeypatch):
     whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
 
