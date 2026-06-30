@@ -704,6 +704,52 @@ def test_runtime_settings_update_settings_accepts_video_resolution():
     finally:
         settings.ytdlp_video_resolution = original_resolution
 
+
+def test_runtime_settings_update_settings_accepts_deno_path():
+    """Runtime settings should accept optional yt-dlp Deno runtime paths."""
+    service = RuntimeSettingsService()
+    original_deno_path = settings.ytdlp_deno_path
+    try:
+        with patch.object(
+            RuntimeSettingsService,
+            "get_demucs_health",
+            return_value=DemucsHealthResponse(
+                api_url="http://127.0.0.1:8001",
+                healthy=True,
+                detail="Demucs service is healthy",
+            ),
+        ):
+            result = service.update_settings(
+                RuntimeSettingsUpdateRequest(ytdlp_deno_path=" /usr/local/bin/deno ")
+            )
+        assert result.ytdlp_deno_path == "/usr/local/bin/deno"
+        assert settings.ytdlp_deno_path == "/usr/local/bin/deno"
+    finally:
+        settings.ytdlp_deno_path = original_deno_path
+
+
+def test_runtime_settings_update_settings_accepts_empty_deno_path():
+    """Runtime settings should allow clearing the yt-dlp Deno runtime path."""
+    service = RuntimeSettingsService()
+    original_deno_path = settings.ytdlp_deno_path
+    try:
+        settings.ytdlp_deno_path = "/usr/local/bin/deno"
+        with patch.object(
+            RuntimeSettingsService,
+            "get_demucs_health",
+            return_value=DemucsHealthResponse(
+                api_url="http://127.0.0.1:8001",
+                healthy=True,
+                detail="Demucs service is healthy",
+            ),
+        ):
+            result = service.update_settings(RuntimeSettingsUpdateRequest(ytdlp_deno_path=" "))
+        assert result.ytdlp_deno_path == ""
+        assert settings.ytdlp_deno_path == ""
+    finally:
+        settings.ytdlp_deno_path = original_deno_path
+
+
 def test_runtime_settings_update_settings_accepts_empty_proxy_url():
     """Runtime settings should allow clearing yt-dlp proxy URL."""
     service = RuntimeSettingsService()
@@ -911,6 +957,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
     original_netease = settings.lyrics_provider_netease_enabled
     original_lrclib = settings.lyrics_provider_lrclib_enabled
     original_resolution = settings.ytdlp_video_resolution
+    original_deno_path = settings.ytdlp_deno_path
     original_cutoff = settings.demucs_direct_media_max_mb
     original_poll_interval_seconds = settings.demucs_poll_interval_seconds
     original_whisperx_transcription_model = settings.whisperx_transcription_model
@@ -934,6 +981,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
                     lyrics_provider_netease_enabled=False,
                     lyrics_provider_lrclib_enabled=True,
                     ytdlp_video_resolution="1080",
+                    ytdlp_deno_path="/usr/local/bin/deno",
                     demucs_direct_media_max_mb=1234,
                     demucs_poll_interval_seconds=1.75,
                     whisperx_transcription_model="tiny",
@@ -952,6 +1000,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert result.lyrics_provider_netease_enabled is False
         assert result.lyrics_provider_lrclib_enabled is True
         assert result.ytdlp_video_resolution == "1080"
+        assert result.ytdlp_deno_path == "/usr/local/bin/deno"
         assert result.demucs_direct_media_max_mb == 1234
         assert result.demucs_poll_interval_seconds == 1.75
         assert result.whisperx_transcription_model == "tiny"
@@ -971,6 +1020,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert stored["lyrics_provider_netease_enabled"] == "false"
         assert stored["lyrics_provider_lrclib_enabled"] == "true"
         assert stored["ytdlp_video_resolution"] == "1080"
+        assert stored["ytdlp_deno_path"] == "/usr/local/bin/deno"
         assert stored["demucs_direct_media_max_mb"] == "1234"
         assert stored["demucs_poll_interval_seconds"] == "1.75"
         assert stored["whisperx_transcription_model"] == "tiny"
@@ -989,6 +1039,7 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         settings.lyrics_provider_netease_enabled = original_netease
         settings.lyrics_provider_lrclib_enabled = original_lrclib
         settings.ytdlp_video_resolution = original_resolution
+        settings.ytdlp_deno_path = original_deno_path
         settings.demucs_direct_media_max_mb = original_cutoff
         settings.demucs_poll_interval_seconds = original_poll_interval_seconds
         settings.whisperx_transcription_model = original_whisperx_transcription_model
@@ -1013,6 +1064,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
                 RuntimeSetting(key="stage_vocals_volume_default", value="0.35"),
                 RuntimeSetting(key="ffmpeg_preset", value="veryslow"),
                 RuntimeSetting(key="ytdlp_video_resolution", value="720"),
+                RuntimeSetting(key="ytdlp_deno_path", value="/opt/deno/bin/deno"),
                 RuntimeSetting(key="demucs_direct_media_max_mb", value="777"),
                 RuntimeSetting(key="demucs_poll_interval_seconds", value="1.25"),
                 RuntimeSetting(key="whisperx_transcription_model", value="base"),
@@ -1029,6 +1081,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         settings.stage_lobby_media_path = ""
         settings.stage_vocals_volume_default = 1.0
         settings.ytdlp_video_resolution = "default"
+        settings.ytdlp_deno_path = ""
         settings.demucs_direct_media_max_mb = 500
         settings.demucs_poll_interval_seconds = 1.0
         settings.whisperx_transcription_model = "tiny"
@@ -1044,6 +1097,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         assert "stage_lobby_media_path" in applied
         assert "stage_vocals_volume_default" in applied
         assert "ytdlp_video_resolution" in applied
+        assert "ytdlp_deno_path" in applied
         assert "demucs_direct_media_max_mb" in applied
         assert "demucs_poll_interval_seconds" in applied
         assert settings.demucs_model == "persisted-model"
@@ -1051,6 +1105,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         assert settings.stage_lobby_media_path == "/media/stage-lobby.mp4"
         assert settings.stage_vocals_volume_default == 0.35
         assert settings.ytdlp_video_resolution == "720"
+        assert settings.ytdlp_deno_path == "/opt/deno/bin/deno"
         assert settings.demucs_direct_media_max_mb == 777
         assert settings.demucs_poll_interval_seconds == 1.25
         assert settings.whisperx_transcription_model == "base"

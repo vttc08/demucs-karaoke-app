@@ -30,6 +30,7 @@ def test_download_audio_uses_explicit_audio_selection_first(monkeypatch, tmp_pat
     cmd = captured_cmd["cmd"]
     assert "-f" in cmd
     assert "-S" not in cmd
+    assert "--js-runtimes" not in cmd
     assert "--extractor-args" not in cmd
     assert cmd[cmd.index("-f") + 1] == "bestaudio[ext=m4a]/bestaudio"
     assert result == expected_output
@@ -153,6 +154,31 @@ def test_download_audio_ignores_video_resolution_cap(monkeypatch, tmp_path):
     assert "-S" not in captured_cmd["cmd"]
 
 
+def test_downloads_include_configured_deno_runtime(monkeypatch, tmp_path):
+    """Download commands should pass the configured Deno runtime to yt-dlp."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "deno123"
+    expected_output = tmp_path / f"{youtube_id}.webm"
+    calls = []
+    original_deno_path = settings.ytdlp_deno_path
+    settings.ytdlp_deno_path = "/usr/local/bin/deno"
+
+    def fake_run(cmd, check, capture_output, timeout):
+        calls.append(cmd)
+        expected_output.write_bytes(b"video-audio")
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    try:
+        result = adapter.download_video_with_audio(youtube_id, tmp_path)
+    finally:
+        settings.ytdlp_deno_path = original_deno_path
+
+    assert result == expected_output
+    assert "--js-runtimes" in calls[0]
+    assert calls[0][calls[0].index("--js-runtimes") + 1] == "deno:/usr/local/bin/deno"
+
+
 def test_streaming_download_adds_newline_for_live_progress(monkeypatch, tmp_path):
     """Streaming downloads should force line-delimited yt-dlp progress output."""
     adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
@@ -182,6 +208,81 @@ def test_streaming_download_adds_newline_for_live_progress(monkeypatch, tmp_path
     assert "--progress-template" in captured_cmd["cmd"]
     assert "[download][karaoke-progress]" in captured_cmd["cmd"][captured_cmd["cmd"].index("--progress-template") + 1]
     assert progress_events == [(42, "[download] 42.0%")]
+
+
+def test_streaming_download_includes_configured_deno_runtime(monkeypatch, tmp_path):
+    """Streaming download commands should preserve Deno runtime args."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "stream-deno123"
+    expected_output = tmp_path / f"{youtube_id}.mp4"
+    captured_cmd = {}
+    original_deno_path = settings.ytdlp_deno_path
+    settings.ytdlp_deno_path = "/opt/deno/bin/deno"
+
+    def fake_streaming_download(cmd, *, progress_callback=None, log_callback=None, cancel_event=None):
+        captured_cmd["cmd"] = cmd
+        expected_output.write_bytes(b"video")
+
+    monkeypatch.setattr(adapter, "_run_streaming_download", fake_streaming_download)
+    try:
+        result = adapter.download_video_with_progress(
+            youtube_id,
+            tmp_path,
+            progress_callback=lambda percent, line: None,
+        )
+    finally:
+        settings.ytdlp_deno_path = original_deno_path
+
+    assert result == expected_output
+    assert "--newline" in captured_cmd["cmd"]
+    assert "--js-runtimes" in captured_cmd["cmd"]
+    assert captured_cmd["cmd"][captured_cmd["cmd"].index("--js-runtimes") + 1] == "deno:/opt/deno/bin/deno"
+
+
+def test_search_includes_configured_deno_runtime(monkeypatch):
+    """Search commands should pass the configured Deno runtime to yt-dlp."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    captured_cmd = {}
+    original_deno_path = settings.ytdlp_deno_path
+    settings.ytdlp_deno_path = "/usr/bin/deno"
+
+    def fake_run(cmd, capture_output, text, check, timeout):
+        captured_cmd["cmd"] = cmd
+        stdout = '{"id":"abc","title":"Song","uploader":"Channel","duration_string":"3:21","thumbnail":"thumb.jpg"}\n'
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=stdout)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    try:
+        results = adapter.search("karaoke", max_results=1)
+    finally:
+        settings.ytdlp_deno_path = original_deno_path
+
+    assert results[0]["video_id"] == "abc"
+    assert "--js-runtimes" in captured_cmd["cmd"]
+    assert captured_cmd["cmd"][captured_cmd["cmd"].index("--js-runtimes") + 1] == "deno:/usr/bin/deno"
+
+
+def test_metadata_includes_configured_deno_runtime(monkeypatch):
+    """Metadata commands should pass the configured Deno runtime to yt-dlp."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    captured_cmd = {}
+    original_deno_path = settings.ytdlp_deno_path
+    settings.ytdlp_deno_path = "/home/app/bin/deno"
+
+    def fake_run(cmd, capture_output, text, check, timeout):
+        captured_cmd["cmd"] = cmd
+        stdout = '{"id":"abc","title":"Song","uploader":"Channel","duration_string":"3:21","thumbnail":"thumb.jpg"}'
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=stdout)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    try:
+        result = adapter.get_video_info("https://www.youtube.com/watch?v=abc")
+    finally:
+        settings.ytdlp_deno_path = original_deno_path
+
+    assert result["video_id"] == "abc"
+    assert "--js-runtimes" in captured_cmd["cmd"]
+    assert captured_cmd["cmd"][captured_cmd["cmd"].index("--js-runtimes") + 1] == "deno:/home/app/bin/deno"
 
 
 def test_streaming_download_filters_structured_progress_from_log_callback(monkeypatch, tmp_path):

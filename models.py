@@ -464,6 +464,7 @@ class RuntimeSettingsResponse(BaseModel):
     ffmpeg_preset: str
     ffmpeg_crf: int
     ytdlp_path: str
+    ytdlp_deno_path: str
     ytdlp_proxy_url: str
     ytdlp_video_resolution: str
     concurrent_ytdlp_search_enabled: bool
@@ -495,6 +496,7 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     ffmpeg_preset: Optional[str] = None
     ffmpeg_crf: Optional[int] = None
     ytdlp_path: Optional[str] = None
+    ytdlp_deno_path: Optional[str] = None
     ytdlp_proxy_url: Optional[str] = None
     ytdlp_video_resolution: Optional[str] = None
     concurrent_ytdlp_search_enabled: Optional[bool] = None

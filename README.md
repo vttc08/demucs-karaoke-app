@@ -19,6 +19,7 @@ Lightweight AI-powered karaoke application for home use.
 - Python 3.11+
 - `uv` for dependency management
 - `yt-dlp` for YouTube downloads
+- Optional: Deno for yt-dlp external JavaScript execution on videos that require it
 - `ffmpeg` for video processing
 - Demucs service for vocal separation (separate machine)
 
@@ -92,6 +93,8 @@ uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude 'lo
 ```bash
 uv run uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+For Docker, systemd, and Windows deployment notes, including optional Deno support for yt-dlp external JavaScript execution, see [docs/deployment.md](docs/deployment.md).
 
 ### Reverse proxy subpath
 
@@ -167,6 +170,7 @@ and `/static/...`.
        - Configure **Stage Lobby Media URL** (`/media/...` or `/cache/...`) for empty-queue loop playback
        - Configure the stage QR overlay URL for the fullscreen stage view; QR size and placement are adjusted per device on `/stage`
        - Configure the default vocals volume used when `/stage` or `/queue` loads after a restart
+       - Optionally configure a Deno runtime path for yt-dlp external JavaScript execution
        - Check current yt-dlp version and update from UI; release binaries use `yt-dlp -U`, while pip/uv installs fall back to an in-environment package update
       - Apply settings immediately without restarting the app (for processing/runtime behavior)
        - Persist changes to the database so settings survive app reloads and restarts
@@ -415,6 +419,7 @@ python -m pip install --upgrade yt-dlp
 
 For karaoke mode, this app downloads source audio directly from yt-dlp formats (instead of yt-dlp ffmpeg postprocessing), which avoids `ffprobe/ffmpeg not found` during the audio-download step.
 The downloader uses explicit audio-only selectors first for karaoke audio downloads, so yt-dlp does not silently fall back to a video-only stream under the audio filename. It still uses progressive fallback for unavailable video formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise. When you set a video resolution cap in Settings, the app adds yt-dlp's resolution sort flag, for example `-S "res:720"`, so downloads stay at or below the chosen height. Leave the setting at `Default` to keep the current behavior unchanged.
+Some YouTube videos require yt-dlp's external JavaScript execution support. The Python dependency `yt-dlp-ejs` is included in this project, but the JavaScript runtime itself is optional. Install Deno and set **Deno path** in Settings, or set `YTDLP_DENO_PATH=/usr/local/bin/deno` in the environment. Leave it empty to keep the old command shape.
 Runtime proxy is supported through settings (`yt-dlp Proxy URL`) and applied to:
 - yt-dlp search/download commands
 - lyrics provider requests (Musixmatch, NetEase, LRCLib, and Last.fm metadata lookup)
@@ -451,6 +456,12 @@ yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
 
 # Last-resort default selection (lets yt-dlp choose)
 yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --no-playlist \
+  -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
+
+# When a video needs external JavaScript execution
+yt-dlp --js-runtimes "deno:/usr/local/bin/deno" \
+  "https://www.youtube.com/watch?v=VIDEO_ID" \
   --no-playlist \
   -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
 ```

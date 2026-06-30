@@ -663,6 +663,8 @@
   "settings.unavailable": "不可用",
   "settings.version_unknown": "未知",
   "settings.ytdlp_path": "yt-dlp 路径",
+  "settings.ytdlp_deno_path": "Deno 路径",
+  "settings.ytdlp_deno_path_detail": "留空即可保持 yt-dlp 默认行为。遇到需要外部 JS 执行的视频时设置此路径。",
   "settings.ytdlp_proxy": "yt-dlp 代理 URL",
   "settings.ytdlp_resolution_1080": "1080p",
   "settings.ytdlp_resolution_2160": "2160p",

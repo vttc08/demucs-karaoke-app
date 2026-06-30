@@ -23,6 +23,7 @@ def test_get_runtime_settings(client):
     assert "ffmpeg_preset" in data
     assert "ffmpeg_crf" in data
     assert "ytdlp_path" in data
+    assert "ytdlp_deno_path" in data
     assert "ytdlp_proxy_url" in data
     assert "ytdlp_video_resolution" in data
     assert "concurrent_ytdlp_search_enabled" in data
@@ -127,6 +128,7 @@ def test_update_runtime_settings(client):
             "media_path": "/tmp/karaoke_media_test",
             "cache_path": "/tmp/karaoke_cache_test",
             "ytdlp_path": "yt-dlp",
+            "ytdlp_deno_path": "/usr/local/bin/deno",
             "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
             "ytdlp_video_resolution": "720",
             "concurrent_ytdlp_search_enabled": True,
@@ -156,6 +158,7 @@ def test_update_runtime_settings(client):
     assert data["ffmpeg_crf"] == 28
     assert data["media_path"] == "/tmp/karaoke_media_test"
     assert data["cache_path"] == "/tmp/karaoke_cache_test"
+    assert data["ytdlp_deno_path"] == "/usr/local/bin/deno"
     assert data["ytdlp_proxy_url"] == "socks5://127.0.0.1:1080"
     assert data["ytdlp_video_resolution"] == "720"
     assert data["concurrent_ytdlp_search_enabled"] is True
@@ -190,6 +193,7 @@ def test_update_runtime_settings_persists_to_database(client):
                 "whisperx_use_synced_lyrics": False,
                 "whisperx_preload_models": "transcription=tiny",
                 "ytdlp_video_resolution": "1080",
+                "ytdlp_deno_path": "/usr/local/bin/deno",
                 "concurrent_ytdlp_search_enabled": True,
                 "demucs_direct_media_max_mb": 333,
                 "demucs_poll_interval_seconds": 1.25,
@@ -208,6 +212,9 @@ def test_update_runtime_settings_persists_to_database(client):
         ).first()
         resolution = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "ytdlp_video_resolution"
+        ).first()
+        deno_path = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "ytdlp_deno_path"
         ).first()
         cutoff = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "demucs_direct_media_max_mb"
@@ -241,6 +248,8 @@ def test_update_runtime_settings_persists_to_database(client):
         assert stage_vocals_volume_default.value == "0.25"
         assert resolution is not None
         assert resolution.value == "1080"
+        assert deno_path is not None
+        assert deno_path.value == "/usr/local/bin/deno"
         assert cutoff is not None
         assert cutoff.value == "333"
         assert poll_interval is not None
