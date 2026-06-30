@@ -301,7 +301,7 @@
         words.forEach((word, wordIndex) => {
             const button = document.createElement("button");
             button.type = "button";
-            button.className = "inline-flex items-center rounded border border-white/10 bg-surface-container-highest/80 px-2 py-0.5 text-sm font-semibold text-on-surface transition hover:border-primary/30 hover:bg-primary/10 active:scale-[0.99]";
+            button.className = "subtitle-word-button inline-flex items-center rounded border border-white/10 bg-surface-container-highest/80 px-2 py-0.5 text-sm font-semibold text-on-surface transition hover:border-primary/30 hover:bg-primary/10 active:scale-[0.99]";
             button.textContent = String(word.word || "");
             button.title = t("subtitle.split_after_word", { word: String(word.word || "") });
             button.addEventListener("click", () => splitSegmentAt(segmentIndex, wordIndex + 1));

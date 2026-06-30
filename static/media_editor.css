@@ -650,6 +650,41 @@
     white-space: nowrap;
 }
 
+@media (hover: hover) and (pointer: fine) {
+    .subtitle-word-button {
+        position: relative;
+        overflow: visible;
+    }
+
+    .subtitle-word-button::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: calc(100% + 0.35rem);
+        width: 0.3rem;
+        height: 1.35rem;
+        border-radius: 9999px;
+        background: linear-gradient(180deg, rgba(0, 242, 255, 0.95), rgba(255, 255, 255, 0.75));
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28), 0 0 14px rgba(0, 242, 255, 0.42);
+        opacity: 0;
+        transform: translateY(-50%) scaleY(0.35);
+        transform-origin: center top;
+        pointer-events: none;
+        transition: opacity 140ms ease, transform 140ms ease;
+    }
+
+    .subtitle-word-button:hover,
+    .subtitle-word-button:focus-visible {
+        z-index: 1;
+    }
+
+    .subtitle-word-button:hover::after,
+    .subtitle-word-button:focus-visible::after {
+        opacity: 1;
+        transform: translateY(-50%) scaleY(1);
+    }
+}
+
 @media (min-width: 900px) {
     .trim-editor-page {
         padding-inline: 1.5rem;
