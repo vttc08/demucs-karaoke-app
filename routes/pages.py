@@ -482,6 +482,63 @@ async def media_subtitles_page(
                 "files_url": app_url(f"/api/media/{media_item.id}/files"),
                 "package_url": app_url(f"/api/media/{media_item.id}/download"),
                 "docs_url": docs_target,
+                "split_merge_url": app_url(f"/media-subtitles/{media_item.id}/split-merge"),
+            },
+        },
+    )
+
+
+@router.get("/media-subtitles/{item_id}/split-merge", response_class=HTMLResponse)
+async def media_subtitles_split_merge_page(
+    item_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Admin-only synced JSON split/merge editor for one media item."""
+    admin = auth_service.get_admin_for_session(
+        db, request.cookies.get(ADMIN_SESSION_COOKIE)
+    )
+    if admin is None:
+        return RedirectResponse(url=app_url("/login"), status_code=302)
+    locale = resolve_locale(request)
+
+    try:
+        media_item, media_file, lyrics_file = subtitle_workflow_service.get_editable_media(db, item_id)
+    except (SubtitleWorkflowNotFoundError, SubtitleWorkflowConflictError) as exc:
+        if isinstance(exc, SubtitleWorkflowConflictError):
+            detail = translate(locale, "subtitle.not_available_detail")
+        else:
+            detail = translate(locale, "subtitle.not_found_detail")
+        return templates.TemplateResponse(
+            "media_subtitles_split_merge.html",
+            {
+                "request": request,
+                "subtitle_error": {
+                    "title": translate(locale, "subtitle.not_available"),
+                    "detail": detail,
+                    "back_url": app_url(f"/media-subtitles/{item_id}"),
+                    "history_back": translate(locale, "subtitle.go_back_previous"),
+                },
+            },
+            status_code=404,
+        )
+
+    docs_target = app_url(build_docs_url(locale, "subtitles"))
+    return templates.TemplateResponse(
+        "media_subtitles_split_merge.html",
+        {
+            "request": request,
+            "subtitle_editor_info": {
+                "media_id": media_item.id,
+                "title": media_item.title,
+                "artist": media_item.artist,
+                "media_url": media_item.media_path,
+                "lyrics_url": media_item.lyrics_path,
+                "docs_url": docs_target,
+                "back_url": app_url(f"/media-subtitles/{media_item.id}"),
+                "json_url": app_url(f"/api/media/{media_item.id}/subtitles/json"),
+                "process_url": app_url(f"/api/media/{media_item.id}/subtitles/process"),
+                "save_url": app_url(f"/api/media/{media_item.id}/subtitles/save"),
             },
         },
     )

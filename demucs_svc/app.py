@@ -620,6 +620,9 @@ def _align_lyrics(
         align_language=config.align_language,
         detect_language=config.detect_language,
         use_synced_lyrics=config.use_synced_lyrics,
+        process_lyrics_lines=config.process_lyrics_lines,
+        max_line_length=config.max_line_length,
+        max_line_length_cjk=config.max_line_length_cjk,
         device=config.device,
         compute_type=config.compute_type,
     )
@@ -986,6 +989,9 @@ def _validated_config(
     detect_language: bool = DEFAULT_WHISPERX_DETECT_LANGUAGE,
     use_synced_lyrics: bool = DEFAULT_WHISPERX_USE_SYNCED_LYRICS,
     whisperx_preload_models: str | None = None,
+    process_lyrics_lines: bool = False,
+    max_line_length: int = 36,
+    max_line_length_cjk: int = 12,
     compute_type: str | None = None,
 ) -> SeparateConfig:
     try:
@@ -1001,6 +1007,9 @@ def _validated_config(
             detect_language=detect_language,
             use_synced_lyrics=use_synced_lyrics,
             whisperx_preload_models=whisperx_preload_models,
+            process_lyrics_lines=process_lyrics_lines,
+            max_line_length=max_line_length,
+            max_line_length_cjk=max_line_length_cjk,
             compute_type=compute_type,
         )
     except ValidationError as error:
@@ -1075,6 +1084,9 @@ async def create_job(
     detect_language: bool = Form(DEFAULT_WHISPERX_DETECT_LANGUAGE),
     use_synced_lyrics: bool = Form(DEFAULT_WHISPERX_USE_SYNCED_LYRICS),
     whisperx_preload_models: str | None = Form(DEFAULT_WHISPERX_PRELOAD_MODELS),
+    process_lyrics_lines: bool = Form(False),
+    max_line_length: int = Form(36),
+    max_line_length_cjk: int = Form(12),
     compute_type: str | None = Form(None),
 ):
     config = _validated_config(
@@ -1089,6 +1101,9 @@ async def create_job(
         detect_language=detect_language,
         use_synced_lyrics=use_synced_lyrics,
         whisperx_preload_models=whisperx_preload_models,
+        process_lyrics_lines=process_lyrics_lines,
+        max_line_length=max_line_length,
+        max_line_length_cjk=max_line_length_cjk,
         compute_type=compute_type,
     )
     payload = await file.read()
@@ -1120,6 +1135,9 @@ async def create_alignment_job(
     detect_language: bool = Form(DEFAULT_WHISPERX_DETECT_LANGUAGE),
     use_synced_lyrics: bool = Form(DEFAULT_WHISPERX_USE_SYNCED_LYRICS),
     whisperx_preload_models: str | None = Form(DEFAULT_WHISPERX_PRELOAD_MODELS),
+    process_lyrics_lines: bool = Form(False),
+    max_line_length: int = Form(36),
+    max_line_length_cjk: int = Form(12),
     compute_type: str | None = Form(None),
 ):
     config = _validated_config(
@@ -1134,6 +1152,9 @@ async def create_alignment_job(
         detect_language=detect_language,
         use_synced_lyrics=use_synced_lyrics,
         whisperx_preload_models=whisperx_preload_models,
+        process_lyrics_lines=process_lyrics_lines,
+        max_line_length=max_line_length,
+        max_line_length_cjk=max_line_length_cjk,
         compute_type=compute_type,
     )
     if not config.lyrics_text:
@@ -1323,6 +1344,9 @@ async def separate(
     detect_language: bool = Form(DEFAULT_WHISPERX_DETECT_LANGUAGE),
     use_synced_lyrics: bool = Form(DEFAULT_WHISPERX_USE_SYNCED_LYRICS),
     whisperx_preload_models: str | None = Form(DEFAULT_WHISPERX_PRELOAD_MODELS),
+    process_lyrics_lines: bool = Form(False),
+    max_line_length: int = Form(36),
+    max_line_length_cjk: int = Form(12),
     compute_type: str | None = Form(None),
 ):
     config = _validated_config(
@@ -1337,6 +1361,9 @@ async def separate(
         detect_language=detect_language,
         use_synced_lyrics=use_synced_lyrics,
         whisperx_preload_models=whisperx_preload_models,
+        process_lyrics_lines=process_lyrics_lines,
+        max_line_length=max_line_length,
+        max_line_length_cjk=max_line_length_cjk,
         compute_type=compute_type,
     )
     payload = await file.read()
@@ -1363,6 +1390,9 @@ async def separate_meta(
     detect_language: bool = Form(DEFAULT_WHISPERX_DETECT_LANGUAGE),
     use_synced_lyrics: bool = Form(DEFAULT_WHISPERX_USE_SYNCED_LYRICS),
     whisperx_preload_models: str | None = Form(DEFAULT_WHISPERX_PRELOAD_MODELS),
+    process_lyrics_lines: bool = Form(False),
+    max_line_length: int = Form(36),
+    max_line_length_cjk: int = Form(12),
     compute_type: str | None = Form(None),
 ):
     config = _validated_config(
@@ -1377,6 +1407,9 @@ async def separate_meta(
         detect_language=detect_language,
         use_synced_lyrics=use_synced_lyrics,
         whisperx_preload_models=whisperx_preload_models,
+        process_lyrics_lines=process_lyrics_lines,
+        max_line_length=max_line_length,
+        max_line_length_cjk=max_line_length_cjk,
         compute_type=compute_type,
     )
 

@@ -38,6 +38,9 @@ class SeparateConfig(BaseModel):
     detect_language: bool = DEFAULT_WHISPERX_DETECT_LANGUAGE
     use_synced_lyrics: bool = DEFAULT_WHISPERX_USE_SYNCED_LYRICS
     whisperx_preload_models: str | None = DEFAULT_WHISPERX_PRELOAD_MODELS
+    process_lyrics_lines: bool = False
+    max_line_length: int = Field(default=36, ge=1, le=200)
+    max_line_length_cjk: int = Field(default=12, ge=1, le=100)
     compute_type: str | None = None
 
     @model_validator(mode="after")
@@ -59,6 +62,9 @@ class SeparateConfig(BaseModel):
         if isinstance(self.compute_type, str):
             normalized_compute_type = self.compute_type.strip().lower()
             self.compute_type = normalized_compute_type or None
+        if not self.process_lyrics_lines:
+            self.max_line_length = 36
+            self.max_line_length_cjk = 12
         return self
 
 

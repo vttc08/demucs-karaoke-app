@@ -5,6 +5,11 @@
    - Buttons have id: lyrics-search-btn, lyrics-upload-btn, lyrics-google-link
    - Hidden file input: lyrics-file
    - Optional WhisperX override input has id: lyrics-whisperx-language-code
+   - Optional line-processing controls have ids:
+     - lyrics-process-lines-toggle
+     - lyrics-process-lines-detail
+     - lyrics-max-line-length
+     - lyrics-max-line-length-cjk
    - All elements should be disabled when lyrics not enabled
    
    Usage:
@@ -23,6 +28,10 @@
      uploadBtn: '#lyrics-upload-btn',
      fileInput: '#lyrics-file',
      googleLink: '#lyrics-google-link',
+     processLinesToggle: '#lyrics-process-lines-toggle',
+     processLinesDetail: '#lyrics-process-lines-detail',
+     maxLineLengthInput: '#lyrics-max-line-length',
+     maxLineLengthCjkInput: '#lyrics-max-line-length-cjk',
      whisperxLanguageInput: '#lyrics-whisperx-language-code',
      ...
    });
@@ -48,6 +57,8 @@
     />
   </label>
 </div>
+
+{% include '_lyrics_line_processing.html' with context %}
 
 <label class="flex flex-col gap-2">
   <span class="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">{{ t('lyrics.whisperx_language_override') }}</span>

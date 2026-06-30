@@ -277,6 +277,9 @@ def test_align_lyrics_supports_srt_format(monkeypatch):
         align_language="en",
         detect_language=False,
         use_synced_lyrics=True,
+        process_lyrics_lines=False,
+        max_line_length=36,
+        max_line_length_cjk=12,
         device="cpu",
         compute_type=None,
     )
@@ -348,6 +351,9 @@ def test_align_lyrics_rebuilds_synced_lrc_lines_with_filtered_tokens(monkeypatch
         align_language="en",
         detect_language=False,
         use_synced_lyrics=False,
+        process_lyrics_lines=False,
+        max_line_length=36,
+        max_line_length_cjk=12,
         device="cpu",
         compute_type=None,
     )
@@ -403,6 +409,9 @@ def test_align_lyrics_rebuilds_unsynced_plain_text_lines(monkeypatch):
         align_language="en",
         detect_language=False,
         use_synced_lyrics=False,
+        process_lyrics_lines=False,
+        max_line_length=36,
+        max_line_length_cjk=12,
         device="cpu",
         compute_type=None,
     )
@@ -412,6 +421,260 @@ def test_align_lyrics_rebuilds_unsynced_plain_text_lines(monkeypatch):
         (0.0, 0.5, "Hello world"),
         (0.5, 1.0, "Second line"),
     ]
+
+
+def test_align_lyrics_processes_plain_text_lines_before_alignment(monkeypatch):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+
+    seen_transcript = {}
+
+    def fake_align(transcript, *args, **kwargs):
+        seen_transcript["transcript"] = transcript
+        return {
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": 2.0,
+                    "text": "flattened",
+                    "words": [
+                        {"word": "Hello", "start": 0.0, "end": 0.2, "score": 0.9},
+                        {"word": "there", "start": 0.2, "end": 0.4, "score": 0.9},
+                        {"word": "friend", "start": 0.4, "end": 0.6, "score": 0.9},
+                        {"word": "this", "start": 0.6, "end": 0.8, "score": 0.9},
+                        {"word": "line", "start": 0.8, "end": 1.0, "score": 0.9},
+                        {"word": "should", "start": 1.0, "end": 1.2, "score": 0.9},
+                        {"word": "split", "start": 1.2, "end": 1.4, "score": 0.9},
+                    ],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(whisperx_pipeline, "pylrc", SimpleNamespace(parse=lambda text: []))
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "whisperx",
+        SimpleNamespace(
+            load_audio=lambda path: [0.0] * 32000,
+            load_align_model=lambda language_code, device: (
+                {"language_code": language_code},
+                {"language_code": language_code},
+            ),
+            align=fake_align,
+        ),
+    )
+
+    aligned = whisperx_pipeline.align_lyrics(
+        Path("input.wav"),
+        "Hello there friend this line should split",
+        lyrics_format="txt",
+        transcription_model="tiny",
+        align_language="en",
+        detect_language=False,
+        use_synced_lyrics=False,
+        process_lyrics_lines=True,
+        max_line_length=18,
+        max_line_length_cjk=12,
+        device="cpu",
+        compute_type=None,
+    )
+
+    assert seen_transcript["transcript"] == [{"text": "Hello there friend this line should split", "start": 0.0, "end": 2.0}]
+    assert [segment["text"] for segment in aligned] == [
+        "Hello there friend",
+        "this line",
+        "should split",
+    ]
+
+
+def test_align_lyrics_processes_cjk_lines(monkeypatch):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+
+    monkeypatch.setattr(whisperx_pipeline, "pylrc", SimpleNamespace(parse=lambda text: []))
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "whisperx",
+        SimpleNamespace(
+            load_audio=lambda path: [0.0] * 32000,
+            load_align_model=lambda language_code, device: (
+                {"language_code": language_code},
+                {"language_code": language_code},
+            ),
+            align=lambda transcript, *args, **kwargs: {
+                "segments": [
+                    {
+                        "start": 0.0,
+                        "end": 1.0,
+                        "text": "flattened",
+                        "words": [
+                            {"word": "當", "start": 0.0, "end": 0.1, "score": 0.9},
+                            {"word": "夢", "start": 0.1, "end": 0.2, "score": 0.9},
+                            {"word": "被", "start": 0.2, "end": 0.3, "score": 0.9},
+                            {"word": "埋", "start": 0.3, "end": 0.4, "score": 0.9},
+                            {"word": "在", "start": 0.4, "end": 0.5, "score": 0.9},
+                            {"word": "江", "start": 0.5, "end": 0.6, "score": 0.9},
+                            {"word": "南", "start": 0.6, "end": 0.7, "score": 0.9},
+                            {"word": "煙", "start": 0.7, "end": 0.8, "score": 0.9},
+                            {"word": "雨", "start": 0.8, "end": 0.9, "score": 0.9},
+                            {"word": "中", "start": 0.9, "end": 1.0, "score": 0.9},
+                        ],
+                    }
+                ]
+            },
+        ),
+    )
+
+    aligned = whisperx_pipeline.align_lyrics(
+        Path("input.wav"),
+        "當夢被埋在江南煙雨中",
+        lyrics_format="txt",
+        transcription_model="tiny",
+        align_language="zh",
+        detect_language=False,
+        use_synced_lyrics=False,
+        process_lyrics_lines=True,
+        max_line_length=36,
+        max_line_length_cjk=5,
+        device="cpu",
+        compute_type=None,
+    )
+
+    assert [segment["text"] for segment in aligned] == ["當夢被埋在", "江南煙雨中"]
+
+
+def test_align_lyrics_processes_mixed_script_lines_without_cjk_over_split(monkeypatch):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+
+    monkeypatch.setattr(whisperx_pipeline, "pylrc", SimpleNamespace(parse=lambda text: []))
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "whisperx",
+        SimpleNamespace(
+            load_audio=lambda path: [0.0] * 32000,
+            load_align_model=lambda language_code, device: (
+                {"language_code": language_code},
+                {"language_code": language_code},
+            ),
+            align=lambda transcript, *args, **kwargs: {
+                "segments": [
+                    {
+                        "start": 0.0,
+                        "end": 1.0,
+                        "text": "flattened",
+                        "words": [
+                            {"word": "hello", "start": 0.0, "end": 0.1, "score": 0.9},
+                            {"word": "中文", "start": 0.1, "end": 0.2, "score": 0.9},
+                            {"word": "friend", "start": 0.2, "end": 0.3, "score": 0.9},
+                            {"word": "again", "start": 0.3, "end": 0.4, "score": 0.9},
+                        ],
+                    }
+                ]
+            },
+        ),
+    )
+
+    aligned = whisperx_pipeline.align_lyrics(
+        Path("input.wav"),
+        "hello 中文 friend again",
+        lyrics_format="txt",
+        transcription_model="tiny",
+        align_language="zh",
+        detect_language=False,
+        use_synced_lyrics=False,
+        process_lyrics_lines=True,
+        max_line_length=12,
+        max_line_length_cjk=4,
+        device="cpu",
+        compute_type=None,
+    )
+
+    assert [segment["text"] for segment in aligned] == ["hello 中文", "friend again"]
+
+
+def test_process_lyric_lines_wraps_long_english_lines():
+    lyric_processor = importlib.import_module("demucs_svc.lyrics_line_processor")
+
+    processed = lyric_processor.process_lyric_lines(
+        [
+            "I can get 'em both, I don't wanna choose",
+            "I don't dance now, I make money moves",
+            "Look, I might just chill in some BAPE",
+            "Turns out, I'm rich, I'm rich, I'm rich",
+            "you can't fuck with me if you wanted to\"",
+        ],
+        max_line_length=36,
+        max_line_length_cjk=12,
+    )
+
+    assert processed[:2] == ["I can get 'em both,", "I don't wanna choose"]
+    assert all(len(line) <= 36 for line in processed)
+    assert len(processed) > 5
+
+
+def test_align_lyrics_processing_disables_synced_lrc_mode(monkeypatch):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+
+    seen_transcript = {}
+
+    def fake_align(transcript, *args, **kwargs):
+        seen_transcript["transcript"] = transcript
+        return {
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": 2.0,
+                    "text": "flattened",
+                    "words": [
+                        {"word": "Hello", "start": 0.0, "end": 0.2, "score": 0.9},
+                        {"word": "there", "start": 0.2, "end": 0.4, "score": 0.9},
+                        {"word": "friend", "start": 0.4, "end": 0.6, "score": 0.9},
+                        {"word": "Second", "start": 0.6, "end": 0.8, "score": 0.9},
+                        {"word": "synced", "start": 0.8, "end": 1.0, "score": 0.9},
+                        {"word": "line", "start": 1.0, "end": 1.2, "score": 0.9},
+                    ],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "pylrc",
+        SimpleNamespace(
+            parse=lambda text: [
+                SimpleNamespace(text="Hello there friend", time=1.0),
+                SimpleNamespace(text="Second synced line", time=2.0),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        whisperx_pipeline,
+        "whisperx",
+        SimpleNamespace(
+            load_audio=lambda path: [0.0] * 32000,
+            load_align_model=lambda language_code, device: (
+                {"language_code": language_code},
+                {"language_code": language_code},
+            ),
+            align=fake_align,
+        ),
+    )
+
+    aligned = whisperx_pipeline.align_lyrics(
+        Path("input.wav"),
+        "ignored",
+        lyrics_format="lrc",
+        transcription_model="tiny",
+        align_language="en",
+        detect_language=False,
+        use_synced_lyrics=True,
+        process_lyrics_lines=True,
+        max_line_length=12,
+        max_line_length_cjk=12,
+        device="cpu",
+        compute_type=None,
+    )
+
+    assert seen_transcript["transcript"] == [{"text": "Hello there friend Second synced line", "start": 0.0, "end": 2.0}]
+    assert [segment["text"] for segment in aligned] == ["Hello", "there friend", "Second", "synced line"]
 
 
 def test_separate_config_clears_mp3_bitrate_for_wav():
@@ -513,6 +776,9 @@ def test_job_creation_passes_whisperx_request_fields(monkeypatch, tmp_path):
             "detect_language": "true",
             "use_synced_lyrics": "true",
             "whisperx_preload_models": "transcription=base,align=en",
+            "process_lyrics_lines": "true",
+            "max_line_length": "40",
+            "max_line_length_cjk": "14",
         },
         files={"file": ("input.wav", b"audio", "audio/wav")},
     )
@@ -526,6 +792,9 @@ def test_job_creation_passes_whisperx_request_fields(monkeypatch, tmp_path):
     assert config.detect_language is True
     assert config.use_synced_lyrics is True
     assert config.whisperx_preload_models == "transcription=base,align=en"
+    assert config.process_lyrics_lines is True
+    assert config.max_line_length == 40
+    assert config.max_line_length_cjk == 14
 
 
 def test_job_result_includes_aligned_lyrics_zip_entry(monkeypatch, tmp_path):

@@ -57,10 +57,32 @@ function initializeMediaEditLyricsManager() {
         uploadBtn: '#media-edit-lyrics-upload-btn',
         fileInput: '#media-edit-lyrics-file',
         whisperxLanguageInput: '#media-edit-lyrics-whisperx-language-code',
+        processLinesToggle: '#lyrics-process-lines-toggle',
+        processLinesDetail: '#lyrics-process-lines-detail',
+        maxLineLengthInput: '#lyrics-max-line-length',
+        maxLineLengthCjkInput: '#lyrics-max-line-length-cjk',
         panel: '#media-edit-lyrics-form-section'
     });
     lyricsUIAdapter.initialize();
     lyricsManager.on(() => updateMediaEditLyricsControls());
+}
+
+function setSwitchToggleState(toggle, checked, disabled) {
+    if (!toggle) return;
+    toggle.disabled = Boolean(disabled);
+    toggle.setAttribute("aria-disabled", String(Boolean(disabled)));
+    if (toggle.getAttribute("aria-checked") !== String(Boolean(checked))) {
+        toggle.setAttribute("aria-checked", String(Boolean(checked)));
+    }
+    toggle.classList.toggle("opacity-60", Boolean(disabled));
+    toggle.classList.toggle("cursor-not-allowed", Boolean(disabled));
+    toggle.classList.toggle("bg-primary", Boolean(checked) && !disabled);
+    toggle.classList.toggle("bg-surface-container-highest", !Boolean(checked) || Boolean(disabled));
+    const knob = toggle.querySelector("span");
+    if (knob) {
+        knob.classList.toggle("translate-x-5", Boolean(checked));
+        knob.classList.toggle("translate-x-0", !Boolean(checked));
+    }
 }
 
 function syncMediaEditLyricsMetadata() {
@@ -224,6 +246,9 @@ function updateMediaEditLyricsControls() {
     const isLocked = Boolean(isSynced);
     const hasText = Boolean((state.text || "").trim());
     const canAlign = Boolean(isEnabled && hasText && !isLocked && demucsHealth.healthy);
+    if (!canAlign && state.processLyricsLines) {
+        lyricsManager.setLineProcessingSettings(false);
+    }
 
     if (editLyricsToggle) {
         editLyricsToggle.checked = isEnabled;
@@ -264,11 +289,11 @@ function updateMediaEditLyricsControls() {
     }
 
     if (editLyricsAlignToggle) {
-        editLyricsAlignToggle.disabled = !canAlign;
-        if (!canAlign && editLyricsAlignToggle.checked) {
-            editLyricsAlignToggle.checked = false;
+        const alignRequested = Boolean(state.alignLyricsRequested);
+        if (!canAlign && alignRequested) {
             lyricsManager.setAlignLyricsRequested(false);
         }
+        setSwitchToggleState(editLyricsAlignToggle, Boolean(canAlign && alignRequested), !canAlign);
     }
     if (editLyricsAlignStatus) {
         if (isLocked) {
@@ -294,6 +319,7 @@ function setLoadedLyricsState(text, format, providerLabel) {
         isSynced: normalizedFormat === "json" || normalizedFormat === "lrc",
         lyricsState: "manual",
     });
+    lyricsManager.setLineProcessingSettings(false);
     activeEditLyricsBaselineHash = hashLyricsText(normalizedText);
     activeEditLyricsBaselineFormat = normalizedFormat;
     activeEditLyricsBaselineProvider = providerLabel;
@@ -310,6 +336,7 @@ function setLockedSyncedLyricsState() {
         isSynced: true,
         lyricsState: "manual",
     });
+    lyricsManager.setLineProcessingSettings(false);
     activeEditLyricsBaselineHash = "";
     activeEditLyricsBaselineFormat = "json";
     activeEditLyricsBaselineProvider = "";
@@ -1593,6 +1620,11 @@ async function saveEditModal(event) {
         if ((lyricsPayloadChanged || alignRequested) && currentLyricsState?.lyricsEnabled && currentLyricsText) {
             requestBody.lyrics_text = currentLyricsText;
             requestBody.lyrics_format = currentLyricsFormat;
+            requestBody.process_lyrics_lines = Boolean(currentLyricsState.processLyricsLines);
+            if (currentLyricsState.processLyricsLines) {
+                requestBody.max_line_length = currentLyricsState.maxLineLength;
+                requestBody.max_line_length_cjk = currentLyricsState.maxLineLengthCjk;
+            }
             if (alignRequested && currentLyricsState.whisperxAlignLanguageOverride) {
                 requestBody.whisperx_align_language_override = currentLyricsState.whisperxAlignLanguageOverride;
             }
@@ -2029,10 +2061,12 @@ if (editLyricsToggle) {
     });
 }
 if (editLyricsAlignToggle) {
-    editLyricsAlignToggle.addEventListener("change", () => {
+    editLyricsAlignToggle.addEventListener("click", (event) => {
+        event.preventDefault();
         initializeMediaEditLyricsManager();
         if (lyricsManager) {
-            lyricsManager.setAlignLyricsRequested(editLyricsAlignToggle.checked);
+            const currentState = lyricsManager.getState();
+            lyricsManager.setAlignLyricsRequested(!currentState.alignLyricsRequested);
         }
     });
 }

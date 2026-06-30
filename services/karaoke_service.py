@@ -323,6 +323,9 @@ class KaraokeService:
             audio_path=audio_path,
             align_lyrics=align_lyrics,
             whisperx_align_language_override=task.whisperx_align_language_override,
+            process_lyrics_lines=task.process_lyrics_lines,
+            max_line_length=task.max_line_length,
+            max_line_length_cjk=task.max_line_length_cjk,
             cancel_event=cancel_event,
         )
 
@@ -388,6 +391,9 @@ class KaraokeService:
             align_language=align_language,
             detect_language=detect_language,
             use_synced_lyrics=settings.whisperx_use_synced_lyrics,
+            process_lyrics_lines=bool(task.process_lyrics_lines),
+            max_line_length=task.max_line_length,
+            max_line_length_cjk=task.max_line_length_cjk,
             whisperx_preload_models=settings.whisperx_preload_models,
             cancel_event=cancel_event,
             progress_callback=progress_callback,
@@ -595,6 +601,9 @@ class KaraokeService:
         audio_path: Path,
         align_lyrics: bool = False,
         whisperx_align_language_override: str | None = None,
+        process_lyrics_lines: bool | None = None,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
         cancel_event: threading.Event | None = None,
     ):
         await self._raise_if_canceled(cancel_event, task.id)
@@ -616,6 +625,9 @@ class KaraokeService:
             align_lyrics=align_lyrics,
             task_id=task.id,
             whisperx_align_language_override=whisperx_align_language_override,
+            process_lyrics_lines=process_lyrics_lines,
+            max_line_length=max_line_length,
+            max_line_length_cjk=max_line_length_cjk,
             progress_step_index=3,
             progress_step_total=4,
             cancel_event=cancel_event,
@@ -888,6 +900,22 @@ class KaraokeService:
             return override_language, False
         return align_language, detect_language
 
+    @staticmethod
+    def _line_processing_settings(
+        queue_item: QueueItem | None,
+        *,
+        process_lyrics_lines: bool | None = None,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
+    ) -> tuple[bool, int | None, int | None]:
+        if queue_item is not None:
+            if not bool(queue_item.process_lyrics_lines):
+                return False, None, None
+            return True, queue_item.max_line_length or 36, queue_item.max_line_length_cjk or 12
+        if not bool(process_lyrics_lines):
+            return False, None, None
+        return True, max_line_length or 36, max_line_length_cjk or 12
+
     async def _separate_vocals_with_retry(
         self,
         queue_item: QueueItem | None,
@@ -897,6 +925,9 @@ class KaraokeService:
         align_lyrics: bool,
         task_id: int,
         whisperx_align_language_override: str | None = None,
+        process_lyrics_lines: bool | None = None,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
         progress_step_index: int,
         progress_step_total: int,
         cancel_event: threading.Event | None = None,
@@ -915,6 +946,12 @@ class KaraokeService:
         )
 
         async def run_demucs(target_audio_path: Path):
+            line_processing_enabled, processing_max_line_length, processing_max_line_length_cjk = self._line_processing_settings(
+                queue_item,
+                process_lyrics_lines=process_lyrics_lines,
+                max_line_length=max_line_length,
+                max_line_length_cjk=max_line_length_cjk,
+            )
             demucs_kwargs = {
                 "output_dir": self._task_cache_dir("demucs_outputs", task_id),
                 "lyrics_text": lyrics_text,
@@ -924,6 +961,9 @@ class KaraokeService:
                 "detect_language": detect_language,
                 "use_synced_lyrics": settings.whisperx_use_synced_lyrics,
                 "whisperx_preload_models": settings.whisperx_preload_models,
+                "process_lyrics_lines": line_processing_enabled,
+                "max_line_length": processing_max_line_length,
+                "max_line_length_cjk": processing_max_line_length_cjk,
                 "progress_callback": progress_callback,
                 "log_callback": log_callback,
             }

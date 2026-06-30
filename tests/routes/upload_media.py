@@ -18,6 +18,9 @@ def test_upload_page_loads(client):
     assert 'accept=".mp3,.mp4,.webm,.mkv,.mov,.avi,.m4v,.zip"' in response.text
     assert 'accept=".lrc,.txt,.json"' in response.text
     assert 'id="upload-lyrics-whisperx-language-code"' in response.text
+    assert 'id="lyrics-process-lines-toggle"' in response.text
+    assert 'id="lyrics-max-line-length"' in response.text
+    assert 'id="lyrics-max-line-length-cjk"' in response.text
 
 def test_upload_media_saves_file_and_queues_item(client, tmp_path):
     """Uploaded media should be saved, catalogued, and queued when requested."""
@@ -142,6 +145,9 @@ def test_upload_media_alignment_request_marks_queue_item(client, tmp_path):
                     "artist": "Upload Artist",
                     "add_to_queue": "true",
                     "align_lyrics": "true",
+                    "process_lyrics_lines": "true",
+                    "max_line_length": "40",
+                    "max_line_length_cjk": "14",
                     "lyrics_text": "[00:01.00]Uploaded line",
                     "lyrics_format": "lrc",
                     "whisperx_align_language_override": "JA",
@@ -161,6 +167,9 @@ def test_upload_media_alignment_request_marks_queue_item(client, tmp_path):
             assert queue_item.requested_karaoke is True
             assert queue_item.requested_lyrics_alignment is True
             assert queue_item.whisperx_align_language_override == "ja"
+            assert queue_item.process_lyrics_lines is True
+            assert queue_item.max_line_length == 40
+            assert queue_item.max_line_length_cjk == 14
             assert queue_item.media.lyrics_path == f"/media/{expected_stem}.lrc"
     finally:
         settings.media_path = original_media
@@ -213,6 +222,9 @@ def test_upload_media_standalone_alignment_stores_whisperx_override(client, tmp_
                     "title": "Standalone Align",
                     "add_to_queue": "false",
                     "align_lyrics": "true",
+                    "process_lyrics_lines": "true",
+                    "max_line_length": "44",
+                    "max_line_length_cjk": "16",
                     "lyrics_text": "Plain line",
                     "lyrics_format": "txt",
                     "whisperx_align_language_override": "ZH",
@@ -231,6 +243,9 @@ def test_upload_media_standalone_alignment_stores_whisperx_override(client, tmp_
             ).one()
             assert task.task_type == "media_karaoke_align"
             assert task.whisperx_align_language_override == "zh"
+            assert task.process_lyrics_lines is True
+            assert task.max_line_length == 44
+            assert task.max_line_length_cjk == 16
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
@@ -1366,6 +1381,9 @@ def test_media_edit_alignment_with_existing_vocals_creates_align_task(client, tm
                     "artist": "Singer",
                     "rename_on_disk": False,
                     "align_lyrics": True,
+                    "process_lyrics_lines": True,
+                    "max_line_length": 42,
+                    "max_line_length_cjk": 15,
                     "lyrics_text": "[00:01.00]Line",
                     "lyrics_format": "lrc",
                     "whisperx_align_language_override": "KO",
@@ -1385,6 +1403,9 @@ def test_media_edit_alignment_with_existing_vocals_creates_align_task(client, tm
             assert task.task_type == "media_lyrics_align"
             assert task.target_media_item_id == media_id
             assert task.whisperx_align_language_override == "ko"
+            assert task.process_lyrics_lines is True
+            assert task.max_line_length == 42
+            assert task.max_line_length_cjk == 15
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
@@ -1425,6 +1446,9 @@ def test_media_edit_alignment_without_vocals_creates_karaoke_align_task(client, 
                     "artist": "Singer",
                     "rename_on_disk": False,
                     "align_lyrics": True,
+                    "process_lyrics_lines": True,
+                    "max_line_length": 48,
+                    "max_line_length_cjk": 18,
                     "lyrics_text": "Plain line",
                     "lyrics_format": "txt",
                     "whisperx_align_language_override": "FR",
@@ -1442,6 +1466,9 @@ def test_media_edit_alignment_without_vocals_creates_karaoke_align_task(client, 
             assert task.task_type == "media_karaoke_align"
             assert task.target_media_item_id == media_id
             assert task.whisperx_align_language_override == "fr"
+            assert task.process_lyrics_lines is True
+            assert task.max_line_length == 48
+            assert task.max_line_length_cjk == 18
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache

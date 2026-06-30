@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from database import get_db
-from models import MediaItem, MediaTrimRequest, QueueItemCreate
+from models import MediaItem, MediaTrimRequest, QueueItemCreate, normalize_line_processing_settings
 from routes.auth import require_admin_user
 from services.media_library_maintenance_service import (
     MediaItemDeleteConflictError,
@@ -142,6 +142,21 @@ def _normalize_whisperx_align_language_override(value: object) -> str | None:
     return normalized if normalized not in {"", "auto", "default"} else None
 
 
+def _normalize_line_processing_request(
+    process_lyrics_lines: object,
+    max_line_length: object,
+    max_line_length_cjk: object,
+) -> tuple[bool, int | None, int | None]:
+    try:
+        return normalize_line_processing_settings(
+            process_lyrics_lines,
+            max_line_length,
+            max_line_length_cjk,
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 def _is_zip_root_entry(filename: str) -> bool:
     normalized = filename.replace("\\", "/").strip()
     if not normalized or normalized.endswith("/"):
@@ -233,6 +248,9 @@ async def upload_media(
     lyrics_format: str | None = Form(None),
     align_lyrics: bool = Form(False),
     whisperx_align_language_override: str | None = Form(None),
+    process_lyrics_lines: bool = Form(False),
+    max_line_length: int | None = Form(None),
+    max_line_length_cjk: int | None = Form(None),
     db: Session = Depends(get_db),
 ):
     """Upload a new media file and create a library entry."""
@@ -255,6 +273,15 @@ async def upload_media(
     whisperx_override = _normalize_whisperx_align_language_override(
         whisperx_align_language_override
     )
+    (
+        line_processing_requested,
+        normalized_max_line_length,
+        normalized_max_line_length_cjk,
+    ) = _normalize_line_processing_request(
+        process_lyrics_lines,
+        max_line_length,
+        max_line_length_cjk,
+    )
 
     if ext == ".zip":
         karaoke_requested = False
@@ -262,6 +289,9 @@ async def upload_media(
         lyrics_text = None
         lyrics_format = None
         whisperx_override = None
+        line_processing_requested = False
+        normalized_max_line_length = None
+        normalized_max_line_length_cjk = None
     elif alignment_requested:
         karaoke_requested = True
 
@@ -282,6 +312,7 @@ async def upload_media(
                         artist=media_item.artist,
                         is_karaoke=False,
                         align_lyrics=False,
+                        process_lyrics_lines=False,
                     ),
                 )
                 await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
@@ -349,6 +380,19 @@ async def upload_media(
                         whisperx_align_language_override=(
                             whisperx_override if alignment_requested and karaoke_available else None
                         ),
+                        process_lyrics_lines=(
+                            line_processing_requested if alignment_requested and karaoke_available else False
+                        ),
+                        max_line_length=(
+                            normalized_max_line_length
+                            if alignment_requested and karaoke_available
+                            else None
+                        ),
+                        max_line_length_cjk=(
+                            normalized_max_line_length_cjk
+                            if alignment_requested and karaoke_available
+                            else None
+                        ),
                     ),
                 )
                 await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
@@ -368,9 +412,22 @@ async def upload_media(
                             db,
                             media_item.id,
                             whisperx_align_language_override=whisperx_override,
+                            process_lyrics_lines=line_processing_requested if alignment_requested else False,
+                            max_line_length=(
+                                normalized_max_line_length if alignment_requested else None
+                            ),
+                            max_line_length_cjk=(
+                                normalized_max_line_length_cjk if alignment_requested else None
+                            ),
                         )
                         if alignment_requested
-                        else processing_task_service.get_or_create_media_task(db, media_item.id)
+                        else processing_task_service.get_or_create_media_task(
+                            db,
+                            media_item.id,
+                            process_lyrics_lines=False,
+                            max_line_length=None,
+                            max_line_length_cjk=None,
+                        )
                     )
                     task_execution_coordinator.start(task.id)
                     karaoke_task_id = task.id
@@ -554,7 +611,13 @@ def process_media_item_karaoke(
             detail=f"Demucs unavailable: {detail or 'health check failed'}",
         )
 
-    task = processing_task_service.get_or_create_media_task(db, item_id)
+    task = processing_task_service.get_or_create_media_task(
+        db,
+        item_id,
+        process_lyrics_lines=False,
+        max_line_length=None,
+        max_line_length_cjk=None,
+    )
     task_execution_coordinator.start(task.id)
     return {"status": "processing", "media_id": item_id, "task_id": task.id}
 
@@ -735,6 +798,24 @@ def rename_media_item(
     whisperx_override = _normalize_whisperx_align_language_override(
         payload.get("whisperx_align_language_override")
     )
+    process_lyrics_lines = payload.get("process_lyrics_lines", False)
+    if not isinstance(process_lyrics_lines, bool):
+        raise HTTPException(status_code=400, detail="process_lyrics_lines must be a boolean")
+    max_line_length = payload.get("max_line_length")
+    if max_line_length is not None and not isinstance(max_line_length, int):
+        raise HTTPException(status_code=400, detail="max_line_length must be an integer or null")
+    max_line_length_cjk = payload.get("max_line_length_cjk")
+    if max_line_length_cjk is not None and not isinstance(max_line_length_cjk, int):
+        raise HTTPException(status_code=400, detail="max_line_length_cjk must be an integer or null")
+    (
+        line_processing_requested,
+        normalized_max_line_length,
+        normalized_max_line_length_cjk,
+    ) = _normalize_line_processing_request(
+        process_lyrics_lines,
+        max_line_length,
+        max_line_length_cjk,
+    )
     _validate_alignment_request(
         align_lyrics=align_lyrics,
         lyrics_text=lyrics_text,
@@ -788,15 +869,27 @@ def rename_media_item(
                             db,
                             item_id,
                             whisperx_align_language_override=whisperx_override,
+                            process_lyrics_lines=line_processing_requested,
+                            max_line_length=normalized_max_line_length,
+                            max_line_length_cjk=normalized_max_line_length_cjk,
                         )
                     elif align_lyrics:
                         task = processing_task_service.get_or_create_media_karaoke_align_task(
                             db,
                             item_id,
                             whisperx_align_language_override=whisperx_override,
+                            process_lyrics_lines=line_processing_requested,
+                            max_line_length=normalized_max_line_length,
+                            max_line_length_cjk=normalized_max_line_length_cjk,
                         )
                     else:
-                        task = processing_task_service.get_or_create_media_task(db, item_id)
+                        task = processing_task_service.get_or_create_media_task(
+                            db,
+                            item_id,
+                            process_lyrics_lines=False,
+                            max_line_length=None,
+                            max_line_length_cjk=None,
+                        )
                     task_execution_coordinator.start(task.id)
                     karaoke_started = True
                     karaoke_task_id = task.id

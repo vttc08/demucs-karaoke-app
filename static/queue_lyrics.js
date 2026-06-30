@@ -43,6 +43,11 @@ const lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
     uploadBtn: "#lyrics-upload-btn",
     fileInput: "#lyrics-file",
     googleLink: "#lyrics-google-link",
+    processLinesToggle: "#lyrics-process-lines-toggle",
+    processLinesDetail: "#lyrics-process-lines-detail",
+    maxLineLengthInput: "#lyrics-max-line-length",
+    maxLineLengthCjkInput: "#lyrics-max-line-length-cjk",
+    whisperxLanguageInput: "#lyrics-whisperx-language-code",
     panel: "#lyrics-panel",
 });
 

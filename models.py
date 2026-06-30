@@ -24,6 +24,25 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def normalize_line_processing_settings(
+    process_lyrics_lines: object,
+    max_line_length: object,
+    max_line_length_cjk: object,
+) -> tuple[bool, Optional[int], Optional[int]]:
+    """Normalize per-song lyric line processing settings."""
+    enabled = bool(process_lyrics_lines)
+    if not enabled:
+        return False, None, None
+
+    normalized_max_line_length = 36 if max_line_length is None else int(max_line_length)
+    normalized_max_line_length_cjk = 12 if max_line_length_cjk is None else int(max_line_length_cjk)
+    if not (1 <= normalized_max_line_length <= 200):
+        raise ValueError("max_line_length must be between 1 and 200")
+    if not (1 <= normalized_max_line_length_cjk <= 100):
+        raise ValueError("max_line_length_cjk must be between 1 and 100")
+    return True, normalized_max_line_length, normalized_max_line_length_cjk
+
+
 class QueueStatus(str, Enum):
     """Queue item status."""
 
@@ -66,6 +85,9 @@ class QueueItem(Base):
     session_id = Column(String, nullable=True)
     requester_name = Column(String, nullable=True)
     whisperx_align_language_override = Column(String, nullable=True)
+    process_lyrics_lines = Column(Boolean, default=False, nullable=False)
+    max_line_length = Column(Integer, nullable=True)
+    max_line_length_cjk = Column(Integer, nullable=True)
     status = Column(String, default=QueueStatus.PENDING)
     error = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -148,6 +170,9 @@ class ProcessingTask(Base):
     last_error_summary = Column(String, nullable=True)
     last_error_detail = Column(String, nullable=True)
     whisperx_align_language_override = Column(String, nullable=True)
+    process_lyrics_lines = Column(Boolean, default=False, nullable=False)
+    max_line_length = Column(Integer, nullable=True)
+    max_line_length_cjk = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(
         DateTime, default=utc_now, onupdate=utc_now, nullable=False
@@ -222,6 +247,9 @@ class QueueItemCreate(BaseModel):
     lyrics_format: Optional[Literal["lrc", "txt", "json"]] = None
     align_lyrics: bool = False
     whisperx_align_language_override: Optional[str] = None
+    process_lyrics_lines: bool = False
+    max_line_length: Optional[int] = None
+    max_line_length_cjk: Optional[int] = None
     queue_as_name: Optional[str] = None
     queue_as_guest_id: Optional[str] = None
 
@@ -235,6 +263,15 @@ class QueueItemCreate(BaseModel):
         if isinstance(self.whisperx_align_language_override, str):
             override = " ".join(self.whisperx_align_language_override.split()).strip().lower()
             self.whisperx_align_language_override = override if override not in {"", "auto", "default"} else None
+        (
+            self.process_lyrics_lines,
+            self.max_line_length,
+            self.max_line_length_cjk,
+        ) = normalize_line_processing_settings(
+            self.process_lyrics_lines,
+            self.max_line_length,
+            self.max_line_length_cjk,
+        )
         if isinstance(self.queue_as_name, str):
             normalized_queue_as = " ".join(self.queue_as_name.split()).strip()
             self.queue_as_name = normalized_queue_as[:40] or None
@@ -318,6 +355,9 @@ class QueueItemResponse(BaseModel):
     lyrics_path: Optional[str] = None
     vocals_path: Optional[str] = None
     whisperx_align_language_override: Optional[str] = None
+    process_lyrics_lines: bool = False
+    max_line_length: Optional[int] = None
+    max_line_length_cjk: Optional[int] = None
     error: Optional[str] = None
     task_id: Optional[int] = None
     processing_stage: Optional[str] = None
