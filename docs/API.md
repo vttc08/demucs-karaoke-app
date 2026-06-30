@@ -994,6 +994,16 @@ On connect, the server emits:
 
 ---
 
+### Delete Processing Task
+```
+DELETE /api/tasks/{task_id}
+```
+
+Admin-only endpoint that deletes a failed or canceled durable task and any orphaned queue/media rows
+it leaves behind.
+
+---
+
 ### Skip Current Item
 ```
 POST /api/queue/skip

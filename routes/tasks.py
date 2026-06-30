@@ -154,7 +154,7 @@ async def delete_task(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Delete a canceled task and remove any orphaned rows it leaves behind."""
+    """Delete a failed or canceled task and remove any orphaned rows it leaves behind."""
     task = processing_task_service.get_task(db, task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -162,8 +162,8 @@ async def delete_task(
     is_admin = get_admin_user(request, db) is not None
     if not is_admin:
         raise HTTPException(status_code=403, detail="Not allowed to delete this task")
-    if task.status != "canceled":
-        raise HTTPException(status_code=409, detail="Only canceled tasks can be deleted")
+    if task.status not in {"canceled", "failed"}:
+        raise HTTPException(status_code=409, detail="Only failed or canceled tasks can be deleted")
 
     deleted = await processing_task_service.delete_canceled_task(db, task_id)
     await task_stream_manager.clear_task(task_id)

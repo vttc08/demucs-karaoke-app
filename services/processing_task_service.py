@@ -681,12 +681,12 @@ class ProcessingTaskService:
         return task
 
     async def delete_canceled_task(self, db: Session, task_id: int) -> dict[str, int | None]:
-        """Delete a canceled task and any orphaned rows it leaves behind."""
+        """Delete a failed or canceled task and any orphaned rows it leaves behind."""
         task = self.get_task(db, task_id)
         if task is None:
             raise ValueError(f"Task not found: {task_id}")
-        if task.status != ProcessingTaskStatus.CANCELED.value:
-            raise ValueError("Only canceled tasks can be deleted")
+        if task.status not in {ProcessingTaskStatus.CANCELED.value, ProcessingTaskStatus.FAILED.value}:
+            raise ValueError("Only failed or canceled tasks can be deleted")
 
         queue_item_id = task.target_queue_item_id
         media_item_id = self._task_media_id(db, task)

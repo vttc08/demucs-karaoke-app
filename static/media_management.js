@@ -934,7 +934,7 @@ function renderTaskList(tasks) {
         const statusChip = ['downloading', 'processing'].includes(task.status)
             ? ""
             : `<span class="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${task.status === 'canceled' ? 'border-error/30 bg-error/10 text-error' : 'text-on-surface-variant'}">${escapeHtml(getTaskStatusLabel(task.status))}</span>`;
-        const actionHtml = task.status === "canceled"
+        const actionHtml = task.status === "canceled" || task.status === "failed"
             ? `
                 <div class="mt-3 flex justify-end gap-3">
                     <button
@@ -953,27 +953,11 @@ function renderTaskList(tasks) {
                         data-action="delete-task"
                         class="inline-flex items-center gap-2 rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-60"
                         data-task-id="${task.id}"
-                        title="${escapeHtml(t("media.delete_task"))}"
-                        aria-label="${escapeHtml(t("media.delete_task"))}"
+                        title="${escapeHtml(t("common.delete"))}"
+                        aria-label="${escapeHtml(t("common.delete"))}"
                     >
                         <span class="material-symbols-outlined text-[16px]">delete</span>
-                        <span>${escapeHtml(t("media.delete_task"))}</span>
-                    </button>
-                </div>
-                `
-            : task.status === "failed"
-            ? `
-                <div class="mt-3 flex justify-end">
-                    <button
-                        type="button"
-                        data-action="retry-task"
-                        class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
-                        data-task-id="${task.id}"
-                        title="${escapeHtml(t("common.retry"))}"
-                        aria-label="${escapeHtml(t("common.retry"))}"
-                    >
-                        <span class="material-symbols-outlined text-[16px]">refresh</span>
-                        <span>${escapeHtml(t("common.retry"))}</span>
+                        <span>${escapeHtml(t("common.delete"))}</span>
                     </button>
                 </div>
                 `
@@ -1146,7 +1130,7 @@ async function deleteProcessingTask(button) {
             method: "DELETE",
         });
         if (!response.ok) {
-            let detail = t("media.delete_task_failed");
+            let detail = t("common.delete_failed");
             try {
                 const payload = await response.json();
                 if (payload?.detail) {
@@ -1163,13 +1147,13 @@ async function deleteProcessingTask(button) {
             window.location.reload();
         }, 350);
     } catch (error) {
-        const message = error instanceof Error ? error.message : t("media.delete_task_failed");
+        const message = error instanceof Error ? error.message : t("common.delete_failed");
         showToast(message);
         button.disabled = false;
         button.removeAttribute("aria-busy");
-        button.title = t("media.delete_task");
-        button.setAttribute("aria-label", t("media.delete_task"));
-        button.innerHTML = originalHtml || `<span class="material-symbols-outlined text-[16px]">delete</span><span>${escapeHtml(t("media.delete_task"))}</span>`;
+        button.title = t("common.delete");
+        button.setAttribute("aria-label", t("common.delete"));
+        button.innerHTML = originalHtml || `<span class="material-symbols-outlined text-[16px]">delete</span><span>${escapeHtml(t("common.delete"))}</span>`;
     }
 }
 
