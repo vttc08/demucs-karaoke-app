@@ -981,6 +981,16 @@ The initial SSE message is a snapshot payload with current active tasks, followe
 
 ---
 
+### List Tasks
+```
+GET /api/tasks/
+```
+
+Returns the active and recently failed durable tasks visible to the current viewer.
+Admins receive all visible tasks. Guests receive only their own queue-backed tasks.
+
+---
+
 ### Stream One Task
 ```
 GET /api/tasks/{task_id}/stream
@@ -999,8 +1009,8 @@ On connect, the server emits:
 DELETE /api/tasks/{task_id}
 ```
 
-Admin-only endpoint that deletes a failed or canceled durable task and any orphaned queue/media rows
-it leaves behind.
+Deletes a failed or canceled durable task and any orphaned queue/media rows it leaves behind.
+Admins may delete any failed or canceled task. Guests may delete their own failed or canceled queue-backed tasks.
 
 ---
 

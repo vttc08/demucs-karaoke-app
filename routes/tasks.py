@@ -33,12 +33,15 @@ def _serialize_sse(payload: dict) -> str:
 
 @router.get("/", response_model=list[ProcessingTaskResponse])
 def list_tasks(
+    request: Request,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin_user),
 ):
-    """List active and recently failed tasks."""
-    return processing_task_service.list_tasks(
+    """List tasks visible to the current viewer."""
+    is_admin = get_admin_user(request, db) is not None
+    return processing_task_service.list_tasks_for_viewer(
         db,
+        is_admin=is_admin,
+        requester_id=_current_guest_id(request),
         include_done=False,
         include_failed=True,
         limit=50,
@@ -160,10 +163,16 @@ async def delete_task(
         raise HTTPException(status_code=404, detail="Task not found")
 
     is_admin = get_admin_user(request, db) is not None
-    if not is_admin:
-        raise HTTPException(status_code=403, detail="Not allowed to delete this task")
+    requester_id = _current_guest_id(request)
     if task.status not in {"canceled", "failed"}:
         raise HTTPException(status_code=409, detail="Only failed or canceled tasks can be deleted")
+    if not processing_task_service.can_delete_task(
+        db,
+        task,
+        is_admin=is_admin,
+        requester_id=requester_id,
+    ):
+        raise HTTPException(status_code=403, detail="Not allowed to delete this task")
 
     deleted = await processing_task_service.delete_canceled_task(db, task_id)
     await task_stream_manager.clear_task(task_id)

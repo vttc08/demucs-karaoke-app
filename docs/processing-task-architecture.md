@@ -35,7 +35,7 @@ Cancellation is a first-class terminal state:
 - partially downloaded cache artifacts and generated outputs are removed during cleanup
 - local `media_karaoke` and uploaded/library queue tasks preserve their original durable media file; only scratch and task-owned temporary outputs are removed
 - canceled tasks can be retried while their task row still exists, using the same retry path as failed tasks
-- failed or canceled tasks can be deleted by admins after they are no longer useful
+- failed or canceled tasks can be deleted by admins, and queue-owning guests can delete their own failed/canceled queue-backed tasks after they are no longer useful
 
 ## Live State
 

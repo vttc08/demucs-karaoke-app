@@ -336,6 +336,54 @@ class ProcessingTaskService:
         )
         return [self.to_response(task) for task in tasks]
 
+    def list_tasks_for_viewer(
+        self,
+        db: Session,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+        include_done: bool = False,
+        include_failed: bool = True,
+        limit: int = 25,
+    ) -> list[ProcessingTaskResponse]:
+        """List recent tasks visible to the current viewer."""
+        if is_admin:
+            return self.list_tasks(
+                db,
+                include_done=include_done,
+                include_failed=include_failed,
+                limit=limit,
+            )
+
+        normalized_requester_id = self._normalize_optional_id(requester_id)
+        if normalized_requester_id is None:
+            return []
+
+        query = (
+            db.query(ProcessingTask)
+            .join(QueueItem, QueueItem.id == ProcessingTask.target_queue_item_id)
+            .filter(QueueItem.user_id == normalized_requester_id)
+        )
+        if include_done and include_failed:
+            pass
+        elif include_done:
+            query = query.filter(
+                ProcessingTask.status != ProcessingTaskStatus.FAILED.value
+            )
+        elif include_failed:
+            query = query.filter(
+                ProcessingTask.status != ProcessingTaskStatus.DONE.value
+            )
+        else:
+            query = query.filter(ProcessingTask.status.in_(self.ACTIVE_STATUSES))
+
+        tasks = (
+            query.order_by(ProcessingTask.updated_at.desc(), ProcessingTask.id.desc())
+            .limit(limit)
+            .all()
+        )
+        return [self.to_response(task) for task in tasks]
+
     def get_task(self, db: Session, task_id: int) -> ProcessingTask | None:
         """Fetch one task row."""
         return db.query(ProcessingTask).filter(ProcessingTask.id == task_id).first()
@@ -784,6 +832,9 @@ class ProcessingTaskService:
             return True
         if task.target_queue_item_id is None:
             return False
+        normalized_requester_id = self._normalize_optional_id(requester_id)
+        if normalized_requester_id is None:
+            return False
         queue_item = (
             db.query(QueueItem)
             .filter(QueueItem.id == task.target_queue_item_id)
@@ -791,7 +842,34 @@ class ProcessingTaskService:
         )
         if queue_item is None:
             return False
-        return True
+        return self._normalize_optional_id(queue_item.user_id) == normalized_requester_id
+
+    def can_delete_task(
+        self,
+        db: Session,
+        task: ProcessingTask,
+        *,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+    ) -> bool:
+        """Return whether the current viewer may delete the task."""
+        if task.status not in self.RETRYABLE_STATUSES:
+            return False
+        if is_admin:
+            return True
+        if task.target_queue_item_id is None:
+            return False
+        normalized_requester_id = self._normalize_optional_id(requester_id)
+        if normalized_requester_id is None:
+            return False
+        queue_item = (
+            db.query(QueueItem)
+            .filter(QueueItem.id == task.target_queue_item_id)
+            .first()
+        )
+        if queue_item is None:
+            return False
+        return self._normalize_optional_id(queue_item.user_id) == normalized_requester_id
 
     def can_cancel_task(
         self,

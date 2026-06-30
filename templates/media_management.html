@@ -172,7 +172,7 @@
                 </div>
             </section>
 
-            {% if is_admin %}
+            {% if is_admin or task_items %}
             <section
                 id="media-task-panel"
                 class="glass-card rounded-2xl border border-white/10 p-3 {% if not task_items %}hidden{% endif %}"

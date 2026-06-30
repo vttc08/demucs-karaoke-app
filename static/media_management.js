@@ -977,7 +977,7 @@ function renderTaskList(tasks) {
                 </div>
                 `;
         return `
-            <article class="rounded-xl border ${isSelectedTask ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20' : 'border-white/10 bg-surface-container-low'} p-3 cursor-pointer transition-colors" data-task-id="${task.id}" aria-current="${isSelectedTask ? 'true' : 'false'}">
+            <article class="rounded-xl border ${isSelectedTask ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20' : 'border-white/10 bg-surface-container-low'} p-3 ${isAdmin ? 'cursor-pointer' : 'cursor-default'} transition-colors" data-task-id="${task.id}" aria-current="${isSelectedTask ? 'true' : 'false'}">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
                         <p class="truncate text-sm font-bold text-on-surface">${escapeHtml(task.target_media_item_id ? t("media.media_task_target", { id: targetId }) : t("media.queue_task_target", { id: targetId }))}</p>
@@ -998,7 +998,7 @@ function renderTaskList(tasks) {
 }
 
 async function refreshTaskList() {
-    if (!isAdmin || !taskList) {
+    if (!taskList) {
         return;
     }
     if (taskRefreshPromise) {
@@ -1032,7 +1032,7 @@ async function refreshTaskList() {
 }
 
 async function retryTask(taskId) {
-    if (!Number.isFinite(taskId) || taskId <= 0 || !isAdmin) {
+    if (!Number.isFinite(taskId) || taskId <= 0) {
         return;
     }
     try {
@@ -1060,7 +1060,7 @@ async function retryTask(taskId) {
 }
 
 async function cancelProcessingTask(button) {
-    if (!button || !isAdmin) {
+    if (!button) {
         return;
     }
     const taskCard = button.closest("[data-task-id]");
@@ -1106,7 +1106,7 @@ async function cancelProcessingTask(button) {
 }
 
 async function deleteProcessingTask(button) {
-    if (!button || !isAdmin) {
+    if (!button) {
         return;
     }
     const taskCard = button.closest("[data-task-id]");
@@ -1888,7 +1888,8 @@ function handleActionClick(event) {
     }
     const action = button.dataset.action;
 
-    if (!isAdmin && action !== "add-to-queue") {
+    const guestAllowedActions = new Set(["add-to-queue", "retry-task", "delete-task", "cancel-task", "clear-task-log"]);
+    if (!isAdmin && !guestAllowedActions.has(action)) {
         return;
     }
 
@@ -2061,6 +2062,9 @@ document.addEventListener("keydown", (event) => {
     }
 });
 taskList?.addEventListener("click", (event) => {
+    if (!isAdmin) {
+        return;
+    }
     if (event.target.closest("button[data-action]")) {
         return;
     }

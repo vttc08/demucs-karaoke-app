@@ -662,6 +662,52 @@ def test_media_management_page_hides_edit_controls_for_guest(client):
     assert b'data-action="scan-library"' not in response.content
     assert b'data-action="upload-media"' not in response.content
 
+
+def test_media_management_page_shows_guest_task_controls_for_own_failed_task(client):
+    """Guests should see retry/delete controls for their own failed queue task."""
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="guest-task-media",
+            title="Guest Task Media",
+            media_path="/media/guest-task-media.mp4",
+            missing=True,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1,
+            requested_karaoke=False,
+            user_id="guest-owner",
+            status=QueueStatus.FAILED.value,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+
+        task = ProcessingTask(
+            task_type="queue_prepare",
+            source_kind="youtube",
+            target_queue_item_id=queue_item.id,
+            target_media_item_id=media.id,
+            status=ProcessingTaskStatus.FAILED.value,
+            stage="failed",
+            last_error_summary="old error",
+        )
+        db.add(task)
+        db.commit()
+
+    response = client.get("/media")
+
+    assert response.status_code == 200
+    assert b'id="media-task-panel"' in response.content
+    assert b'data-action="retry-task"' in response.content
+    assert b'data-action="delete-task"' in response.content
+    assert b'data-action="cancel-task"' not in response.content
+
 def test_media_management_page_shows_edit_controls_for_admin(client):
     """Admin media library should include edit and delete actions."""
     authenticate_admin_client(client)

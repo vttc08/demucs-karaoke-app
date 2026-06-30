@@ -490,6 +490,81 @@ def test_processing_task_retry_rejects_active_and_done_tasks_even_for_admin(db_s
             asyncio.run(processing_task_service.retry_task(db_session, task.id))
 
 
+def test_processing_task_retry_and_delete_require_owner_for_guests(db_session):
+    """Guests should only retry or delete their own failed queue-backed tasks."""
+    service = QueueService()
+    media = MediaItem(
+        title="Guest Managed Task",
+        file_stem="guest-managed-task",
+        media_path="/media/guest-managed-task.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    owned_queue = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="guest-managed-task",
+            title="Guest Managed Task",
+            is_karaoke=False,
+        ),
+        requester_id="guest-owner",
+    )
+    other_queue = service.add_to_queue(
+        db_session,
+        QueueItemCreate(
+            youtube_id="guest-managed-task-other",
+            title="Guest Managed Task Other",
+            is_karaoke=False,
+        ),
+        requester_id="guest-other",
+    )
+
+    owned_task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="youtube",
+        target_queue_item_id=owned_queue.id,
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.FAILED.value,
+        stage="failed",
+    )
+    other_task = ProcessingTask(
+        task_type="queue_prepare",
+        source_kind="youtube",
+        target_queue_item_id=other_queue.id,
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.FAILED.value,
+        stage="failed",
+    )
+    db_session.add_all([owned_task, other_task])
+    db_session.commit()
+    db_session.refresh(owned_task)
+    db_session.refresh(other_task)
+
+    assert processing_task_service.can_retry_task(
+        db_session,
+        owned_task,
+        requester_id="guest-owner",
+    ) is True
+    assert processing_task_service.can_retry_task(
+        db_session,
+        other_task,
+        requester_id="guest-owner",
+    ) is False
+    assert processing_task_service.can_delete_task(
+        db_session,
+        owned_task,
+        requester_id="guest-owner",
+    ) is True
+    assert processing_task_service.can_delete_task(
+        db_session,
+        other_task,
+        requester_id="guest-owner",
+    ) is False
+
+
 def test_task_execution_coordinator_cancel_sets_event_without_canceling_async_task():
     """Remote Demucs cleanup relies on cooperative cancel_event handling."""
     from services.processing_task_service import TaskExecutionCoordinator
