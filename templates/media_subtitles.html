@@ -103,21 +103,16 @@
     </section>
     <section class="grid gap-4 xl:grid-cols-2">
         <article class="glass-card overflow-hidden rounded-3xl border border-white/10 p-4 sm:p-5">
-            <div class="grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-start">
+            <div class="gap-4">
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-primary">{{ t('subtitle.recommended') }}</span>
                         <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('subtitle.ass_title') }}</h3>
                     </div>
+                    <img src="{{ static_asset_url('/static/ssa.webp') }}" alt="{{ t('subtitle.ass_card_image_alt') }}" class="w-full my-4 aspect-[1375/415] object-contain">
                     <p class="mt-2 text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.ass_summary') }}</p>
-                    <p class="mt-2 text-sm font-semibold text-on-surface">{{ t('subtitle.desktop_only') }}</p>
-                    <ul class="mt-4 space-y-2 text-sm text-on-surface-variant">
-                        <li>• {{ t('subtitle.ass_supported_1') }}</li>
-                        <li>• {{ t('subtitle.ass_supported_2') }}</li>
-                        <li>• {{ t('subtitle.ass_supported_3') }}</li>
-                    </ul>
                 </div>
-                <img src="{{ static_asset_url('/static/ssa.png') }}" alt="{{ t('subtitle.ass_card_image_alt') }}" class="w-full aspect-[1223/485] object-contain">
+
             </div>
             <div class="mt-4 space-y-2">
                 <div class="flex flex-nowrap items-center gap-3 overflow-x-auto">
@@ -168,21 +163,16 @@
         </article>
 
         <article class="glass-card overflow-hidden rounded-3xl border border-white/10 p-4 sm:p-5">
-            <div class="grid gap-4 lg:grid-cols-[minmax(0,1.12fr)_minmax(280px,0.88fr)] lg:items-start">
+            <div class="gap-4">
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="rounded-full border border-secondary/30 bg-secondary/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-secondary">{{ t('subtitle.alternate') }}</span>
                         <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('subtitle.srt_title') }}</h3>
                     </div>
+                    <img src="{{ static_asset_url('/static/srt.webp') }}" alt="{{ t('subtitle.srt_card_image_alt') }}" class="my-4 w-full aspect-[1375/415] object-contain">
                     <p class="mt-2 text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.srt_summary') }}</p>
-                    <p class="mt-2 text-sm font-semibold text-on-surface">{{ t('subtitle.desktop_only') }}</p>
-                    <ul class="mt-4 space-y-2 text-sm text-on-surface-variant">
-                        <li>• {{ t('subtitle.srt_supported_1') }}</li>
-                        <li>• {{ t('subtitle.srt_supported_2') }}</li>
-                        <li>• {{ t('subtitle.srt_supported_3') }}</li>
-                    </ul>
                 </div>
-                <img src="{{ static_asset_url('/static/srt.png') }}" alt="{{ t('subtitle.srt_card_image_alt') }}" class="w-full aspect-[1375/415] object-contain">
+
             </div>
             <div class="my-4 space-y-2">
                 <div class="flex flex-nowrap items-center gap-3 overflow-x-auto">
