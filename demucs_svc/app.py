@@ -1,4 +1,5 @@
 import gc
+import os
 import json
 import logging
 import multiprocessing
@@ -12,8 +13,10 @@ from collections import Counter
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
+from html import escape
 
-from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File, Form
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import ValidationError
 
 try:
@@ -36,6 +39,7 @@ try:
         DemucsJobStatusResponse,
         SeparateConfig,
         SeparateMetaResponse,
+        TransferUploadResponse,
         WhisperXPreloadResponse,
     )
     from .settings import (
@@ -81,6 +85,7 @@ except ImportError:
         DemucsJobStatusResponse,
         SeparateConfig,
         SeparateMetaResponse,
+        TransferUploadResponse,
         WhisperXPreloadResponse,
     )
     from settings import (
@@ -110,6 +115,9 @@ except ImportError:
 app = FastAPI(title="Demucs Service", version="0.2.0")
 job_store = DemucsJobStore(tail_limit=JOB_OUTPUT_TAIL_LINES)
 logger = logging.getLogger(__name__)
+TRANSFER_CACHE_ROOT = Path(__file__).resolve().parent / ".cache" / "transfer"
+TRANSFER_RANDOM_FILENAME = "random-25mb.bin"
+TRANSFER_RANDOM_FILE_SIZE_BYTES = 25 * 1024 * 1024
 _gc_lock = threading.Lock()
 _gc_scheduler_stop_event = threading.Event()
 _gc_scheduler_thread: threading.Thread | None = None
@@ -195,6 +203,417 @@ def _record_gc_state(*, finished_at: str, mode: str, detail: str) -> None:
 def _current_gc_state() -> dict[str, str | None]:
     with _gc_state_lock:
         return dict(_gc_state)
+
+
+def _transfer_random_file_path() -> Path:
+    return TRANSFER_CACHE_ROOT / TRANSFER_RANDOM_FILENAME
+
+
+def _generate_random_transfer_file(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f"{path.name}.tmp")
+    remaining = TRANSFER_RANDOM_FILE_SIZE_BYTES
+    chunk_size = 1024 * 1024
+
+    with temp_path.open("wb") as handle:
+        while remaining > 0:
+            write_size = min(chunk_size, remaining)
+            handle.write(os.urandom(write_size))
+            remaining -= write_size
+
+    os.replace(temp_path, path)
+
+
+def _ensure_random_transfer_file() -> Path:
+    path = _transfer_random_file_path()
+    if path.exists() and path.stat().st_size == TRANSFER_RANDOM_FILE_SIZE_BYTES:
+        return path
+
+    _generate_random_transfer_file(path)
+    return path
+
+
+def _transfer_request_base_url(request: Request) -> str:
+    return str(request.base_url).rstrip("/")
+
+
+def _transfer_page_html(*, request: Request) -> str:
+    base_url = escape(_transfer_request_base_url(request))
+    download_url_raw = str(request.url_for("transfer_random_download"))
+    multipart_upload_url_raw = str(request.url_for("transfer_upload"))
+    raw_upload_url_raw = str(request.url_for("transfer_upload_raw"))
+    download_url = escape(download_url_raw)
+    multipart_upload_url = escape(multipart_upload_url_raw)
+    raw_upload_url = escape(raw_upload_url_raw)
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demucs Transfer Bench</title>
+  <style>
+    :root {{
+      color-scheme: light dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-soft: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #22c55e;
+      --accent-strong: #16a34a;
+      --border: rgba(148, 163, 184, 0.25);
+      --shadow: 0 16px 48px rgba(0, 0, 0, 0.24);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(34, 197, 94, 0.16), transparent 32%),
+        radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.14), transparent 24%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }}
+    main {{
+      width: min(1100px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }}
+    .hero {{
+      display: grid;
+      gap: 12px;
+      margin-bottom: 20px;
+    }}
+    h1, h2, p {{ margin: 0; }}
+    h1 {{
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }}
+    .lede {{
+      max-width: 70ch;
+      color: var(--muted);
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 16px;
+    }}
+    .card {{
+      grid-column: span 12;
+      background: linear-gradient(180deg, rgba(17, 24, 39, 0.94), rgba(15, 23, 42, 0.94));
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }}
+    @media (min-width: 900px) {{
+      .card.upload {{ grid-column: span 7; }}
+      .card.download, .card.commands {{ grid-column: span 5; }}
+    }}
+    .section-title {{
+      font-size: 1.1rem;
+      margin-bottom: 10px;
+    }}
+    .muted {{
+      color: var(--muted);
+      font-size: 0.95rem;
+    }}
+    .stack {{
+      display: grid;
+      gap: 12px;
+    }}
+    .actions {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }}
+    .button {{
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      color: #04130a;
+      font-weight: 700;
+      padding: 0.8rem 1rem;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }}
+    .button.secondary {{
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }}
+    .field {{
+      display: grid;
+      gap: 8px;
+    }}
+    input[type="file"] {{
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+    }}
+    progress {{
+      width: 100%;
+      height: 18px;
+      border-radius: 999px;
+      overflow: hidden;
+    }}
+    progress::-webkit-progress-bar {{
+      background: rgba(148, 163, 184, 0.12);
+    }}
+    progress::-webkit-progress-value {{
+      background: linear-gradient(90deg, #34d399, #22c55e);
+    }}
+    progress::-moz-progress-bar {{
+      background: linear-gradient(90deg, #34d399, #22c55e);
+    }}
+    pre {{
+      margin: 0;
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }}
+    .status {{
+      min-height: 1.5em;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }}
+    .result {{
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: #dcfce7;
+      min-height: 3rem;
+    }}
+    code {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.92em;
+    }}
+    label {{
+      font-weight: 600;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Demucs Transfer Bench</h1>
+      <p class="lede">
+        Admin throughput test page for the standalone Demucs service.
+        Use it to measure upload, download, and round-trip latency between your browser or CLI
+        tools and the Demucs host without invoking separation or alignment work.
+      </p>
+      <p class="muted">Service base: <code>{base_url}</code></p>
+    </section>
+
+    <section class="grid">
+      <article class="card upload">
+        <div class="stack">
+          <div>
+            <h2 class="section-title">Upload test</h2>
+            <p class="muted">
+              Multipart upload for browser testing. The server reads the bytes, counts them, and
+              discards them immediately.
+            </p>
+          </div>
+          <form id="transfer-upload-form" class="stack" action="{multipart_upload_url}" method="post" enctype="multipart/form-data">
+            <div class="field">
+              <label for="transfer-upload-file">Choose any file</label>
+              <input id="transfer-upload-file" name="file" type="file" required>
+            </div>
+            <div class="actions">
+              <button class="button" type="submit">Upload selected file</button>
+              <a class="button secondary" href="{raw_upload_url}">Raw upload endpoint</a>
+            </div>
+          </form>
+          <progress id="transfer-upload-progress" value="0" max="100"></progress>
+          <div id="transfer-upload-status" class="status">Idle.</div>
+          <div id="transfer-upload-speed" class="muted">Transfer speed will appear here during upload.</div>
+          <div id="transfer-upload-result" class="result">Waiting for an upload.</div>
+        </div>
+      </article>
+
+      <article class="card download">
+        <div class="stack">
+          <div>
+            <h2 class="section-title">Download test</h2>
+            <p class="muted">
+              Downloads a cached 25 MiB random file. The first request creates the payload; later
+              requests reuse the same file.
+            </p>
+          </div>
+          <div class="actions">
+            <a class="button" href="{download_url}">Download 25 MiB file</a>
+          </div>
+          <p class="muted">
+            The browser or your CLI client can measure transfer time, throughput, and completion.
+          </p>
+        </div>
+      </article>
+
+      <article class="card commands">
+        <div class="stack">
+          <div>
+            <h2 class="section-title">curl / wget</h2>
+            <p class="muted">Use these when you want a simple command-line throughput check.</p>
+          </div>
+          <pre><code>curl -F "file=@/path/to/media.bin" "{multipart_upload_url}"
+curl -X POST --data-binary "@/path/to/media.bin" "{raw_upload_url}"
+curl -OJ "{download_url}"
+wget --method=POST --body-file=/path/to/media.bin -O - "{raw_upload_url}"
+wget -O random-25mb.bin "{download_url}"</code></pre>
+        </div>
+      </article>
+    </section>
+  </main>
+  <script>
+    (() => {{
+      const form = document.getElementById("transfer-upload-form");
+      const fileInput = document.getElementById("transfer-upload-file");
+      const progress = document.getElementById("transfer-upload-progress");
+      const status = document.getElementById("transfer-upload-status");
+      const speed = document.getElementById("transfer-upload-speed");
+      const result = document.getElementById("transfer-upload-result");
+      const uploadUrl = {json.dumps(multipart_upload_url_raw)};
+
+      function formatBytes(bytes) {{
+        const units = ["B", "KB", "MB", "GB"];
+        let value = bytes;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {{
+          value /= 1024;
+          unitIndex += 1;
+        }}
+        return `${{value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)}} ${{units[unitIndex]}}`;
+      }}
+
+      form.addEventListener("submit", (event) => {{
+        event.preventDefault();
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) {{
+          status.textContent = "Choose a file first.";
+          return;
+        }}
+
+        const start = performance.now();
+        let timer = null;
+        const xhr = new XMLHttpRequest();
+        const data = new FormData();
+        data.append("file", file, file.name);
+
+        progress.removeAttribute("value");
+        progress.max = 1;
+        progress.value = 0;
+        status.textContent = "Starting upload...";
+        speed.textContent = "Measuring transfer speed...";
+        result.textContent = "Uploading...";
+
+        xhr.open("POST", uploadUrl, true);
+        xhr.responseType = "json";
+
+        let lastSampleAt = start;
+        let lastSampleLoaded = 0;
+        let smoothedRate = 0;
+
+        function updateSpeed(now = performance.now()) {{
+          const loaded = progress.hasAttribute("value") ? progress.value : 0;
+          const elapsedSeconds = (now - start) / 1000;
+          const sampleSeconds = (now - lastSampleAt) / 1000;
+          const sampleLoaded = loaded - lastSampleLoaded;
+          const instantRate = sampleSeconds > 0 && sampleLoaded > 0 ? sampleLoaded / sampleSeconds : 0;
+
+          if (instantRate > 0) {{
+            smoothedRate = smoothedRate > 0 ? (smoothedRate * 0.75) + (instantRate * 0.25) : instantRate;
+            lastSampleAt = now;
+            lastSampleLoaded = loaded;
+          }}
+
+          const total = progress.hasAttribute("max") ? progress.max : 0;
+          const speedText = smoothedRate > 0 ? ` at ${{formatBytes(smoothedRate)}}/s` : "";
+          if (total) {{
+            status.textContent = `${{formatBytes(loaded)}} / ${{formatBytes(total)}} uploaded`;
+          }} else {{
+            status.textContent = `${{formatBytes(loaded)}} uploaded`;
+          }}
+          speed.textContent = elapsedSeconds > 0 || loaded > 0 ? `Estimated transfer speed${{speedText}}` : "Measuring transfer speed...";
+        }}
+
+        xhr.upload.onprogress = (event) => {{
+          if (event.lengthComputable) {{
+            progress.max = event.total;
+            progress.value = event.loaded;
+          }} else {{
+            progress.removeAttribute("max");
+            progress.value = event.loaded;
+          }}
+          updateSpeed();
+        }};
+
+        xhr.onloadstart = () => {{
+          timer = window.setInterval(() => {{
+            updateSpeed();
+          }}, 250);
+        }};
+
+        xhr.onerror = () => {{
+          window.clearInterval(timer);
+          status.textContent = "Upload failed.";
+          result.textContent = "The request failed before the server responded.";
+        }};
+
+        xhr.onload = () => {{
+          window.clearInterval(timer);
+          const elapsedMs = performance.now() - start;
+          const payload = xhr.response || {{}};
+          if (xhr.status >= 200 && xhr.status < 300) {{
+            const received = payload.received_bytes ?? file.size;
+            status.textContent = `Completed in ${{(elapsedMs / 1000).toFixed(2)}}s.`;
+            speed.textContent = `Average transfer speed ${{formatBytes(received / Math.max(elapsedMs / 1000, 0.001))}}/s`;
+            result.textContent = `Server received ${{formatBytes(received)}} and discarded it.`;
+            progress.max = received || 1;
+            progress.value = received || 1;
+          }} else {{
+            status.textContent = `Upload failed with HTTP ${{xhr.status}}.`;
+            speed.textContent = "Transfer speed unavailable.";
+            result.textContent = payload.detail || "The server rejected the upload.";
+          }}
+        }};
+
+        xhr.onloadend = () => {{
+          window.clearInterval(timer);
+        }};
+
+        xhr.send(data);
+      }});
+    }})();
+  </script>
+</body>
+</html>"""
+
+
+async def _drain_upload_file(upload_file: UploadFile, *, chunk_size: int = 1024 * 1024) -> int:
+    total_bytes = 0
+    while True:
+        chunk = await upload_file.read(chunk_size)
+        if not chunk:
+            break
+        total_bytes += len(chunk)
+    return total_bytes
 
 
 def _health_snapshot() -> dict[str, object]:
@@ -1036,6 +1455,48 @@ def _wait_for_terminal_job(job_id: str, *, timeout_seconds: float = 600.0) -> De
 @app.get("/health")
 def health():
     return _health_snapshot()
+
+
+@app.get("/transfer", response_class=HTMLResponse)
+def transfer_page(request: Request):
+    return HTMLResponse(_transfer_page_html(request=request))
+
+
+@app.post("/transfer/upload", response_model=TransferUploadResponse)
+async def transfer_upload(file: UploadFile = File(...)):
+    received_bytes = 0
+    try:
+        received_bytes = await _drain_upload_file(file)
+    finally:
+        await file.close()
+    return TransferUploadResponse(
+        transfer_mode="multipart",
+        received_bytes=received_bytes,
+        received_filename=file.filename,
+        detail="Multipart upload received and discarded",
+    )
+
+
+@app.post("/transfer/upload/raw", response_model=TransferUploadResponse)
+async def transfer_upload_raw(request: Request):
+    received_bytes = 0
+    async for chunk in request.stream():
+        received_bytes += len(chunk)
+    return TransferUploadResponse(
+        transfer_mode="raw",
+        received_bytes=received_bytes,
+        detail="Raw upload received and discarded",
+    )
+
+
+@app.get("/transfer/download/random-25mb", name="transfer_random_download")
+def transfer_random_download():
+    path = _ensure_random_transfer_file()
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=TRANSFER_RANDOM_FILENAME,
+    )
 
 
 @app.get("/metrics", response_model=DemucsMetricsResponse)

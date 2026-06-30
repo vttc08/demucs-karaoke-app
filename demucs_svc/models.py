@@ -99,6 +99,13 @@ class DemucsJobCreateResponse(BaseModel):
     cancel_url: str
 
 
+class TransferUploadResponse(BaseModel):
+    transfer_mode: Literal["multipart", "raw"]
+    received_bytes: int
+    received_filename: str | None = None
+    detail: str
+
+
 class DemucsJobStatusResponse(BaseModel):
     job_id: str
     status: Literal["queued", "running", "completed", "failed", "canceled"]

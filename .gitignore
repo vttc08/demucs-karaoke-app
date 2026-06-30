@@ -48,6 +48,7 @@ env/
 /tmp/
 karaoke_media/
 karaoke_cache/
+demucs_svc/.cache/
 
 # Test coverage
 .coverage

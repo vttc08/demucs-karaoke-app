@@ -10,6 +10,7 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -1237,6 +1238,97 @@ def test_get_io_usage_reports_current_folder_size_and_counts(monkeypatch, tmp_pa
     assert data["active_job_count"] == 0
     assert data["running_job_count"] == 0
     assert data["detail"] == "Current Demucs IO footprint"
+
+
+def test_transfer_page_renders_upload_download_and_cli_instructions():
+    with patch("demucs_svc.app.preload_models", return_value=[]), patch(
+        "demucs_svc.app.subprocess.run",
+        return_value=SimpleNamespace(returncode=0),
+    ):
+        with TestClient(demucs_app.app) as client:
+            response = client.get("/transfer")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    body = response.text
+    assert "/transfer/upload" in body
+    assert "/transfer/upload/raw" in body
+    assert "/transfer/download/random-25mb" in body
+    assert "curl -X POST" in body
+    assert "wget --method=POST" in body
+
+
+def test_transfer_upload_multipart_discards_bytes_and_reports_count():
+    with patch("demucs_svc.app.preload_models", return_value=[]), patch(
+        "demucs_svc.app.subprocess.run",
+        return_value=SimpleNamespace(returncode=0),
+    ):
+        with TestClient(demucs_app.app) as client:
+            response = client.post(
+                "/transfer/upload",
+                files={"file": ("sample.bin", b"abcdef", "application/octet-stream")},
+            )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["transfer_mode"] == "multipart"
+    assert data["received_bytes"] == 6
+    assert data["received_filename"] == "sample.bin"
+    assert data["detail"] == "Multipart upload received and discarded"
+
+
+def test_transfer_upload_raw_discards_bytes_and_reports_count():
+    with patch("demucs_svc.app.preload_models", return_value=[]), patch(
+        "demucs_svc.app.subprocess.run",
+        return_value=SimpleNamespace(returncode=0),
+    ):
+        with TestClient(demucs_app.app) as client:
+            response = client.request(
+                "POST",
+                "/transfer/upload/raw",
+                content=b"raw-transfer-bytes",
+                headers={"content-type": "application/octet-stream"},
+            )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["transfer_mode"] == "raw"
+    assert data["received_bytes"] == len(b"raw-transfer-bytes")
+    assert data["received_filename"] is None
+    assert data["detail"] == "Raw upload received and discarded"
+
+
+def test_transfer_download_creates_and_reuses_cached_file(monkeypatch, tmp_path):
+    monkeypatch.setattr(demucs_app, "TRANSFER_CACHE_ROOT", tmp_path / "transfer-cache")
+    monkeypatch.setattr(demucs_app, "TRANSFER_RANDOM_FILE_SIZE_BYTES", 1024)
+
+    create_calls: list[Path] = []
+    original_generate = demucs_app._generate_random_transfer_file
+
+    def spy_generate(path):
+        create_calls.append(path)
+        original_generate(path)
+
+    monkeypatch.setattr(demucs_app, "_generate_random_transfer_file", spy_generate)
+
+    with patch("demucs_svc.app.preload_models", return_value=[]), patch(
+        "demucs_svc.app.subprocess.run",
+        return_value=SimpleNamespace(returncode=0),
+    ):
+        with TestClient(demucs_app.app) as client:
+            first = client.get("/transfer/download/random-25mb")
+            second = client.get("/transfer/download/random-25mb")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.headers["content-type"].startswith("application/octet-stream")
+    assert first.headers["content-length"] == "1024"
+    assert first.headers["content-disposition"].startswith("attachment;")
+    assert "random-25mb.bin" in first.headers["content-disposition"]
+    assert len(first.content) == 1024
+    assert first.content == second.content
+    assert len(create_calls) == 1
+    assert create_calls[0] == tmp_path / "transfer-cache" / "random-25mb.bin"
 
 
 def test_cleanup_io_deletes_terminal_jobs_and_files(monkeypatch, tmp_path):
