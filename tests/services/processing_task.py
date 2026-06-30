@@ -150,6 +150,242 @@ def test_success_cleanup_error_does_not_fail_completed_task(
     assert task.status == ProcessingTaskStatus.DONE.value
 
 
+def test_prepare_karaoke_inputs_downloads_audio_when_fresh_video_has_no_audio(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media = MediaItem(
+        youtube_id="videoonly123",
+        title="Video Only",
+        file_stem="video-only",
+        media_path="/media/video-only.mp4",
+        missing=True,
+    )
+    db_session.add(media)
+    db_session.commit()
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="youtube",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PENDING.value,
+        stage="queued",
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    service = KaraokeService()
+    downloaded_video = cache_root / "ytdlp" / str(task.id) / "videoonly123.mp4"
+    downloaded_audio = cache_root / "ytdlp" / str(task.id) / "videoonly123.audio.m4a"
+
+    def fake_download_video(*_args, **_kwargs):
+        downloaded_video.parent.mkdir(parents=True, exist_ok=True)
+        downloaded_video.write_bytes(b"video")
+        return downloaded_video
+
+    def fake_download_audio(*_args, **_kwargs):
+        downloaded_audio.parent.mkdir(parents=True, exist_ok=True)
+        downloaded_audio.write_bytes(b"audio")
+        return downloaded_audio
+
+    monkeypatch.setattr(service, "_download_video_for_task", fake_download_video)
+    monkeypatch.setattr(service, "_download_audio_for_task", fake_download_audio)
+    monkeypatch.setattr(service.ffmpeg, "has_audio_stream", lambda _path: False)
+
+    video_path, audio_path = asyncio.run(
+        service._prepare_karaoke_inputs(
+            db_session,
+            task,
+            media,
+            existing_media_path=None,
+        )
+    )
+
+    assert video_path.name == "video-only.mp4"
+    assert audio_path.name == "video-only.audio.m4a"
+    assert video_path.exists()
+    assert audio_path.exists()
+
+
+def test_prepare_karaoke_inputs_uses_direct_downloaded_video_when_audio_present(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+    monkeypatch.setattr(settings, "demucs_direct_media_max_mb", 500)
+
+    media = MediaItem(
+        youtube_id="audioyes123",
+        title="Audio Yes",
+        file_stem="audio-yes",
+        media_path="/media/audio-yes.mp4",
+        missing=True,
+    )
+    db_session.add(media)
+    db_session.commit()
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="youtube",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PENDING.value,
+        stage="queued",
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    service = KaraokeService()
+    downloaded_video = cache_root / "ytdlp" / str(task.id) / "audioyes123.mp4"
+
+    def fake_download_video(*_args, **_kwargs):
+        downloaded_video.parent.mkdir(parents=True, exist_ok=True)
+        downloaded_video.write_bytes(b"video-with-audio")
+        return downloaded_video
+
+    monkeypatch.setattr(service, "_download_video_for_task", fake_download_video)
+    monkeypatch.setattr(
+        service,
+        "_download_audio_for_task",
+        Mock(side_effect=AssertionError("audio download should not run")),
+    )
+    monkeypatch.setattr(service.ffmpeg, "has_audio_stream", lambda _path: True)
+    monkeypatch.setattr(service.ffmpeg, "has_video_stream", lambda _path: True)
+
+    video_path, audio_path = asyncio.run(
+        service._prepare_karaoke_inputs(
+            db_session,
+            task,
+            media,
+            existing_media_path=None,
+        )
+    )
+
+    assert video_path == audio_path
+    assert video_path.name == "audio-yes.mp4"
+
+
+def test_prepare_karaoke_inputs_downloads_audio_for_existing_youtube_video_without_audio(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    existing_video = media_root / "flowers.mp4"
+    existing_video.write_bytes(b"video")
+    media = MediaItem(
+        youtube_id="G7KNmW9a75Y",
+        title="Flowers",
+        artist="Miley Cyrus",
+        file_stem="Miley Cyrus - Flowers",
+        media_path="/media/flowers.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="youtube",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PENDING.value,
+        stage="queued",
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    service = KaraokeService()
+    downloaded_audio = cache_root / "ytdlp" / str(task.id) / "G7KNmW9a75Y.audio.m4a"
+
+    def fake_download_audio(*_args, **_kwargs):
+        downloaded_audio.parent.mkdir(parents=True, exist_ok=True)
+        downloaded_audio.write_bytes(b"audio")
+        return downloaded_audio
+
+    monkeypatch.setattr(service.ffmpeg, "has_audio_stream", lambda _path: False)
+    monkeypatch.setattr(
+        service.ffmpeg,
+        "extract_audio",
+        Mock(side_effect=AssertionError("extract_audio should not run")),
+    )
+    monkeypatch.setattr(service, "_download_audio_for_task", fake_download_audio)
+
+    video_path, audio_path = asyncio.run(
+        service._prepare_karaoke_inputs(
+            db_session,
+            task,
+            media,
+            existing_media_path=existing_video,
+        )
+    )
+
+    assert video_path == existing_video
+    assert audio_path.name == "Miley Cyrus - Flowers.audio.m4a"
+    assert audio_path.exists()
+
+
+def test_prepare_karaoke_inputs_rejects_local_video_without_audio(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    existing_video = media_root / "silent.mp4"
+    existing_video.write_bytes(b"video")
+    media = MediaItem(
+        title="Silent",
+        file_stem="silent",
+        media_path="/media/silent.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="library_media",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PENDING.value,
+        stage="queued",
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    service = KaraokeService()
+    monkeypatch.setattr(service.ffmpeg, "has_audio_stream", lambda _path: False)
+
+    with pytest.raises(RuntimeError, match="no audio stream"):
+        asyncio.run(
+            service._prepare_karaoke_inputs(
+                db_session,
+                task,
+                media,
+                existing_media_path=existing_video,
+            )
+        )
+
+
 
 def test_processing_task_cancel_cleans_up_partial_artifacts_and_resets_rows(db_session, tmp_path, monkeypatch):
     """Cancel should remove partial files and reset queue/media rows for retry."""

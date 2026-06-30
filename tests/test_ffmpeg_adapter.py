@@ -150,6 +150,72 @@ def test_probe_media_reads_duration_and_stream_types(monkeypatch, tmp_path):
     }
 
 
+def test_has_audio_stream_reads_ffprobe_json(monkeypatch, tmp_path):
+    adapter = FFmpegAdapter(ffmpeg_path="/opt/bin/ffmpeg")
+    source_path = tmp_path / "input.mp4"
+    captured = {}
+
+    def fake_run(cmd, check, capture_output, text):
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout='{"streams":[{"codec_type":"audio"}]}',
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert adapter.has_audio_stream(source_path) is True
+    assert captured["cmd"] == [
+        "/opt/bin/ffprobe",
+        "-v",
+        "quiet",
+        "-print_format",
+        "json",
+        "-show_streams",
+        "-select_streams",
+        "a",
+        str(source_path),
+    ]
+
+
+def test_has_audio_stream_returns_false_without_audio(monkeypatch, tmp_path):
+    adapter = FFmpegAdapter(ffmpeg_path="/bin/ffmpeg")
+
+    def fake_run(cmd, check, capture_output, text):
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout='{"streams":[]}')
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert adapter.has_audio_stream(tmp_path / "input.mp4") is False
+
+
+@pytest.mark.parametrize(
+    "side_effect,stdout",
+    [
+        (FileNotFoundError(), ""),
+        (subprocess.CalledProcessError(returncode=1, cmd=["ffprobe"]), ""),
+        (None, "{not-json"),
+    ],
+)
+def test_has_audio_stream_returns_false_when_probe_fails(
+    monkeypatch,
+    tmp_path,
+    side_effect,
+    stdout,
+):
+    adapter = FFmpegAdapter(ffmpeg_path="/bin/ffmpeg")
+
+    def fake_run(cmd, check, capture_output, text):
+        if side_effect is not None:
+            raise side_effect
+        return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=stdout)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    assert adapter.has_audio_stream(tmp_path / "input.mp4") is False
+
+
 def test_get_video_keyframes_normalizes_media_start_time(monkeypatch, tmp_path):
     adapter = FFmpegAdapter(ffmpeg_path="/opt/bin/ffmpeg")
     monkeypatch.setattr(
