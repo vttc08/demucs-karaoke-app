@@ -261,6 +261,41 @@ def test_subtitle_editor_service_process_segments_wraps_english_cjk_and_mixed_li
     assert all(len(segment["text"]) <= 12 or any("\u4e00" <= char <= "\u9fff" for char in segment["text"]) for segment in processed)
 
 
+def test_subtitle_editor_service_process_segments_drops_blank_rows():
+    segments = [
+        {
+            "start": 0.0,
+            "end": 1.0,
+            "text": "Hello world",
+            "words": [
+                {"word": "Hello", "start": 0.0, "end": 0.5},
+                {"word": "world", "start": 0.5, "end": 1.0},
+            ],
+        },
+        {
+            "start": 1.0,
+            "end": 1.0,
+            "text": "",
+            "words": [],
+        },
+        {
+            "start": 1.0,
+            "end": 2.0,
+            "text": "Again",
+            "words": [{"word": "Again", "start": 1.0, "end": 2.0}],
+        },
+    ]
+
+    processed = subtitle_editor_service.process_segments(
+        segments,
+        max_line_length=12,
+        max_line_length_cjk=4,
+    )
+
+    assert [segment["text"] for segment in processed] == ["Hello world", "Again"]
+    assert all(segment["text"].strip() for segment in processed)
+
+
 def test_subtitle_editor_service_process_saved_segments_rewraps_disk_state(db_session, tmp_path, monkeypatch):
     media_root = tmp_path / "media"
     media_root.mkdir()

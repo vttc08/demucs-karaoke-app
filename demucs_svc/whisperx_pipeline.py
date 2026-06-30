@@ -462,8 +462,10 @@ def _rebuild_segments(
 
     expected_word_count = sum(len(_alignment_tokens(segment.text)) for segment in filtered_segments)
     if expected_word_count == len(filtered_words):
-        return _realign_easy(filtered_segments, filtered_words)
-    return _realign_with_sequence(filtered_segments, filtered_words)
+        rebuilt = _realign_easy(filtered_segments, filtered_words)
+    else:
+        rebuilt = _realign_with_sequence(filtered_segments, filtered_words)
+    return [segment for segment in rebuilt if str(segment.get("text", "")).strip() or segment.get("words")]
 
 
 def align_lyrics(

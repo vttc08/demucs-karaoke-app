@@ -68,7 +68,7 @@ class SubtitleEditorService:
 
     def save_segments(self, db: Session, media_item_id: int, segments: list[dict[str, Any]]) -> SubtitleEditorPayload:
         media_item, _lyrics_file = self._get_editable_media(db, media_item_id)
-        normalized_segments = self._normalize_segments(segments)
+        normalized_segments = self._compact_segments(segments)
         lyrics_text = json.dumps({"segments": normalized_segments}, ensure_ascii=False, indent=2)
         self.queue_service.store_lyrics_sidecar(
             media_item,
@@ -125,7 +125,7 @@ class SubtitleEditorService:
         max_line_length: int,
         max_line_length_cjk: int,
     ) -> list[dict[str, Any]]:
-        normalized = self._normalize_segments(segments)
+        normalized = self._compact_segments(segments)
         return self._rewrap_segments(normalized, max_line_length=max_line_length, max_line_length_cjk=max_line_length_cjk)
 
     def process_saved_segments(
@@ -137,7 +137,7 @@ class SubtitleEditorService:
         max_line_length_cjk: int,
     ) -> list[dict[str, Any]]:
         media_item, _lyrics_file = self._get_editable_media(db, media_item_id)
-        segments = self._load_segments(media_item)
+        segments = self._compact_segments(self._load_segments(media_item))
         return self._rewrap_segments(segments, max_line_length=max_line_length, max_line_length_cjk=max_line_length_cjk)
 
     def _rewrap_segments(
@@ -175,7 +175,7 @@ class SubtitleEditorService:
         rebuilt = _rebuild_segments(processed_segments, aligned_words)
         if not rebuilt:
             return []
-        return self._normalize_segments(rebuilt)
+        return self._compact_segments(rebuilt)
 
     def _load_segments(self, media_item: MediaItem) -> list[dict[str, Any]]:
         payload = self.lyrics_service.load_lyrics_payload_from_media_url(media_item.lyrics_path or "")
@@ -210,7 +210,18 @@ class SubtitleEditorService:
                     ],
                 }
             )
-        return self._normalize_segments(segments)
+        return self._compact_segments(segments)
+
+    @classmethod
+    def _compact_segments(cls, segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        compacted: list[dict[str, Any]] = []
+        for segment in cls._normalize_segments(segments):
+            text = str(segment.get("text", "")).strip()
+            words = list(segment.get("words") or [])
+            if not text and not words:
+                continue
+            compacted.append(segment)
+        return compacted
 
     @staticmethod
     def _normalize_words(words: object) -> list[dict[str, Any]]:

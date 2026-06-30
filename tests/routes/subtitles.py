@@ -326,6 +326,73 @@ def test_subtitle_json_process_and_save_routes_round_trip(client, tmp_path, monk
     ]
 
 
+def test_subtitle_save_endpoint_compacts_blank_segments_before_persisting(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    lyrics_file = tmp_path / "song.json"
+    media_file.write_bytes(b"video")
+    lyrics_file.write_text(
+        json.dumps(
+            {
+                "segments": [
+                    {
+                        "start": 0.0,
+                        "end": 1.0,
+                        "text": "Hello world",
+                        "words": [
+                            {"word": "Hello", "start": 0.0, "end": 0.5},
+                            {"word": "world", "start": 0.5, "end": 1.0},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path="/media/song.json",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.post(
+        f"/api/media/{media_id}/subtitles/save",
+        json={
+            "segments": [
+                {
+                    "start": 0.0,
+                    "end": 1.0,
+                    "text": "Hello world",
+                    "words": [
+                        {"word": "Hello", "start": 0.0, "end": 0.5},
+                        {"word": "world", "start": 0.5, "end": 1.0},
+                    ],
+                },
+                {"start": 1.0, "end": 1.0, "text": "", "words": []},
+                {
+                    "start": 1.0,
+                    "end": 2.0,
+                    "text": "Again",
+                    "words": [{"word": "Again", "start": 1.0, "end": 2.0}],
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    assert [segment["text"] for segment in response.json()["segments"]] == ["Hello world", "Again"]
+    saved_payload = json.loads(lyrics_file.read_text(encoding="utf-8"))
+    assert [segment["text"] for segment in saved_payload["segments"]] == ["Hello world", "Again"]
+
+
 def test_subtitle_process_endpoint_reloads_persisted_json_before_rewrapping(client, tmp_path, monkeypatch):
     authenticate_admin_client(client)
     monkeypatch.setattr(settings, "media_path", tmp_path)
