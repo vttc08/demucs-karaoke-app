@@ -1255,6 +1255,32 @@ The remote Demucs service also exposes:
   - `adaptive` avoids full model unload while jobs are still running
   - `partial`, `cuda`, and `full` are available for operator use
 
+### Transfer Bench
+
+The standalone Demucs host also serves a small throughput-testing page and helper endpoints:
+
+- `GET /transfer`
+  - browser page with a multipart upload form, a download button, a progress bar, and CLI examples
+- `POST /transfer/upload`
+  - multipart upload endpoint for browser testing
+  - the service reads the uploaded bytes and discards them immediately
+- `POST /transfer/upload/raw`
+  - raw-body upload endpoint for `curl` and `wget`
+  - accepts arbitrary request bodies and discards them immediately
+- `GET /transfer/download/random-25mb`
+  - lazily generates a cached 25 MiB random file on first request
+  - reuses the cached file on later requests so repeated downloads test transfer speed instead of file generation
+
+Example commands:
+
+```bash
+curl -F "file=@/path/to/media.bin" "http://127.0.0.1:8001/transfer/upload"
+curl -X POST --data-binary "@/path/to/media.bin" "http://127.0.0.1:8001/transfer/upload/raw"
+curl -OJ "http://127.0.0.1:8001/transfer/download/random-25mb"
+wget --method=POST --body-file=/path/to/media.bin -O - "http://127.0.0.1:8001/transfer/upload/raw"
+wget -O random-25mb.bin "http://127.0.0.1:8001/transfer/download/random-25mb"
+```
+
 At startup the service logs a healthy or degraded readiness summary, and WhisperX preload
 failures are logged with the exception details so missing Demucs dependencies are visible in the
 terminal immediately.
