@@ -53,6 +53,11 @@ const lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
 
 let ws = null;
 let shouldReconnectSocket = true;
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let reconnectDelayMs = 1000;
+let lastSocketMessageAt = 0;
+let lastSocketPingAt = 0;
 let currentItem = null;
 let currentItemId = Number(main?.dataset.initialItemId || 0) || null;
 let isSynced = false;
@@ -1027,8 +1032,10 @@ async function refreshCurrentItem() {
 }
 
 function handleSocketMessage(message) {
+    lastSocketMessageAt = Date.now();
     const type = message?.type;
     if (type === "ping") {
+        lastSocketPingAt = Date.now();
         ws?.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
         return;
     }
@@ -1090,62 +1097,167 @@ function handleSocketMessage(message) {
     }
 }
 
-function connectSocket() {
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-        return;
+function clearReconnectTimer() {
+    if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
     }
-    shouldReconnectSocket = true;
-    ws = new WebSocket(appWsUrl("/api/queue/ws"));
-    setLiveStatus(t("queue_lyrics.connecting"));
-
-    ws.onopen = () => {
-        ws?.send(JSON.stringify({
-            type: "client_subscribe",
-            data: { page: "lyrics_viewer" },
-            timestamp: Date.now(),
-        }));
-        setLiveStatus(t("queue.connected"), "online");
-    };
-
-    ws.onmessage = (event) => {
-        try {
-            handleSocketMessage(JSON.parse(event.data));
-        } catch (error) {
-            console.warn("Invalid websocket message:", error);
-        }
-    };
-
-    ws.onclose = () => {
-        setLiveStatus(t("queue.offline"), "offline");
-        if (shouldReconnectSocket) {
-            window.setTimeout(connectSocket, 2000);
-        }
-    };
-
-    ws.onerror = () => {
-        setLiveStatus(t("queue.offline"), "offline");
-    };
 }
 
-function closeSocketBeforeUnload() {
+function isSocketStale() {
+    return window.KaraokeWebSocketLifecycle?.isSocketStale({
+        socket: ws,
+        lastActivityAt: Math.max(lastSocketMessageAt || 0, lastSocketPingAt || 0),
+        graceMs: 5000,
+    }) || false;
+}
+
+function resetReconnectState() {
+    clearReconnectTimer();
+    reconnectAttempts = 0;
+    reconnectDelayMs = 1000;
+}
+
+function scheduleReconnect() {
+    if (!shouldReconnectSocket) {
+        return;
+    }
+    reconnectAttempts += 1;
+    const rawDelay = Math.min(reconnectDelayMs * Math.pow(2, reconnectAttempts - 1), 8000);
+    const delay = window.KaraokeWebSocketLifecycle?.withJitter(rawDelay) ?? rawDelay;
+    clearReconnectTimer();
+    reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        connectSocket(true);
+    }, delay);
+}
+
+function reconnectNow(reason = "manual") {
+    shouldReconnectSocket = true;
+    clearReconnectTimer();
+    if (ws && ws.readyState !== WebSocket.CLOSED) {
+        try {
+            ws.close(4000, reason);
+        } catch (_) {
+            // Best-effort only.
+        }
+    }
+    ws = null;
+    resetReconnectState();
+    connectSocket(true);
+}
+
+function handleVisibleResume(event) {
+    shouldReconnectSocket = true;
+    if (!window.KaraokeWebSocketLifecycle?.isVisible()) {
+        return;
+    }
+    if (ws && ws.readyState === WebSocket.CONNECTING) {
+        return;
+    }
+    if (!ws || ws.readyState === WebSocket.CLOSED || isSocketStale() || event?.persisted) {
+        reconnectNow(event?.persisted ? "pageshow" : "foreground");
+        return;
+    }
+    refreshCurrentItem().catch((error) => {
+        console.warn("Failed to refresh lyrics on resume:", error);
+    });
+}
+
+function handlePageHide() {
     shouldReconnectSocket = false;
+    clearReconnectTimer();
     if (!ws) {
         return;
     }
     try {
-        ws.close(1000, "page unload");
+        ws.close(1000, "page hide");
     } catch (_) {
         // Best-effort shutdown only.
     }
 }
 
-window.addEventListener("pagehide", closeSocketBeforeUnload);
-window.addEventListener("beforeunload", closeSocketBeforeUnload);
-window.addEventListener("pageshow", () => {
-    shouldReconnectSocket = true;
-    if (!ws || ws.readyState === WebSocket.CLOSED) {
-        connectSocket();
+function connectSocket(force = false) {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        if (!force) {
+            return;
+        }
+        try {
+            ws.close(4000, "force reconnect");
+        } catch (_) {
+            // Best-effort only.
+        }
+        ws = null;
     }
+    if (!shouldReconnectSocket) {
+        return;
+    }
+    setLiveStatus(t("queue_lyrics.connecting"));
+    try {
+        ws = new WebSocket(appWsUrl("/api/queue/ws"));
+        const socket = ws;
+
+        ws.onopen = () => {
+            if (ws !== socket) {
+                return;
+            }
+            resetReconnectState();
+            lastSocketMessageAt = Date.now();
+            lastSocketPingAt = 0;
+            socket.send(JSON.stringify({
+                type: "client_subscribe",
+                data: { page: "lyrics_viewer" },
+                timestamp: Date.now(),
+            }));
+            setLiveStatus(t("queue.connected"), "online");
+            refreshCurrentItem().catch((error) => {
+                console.warn("Failed to refresh lyrics after reconnect:", error);
+            });
+        };
+
+        ws.onmessage = (event) => {
+            if (ws !== socket) {
+                return;
+            }
+            try {
+                handleSocketMessage(JSON.parse(event.data));
+            } catch (error) {
+                console.warn("Invalid websocket message:", error);
+            }
+        };
+
+        ws.onclose = () => {
+            if (ws !== socket) {
+                return;
+            }
+            ws = null;
+            setLiveStatus(t("queue.offline"), "offline");
+            if (shouldReconnectSocket) {
+                scheduleReconnect();
+            }
+        };
+
+        ws.onerror = () => {
+            if (ws !== socket) {
+                return;
+            }
+            setLiveStatus(t("queue.offline"), "offline");
+        };
+    } catch (error) {
+        console.warn("Failed to open lyrics websocket:", error);
+        setLiveStatus(t("queue.offline"), "offline");
+        if (shouldReconnectSocket) {
+            scheduleReconnect();
+        }
+    }
+}
+
+window.KaraokeWebSocketLifecycle?.installPageLifecycle({
+    onVisible: () => handleVisibleResume(),
+    onOnline: () => handleVisibleResume(),
+    onPageShow: (event) => handleVisibleResume(event),
+    onPageHide: () => handlePageHide(),
+    onOffline: () => setLiveStatus(t("queue.offline"), "offline"),
 });
 
 function getInferenceSeed() {

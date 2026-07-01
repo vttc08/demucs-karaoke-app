@@ -285,6 +285,7 @@ async def queue_page(request: Request, db: Session = Depends(get_db)):
             "needs_singer_name": not singer_name,
             "is_admin": is_admin,
             "stage_vocals_volume_default": runtime_settings.stage_vocals_volume_default,
+            "ws_heartbeat_interval_seconds": settings.ws_heartbeat_interval,
         },
     )
 
@@ -298,6 +299,7 @@ async def queue_lyrics_page(request: Request, db: Session = Depends(get_db)):
         {
             "request": request,
             "current": current_item,
+            "ws_heartbeat_interval_seconds": settings.ws_heartbeat_interval,
         },
     )
 
@@ -320,6 +322,7 @@ async def stage_page(request: Request, db: Session = Depends(get_db)):
             "stage_qr_url": runtime_settings.stage_qr_url,
             "stage_lobby_media_url": lobby_media_url,
             "stage_vocals_volume_default": runtime_settings.stage_vocals_volume_default,
+            "ws_heartbeat_interval_seconds": settings.ws_heartbeat_interval,
         },
     )
 

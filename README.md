@@ -11,6 +11,7 @@ Lightweight AI-powered karaoke application for home use.
 - **Subtitle Workflow**: Admin-only ASS/Aegisub and SRT/SubtitleEdit editor for round-tripping synced JSON lyrics
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
+- **Mobile-Friendly Reconnects**: Lifecycle-aware websocket recovery on queue, lyrics, and stage pages for faster return after backgrounding or screen-off on mobile browsers
 - **Live Queue Presence**: Queue page shows active guests and join toasts in real time
 - **Frontend Language Switching**: English and Simplified Chinese UI labels with a header selector
 

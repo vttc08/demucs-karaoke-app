@@ -96,6 +96,8 @@ The queue page uses a hybrid update model:
 - Primary: WebSocket push at `/api/queue/ws`
 - Fallback: periodic polling from `static/queue.js` when WebSocket reconnect attempts are exhausted
 - Presence roster fallback: `GET /api/queue/presence` on the same polling interval when WebSocket is unavailable
+- Mobile reconnect recovery is lifecycle-aware on `/queue`, `/queue/lyrics`, and `/stage`: the client closes sockets on `pagehide`, reconnects immediately on `pageshow`/foreground return, and treats `navigator.onLine` as only a hint.
+- Queue fallback polling uses a short recovery window first, then falls back to the normal longer interval if the websocket stays unavailable.
 
 The stage page uses a websocket-first model:
 
@@ -110,6 +112,7 @@ The stage page uses a websocket-first model:
 ### WebSocket server flow
 
 - `routes/queue.py` hosts the WebSocket endpoint and heartbeat loop (server `ping`, client `pong`).
+- The heartbeat loop actively evicts stale clients after missed heartbeats so dead mobile sockets do not linger indefinitely.
 - `services/websocket_manager.py` tracks active connections and broadcasts queue events.
 - WebSocket clients now register a page role after connect (`queue`, `stage`, `lyrics_viewer`) so the
   server can target event delivery instead of broadcasting every event to every page.

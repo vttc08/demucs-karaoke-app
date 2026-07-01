@@ -40,8 +40,15 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         """Accept and register a new WebSocket connection."""
         await websocket.accept()
+        now = self._timestamp()
         async with self._lock:
             self.active_connections.append(websocket)
+            self._connection_context[websocket] = {
+                "connected_at": now,
+                "last_seen_at": now,
+                "last_ping_at": None,
+                "last_pong_at": now,
+            }
         logger.info("WebSocket connected total_connections=%s", len(self.active_connections))
 
     async def disconnect(self, websocket: Any):
@@ -90,6 +97,55 @@ class ConnectionManager:
         except Exception:
             logger.exception("Failed personal websocket send")
             await self.disconnect(websocket)
+
+    async def touch_connection(self, websocket: Any):
+        """Refresh the activity timestamp for one connection."""
+        async with self._lock:
+            context = self._connection_context.get(websocket)
+            if context is None:
+                return
+            context["last_seen_at"] = self._timestamp()
+
+    async def mark_connection_ping(self, websocket: Any):
+        """Record the last heartbeat ping sent to one connection."""
+        async with self._lock:
+            context = self._connection_context.get(websocket)
+            if context is None:
+                return
+            context["last_ping_at"] = self._timestamp()
+
+    async def mark_connection_pong(self, websocket: Any):
+        """Record the last heartbeat pong received from one connection."""
+        async with self._lock:
+            context = self._connection_context.get(websocket)
+            if context is None:
+                return
+            now = self._timestamp()
+            context["last_pong_at"] = now
+            context["last_seen_at"] = now
+
+    async def is_connection_stale(
+        self,
+        websocket: Any,
+        *,
+        heartbeat_interval_seconds: float,
+        grace_seconds: float = 5.0,
+    ) -> bool:
+        """Return whether a connection has missed enough heartbeats to be evicted."""
+        async with self._lock:
+            context = self._connection_context.get(websocket)
+            if context is None:
+                return False
+            last_seen_at = context.get("last_seen_at")
+        if last_seen_at is None:
+            return False
+        try:
+            last_seen = datetime.fromisoformat(last_seen_at)
+        except ValueError:
+            return False
+        age_seconds = (datetime.now(timezone.utc) - last_seen).total_seconds()
+        stale_after_seconds = max(0.0, float(heartbeat_interval_seconds)) * 2 + max(0.0, float(grace_seconds))
+        return age_seconds > stale_after_seconds
 
     async def broadcast(self, message: dict):
         """Broadcast a message to all active connections."""
@@ -225,15 +281,19 @@ class ConnectionManager:
         stage_name: str,
     ):
         """Register or refresh a connected stage display."""
+        now = self._timestamp()
         async with self._lock:
             self._connection_context[websocket] = {
                 "page": "stage",
                 "role": "stage",
                 "stage_id": stage_id,
+                "connected_at": now,
+                "last_seen_at": now,
+                "last_ping_at": None,
+                "last_pong_at": now,
             }
             existing = self._stage_presence.get(stage_id)
             if existing is None:
-                now = self._timestamp()
                 self._stage_presence[stage_id] = {
                     "stage_name": stage_name,
                     "connected_at": now,
@@ -311,19 +371,24 @@ class ConnectionManager:
         """Register or refresh queue-page presence for a websocket connection."""
         join_payload = None
         update_payload = None
+        now = self._timestamp()
         async with self._lock:
             self._connection_context[websocket] = {
                 "page": "queue",
                 "role": "queue",
                 "guest_id": guest_id,
                 "tab_id": tab_id,
+                "connected_at": now,
+                "last_seen_at": now,
+                "last_ping_at": None,
+                "last_pong_at": now,
             }
 
             existing = self._queue_presence.get(guest_id)
             if existing is None:
                 self._queue_presence[guest_id] = {
                     "display_name": display_name,
-                    "joined_at": self._timestamp(),
+                    "joined_at": now,
                     "tab_ids": {tab_id},
                 }
                 join_payload = self._build_presence_payload(guest_id)
@@ -371,6 +436,10 @@ class ConnectionManager:
                     "role": "queue",
                     "guest_id": guest_id,
                     "tab_id": tab_id,
+                    "connected_at": self._timestamp(),
+                    "last_seen_at": self._timestamp(),
+                    "last_ping_at": None,
+                    "last_pong_at": self._timestamp(),
                 }
             else:
                 self._connection_context[websocket] = {
@@ -378,6 +447,10 @@ class ConnectionManager:
                     "role": "queue",
                     "guest_id": guest_id,
                     "tab_id": tab_id,
+                    "connected_at": self._timestamp(),
+                    "last_seen_at": self._timestamp(),
+                    "last_ping_at": None,
+                    "last_pong_at": self._timestamp(),
                 }
                 presence["tab_ids"].add(tab_id)
                 presence["display_name"] = display_name or presence["display_name"]

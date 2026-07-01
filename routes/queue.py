@@ -432,9 +432,18 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
         # Heartbeat task
         async def send_heartbeat():
             """Send periodic heartbeat to keep connection alive."""
+            interval_seconds = max(1.0, float(settings.ws_heartbeat_interval))
             while True:
                 try:
-                    await asyncio.sleep(settings.ws_heartbeat_interval)
+                    await asyncio.sleep(interval_seconds)
+                    if await manager.is_connection_stale(
+                        websocket,
+                        heartbeat_interval_seconds=interval_seconds,
+                    ):
+                        logger.info("Closing stale websocket connection")
+                        await websocket.close(code=1001, reason="heartbeat timeout")
+                        break
+                    await manager.mark_connection_ping(websocket)
                     await websocket.send_json({
                         "type": "ping",
                         "timestamp": asyncio.get_event_loop().time()
@@ -447,9 +456,11 @@ async def websocket_endpoint(websocket: WebSocket, db: Session = Depends(get_db)
         # Listen for client messages
         while True:
             data = await websocket.receive_json()
+            await manager.touch_connection(websocket)
 
             # Handle pong response
             if data.get("type") == "pong":
+                await manager.mark_connection_pong(websocket)
                 logger.debug("Received pong from client")
                 continue
 

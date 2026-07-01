@@ -167,6 +167,7 @@
         window.KARAOKE_BASE_PATH = {{ app_url('') | tojson }};
         window.KARAOKE_LOCALE = {{ current_locale(request) | tojson }};
         window.KARAOKE_I18N_CATALOGS = {{ i18n_catalogs() | tojson }};
+        window.KARAOKE_WS_HEARTBEAT_INTERVAL_SECONDS = {{ ws_heartbeat_interval_seconds | default(30) | tojson }};
         window.KaraokeI18n = {
             locale: window.KARAOKE_LOCALE || "en",
             catalogs: window.KARAOKE_I18N_CATALOGS || {},
@@ -184,6 +185,7 @@
     <script src="{{ app_url('/static/app-urls.js') }}"></script>
     <script src="{{ app_url('/static/language-selector.js') }}"></script>
     <script src="{{ app_url('/static/task-progress.js') }}"></script>
+    <script src="{{ static_asset_url('/static/websocket-lifecycle.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
