@@ -36,9 +36,24 @@ class DemucsClient:
     REQUEST_TIMEOUT_SECONDS = 600.0
     DELETE_TIMEOUT_SECONDS = 30.0
 
-    def __init__(self, api_url: str = None, poll_interval_seconds: float | None = None):
+    def __init__(
+        self,
+        api_url: str = None,
+        api_key: str | None = None,
+        poll_interval_seconds: float | None = None,
+    ):
         self.api_url = api_url or settings.demucs_api_url
+        self.api_key = (settings.demucs_api_key if api_key is None else api_key).strip()
         self.poll_interval_seconds = poll_interval_seconds
+
+    def _auth_headers(self) -> dict[str, str]:
+        if not self.api_key:
+            return {}
+        return {"X-API-Key": self.api_key}
+
+    def _request_headers_kwargs(self) -> dict[str, dict[str, str]]:
+        headers = self._auth_headers()
+        return {"headers": headers} if headers else {}
 
     @staticmethod
     def _extract_stems_zip(payload: bytes) -> tuple[bytes, bytes, bytes | None, str]:
@@ -137,12 +152,22 @@ class DemucsClient:
         log_callback: LogCallback | None = None,
     ) -> None:
         try:
-            await client.delete(f"{self.api_url}/jobs/{job_id}", timeout=self.DELETE_TIMEOUT_SECONDS)
+            await client.delete(
+                f"{self.api_url}/jobs/{job_id}",
+                timeout=self.DELETE_TIMEOUT_SECONDS,
+                **self._request_headers_kwargs(),
+            )
             if log_callback is not None:
-                log_callback("remote", f"Requested remote Demucs cancellation for job {job_id}")
+                log_callback(
+                    "remote",
+                    f"Requested remote Demucs cancellation for job {job_id}",
+                )
         except Exception as error:
             if log_callback is not None:
-                log_callback("remote", f"Failed to request remote Demucs cancellation for job {job_id}: {error}")
+                log_callback(
+                    "remote",
+                    f"Failed to request remote Demucs cancellation for job {job_id}: {error}",
+                )
 
     async def separate_vocals(
         self,
@@ -178,6 +203,7 @@ class DemucsClient:
                 create_response = await client.post(
                     f"{self.api_url}/jobs",
                     files={"file": (audio_path.name, fh, "audio/wav")},
+                    **self._request_headers_kwargs(),
                     data=self._build_request_data(
                         lyrics_text=lyrics_text,
                         lyrics_format=lyrics_format,
@@ -212,7 +238,10 @@ class DemucsClient:
                         remote_cancel_requested = True
                         raise asyncio.CancelledError()
 
-                    status_response = await client.get(f"{self.api_url}/jobs/{job_id}")
+                    status_response = await client.get(
+                        f"{self.api_url}/jobs/{job_id}",
+                        **self._request_headers_kwargs(),
+                    )
                     status_response.raise_for_status()
                     status_payload = status_response.json()
                     self._emit_remote_log_lines(
@@ -233,7 +262,10 @@ class DemucsClient:
 
                     status = str(status_payload.get("status"))
                     if status == "completed":
-                        result_response = await client.get(f"{self.api_url}/jobs/{job_id}/result")
+                        result_response = await client.get(
+                            f"{self.api_url}/jobs/{job_id}/result",
+                            **self._request_headers_kwargs(),
+                        )
                         result_response.raise_for_status()
                         no_vocals_bytes, vocals_bytes, aligned_bytes, extension = self._extract_stems_zip(
                             result_response.content
@@ -318,6 +350,7 @@ class DemucsClient:
                 create_response = await client.post(
                     f"{self.api_url}/align-jobs",
                     files={"file": (vocals_path.name, fh, "audio/wav")},
+                    **self._request_headers_kwargs(),
                     data=self._build_request_data(
                         lyrics_text=lyrics_text,
                         lyrics_format=lyrics_format,
@@ -352,7 +385,10 @@ class DemucsClient:
                         remote_cancel_requested = True
                         raise asyncio.CancelledError()
 
-                    status_response = await client.get(f"{self.api_url}/jobs/{job_id}")
+                    status_response = await client.get(
+                        f"{self.api_url}/jobs/{job_id}",
+                        **self._request_headers_kwargs(),
+                    )
                     status_response.raise_for_status()
                     status_payload = status_response.json()
                     self._emit_remote_log_lines(
@@ -373,7 +409,10 @@ class DemucsClient:
 
                     status = str(status_payload.get("status"))
                     if status == "completed":
-                        result_response = await client.get(f"{self.api_url}/align-jobs/{job_id}/result")
+                        result_response = await client.get(
+                            f"{self.api_url}/align-jobs/{job_id}/result",
+                            **self._request_headers_kwargs(),
+                        )
                         result_response.raise_for_status()
                         aligned_output_path = out_dir / f"{vocals_path.stem}_{job_id}_aligned_lyrics.json"
                         aligned_output_path.write_bytes(result_response.content)
@@ -428,6 +467,7 @@ class DemucsClient:
         response = httpx.post(
             f"{self.api_url}/whisperx/preload",
             data=data,
+            **self._request_headers_kwargs(),
             timeout=self.PRELOAD_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
@@ -437,7 +477,9 @@ class DemucsClient:
         """Check if Demucs service is available and ready."""
         try:
             response = httpx.get(
-                f"{self.api_url}/health", timeout=self.HEALTH_TIMEOUT_SECONDS
+                f"{self.api_url}/health",
+                **self._request_headers_kwargs(),
+                timeout=self.HEALTH_TIMEOUT_SECONDS,
             )
             if response.status_code != 200:
                 return DemucsHealthResponse(
@@ -487,6 +529,7 @@ class DemucsClient:
         response = httpx.post(
             f"{self.api_url}/gc",
             params={"mode": mode},
+            **self._request_headers_kwargs(),
             timeout=self.GC_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
@@ -497,6 +540,7 @@ class DemucsClient:
         """Fetch the current remote Demucs IO footprint."""
         response = httpx.get(
             f"{self.api_url}/io",
+            **self._request_headers_kwargs(),
             timeout=self.IO_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
@@ -506,6 +550,7 @@ class DemucsClient:
         """Delete all remote Demucs IO scratch files when no jobs are active."""
         response = httpx.delete(
             f"{self.api_url}/io",
+            **self._request_headers_kwargs(),
             timeout=self.IO_CLEANUP_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
@@ -515,6 +560,7 @@ class DemucsClient:
         """Delete remote job input/output artifacts after local success is durable."""
         response = httpx.delete(
             f"{self.api_url}/jobs/{job_id}/artifacts",
+            **self._request_headers_kwargs(),
             timeout=self.DELETE_TIMEOUT_SECONDS,
         )
         response.raise_for_status()

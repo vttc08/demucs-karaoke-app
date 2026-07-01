@@ -55,6 +55,7 @@ class RuntimeSettingsService:
     YTDLP_PIP_MANAGED_ERROR = "You installed yt-dlp with pip or using the wheel from PyPi"
     PERSISTED_SETTING_FIELDS = (
         "demucs_api_url",
+        "demucs_api_key",
         "demucs_model",
         "demucs_device",
         "demucs_output_format",
@@ -224,6 +225,7 @@ class RuntimeSettingsService:
 
         return RuntimeSettingsResponse(
             demucs_api_url=settings.demucs_api_url,
+            demucs_api_key=settings.demucs_api_key,
             demucs_healthy=demucs_healthy,
             demucs_health_detail=demucs_health_detail,
             demucs_model=settings.demucs_model,
@@ -292,6 +294,11 @@ class RuntimeSettingsService:
             snapshot.setdefault("demucs_api_url", settings.demucs_api_url)
             settings.demucs_api_url = value
             updated_fields.append("demucs_api_url")
+
+        if payload.demucs_api_key is not None:
+            snapshot.setdefault("demucs_api_key", settings.demucs_api_key)
+            settings.demucs_api_key = payload.demucs_api_key.strip()
+            updated_fields.append("demucs_api_key")
 
         if payload.demucs_model is not None:
             model = payload.demucs_model.strip()
@@ -524,6 +531,8 @@ class RuntimeSettingsService:
         """Apply a single persisted setting value to the in-memory settings object."""
         if field_name == "demucs_api_url":
             settings.demucs_api_url = raw_value
+        elif field_name == "demucs_api_key":
+            settings.demucs_api_key = raw_value.strip()
         elif field_name == "demucs_model":
             settings.demucs_model = raw_value
         elif field_name == "demucs_device":

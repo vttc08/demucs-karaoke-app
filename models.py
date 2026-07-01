@@ -448,6 +448,7 @@ class RuntimeSettingsResponse(BaseModel):
     """Runtime-editable application settings."""
 
     demucs_api_url: str
+    demucs_api_key: str
     demucs_healthy: bool
     demucs_health_detail: str
     demucs_model: str
@@ -482,6 +483,7 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     """Partial update payload for runtime settings."""
 
     demucs_api_url: Optional[str] = None
+    demucs_api_key: Optional[str] = None
     demucs_model: Optional[str] = None
     demucs_device: Optional[str] = None
     demucs_output_format: Optional[str] = None

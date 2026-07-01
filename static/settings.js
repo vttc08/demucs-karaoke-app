@@ -48,6 +48,7 @@ let saveFeedbackTimer = null;
 
 const fields = {
     demucs_api_url: document.getElementById("demucs_api_url"),
+    demucs_api_key: document.getElementById("demucs_api_key"),
     demucs_model: document.getElementById("demucs_model"),
     demucs_device: document.getElementById("demucs_device"),
     demucs_output_format: document.getElementById("demucs_output_format"),
@@ -559,6 +560,7 @@ async function cleanupStorage() {
 
 function applySettingsToForm(data) {
     fields.demucs_api_url.value = data.demucs_api_url || "";
+    fields.demucs_api_key.value = data.demucs_api_key || "";
     fields.demucs_model.value = data.demucs_model || "htdemucs";
     fields.demucs_device.value = data.demucs_device || "cuda";
     fields.demucs_output_format.value = data.demucs_output_format || "wav";
@@ -639,6 +641,7 @@ async function saveSettings() {
 
     const payload = {
         demucs_api_url: fields.demucs_api_url.value.trim(),
+        demucs_api_key: fields.demucs_api_key.value.trim(),
         demucs_model: fields.demucs_model.value,
         demucs_device: fields.demucs_device.value,
         demucs_output_format: fields.demucs_output_format.value,

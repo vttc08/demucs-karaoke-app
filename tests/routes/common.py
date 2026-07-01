@@ -63,6 +63,7 @@ def client():
         "stage_vocals_volume_default"
     ].default
     original_demucs_api_url = settings.demucs_api_url
+    original_demucs_api_key = settings.demucs_api_key
     original_demucs_model = settings.demucs_model
     original_demucs_device = settings.demucs_device
     original_demucs_output_format = settings.demucs_output_format
@@ -107,6 +108,7 @@ def client():
     with patch("routes.media_library.task_execution_coordinator.start"):
         yield TestClient(app)
     settings.demucs_api_url = original_demucs_api_url
+    settings.demucs_api_key = original_demucs_api_key
     settings.demucs_model = original_demucs_model
     settings.demucs_device = original_demucs_device
     settings.demucs_output_format = original_demucs_output_format

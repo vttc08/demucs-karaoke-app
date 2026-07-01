@@ -53,6 +53,11 @@
                         <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_api_url') }}</span>
                         <input id="demucs_api_url" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm font-medium text-primary focus:ring-2 focus:ring-primary/50 focus:outline-none" type="url" required />
                     </label>
+                    <label class="flex flex-col gap-1.5">
+                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_api_key') }}</span>
+                        <input id="demucs_api_key" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm font-medium text-primary focus:ring-2 focus:ring-primary/50 focus:outline-none" type="password" autocomplete="off" spellcheck="false" />
+                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.demucs_api_key_detail') }}</span>
+                    </label>
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <label class="flex flex-col gap-1.5">
                             <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_model') }}</span>

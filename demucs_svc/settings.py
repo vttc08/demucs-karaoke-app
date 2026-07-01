@@ -21,6 +21,7 @@ class DemucsSettings(BaseSettings):
     )
 
     io_root: Path = Field(default=DEFAULT_IO_ROOT, validation_alias="DEMUCS_IO_ROOT")
+    api_key: str = Field(default="", validation_alias="DEMUCS_API_KEY")
     demucs_model: str = "htdemucs"
     demucs_device: str = "cuda"
     demucs_output_format: str = "wav"

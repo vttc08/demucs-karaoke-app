@@ -585,6 +585,8 @@
   "settings.check_version": "检查版本",
   "settings.description": "管理卡拉 OK 处理、存储路径、搜索行为和舞台链接。保存后的更改会立即应用到新请求。",
   "settings.demucs_api_url": "Demucs API URL",
+  "settings.demucs_api_key": "Demucs API 密钥",
+  "settings.demucs_api_key_detail": "可选。连接受保护的 Demucs 服务时会以 X-API-Key 发送。",
   "settings.demucs_device": "Demucs 设备",
   "settings.demucs_model": "Demucs 模型",
   "settings.demucs_direct_media_cutoff": "Demucs 直传媒体上限（MB）",

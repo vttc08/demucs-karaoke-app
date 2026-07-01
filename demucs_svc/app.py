@@ -16,7 +16,7 @@ from typing import Literal
 from html import escape
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import ValidationError
 
 try:
@@ -57,6 +57,7 @@ try:
         JOB_OUTPUT_TAIL_LINES,
         JOB_RETENTION_SECONDS,
         OUTPUT_ROOT,
+        settings,
     )
     from .whisperx_pipeline import (
         align_lyrics,
@@ -103,6 +104,7 @@ except ImportError:
         DEMUCS_GC_INTERVAL_SECONDS,
         DEMUCS_GC_LOW_FREE_VRAM_BYTES,
         OUTPUT_ROOT,
+        settings,
     )
     from whisperx_pipeline import (
         align_lyrics,
@@ -115,6 +117,7 @@ except ImportError:
 app = FastAPI(title="Demucs Service", version="0.2.0")
 job_store = DemucsJobStore(tail_limit=JOB_OUTPUT_TAIL_LINES)
 logger = logging.getLogger(__name__)
+API_KEY_HEADER_NAME = "X-API-Key"
 TRANSFER_CACHE_ROOT = Path(__file__).resolve().parent / ".cache" / "transfer"
 TRANSFER_RANDOM_FILENAME = "random-25mb.bin"
 TRANSFER_RANDOM_FILE_SIZE_BYTES = 25 * 1024 * 1024
@@ -127,6 +130,31 @@ _gc_state = {
     "last_gc_mode": None,
     "last_gc_detail": None,
 }
+
+
+def _configured_api_key() -> str:
+    return settings.api_key.strip()
+
+
+def _transfer_page_allowed(request: Request) -> bool:
+    return request.method == "GET" and request.url.path == "/transfer"
+
+
+@app.middleware("http")
+async def _enforce_api_key(request: Request, call_next):
+    expected_key = _configured_api_key()
+    if not expected_key or request.url.path == "/" or _transfer_page_allowed(request):
+        return await call_next(request)
+
+    supplied_key = request.headers.get(API_KEY_HEADER_NAME, "").strip()
+    if supplied_key and supplied_key == expected_key:
+        return await call_next(request)
+
+    return JSONResponse(
+        status_code=401,
+        content={"detail": "Missing or invalid API key"},
+        headers={"WWW-Authenticate": "ApiKey"},
+    )
 
 
 def _cuda_available() -> bool:
@@ -427,18 +455,23 @@ def _transfer_page_html(*, request: Request) -> str:
           <div>
             <h2 class="section-title">Upload test</h2>
             <p class="muted">
-              Multipart upload for browser testing. The server reads the bytes, counts them, and
-              discards them immediately.
+              Multipart or raw upload for browser testing. The server reads the bytes, counts them,
+              and discards them immediately.
             </p>
           </div>
           <form id="transfer-upload-form" class="stack" action="{multipart_upload_url}" method="post" enctype="multipart/form-data">
+            <div class="field">
+              <label for="transfer-api-key">API key</label>
+              <input id="transfer-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Optional when auth is disabled">
+              <p class="muted">Stored locally in this browser and sent as <code>X-API-Key</code>.</p>
+            </div>
             <div class="field">
               <label for="transfer-upload-file">Choose any file</label>
               <input id="transfer-upload-file" name="file" type="file" required>
             </div>
             <div class="actions">
               <button class="button" type="submit">Upload selected file</button>
-              <a class="button secondary" href="{raw_upload_url}">Raw upload endpoint</a>
+              <button class="button secondary" id="transfer-raw-upload-btn" type="button">Upload raw body</button>
             </div>
           </form>
           <progress id="transfer-upload-progress" value="0" max="100"></progress>
@@ -458,7 +491,7 @@ def _transfer_page_html(*, request: Request) -> str:
             </p>
           </div>
           <div class="actions">
-            <a class="button" href="{download_url}">Download 25 MiB file</a>
+            <button class="button" id="transfer-download-btn" type="button">Download 25 MiB file</button>
           </div>
           <p class="muted">
             The browser or your CLI client can measure transfer time, throughput, and completion.
@@ -485,11 +518,17 @@ wget -O random-25mb.bin "{download_url}"</code></pre>
     (() => {{
       const form = document.getElementById("transfer-upload-form");
       const fileInput = document.getElementById("transfer-upload-file");
+      const apiKeyInput = document.getElementById("transfer-api-key");
+      const rawUploadButton = document.getElementById("transfer-raw-upload-btn");
+      const downloadButton = document.getElementById("transfer-download-btn");
       const progress = document.getElementById("transfer-upload-progress");
       const status = document.getElementById("transfer-upload-status");
       const speed = document.getElementById("transfer-upload-speed");
       const result = document.getElementById("transfer-upload-result");
       const uploadUrl = {json.dumps(multipart_upload_url_raw)};
+      const rawUploadUrl = {json.dumps(raw_upload_url_raw)};
+      const downloadUrl = {json.dumps(download_url_raw)};
+      const apiKeyStorageKey = "demucs.transfer.apiKey";
 
       function formatBytes(bytes) {{
         const units = ["B", "KB", "MB", "GB"];
@@ -502,29 +541,129 @@ wget -O random-25mb.bin "{download_url}"</code></pre>
         return `${{value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)}} ${{units[unitIndex]}}`;
       }}
 
-      form.addEventListener("submit", (event) => {{
-        event.preventDefault();
+      function readApiKey() {{
+        return apiKeyInput ? apiKeyInput.value.trim() : "";
+      }}
+
+      function writeApiKey(value) {{
+        try {{
+          window.localStorage.setItem(apiKeyStorageKey, value);
+        }} catch (_) {{
+          // Keep the UI usable when storage is unavailable.
+        }}
+      }}
+
+      function loadApiKey() {{
+        try {{
+          const value = window.localStorage.getItem(apiKeyStorageKey) || "";
+          if (apiKeyInput) {{
+            apiKeyInput.value = value;
+          }}
+        }} catch (_) {{
+          // Ignore storage errors.
+        }}
+      }}
+
+      function authHeaders() {{
+        const apiKey = readApiKey();
+        return apiKey ? {{"X-API-Key": apiKey}} : {{}};
+      }}
+
+      function setUiDisabled(disabled) {{
+        if (fileInput) {{
+          fileInput.disabled = disabled;
+        }}
+        if (apiKeyInput) {{
+          apiKeyInput.disabled = disabled;
+        }}
+        if (rawUploadButton) {{
+          rawUploadButton.disabled = disabled;
+        }}
+        if (downloadButton) {{
+          downloadButton.disabled = disabled;
+        }}
+      }}
+
+      function loadResponsePayload(xhr) {{
+        if (xhr.response && typeof xhr.response === "object") {{
+          return xhr.response;
+        }}
+        try {{
+          return JSON.parse(xhr.responseText || "{{}}");
+        }} catch (_) {{
+          return {{}};
+        }}
+      }}
+
+      async function downloadRandomFile() {{
+        setUiDisabled(true);
+        status.textContent = "Starting download...";
+        speed.textContent = "Measuring transfer speed...";
+        result.textContent = "Downloading...";
+        try {{
+          const response = await fetch(downloadUrl, {{
+            headers: authHeaders(),
+          }});
+          if (!response.ok) {{
+            const payload = await response.json().catch(() => ({{}}));
+            throw new Error(payload.detail || `Download failed with HTTP ${{response.status}}.`);
+          }}
+          const blob = await response.blob();
+          const objectUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = objectUrl;
+          link.download = "random-25mb.bin";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
+          status.textContent = `Completed download of ${{formatBytes(blob.size)}}.`;
+          speed.textContent = "Download completed.";
+          result.textContent = "Browser download started.";
+        }} catch (error) {{
+          const message = String(error.message || "Download failed.");
+          status.textContent = message;
+          speed.textContent = "Transfer speed unavailable.";
+          result.textContent = message;
+        }} finally {{
+          setUiDisabled(false);
+        }}
+      }}
+
+      function startUpload(mode) {{
         const file = fileInput.files && fileInput.files[0];
         if (!file) {{
           status.textContent = "Choose a file first.";
           return;
         }}
 
+        setUiDisabled(true);
+
         const start = performance.now();
         let timer = null;
         const xhr = new XMLHttpRequest();
-        const data = new FormData();
-        data.append("file", file, file.name);
+        const isMultipart = mode === "multipart";
+        const content = isMultipart ? new FormData() : file;
+        if (isMultipart) {{
+          content.append("file", file, file.name);
+        }}
 
         progress.removeAttribute("value");
         progress.max = 1;
         progress.value = 0;
-        status.textContent = "Starting upload...";
+        status.textContent = isMultipart ? "Starting multipart upload..." : "Starting raw upload...";
         speed.textContent = "Measuring transfer speed...";
         result.textContent = "Uploading...";
 
-        xhr.open("POST", uploadUrl, true);
+        xhr.open("POST", isMultipart ? uploadUrl : rawUploadUrl, true);
         xhr.responseType = "json";
+        if (!isMultipart) {{
+          xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        }}
+        const headers = authHeaders();
+        Object.entries(headers).forEach(([name, value]) => {{
+          xhr.setRequestHeader(name, value);
+        }});
 
         let lastSampleAt = start;
         let lastSampleLoaded = 0;
@@ -579,10 +718,11 @@ wget -O random-25mb.bin "{download_url}"</code></pre>
         xhr.onload = () => {{
           window.clearInterval(timer);
           const elapsedMs = performance.now() - start;
-          const payload = xhr.response || {{}};
+          const payload = loadResponsePayload(xhr);
           if (xhr.status >= 200 && xhr.status < 300) {{
             const received = payload.received_bytes ?? file.size;
-            status.textContent = `Completed in ${{(elapsedMs / 1000).toFixed(2)}}s.`;
+            const modeLabel = payload.transfer_mode || (isMultipart ? "multipart" : "raw");
+              status.textContent = `Completed ${{modeLabel}} upload in ${{(elapsedMs / 1000).toFixed(2)}}s.`;
             speed.textContent = `Average transfer speed ${{formatBytes(received / Math.max(elapsedMs / 1000, 0.001))}}/s`;
             result.textContent = `Server received ${{formatBytes(received)}} and discarded it.`;
             progress.max = received || 1;
@@ -596,10 +736,36 @@ wget -O random-25mb.bin "{download_url}"</code></pre>
 
         xhr.onloadend = () => {{
           window.clearInterval(timer);
+          setUiDisabled(false);
         }};
 
-        xhr.send(data);
+        xhr.send(content);
+      }}
+
+      form.addEventListener("submit", (event) => {{
+        event.preventDefault();
+        startUpload("multipart");
       }});
+
+      if (rawUploadButton) {{
+        rawUploadButton.addEventListener("click", () => {{
+          startUpload("raw");
+        }});
+      }}
+
+      if (downloadButton) {{
+        downloadButton.addEventListener("click", () => {{
+          downloadRandomFile();
+        }});
+      }}
+
+      if (apiKeyInput) {{
+        apiKeyInput.addEventListener("input", () => {{
+          writeApiKey(apiKeyInput.value.trim());
+        }});
+      }}
+
+      loadApiKey();
     }})();
   </script>
 </body>

@@ -57,6 +57,85 @@ class _FakeAsyncClient:
         return _FakeAsyncResponse({"status": "canceled"})
 
 
+def test_demucs_client_includes_api_key_on_sync_requests(monkeypatch):
+    seen = {}
+
+    def fake_get(url, **kwargs):
+        seen["url"] = url
+        seen["headers"] = kwargs.get("headers")
+        return _FakeAsyncResponse({"status": "ok"})
+
+    monkeypatch.setattr("services.demucs_client.httpx.get", fake_get)
+
+    client = DemucsClient(api_url="http://demucs.local", api_key="shared-secret")
+    result = client.health_check()
+
+    assert seen["url"] == "http://demucs.local/health"
+    assert seen["headers"]["X-API-Key"] == "shared-secret"
+    assert result.healthy is True
+
+
+def test_demucs_client_includes_api_key_on_async_requests(tmp_path, monkeypatch):
+    audio_path = tmp_path / "input.wav"
+    audio_path.write_bytes(b"audio")
+
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("no_vocals.wav", b"no-vocals")
+        archive.writestr("vocals.wav", b"vocals")
+    zip_payload = zip_buffer.getvalue()
+
+    class RecordingAsyncClient:
+        def __init__(self, **_):
+            self.calls = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, **kwargs):
+            self.calls.append(("POST", url, kwargs))
+            return _FakeAsyncResponse(
+                {
+                    "job_id": "remote-job",
+                    "status": "queued",
+                    "progress_percent": 0,
+                    "progress_message": "Queued",
+                }
+            )
+
+        async def get(self, url, **kwargs):
+            self.calls.append(("GET", url, kwargs))
+            if url.endswith("/result"):
+                return _FakeAsyncResponse(content=zip_payload)
+            return _FakeAsyncResponse(
+                {
+                    "status": "completed",
+                    "progress_percent": 100,
+                    "progress_message": "Completed",
+                    "output_tail": [],
+                }
+            )
+
+    fake_client = RecordingAsyncClient()
+    monkeypatch.setattr(
+        "services.demucs_client.httpx.AsyncClient",
+        lambda **_: fake_client,
+    )
+
+    client = DemucsClient(api_url="http://demucs.local", api_key="shared-secret", poll_interval_seconds=0)
+
+    result = asyncio.run(client.separate_vocals(audio_path))
+
+    assert result.no_vocals_path.endswith("no_vocals.wav")
+    assert result.vocals_path.endswith("vocals.wav")
+    for _, _, kwargs in fake_client.calls:
+        headers = kwargs.get("headers") or {}
+        assert headers["X-API-Key"] == "shared-secret"
+
+
 def test_demucs_client_separate_vocals_sends_remote_cancel_when_event_set(tmp_path, monkeypatch):
     audio_path = tmp_path / "input.wav"
     audio_path.write_bytes(b"audio")

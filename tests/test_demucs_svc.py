@@ -1331,6 +1331,56 @@ def test_transfer_download_creates_and_reuses_cached_file(monkeypatch, tmp_path)
     assert create_calls[0] == tmp_path / "transfer-cache" / "random-25mb.bin"
 
 
+def test_api_key_protected_routes_require_header_when_configured():
+    original_api_key = demucs_settings.settings.api_key
+    demucs_settings.settings.api_key = "shared-secret"
+    try:
+        with patch("demucs_svc.app.preload_models", return_value=[]), patch(
+            "demucs_svc.app.subprocess.run",
+            return_value=SimpleNamespace(returncode=0),
+        ):
+            with TestClient(demucs_app.app) as client:
+                unauthorized = client.get("/metrics")
+                transfer_page = client.get("/transfer")
+                authorized = client.get(
+                    "/metrics",
+                    headers={"X-API-Key": "shared-secret"},
+                )
+
+        assert unauthorized.status_code == 401
+        assert unauthorized.json()["detail"] == "Missing or invalid API key"
+        assert transfer_page.status_code == 200
+        assert authorized.status_code == 200
+    finally:
+        demucs_settings.settings.api_key = original_api_key
+
+
+def test_transfer_upload_requires_api_key_when_configured():
+    original_api_key = demucs_settings.settings.api_key
+    demucs_settings.settings.api_key = "shared-secret"
+    try:
+        with patch("demucs_svc.app.preload_models", return_value=[]), patch(
+            "demucs_svc.app.subprocess.run",
+            return_value=SimpleNamespace(returncode=0),
+        ):
+            with TestClient(demucs_app.app) as client:
+                unauthorized = client.post(
+                    "/transfer/upload",
+                    files={"file": ("sample.bin", b"abcdef", "application/octet-stream")},
+                )
+                authorized = client.post(
+                    "/transfer/upload",
+                    headers={"X-API-Key": "shared-secret"},
+                    files={"file": ("sample.bin", b"abcdef", "application/octet-stream")},
+                )
+
+        assert unauthorized.status_code == 401
+        assert authorized.status_code == 200
+        assert authorized.json()["received_bytes"] == 6
+    finally:
+        demucs_settings.settings.api_key = original_api_key
+
+
 def test_cleanup_io_deletes_terminal_jobs_and_files(monkeypatch, tmp_path):
     _clear_job_store()
     monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
