@@ -572,6 +572,16 @@ def test_media_management_page_loads(client):
     assert b"Media" in response.content
     assert b"Manage Existing Media" in response.content
 
+
+def test_media_management_page_loads_with_media_id_query_param(client):
+    """Media page should tolerate deep-link query params without breaking render."""
+    authenticate_admin_client(client)
+    response = client.get("/media?media_id=42")
+    assert response.status_code == 200
+    assert b"Media" in response.content
+    assert b'id="media-edit-modal"' in response.content
+    assert b"/static/media_management.js" in response.content
+
 def test_media_management_page_uses_database_rows(client):
     """Media management page should render DB-backed library rows and stats."""
     with TestingSessionLocal() as db:

@@ -182,14 +182,73 @@ let taskRefreshPromise = null;
 let taskRefreshPending = false;
 let lastTaskRefreshAt = 0;
 let shouldScrollToTaskPanel = false;
+const mediaModalQueryParam = "media_id";
 const initialTaskId = (() => {
     const rawTaskId = new URLSearchParams(window.location.search).get("task_id");
     const parsedTaskId = Number(rawTaskId);
     return Number.isFinite(parsedTaskId) && parsedTaskId > 0 ? parsedTaskId : null;
 })();
+const initialMediaId = (() => {
+    const rawMediaId = new URLSearchParams(window.location.search).get(mediaModalQueryParam);
+    const parsedMediaId = Number(rawMediaId);
+    return Number.isFinite(parsedMediaId) && parsedMediaId > 0 ? parsedMediaId : null;
+})();
 
 function isMobile() {
     return window.innerWidth < 640;
+}
+
+function getMediaIdFromUrl(search = window.location.search) {
+    const rawMediaId = new URLSearchParams(search).get(mediaModalQueryParam);
+    const parsedMediaId = Number(rawMediaId);
+    return Number.isFinite(parsedMediaId) && parsedMediaId > 0 ? parsedMediaId : null;
+}
+
+function getMediaManagementUrl(mediaId = null) {
+    const url = new URL(window.location.href);
+    if (mediaId) {
+        url.searchParams.set(mediaModalQueryParam, String(mediaId));
+    } else {
+        url.searchParams.delete(mediaModalQueryParam);
+    }
+    return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function findMediaItemNodeById(mediaId) {
+    if (!mediaId) {
+        return null;
+    }
+    return document.querySelector(`[data-item-id="${mediaId}"]`);
+}
+
+function updateMediaModalHistory(mediaId, { replace = false } = {}) {
+    const nextUrl = getMediaManagementUrl(mediaId);
+    const nextState = mediaId
+        ? { mediaModal: true, mediaId }
+        : { mediaModal: false, mediaId: null };
+    if (replace) {
+        history.replaceState(nextState, "", nextUrl);
+    } else {
+        history.pushState(nextState, "", nextUrl);
+    }
+}
+
+function openMediaModalFromUrl(mediaId) {
+    const itemNode = findMediaItemNodeById(mediaId);
+    if (!itemNode || !isAdmin) {
+        return false;
+    }
+
+    openEditModal(itemNode, { syncHistory: false });
+    return true;
+}
+
+function syncMediaModalStateFromUrl() {
+    const mediaId = getMediaIdFromUrl();
+    if (mediaId && openMediaModalFromUrl(mediaId)) {
+        return;
+    }
+    closeEditModal({ syncHistory: false });
 }
 
 function getFilenameFromPath(mediaPath) {
@@ -1353,6 +1412,21 @@ function openDeepLinkedTaskFromUrl() {
     }
 }
 
+function bootstrapMediaModalFromUrl() {
+    if (!initialMediaId || !isAdmin) {
+        return;
+    }
+
+    const itemNode = findMediaItemNodeById(initialMediaId);
+    if (!itemNode) {
+        return;
+    }
+
+    updateMediaModalHistory(null, { replace: true });
+    updateMediaModalHistory(initialMediaId);
+    openEditModal(itemNode, { syncHistory: false });
+}
+
 function connectTaskStream() {
     if (!isAdmin || !taskPanel || typeof EventSource === "undefined") {
         return;
@@ -1404,7 +1478,7 @@ function setCapabilityFilter(nextFilter) {
     applyFilters();
 }
 
-function openEditModal(itemNode) {
+function openEditModal(itemNode, { syncHistory = true } = {}) {
     if (!isAdmin) {
         return;
     }
@@ -1423,6 +1497,7 @@ function openEditModal(itemNode) {
         return;
     }
     activeEditItemId = itemId;
+    const normalizedItemId = Number(itemId);
     activeEditHasMulti = hasMulti;
     activeEditFileManifest = null;
     resetMediaEditLyricsState();
@@ -1477,6 +1552,13 @@ function openEditModal(itemNode) {
         editDownloadPackageButton.disabled = true;
     }
 
+    if (syncHistory && Number.isFinite(normalizedItemId) && normalizedItemId > 0) {
+        const currentMediaId = getMediaIdFromUrl();
+        if (currentMediaId !== normalizedItemId) {
+            updateMediaModalHistory(normalizedItemId);
+        }
+    }
+
     // Initialize lyrics manager with current metadata
     initializeMediaEditLyricsManager();
     if (lyricsManager) {
@@ -1506,7 +1588,7 @@ function openEditModal(itemNode) {
     }
 }
 
-function closeEditModal() {
+function closeEditModal({ syncHistory = true } = {}) {
     activeEditItemId = null;
     activeEditHasMulti = false;
     activeEditFileManifest = null;
@@ -1522,6 +1604,10 @@ function closeEditModal() {
     if (editModal) {
         editModal.classList.add("hidden");
         editModal.setAttribute("aria-hidden", "true");
+    }
+
+    if (syncHistory && history.state?.mediaModal && getMediaIdFromUrl()) {
+        history.back();
     }
 }
 
@@ -2061,6 +2147,12 @@ document.addEventListener("keydown", (event) => {
         closeEditModal();
     }
 });
+window.addEventListener("popstate", syncMediaModalStateFromUrl);
+window.addEventListener("pageshow", (event) => {
+    if (event.persisted) {
+        syncMediaModalStateFromUrl();
+    }
+});
 taskList?.addEventListener("click", (event) => {
     if (!isAdmin) {
         return;
@@ -2076,6 +2168,7 @@ taskList?.addEventListener("click", (event) => {
 });
 syncFilterButtonStyles();
 updateEmptyState();
+bootstrapMediaModalFromUrl();
 refreshTaskList();
 connectTaskStream();
 openDeepLinkedTaskFromUrl();
