@@ -266,23 +266,6 @@ def _transfer_request_base_url(request: Request) -> str:
     return str(request.base_url).rstrip("/")
 
 
-def _transfer_cli_commands(*, multipart_upload_url: str, raw_upload_url: str, download_url: str) -> str:
-    if _configured_api_key():
-        curl_auth = '-H "X-API-Key: $DEMUCS_API_KEY" '
-        wget_auth = '--header="X-API-Key: $DEMUCS_API_KEY" '
-    else:
-        curl_auth = ""
-        wget_auth = ""
-
-    return (
-        f'curl {curl_auth}-F "file=@/path/to/media.bin" "{multipart_upload_url}"\n'
-        f'curl {curl_auth}-X POST --data-binary "@/path/to/media.bin" "{raw_upload_url}"\n'
-        f'curl {curl_auth}-OJ "{download_url}"\n'
-        f'wget {wget_auth}--method=POST --body-file=/path/to/media.bin -O - "{raw_upload_url}"\n'
-        f'wget {wget_auth}-O random-25mb.bin "{download_url}"'
-    )
-
-
 def _render_transfer_template(*, request: Request) -> str:
     base_url = _transfer_request_base_url(request)
     download_url_raw = str(request.url_for("transfer_random_download"))
@@ -294,16 +277,6 @@ def _render_transfer_template(*, request: Request) -> str:
         .replace("__MULTIPART_UPLOAD_URL__", escape(multipart_upload_url_raw))
         .replace("__RAW_UPLOAD_URL__", escape(raw_upload_url_raw))
         .replace("__DOWNLOAD_URL__", escape(download_url_raw))
-        .replace(
-            "__COMMANDS_BLOCK__",
-            escape(
-                _transfer_cli_commands(
-                    multipart_upload_url=multipart_upload_url_raw,
-                    raw_upload_url=raw_upload_url_raw,
-                    download_url=download_url_raw,
-                )
-            ),
-        )
         .replace("__MULTIPART_UPLOAD_URL_JSON__", json.dumps(multipart_upload_url_raw))
         .replace("__RAW_UPLOAD_URL_JSON__", json.dumps(raw_upload_url_raw))
         .replace("__DOWNLOAD_URL_JSON__", json.dumps(download_url_raw))

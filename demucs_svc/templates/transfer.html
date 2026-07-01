@@ -230,7 +230,7 @@
             <h2 class="section-title">curl / wget</h2>
             <p class="muted">Use these when you want a simple command-line throughput check.</p>
           </div>
-          <pre><code>__COMMANDS_BLOCK__</code></pre>
+          <pre><code id="transfer-commands-block">Loading commands...</code></pre>
         </div>
       </article>
     </section>
@@ -246,7 +246,7 @@
       const status = document.getElementById("transfer-upload-status");
       const speed = document.getElementById("transfer-upload-speed");
       const result = document.getElementById("transfer-upload-result");
-      const uploadUrl = __MULTIPART_UPLOAD_URL_JSON__;
+      const multipartUploadUrl = __MULTIPART_UPLOAD_URL_JSON__;
       const rawUploadUrl = __RAW_UPLOAD_URL_JSON__;
       const downloadUrl = __DOWNLOAD_URL_JSON__;
       const apiKeyStorageKey = "demucs.transfer.apiKey";
@@ -288,6 +288,30 @@
       function authHeaders() {
         const apiKey = readApiKey();
         return apiKey ? {"X-API-Key": apiKey} : {};
+      }
+
+      function shellQuote(value) {
+        return "'" + String(value).replace(/'/g, "'\"'\"'") + "'";
+      }
+
+      function buildCliCommands(apiKey) {
+        const header = apiKey ? `-H ${shellQuote(`X-API-Key: ${apiKey}`)} ` : "";
+        const wgetHeader = apiKey ? `--header=${shellQuote(`X-API-Key: ${apiKey}`)} ` : "";
+        return [
+          `curl ${header}-F "file=@/path/to/media.bin" ${shellQuote(multipartUploadUrl)}`,
+          `curl ${header}-X POST --data-binary "@/path/to/media.bin" ${shellQuote(rawUploadUrl)}`,
+          `curl ${header}-OJ ${shellQuote(downloadUrl)}`,
+          `wget ${wgetHeader}--method=POST --body-file=/path/to/media.bin -O - ${shellQuote(rawUploadUrl)}`,
+          `wget ${wgetHeader}-O random-25mb.bin ${shellQuote(downloadUrl)}`,
+        ].join("\n");
+      }
+
+      function updateCliCommands() {
+        const commandsBlock = document.getElementById("transfer-commands-block");
+        if (!commandsBlock) {
+          return;
+        }
+        commandsBlock.textContent = buildCliCommands(readApiKey());
       }
 
       function setUiDisabled(disabled) {
@@ -376,7 +400,7 @@
         speed.textContent = "Measuring transfer speed...";
         result.textContent = "Uploading...";
 
-        xhr.open("POST", isMultipart ? uploadUrl : rawUploadUrl, true);
+        xhr.open("POST", isMultipart ? multipartUploadUrl : rawUploadUrl, true);
         xhr.responseType = "json";
         if (!isMultipart) {
           xhr.setRequestHeader("Content-Type", "application/octet-stream");
@@ -483,10 +507,12 @@
       if (apiKeyInput) {
         apiKeyInput.addEventListener("input", () => {
           writeApiKey(apiKeyInput.value.trim());
+          updateCliCommands();
         });
       }
 
       loadApiKey();
+      updateCliCommands();
     })();
   </script>
 </body>
