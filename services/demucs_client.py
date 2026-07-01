@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from io import BytesIO
 from pathlib import Path
 import threading
@@ -34,6 +35,7 @@ class DemucsClient:
     IO_CLEANUP_TIMEOUT_SECONDS = 120.0
     PRELOAD_TIMEOUT_SECONDS = 1800.0
     REQUEST_TIMEOUT_SECONDS = 600.0
+    STREAM_CONNECT_TIMEOUT_SECONDS = 15.0
     DELETE_TIMEOUT_SECONDS = 30.0
 
     def __init__(
@@ -169,11 +171,281 @@ class DemucsClient:
                     f"Failed to request remote Demucs cancellation for job {job_id}: {error}",
                 )
 
-    async def separate_vocals(
+    def _stream_timeout(self) -> httpx.Timeout:
+        return httpx.Timeout(
+            connect=self.STREAM_CONNECT_TIMEOUT_SECONDS,
+            read=None,
+            write=self.REQUEST_TIMEOUT_SECONDS,
+            pool=self.REQUEST_TIMEOUT_SECONDS,
+        )
+
+    def _job_events_url(self, job_id: str) -> str:
+        return f"{self.api_url}/jobs/{job_id}/events"
+
+    def _job_status_url(self, job_id: str) -> str:
+        return f"{self.api_url}/jobs/{job_id}"
+
+    def _job_result_url(self, job_id: str) -> str:
+        return f"{self.api_url}/jobs/{job_id}/result"
+
+    def _align_job_result_url(self, job_id: str) -> str:
+        return f"{self.api_url}/align-jobs/{job_id}/result"
+
+    async def _poll_remote_job(
         self,
-        audio_path: Path,
+        client: httpx.AsyncClient,
         *,
-        output_dir: Path | None = None,
+        job_id: str,
+        output_tail_seen: set[str],
+        progress_callback: ProgressCallback | None,
+        log_callback: LogCallback | None,
+        cancel_event: threading.Event | None,
+        running_message: str,
+        result_fetch_url: str,
+        out_dir: Path,
+        audio_path: Path,
+        final_completed_message: str,
+        terminal_statuses: set[str],
+    ) -> DemucsResponse | tuple[Path, str]:
+        poll_interval = (
+            self.poll_interval_seconds
+            if self.poll_interval_seconds is not None
+            else settings.demucs_poll_interval_seconds
+        )
+
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                await self._cancel_remote_job(client, job_id, log_callback)
+                raise asyncio.CancelledError()
+
+            status_response = await client.get(
+                self._job_status_url(job_id),
+                **self._request_headers_kwargs(),
+            )
+            status_response.raise_for_status()
+            status_payload = status_response.json()
+            self._emit_remote_log_lines(
+                log_callback,
+                status_payload.get("output_tail") or [],
+                output_tail_seen,
+            )
+            status = str(status_payload.get("status"))
+            self._emit_progress(
+                progress_callback,
+                int(status_payload.get("progress_percent", 0)),
+                str(status_payload.get("progress_message") or running_message),
+                {
+                    "job_id": job_id,
+                    "status": status,
+                    "error_detail": status_payload.get("error_detail"),
+                },
+            )
+
+            if status == "completed":
+                result_response = await client.get(
+                    result_fetch_url,
+                    **self._request_headers_kwargs(),
+                )
+                result_response.raise_for_status()
+                if result_fetch_url.endswith("/result") and "/align-jobs/" not in result_fetch_url:
+                    no_vocals_bytes, vocals_bytes, aligned_bytes, extension = self._extract_stems_zip(
+                        result_response.content
+                    )
+                    output_path = out_dir / f"{audio_path.stem}_{job_id}_no_vocals.{extension}"
+                    vocals_output_path = out_dir / f"{audio_path.stem}_{job_id}_vocals.{extension}"
+                    output_path.write_bytes(no_vocals_bytes)
+                    vocals_output_path.write_bytes(vocals_bytes)
+                    aligned_output_path = None
+                    if aligned_bytes is not None:
+                        aligned_output_path = out_dir / f"{audio_path.stem}_{job_id}_aligned_lyrics.json"
+                        aligned_output_path.write_bytes(aligned_bytes)
+                    self._emit_progress(
+                        progress_callback,
+                        100,
+                        final_completed_message,
+                        {"job_id": job_id, "status": status},
+                    )
+                    return DemucsResponse(
+                        job_id=job_id,
+                        no_vocals_path=str(output_path),
+                        vocals_path=str(vocals_output_path),
+                        aligned_lyrics_path=str(aligned_output_path) if aligned_output_path else None,
+                    )
+
+                aligned_output_path = out_dir / f"{audio_path.stem}_{job_id}_aligned_lyrics.json"
+                aligned_output_path.write_bytes(result_response.content)
+                self._emit_progress(
+                    progress_callback,
+                    100,
+                    final_completed_message,
+                    {"job_id": job_id, "status": status},
+                )
+                return aligned_output_path, job_id
+
+            if status == "failed":
+                raise RuntimeError(status_payload.get("error_detail") or "Remote Demucs job failed")
+            if status == "canceled":
+                raise asyncio.CancelledError()
+
+            await asyncio.sleep(poll_interval)
+
+    async def _stream_remote_job(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        job_id: str,
+        output_tail_seen: set[str],
+        progress_callback: ProgressCallback | None,
+        log_callback: LogCallback | None,
+        cancel_event: threading.Event | None,
+        running_message: str,
+        result_fetch_url: str,
+        out_dir: Path,
+        audio_path: Path,
+        final_completed_message: str,
+        terminal_statuses: set[str],
+    ) -> DemucsResponse | tuple[Path, str] | None:
+        last_event_id = 0
+        reconnect_attempts = 0
+        max_reconnect_attempts = 3
+
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                await self._cancel_remote_job(client, job_id, log_callback)
+                raise asyncio.CancelledError()
+
+            headers = self._request_headers_kwargs().get("headers", {}).copy()
+            if last_event_id:
+                headers["Last-Event-ID"] = str(last_event_id)
+
+            try:
+                async with client.stream(
+                    "GET",
+                    self._job_events_url(job_id),
+                    headers=headers,
+                    timeout=self._stream_timeout(),
+                ) as response:
+                    if response.status_code == 404:
+                        return None
+                    if response.status_code in {405, 406}:
+                        return None
+                    if response.status_code >= 400:
+                        response.raise_for_status()
+
+                    event_type: str | None = None
+                    event_id: int | None = None
+                    data_lines: list[str] = []
+
+                    async for line in response.aiter_lines():
+                        if cancel_event is not None and cancel_event.is_set():
+                            await self._cancel_remote_job(client, job_id, log_callback)
+                            raise asyncio.CancelledError()
+                        if not line:
+                            if event_type == "job" and data_lines:
+                                payload = json.loads("\n".join(data_lines))
+                                event_id = int(payload.get("sequence") or event_id or 0)
+                                if event_id:
+                                    last_event_id = event_id
+                                self._emit_remote_log_lines(
+                                    log_callback,
+                                    payload.get("output_tail") or [],
+                                    output_tail_seen,
+                                )
+                                status = str(payload.get("status"))
+                                self._emit_progress(
+                                    progress_callback,
+                                    int(payload.get("progress_percent", 0)),
+                                    str(payload.get("progress_message") or running_message),
+                                    {
+                                        "job_id": job_id,
+                                        "status": status,
+                                        "error_detail": payload.get("error_detail"),
+                                    },
+                                )
+                                if status == "completed":
+                                    result_response = await client.get(
+                                        result_fetch_url,
+                                        **self._request_headers_kwargs(),
+                                    )
+                                    result_response.raise_for_status()
+                                    if result_fetch_url.endswith("/result") and "/align-jobs/" not in result_fetch_url:
+                                        no_vocals_bytes, vocals_bytes, aligned_bytes, extension = self._extract_stems_zip(
+                                            result_response.content
+                                        )
+                                        output_path = out_dir / f"{audio_path.stem}_{job_id}_no_vocals.{extension}"
+                                        vocals_output_path = out_dir / f"{audio_path.stem}_{job_id}_vocals.{extension}"
+                                        output_path.write_bytes(no_vocals_bytes)
+                                        vocals_output_path.write_bytes(vocals_bytes)
+                                        aligned_output_path = None
+                                        if aligned_bytes is not None:
+                                            aligned_output_path = out_dir / f"{audio_path.stem}_{job_id}_aligned_lyrics.json"
+                                            aligned_output_path.write_bytes(aligned_bytes)
+                                        self._emit_progress(
+                                            progress_callback,
+                                            100,
+                                            final_completed_message,
+                                            {"job_id": job_id, "status": status},
+                                        )
+                                        return DemucsResponse(
+                                            job_id=job_id,
+                                            no_vocals_path=str(output_path),
+                                            vocals_path=str(vocals_output_path),
+                                            aligned_lyrics_path=str(aligned_output_path) if aligned_output_path else None,
+                                        )
+
+                                    aligned_output_path = out_dir / f"{audio_path.stem}_{job_id}_aligned_lyrics.json"
+                                    aligned_output_path.write_bytes(result_response.content)
+                                    self._emit_progress(
+                                        progress_callback,
+                                        100,
+                                        final_completed_message,
+                                        {"job_id": job_id, "status": status},
+                                    )
+                                    return aligned_output_path, job_id
+                                if status == "failed":
+                                    raise RuntimeError(
+                                        payload.get("error_detail") or "Remote Demucs job failed"
+                                    )
+                                if status == "canceled":
+                                    raise asyncio.CancelledError()
+
+                            event_type = None
+                            event_id = None
+                            data_lines = []
+                            continue
+
+                        if line.startswith(":"):
+                            continue
+                        if line.startswith("event:"):
+                            event_type = line.split(":", 1)[1].strip()
+                            continue
+                        if line.startswith("id:"):
+                            raw_event_id = line.split(":", 1)[1].strip()
+                            try:
+                                event_id = int(raw_event_id)
+                            except ValueError:
+                                event_id = None
+                            continue
+                        if line.startswith("data:"):
+                            data_lines.append(line.split(":", 1)[1].lstrip())
+
+                    reconnect_attempts = 0
+                    if last_event_id:
+                        continue
+                    return None
+            except httpx.HTTPError:
+                reconnect_attempts += 1
+                if reconnect_attempts >= max_reconnect_attempts:
+                    return None
+                await asyncio.sleep(min(5.0, float(2 ** (reconnect_attempts - 1))))
+
+    async def _run_remote_job(
+        self,
+        *,
+        audio_path: Path,
+        endpoint: str,
+        result_url_builder: Callable[[str], str],
+        out_dir: Path,
         lyrics_text: str | None = None,
         lyrics_format: str | None = None,
         transcription_model: str | None = None,
@@ -188,20 +460,21 @@ class DemucsClient:
         cancel_event: threading.Event | None = None,
         progress_callback: ProgressCallback | None = None,
         log_callback: LogCallback | None = None,
-    ) -> DemucsResponse:
+        running_message: str,
+        final_completed_message: str,
+        terminal_statuses: set[str],
+    ) -> DemucsResponse | tuple[Path, str]:
         if not audio_path.exists():
             raise RuntimeError(f"Audio path does not exist: {audio_path}")
         if cancel_event is not None and cancel_event.is_set():
             raise asyncio.CancelledError()
 
-        out_dir = output_dir or settings.cache_path / "demucs_outputs"
-        out_dir.mkdir(parents=True, exist_ok=True)
         seen_output_lines: set[str] = set()
 
         async with httpx.AsyncClient(timeout=self.REQUEST_TIMEOUT_SECONDS) as client:
             with audio_path.open("rb") as fh:
                 create_response = await client.post(
-                    f"{self.api_url}/jobs",
+                    endpoint,
                     files={"file": (audio_path.name, fh, "audio/wav")},
                     **self._request_headers_kwargs(),
                     data=self._build_request_data(
@@ -230,88 +503,91 @@ class DemucsClient:
             if log_callback is not None:
                 log_callback("remote", f"Started remote Demucs job {job_id}")
 
-            remote_cancel_requested = False
             try:
-                while True:
-                    if cancel_event is not None and cancel_event.is_set():
-                        await self._cancel_remote_job(client, job_id, log_callback)
-                        remote_cancel_requested = True
-                        raise asyncio.CancelledError()
-
-                    status_response = await client.get(
-                        f"{self.api_url}/jobs/{job_id}",
-                        **self._request_headers_kwargs(),
-                    )
-                    status_response.raise_for_status()
-                    status_payload = status_response.json()
-                    self._emit_remote_log_lines(
-                        log_callback,
-                        status_payload.get("output_tail") or [],
-                        seen_output_lines,
-                    )
-                    self._emit_progress(
-                        progress_callback,
-                        int(status_payload.get("progress_percent", 0)),
-                        str(status_payload.get("progress_message") or "Running Demucs"),
-                        {
-                            "job_id": job_id,
-                            "status": status_payload.get("status"),
-                            "error_detail": status_payload.get("error_detail"),
-                        },
-                    )
-
-                    status = str(status_payload.get("status"))
-                    if status == "completed":
-                        result_response = await client.get(
-                            f"{self.api_url}/jobs/{job_id}/result",
-                            **self._request_headers_kwargs(),
-                        )
-                        result_response.raise_for_status()
-                        no_vocals_bytes, vocals_bytes, aligned_bytes, extension = self._extract_stems_zip(
-                            result_response.content
-                        )
-                        output_path = out_dir / f"{audio_path.stem}_{job_id}_no_vocals.{extension}"
-                        vocals_output_path = out_dir / f"{audio_path.stem}_{job_id}_vocals.{extension}"
-                        output_path.write_bytes(no_vocals_bytes)
-                        vocals_output_path.write_bytes(vocals_bytes)
-                        aligned_output_path = None
-                        if aligned_bytes is not None:
-                            aligned_output_path = out_dir / f"{audio_path.stem}_{job_id}_aligned_lyrics.json"
-                            aligned_output_path.write_bytes(aligned_bytes)
-                        self._emit_progress(
-                            progress_callback,
-                            100,
-                            str(status_payload.get("progress_message") or "Completed"),
-                            {"job_id": job_id, "status": status},
-                        )
-                        return DemucsResponse(
-                            job_id=job_id,
-                            no_vocals_path=str(output_path),
-                            vocals_path=str(vocals_output_path),
-                            aligned_lyrics_path=str(aligned_output_path) if aligned_output_path else None,
-                        )
-
-                    if status == "failed":
-                        raise RuntimeError(
-                            status_payload.get("error_detail") or "Demucs job failed"
-                        )
-                    if status == "canceled":
-                        raise asyncio.CancelledError()
-
-                    poll_interval = (
-                        self.poll_interval_seconds
-                        if self.poll_interval_seconds is not None
-                        else settings.demucs_poll_interval_seconds
-                    )
-                    await asyncio.sleep(poll_interval)
+                result_fetch_url = result_url_builder(job_id)
+                streamed_result = await self._stream_remote_job(
+                    client,
+                    job_id=job_id,
+                    output_tail_seen=seen_output_lines,
+                    progress_callback=progress_callback,
+                    log_callback=log_callback,
+                    cancel_event=cancel_event,
+                    running_message=running_message,
+                    result_fetch_url=result_fetch_url,
+                    out_dir=out_dir,
+                    audio_path=audio_path,
+                    final_completed_message=final_completed_message,
+                    terminal_statuses=terminal_statuses,
+                )
+                if streamed_result is not None:
+                    return streamed_result
             except asyncio.CancelledError:
-                if not remote_cancel_requested:
-                    await self._cancel_remote_job(client, job_id, log_callback)
                 raise
             except Exception:
-                if cancel_event is not None and cancel_event.is_set() and not remote_cancel_requested:
+                if cancel_event is not None and cancel_event.is_set():
                     await self._cancel_remote_job(client, job_id, log_callback)
                 raise
+
+            return await self._poll_remote_job(
+                client,
+                job_id=job_id,
+                output_tail_seen=seen_output_lines,
+                progress_callback=progress_callback,
+                log_callback=log_callback,
+                cancel_event=cancel_event,
+                running_message=running_message,
+                result_fetch_url=result_fetch_url,
+                out_dir=out_dir,
+                audio_path=audio_path,
+                final_completed_message=final_completed_message,
+                terminal_statuses=terminal_statuses,
+            )
+
+    async def separate_vocals(
+        self,
+        audio_path: Path,
+        *,
+        output_dir: Path | None = None,
+        lyrics_text: str | None = None,
+        lyrics_format: str | None = None,
+        transcription_model: str | None = None,
+        align_language: str | None = None,
+        detect_language: bool | None = None,
+        use_synced_lyrics: bool | None = None,
+        whisperx_preload_models: str | None = None,
+        process_lyrics_lines: bool | None = None,
+        max_line_length: int | None = None,
+        max_line_length_cjk: int | None = None,
+        compute_type: str | None = None,
+        cancel_event: threading.Event | None = None,
+        progress_callback: ProgressCallback | None = None,
+        log_callback: LogCallback | None = None,
+    ) -> DemucsResponse:
+        out_dir = output_dir or settings.cache_path / "demucs_outputs"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        return await self._run_remote_job(
+            audio_path=audio_path,
+            endpoint=f"{self.api_url}/jobs",
+            result_url_builder=self._job_result_url,
+            out_dir=out_dir,
+            lyrics_text=lyrics_text,
+            lyrics_format=lyrics_format,
+            transcription_model=transcription_model,
+            align_language=align_language,
+            detect_language=detect_language,
+            use_synced_lyrics=use_synced_lyrics,
+            whisperx_preload_models=whisperx_preload_models,
+            process_lyrics_lines=process_lyrics_lines,
+            max_line_length=max_line_length,
+            max_line_length_cjk=max_line_length_cjk,
+            compute_type=compute_type,
+            cancel_event=cancel_event,
+            progress_callback=progress_callback,
+            log_callback=log_callback,
+            running_message="Running Demucs",
+            final_completed_message="Completed",
+            terminal_statuses={"completed", "failed", "canceled"},
+        )
 
     async def align_lyrics(
         self,
@@ -343,108 +619,29 @@ class DemucsClient:
 
         out_dir = output_dir or settings.cache_path / "demucs_outputs"
         out_dir.mkdir(parents=True, exist_ok=True)
-        seen_output_lines: set[str] = set()
-
-        async with httpx.AsyncClient(timeout=self.REQUEST_TIMEOUT_SECONDS) as client:
-            with vocals_path.open("rb") as fh:
-                create_response = await client.post(
-                    f"{self.api_url}/align-jobs",
-                    files={"file": (vocals_path.name, fh, "audio/wav")},
-                    **self._request_headers_kwargs(),
-                    data=self._build_request_data(
-                        lyrics_text=lyrics_text,
-                        lyrics_format=lyrics_format,
-                        transcription_model=transcription_model,
-                        align_language=align_language,
-                        detect_language=detect_language,
-                        use_synced_lyrics=use_synced_lyrics,
-                        whisperx_preload_models=whisperx_preload_models,
-                        process_lyrics_lines=process_lyrics_lines,
-                        max_line_length=max_line_length,
-                        max_line_length_cjk=max_line_length_cjk,
-                        compute_type=compute_type,
-                    ),
-                )
-            create_response.raise_for_status()
-            payload = create_response.json()
-            job_id = payload["job_id"]
-            self._emit_progress(
-                progress_callback,
-                int(payload.get("progress_percent", 0)),
-                str(payload.get("progress_message") or "Queued"),
-                {"job_id": job_id, "status": payload.get("status")},
-            )
-            if log_callback is not None:
-                log_callback("remote", f"Started remote WhisperX alignment job {job_id}")
-
-            remote_cancel_requested = False
-            try:
-                while True:
-                    if cancel_event is not None and cancel_event.is_set():
-                        await self._cancel_remote_job(client, job_id, log_callback)
-                        remote_cancel_requested = True
-                        raise asyncio.CancelledError()
-
-                    status_response = await client.get(
-                        f"{self.api_url}/jobs/{job_id}",
-                        **self._request_headers_kwargs(),
-                    )
-                    status_response.raise_for_status()
-                    status_payload = status_response.json()
-                    self._emit_remote_log_lines(
-                        log_callback,
-                        status_payload.get("output_tail") or [],
-                        seen_output_lines,
-                    )
-                    self._emit_progress(
-                        progress_callback,
-                        int(status_payload.get("progress_percent", 0)),
-                        str(status_payload.get("progress_message") or "Aligning lyrics"),
-                        {
-                            "job_id": job_id,
-                            "status": status_payload.get("status"),
-                            "error_detail": status_payload.get("error_detail"),
-                        },
-                    )
-
-                    status = str(status_payload.get("status"))
-                    if status == "completed":
-                        result_response = await client.get(
-                            f"{self.api_url}/align-jobs/{job_id}/result",
-                            **self._request_headers_kwargs(),
-                        )
-                        result_response.raise_for_status()
-                        aligned_output_path = out_dir / f"{vocals_path.stem}_{job_id}_aligned_lyrics.json"
-                        aligned_output_path.write_bytes(result_response.content)
-                        self._emit_progress(
-                            progress_callback,
-                            100,
-                            str(status_payload.get("progress_message") or "Completed"),
-                            {"job_id": job_id, "status": status},
-                        )
-                        return aligned_output_path, job_id
-
-                    if status == "failed":
-                        raise RuntimeError(
-                            status_payload.get("error_detail") or "Lyrics alignment job failed"
-                        )
-                    if status == "canceled":
-                        raise asyncio.CancelledError()
-
-                    poll_interval = (
-                        self.poll_interval_seconds
-                        if self.poll_interval_seconds is not None
-                        else settings.demucs_poll_interval_seconds
-                    )
-                    await asyncio.sleep(poll_interval)
-            except asyncio.CancelledError:
-                if not remote_cancel_requested:
-                    await self._cancel_remote_job(client, job_id, log_callback)
-                raise
-            except Exception:
-                if cancel_event is not None and cancel_event.is_set() and not remote_cancel_requested:
-                    await self._cancel_remote_job(client, job_id, log_callback)
-                raise
+        return await self._run_remote_job(
+            audio_path=vocals_path,
+            endpoint=f"{self.api_url}/align-jobs",
+            result_url_builder=self._align_job_result_url,
+            out_dir=out_dir,
+            lyrics_text=lyrics_text,
+            lyrics_format=lyrics_format,
+            transcription_model=transcription_model,
+            align_language=align_language,
+            detect_language=detect_language,
+            use_synced_lyrics=use_synced_lyrics,
+            whisperx_preload_models=whisperx_preload_models,
+            process_lyrics_lines=process_lyrics_lines,
+            max_line_length=max_line_length,
+            max_line_length_cjk=max_line_length_cjk,
+            compute_type=compute_type,
+            cancel_event=cancel_event,
+            progress_callback=progress_callback,
+            log_callback=log_callback,
+            running_message="Aligning lyrics",
+            final_completed_message="Completed",
+            terminal_statuses={"completed", "failed", "canceled"},
+        )
 
     def preload_whisperx_models(
         self,

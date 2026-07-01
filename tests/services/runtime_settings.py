@@ -265,6 +265,38 @@ def test_connection_manager_uses_configured_default_vocals_volume():
     finally:
         settings.stage_vocals_volume_default = original_default
 
+
+def test_connection_manager_detects_stale_websocket_activity():
+    """Heartbeat timestamps should drive stale connection eviction."""
+    class FakeWebSocket:
+        async def accept(self):
+            return None
+
+        async def send_json(self, message):
+            return None
+
+        async def close(self, code=1000, reason=None):
+            return None
+
+    manager = ConnectionManager()
+    websocket = FakeWebSocket()
+
+    asyncio.run(manager.connect(websocket))
+
+    async def mark_stale():
+        async with manager._lock:
+            manager._connection_context[websocket]["last_seen_at"] = (
+                datetime.now(timezone.utc) - timedelta(seconds=80)
+            ).isoformat()
+
+    asyncio.run(mark_stale())
+    assert asyncio.run(manager.is_connection_stale(websocket, heartbeat_interval_seconds=30)) is True
+
+    asyncio.run(manager.mark_connection_pong(websocket))
+    assert asyncio.run(manager.is_connection_stale(websocket, heartbeat_interval_seconds=30)) is False
+
+    asyncio.run(manager.disconnect(websocket))
+
 def test_runtime_settings_update_settings_includes_demucs_health():
     """Updating settings should still return current Demucs health."""
     service = RuntimeSettingsService()

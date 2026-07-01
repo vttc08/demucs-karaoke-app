@@ -137,6 +137,7 @@ let queueAsModalResolver = null;
 let queueConfigSelectedQueueAsGuestId = null;
 let currentQueueState = [];
 let refreshInterval = null;
+let queueRecoveryTimeout = null;
 let queueRefreshPromise = null;
 let queueRefreshPending = false;
 
@@ -1623,6 +1624,7 @@ function updateQueueDisplay(queue) {
         const statusInfo = getStatusInfo(item.status);
         const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/placeholder.png'));
         const canOpenTaskDetails = ['downloading', 'processing'].includes(item.status) && Number.isFinite(Number(item.task_id));
+        const canOpenMediaDetails = ['ready', 'completed'].includes(item.status) && Number.isFinite(Number(item.media_id));
         const leftActionHtml = item.status === 'playing' ? `
                     <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="${t('queue.playing')}">
                         <span class="material-symbols-outlined">equalizer</span>
@@ -1677,7 +1679,7 @@ function updateQueueDisplay(queue) {
                     </div>
                     `;
         return `
-            <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} ${canOpenTaskDetails ? 'cursor-pointer hover:border-primary/30' : ''} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
+            <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} ${canOpenTaskDetails || canOpenMediaDetails ? 'cursor-pointer hover:border-primary/30' : ''} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-media-id="${item.media_id ?? ''}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
                 ${leftColumnHtml}
                 <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 ${item.status !== 'playing' ? 'grayscale-[50%]' : ''}">
                     <img src="${thumbnail}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'">
@@ -1715,6 +1717,16 @@ function openQueueTaskInMedia(taskId) {
     window.location.assign(targetUrl.toString());
 }
 
+function openQueueMediaItem(mediaId) {
+    const numericMediaId = Number(mediaId);
+    if (!Number.isFinite(numericMediaId) || numericMediaId <= 0) {
+        return;
+    }
+    const targetUrl = new URL(appUrl('/media'), window.location.origin);
+    targetUrl.searchParams.set('media_id', String(numericMediaId));
+    window.location.assign(targetUrl.toString());
+}
+
 function handleQueueItemCardClick(event) {
     if (!queueList) {
         return;
@@ -1727,7 +1739,12 @@ function handleQueueItemCardClick(event) {
         return;
     }
     const status = queueItem.dataset.status;
+    const mediaId = Number(queueItem.dataset.mediaId);
     const taskId = Number(queueItem.dataset.taskId);
+    if (['ready', 'completed'].includes(status) && Number.isFinite(mediaId) && mediaId > 0) {
+        openQueueMediaItem(mediaId);
+        return;
+    }
     if (!['downloading', 'processing'].includes(status) || !Number.isFinite(taskId) || taskId <= 0) {
         return;
     }
@@ -2028,12 +2045,27 @@ class QueueWebSocket {
         this.maxReconnectDelay = 8000; // Max 8 seconds
         this.isConnected = false;
         this.isReconnecting = false;
-        this.heartbeatTimeout = null;
+        this.shouldReconnect = true;
+        this.lastMessageAt = 0;
+        this.lastPingAt = 0;
+        this.reconnectTimer = null;
         this.statusIndicator = null;
         this.guestId = ensureGuestId();
         this.tabId = ensureQueueTabId();
+        this.heartbeatIntervalMs = window.KaraokeWebSocketLifecycle?.heartbeatIntervalMs || 30000;
         
         this.createStatusIndicator();
+        this.lifecycleCleanup = window.KaraokeWebSocketLifecycle?.installPageLifecycle({
+            onVisible: () => this.handleVisibleResume(),
+            onOnline: () => this.handleVisibleResume(),
+            onPageShow: () => this.handlePageShow(),
+            onPageHide: () => this.handlePageHide(),
+            onOffline: () => {
+                if (!this.isConnected) {
+                    this.updateStatus('disconnected');
+                }
+            },
+        }) || null;
         this.connect();
     }
     
@@ -2090,12 +2122,99 @@ class QueueWebSocket {
                 : t('queue.offline');
         }
     }
-    
-    connect() {
-        if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+
+    clearReconnectTimer() {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+    }
+
+    clearPollingTimers() {
+        if (queueRecoveryTimeout) {
+            clearTimeout(queueRecoveryTimeout);
+            queueRecoveryTimeout = null;
+        }
+    }
+
+    isSocketStale() {
+        return window.KaraokeWebSocketLifecycle?.isSocketStale({
+            socket: this.ws,
+            lastActivityAt: Math.max(this.lastMessageAt || 0, this.lastPingAt || 0),
+            graceMs: 5000,
+        }) || false;
+    }
+
+    resetReconnectState() {
+        this.clearReconnectTimer();
+        this.isReconnecting = false;
+        this.reconnectAttempts = 0;
+        this.reconnectDelay = 1000;
+    }
+
+    handlePageShow(event) {
+        this.shouldReconnect = true;
+        if (!event?.persisted && this.ws && this.ws.readyState === WebSocket.CONNECTING) {
             return;
         }
-        
+        if (event?.persisted || !this.ws || this.ws.readyState === WebSocket.CLOSED || this.isSocketStale()) {
+            this.reconnectNow('pageshow');
+        }
+    }
+
+    handlePageHide() {
+        this.disconnect({ allowReconnect: false });
+    }
+
+    handleVisibleResume() {
+        this.shouldReconnect = true;
+        if (!document || document.visibilityState !== 'visible') {
+            return;
+        }
+        if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+            return;
+        }
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN || this.isSocketStale()) {
+            this.reconnectNow('foreground');
+        }
+    }
+
+    reconnectNow(reason = 'manual') {
+        this.shouldReconnect = true;
+        logger.log(`[WebSocket] Forcing reconnect due to ${reason}`);
+        this.clearReconnectTimer();
+        if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
+            try {
+                this.ws.close(4000, reason);
+            } catch (_) {
+                // Best-effort close only.
+            }
+        }
+        this.ws = null;
+        this.resetReconnectState();
+        this.connect(true);
+        if (document.visibilityState === 'visible') {
+            startQueueRefresh({ fast: true });
+        }
+    }
+
+    connect(force = false) {
+        if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) {
+            if (!force) {
+                return;
+            }
+            try {
+                this.ws.close(4000, 'force reconnect');
+            } catch (_) {
+                // Ignore close failures and create a fresh socket below.
+            }
+            this.ws = null;
+        }
+
+        if (!this.shouldReconnect) {
+            return;
+        }
+
         const wsUrl = appWsUrl('/api/queue/ws');
         
         logger.log('[WebSocket] Connecting to', wsUrl);
@@ -2103,16 +2222,22 @@ class QueueWebSocket {
         
         try {
             this.ws = new WebSocket(wsUrl);
+            const socket = this.ws;
             
             this.ws.onopen = () => {
+                if (this.ws !== socket) {
+                    return;
+                }
                 logger.log('[WebSocket] Connected');
                 this.isConnected = true;
                 this.isReconnecting = false;
-                this.reconnectAttempts = 0;
-                this.reconnectDelay = 1000;
+                this.lastMessageAt = Date.now();
+                this.lastPingAt = 0;
+                this.resetReconnectState();
                 this.updateStatus('connected', `● ${t('queue.live')}`);
                 
                 // Stop polling when WebSocket is connected
+                this.clearPollingTimers();
                 if (refreshInterval) {
                     clearInterval(refreshInterval);
                     refreshInterval = null;
@@ -2129,8 +2254,12 @@ class QueueWebSocket {
             };
             
             this.ws.onmessage = (event) => {
+                if (this.ws !== socket) {
+                    return;
+                }
                 try {
                     const message = JSON.parse(event.data);
+                    this.lastMessageAt = Date.now();
                     this.handleMessage(message);
                 } catch (error) {
                     console.error('[WebSocket] Error parsing message:', error);
@@ -2138,46 +2267,54 @@ class QueueWebSocket {
             };
             
             this.ws.onerror = (error) => {
+                if (this.ws !== socket) {
+                    return;
+                }
                 logger.error('[WebSocket] Error:', error);
             };
 
             this.ws.onclose = () => {
+                if (this.ws !== socket) {
+                    return;
+                }
                 logger.log('[WebSocket] Disconnected');
                 this.isConnected = false;
+                this.ws = null;
                 clearRemoteLyricsApplyPending(t('queue.stage_offline'));
                 
-                if (this.heartbeatTimeout) {
-                    clearTimeout(this.heartbeatTimeout);
-                    this.heartbeatTimeout = null;
-                }
-                
                 // Attempt reconnection
-                if (this.reconnectAttempts < this.maxReconnectAttempts) {
+                if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
                     this.reconnect();
-                } else {
+                } else if (this.shouldReconnect) {
                     logger.warn('[WebSocket] Max reconnection attempts reached, falling back to polling');
                     this.updateStatus('fallback', 'Using polling');
                     this.fallbackToPolling();
+                } else {
+                    this.updateStatus('disconnected');
                 }
             };
         } catch (error) {
             logger.error('[WebSocket] Connection error:', error);
-            this.reconnect();
+            if (this.shouldReconnect) {
+                this.reconnect();
+            }
         }
     }
     
     reconnect() {
-        if (this.isReconnecting) return;
+        if (!this.shouldReconnect || this.isReconnecting) return;
         
         this.isReconnecting = true;
         this.reconnectAttempts++;
         
-        const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), this.maxReconnectDelay);
+        const rawDelay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), this.maxReconnectDelay);
+        const delay = window.KaraokeWebSocketLifecycle?.withJitter(rawDelay) ?? rawDelay;
         
         logger.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         this.updateStatus('reconnecting', `Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
         
-        setTimeout(() => {
+        this.clearReconnectTimer();
+        this.reconnectTimer = setTimeout(() => {
             this.isReconnecting = false;
             this.connect();
         }, delay);
@@ -2186,7 +2323,7 @@ class QueueWebSocket {
     fallbackToPolling() {
         logger.warn('[WebSocket] Falling back to polling mode');
         refreshPresenceFallback();
-        startQueueRefresh();
+        startQueueRefresh({ fast: true });
     }
 
     buildPresencePayload() {
@@ -2217,6 +2354,7 @@ class QueueWebSocket {
     }
     
     handleMessage(message) {
+        this.lastMessageAt = Date.now();
         switch (message.type) {
             case 'connected':
                 logger.log('[WebSocket] Connection confirmed, active connections:', message.data.connection_count);
@@ -2242,6 +2380,7 @@ class QueueWebSocket {
                 break;
             case 'ping':
                 // Respond to server ping
+                this.lastPingAt = Date.now();
                 this.send({ type: 'pong', timestamp: Date.now() });
                 break;
             case 'queue_item_added':
@@ -2300,15 +2439,16 @@ class QueueWebSocket {
         return false;
     }
     
-    disconnect() {
+    disconnect({ allowReconnect = false } = {}) {
+        this.shouldReconnect = Boolean(allowReconnect);
+        this.clearReconnectTimer();
+        this.clearPollingTimers();
         if (this.ws) {
             this.ws.close();
             this.ws = null;
         }
-        if (this.heartbeatTimeout) {
-            clearTimeout(this.heartbeatTimeout);
-            this.heartbeatTimeout = null;
-        }
+        this.isConnected = false;
+        this.isReconnecting = false;
     }
 }
 
@@ -3135,14 +3275,28 @@ window.addEventListener('lyrics_settings_ack', (event) => {
     );
 });
 
-function startQueueRefresh() {
+function startQueueRefresh({ fast = false } = {}) {
+    const intervalMs = fast ? 5000 : 15000;
     if (refreshInterval) clearInterval(refreshInterval);
     refreshInterval = setInterval(() => {
         if (document.visibilityState === 'visible') {
             refreshQueue();
             refreshPresenceFallback();
         }
-    }, 15000);
+    }, intervalMs);
+
+    if (queueRecoveryTimeout) {
+        clearTimeout(queueRecoveryTimeout);
+        queueRecoveryTimeout = null;
+    }
+
+    if (fast) {
+        queueRecoveryTimeout = setTimeout(() => {
+            if (!queueWebSocket || !queueWebSocket.isConnected) {
+                startQueueRefresh({ fast: false });
+            }
+        }, 30000);
+    }
 }
 
 refreshDemucsHealth();

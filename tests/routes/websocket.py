@@ -45,6 +45,7 @@ def test_websocket_connect_and_receive_connected_message(client):
         assert message["data"]["stage_state"]["lyrics_enabled"] is True
         assert isinstance(message["data"]["stage_state"]["sync_version"], int)
 
+
 def test_websocket_presence_hello_returns_snapshot(client):
     """Presence hello should register a queue viewer and return a snapshot."""
     with client.websocket_connect("/api/queue/ws") as websocket:

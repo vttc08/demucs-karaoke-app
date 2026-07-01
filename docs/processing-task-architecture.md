@@ -126,6 +126,7 @@ When mocks or legacy callers are used in tests, the orchestration falls back to 
 Remote Demucs execution now uses an async job contract on `demucs_svc`:
 
 - `POST /jobs` uploads audio and starts remote processing
+- `GET /jobs/{job_id}/events` streams live job state as SSE with a monotonic sequence
 - `GET /jobs/{job_id}` returns job status, percent, message, and recent remote output tail
 - `GET /jobs/{job_id}/result` returns the final ZIP payload once the job completes
 - `DELETE /jobs/{job_id}` requests remote cancellation and subprocess termination
@@ -133,14 +134,14 @@ Remote Demucs execution now uses an async job contract on `demucs_svc`:
 - `GET /io` reports the current size and file count of the remote `incoming/` and `output/` trees
 - `DELETE /io` deletes all remote Demucs IO scratch files once no jobs are active
 
-The main app polls the remote job server-side and republishes the latest Demucs step progress through the existing local transports:
+The main app prefers the streamed job feed server-side and republishes the latest Demucs step progress through the existing local transports:
 
 - task SSE for admin task panels
 - `queue_item_progress` websocket events for queue clients
 
-The polling cadence is intentionally throttled to about once per second by default so long-running
-jobs stay responsive without flooding the Demucs host with status checks. The exact interval is
-configurable in runtime settings through `demucs_poll_interval_seconds`.
+If the stream is unavailable, the client falls back to status polling using the existing
+`demucs_poll_interval_seconds` runtime setting. That fallback cadence is still throttled to keep
+long-running jobs responsive without flooding the Demucs host with status checks.
 
 When WhisperX lyrics alignment is requested, the remote job's `Aligning lyrics` phase is surfaced as its own local `whisperx` stage so the browser can apply the optimistic progress helper there instead of letting the Demucs bar stall at the end of the separation run.
 

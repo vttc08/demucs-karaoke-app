@@ -2020,6 +2020,12 @@ let isQrVisible = false;
 let shortcutsPanelVisible = false;
 let qrDragState = null;
 let stageSocket = null;
+let stageReconnectTimer = null;
+let stageReconnectAttempts = 0;
+let stageReconnectDelayMs = 1000;
+let stageShouldReconnect = true;
+let stageSocketLastMessageAt = 0;
+let stageSocketLastPingAt = 0;
 let mixState = {
     vocals_enabled: true,
     vocals_volume: normalizedStageVocalsVolumeDefault,
@@ -3352,24 +3358,141 @@ async function skipCurrentSong() {
     }
 }
 
-function connectStageWebSocket() {
+function clearStageReconnectTimer() {
+    if (stageReconnectTimer) {
+        window.clearTimeout(stageReconnectTimer);
+        stageReconnectTimer = null;
+    }
+}
+
+function resetStageReconnectState() {
+    clearStageReconnectTimer();
+    stageReconnectAttempts = 0;
+    stageReconnectDelayMs = 1000;
+}
+
+function isStageSocketStale() {
+    return window.KaraokeWebSocketLifecycle?.isSocketStale({
+        socket: stageSocket,
+        lastActivityAt: Math.max(stageSocketLastMessageAt || 0, stageSocketLastPingAt || 0),
+        graceMs: 5000,
+    }) || false;
+}
+
+function scheduleStageReconnect() {
+    if (!stageShouldReconnect) {
+        return;
+    }
+    stageReconnectAttempts += 1;
+    const rawDelay = Math.min(stageReconnectDelayMs * Math.pow(2, stageReconnectAttempts - 1), 8000);
+    const delay = window.KaraokeWebSocketLifecycle?.withJitter(rawDelay) ?? rawDelay;
+    clearStageReconnectTimer();
+    stageReconnectTimer = window.setTimeout(() => {
+        stageReconnectTimer = null;
+        connectStageWebSocket(true);
+    }, delay);
+}
+
+function reconnectStageSocketNow(reason = "manual") {
+    stageShouldReconnect = true;
+    clearStageReconnectTimer();
+    if (stageSocket && stageSocket.readyState !== WebSocket.CLOSED) {
+        try {
+            stageSocket.close(4000, reason);
+        } catch (_) {
+            // Best-effort only.
+        }
+    }
+    stageSocket = null;
+    resetStageReconnectState();
+    connectStageWebSocket(true);
+}
+
+function handleStageVisibleResume(event) {
+    stageShouldReconnect = true;
+    if (!window.KaraokeWebSocketLifecycle?.isVisible()) {
+        return;
+    }
+    if (stageSocket && stageSocket.readyState === WebSocket.CONNECTING) {
+        return;
+    }
+    if (!stageSocket || stageSocket.readyState === WebSocket.CLOSED || isStageSocketStale() || event?.persisted) {
+        reconnectStageSocketNow(event?.persisted ? "pageshow" : "foreground");
+        return;
+    }
+    refreshStageState().catch((error) => {
+        console.warn("Failed to refresh stage state on resume:", error);
+    });
+}
+
+function handleStagePageHide() {
+    stageShouldReconnect = false;
+    clearStageReconnectTimer();
+    if (!stageSocket) {
+        return;
+    }
+    try {
+        stageSocket.close(1000, "page hide");
+    } catch (_) {
+        // Best-effort only.
+    }
+}
+
+function connectStageWebSocket(force = false) {
     const wsUrl = window.KaraokeURLs.appWsUrl('/api/queue/ws');
-    stageSocket = new WebSocket(wsUrl);
+    if (stageSocket && (stageSocket.readyState === WebSocket.OPEN || stageSocket.readyState === WebSocket.CONNECTING)) {
+        if (!force) {
+            return;
+        }
+        try {
+            stageSocket.close(4000, "force reconnect");
+        } catch (_) {
+            // Best-effort only.
+        }
+        stageSocket = null;
+    }
+    if (!stageShouldReconnect) {
+        return;
+    }
+    try {
+        stageSocket = new WebSocket(wsUrl);
+    } catch (error) {
+        console.warn("Failed to open stage websocket:", error);
+        if (stageShouldReconnect) {
+            scheduleStageReconnect();
+        }
+        return;
+    }
+    const socket = stageSocket;
 
     stageSocket.onopen = () => {
+        if (stageSocket !== socket) {
+            return;
+        }
+        resetStageReconnectState();
+        stageSocketLastMessageAt = Date.now();
+        stageSocketLastPingAt = 0;
         sendStageCommandRaw({
             type: "client_subscribe",
             data: { page: "stage" },
             timestamp: Date.now(),
         });
         sendStagePresenceHello();
+        refreshStageState().catch((error) => {
+            console.warn("Failed to refresh stage state after reconnect:", error);
+        });
     };
 
     stageSocket.onmessage = async (event) => {
+        if (stageSocket !== socket) {
+            return;
+        }
         try {
             const message = JSON.parse(event.data);
             const messageType = message?.type;
+            stageSocketLastMessageAt = Date.now();
             if (messageType === "ping") {
+                stageSocketLastPingAt = Date.now();
                 sendStageCommandRaw({ type: "pong", timestamp: Date.now() });
                 return;
             }
@@ -3481,8 +3604,20 @@ function connectStageWebSocket() {
         }
     };
 
+    stageSocket.onerror = () => {
+        if (stageSocket !== socket) {
+            return;
+        }
+    };
+
     stageSocket.onclose = () => {
-        window.setTimeout(connectStageWebSocket, 1500);
+        if (stageSocket !== socket) {
+            return;
+        }
+        stageSocket = null;
+        if (stageShouldReconnect) {
+            scheduleStageReconnect();
+        }
     };
 }
 
@@ -3985,6 +4120,12 @@ updatePlaybarUi();
 updateQrOverlayContent();
 updateShortcutsUi();
 connectStageWebSocket();
+window.KaraokeWebSocketLifecycle?.installPageLifecycle({
+    onVisible: () => handleStageVisibleResume(),
+    onOnline: () => handleStageVisibleResume(),
+    onPageShow: (event) => handleStageVisibleResume(event),
+    onPageHide: () => handleStagePageHide(),
+});
 updateNowPlayingMeta(INITIAL_CURRENT_ITEM);
 updatePlaybackModeFlags(INITIAL_CURRENT_ITEM);
 refreshStageState().catch((error) => {

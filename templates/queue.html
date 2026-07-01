@@ -292,7 +292,7 @@
         <div id="queue-list" class="flex flex-col gap-4">
             {% if queue %}
                 {% for item in queue %}
-                <div class="queue-item {% if item.status.value == 'playing' %}glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]{% else %}bg-surface-container-low hover:bg-surface-container{% endif %} p-4 rounded-lg flex items-center gap-4 transition-all {% if item.status.value in ('downloading', 'processing') and item.task_id %}cursor-pointer hover:border-primary/30{% endif %}" data-id="{{ item.id }}" data-task-id="{{ item.task_id or '' }}" data-status="{{ item.status.value }}" data-processing-progress="{{ item.processing_progress if item.processing_progress is not none else '' }}" data-processing-label="{{ item.processing_label or '' }}">
+                <div class="queue-item {% if item.status.value == 'playing' %}glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]{% else %}bg-surface-container-low hover:bg-surface-container{% endif %} p-4 rounded-lg flex items-center gap-4 transition-all {% if (item.status.value in ('downloading', 'processing') and item.task_id) or (item.status.value in ('ready', 'completed') and item.media_id) %}cursor-pointer hover:border-primary/30{% endif %}" data-id="{{ item.id }}" data-media-id="{{ item.media_id }}" data-task-id="{{ item.task_id or '' }}" data-status="{{ item.status.value }}" data-processing-progress="{{ item.processing_progress if item.processing_progress is not none else '' }}" data-processing-label="{{ item.processing_label or '' }}">
                     {% if is_admin %}
                     <div class="flex shrink-0 flex-col items-center gap-1">
                         {% if item.status.value == 'playing' %}

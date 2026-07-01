@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from threading import RLock
+from threading import Condition, RLock
 from typing import Any
 
 
@@ -31,6 +31,8 @@ class DemucsJobState:
     created_at: datetime = field(default_factory=utc_now)
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    updated_at: datetime = field(default_factory=utc_now)
+    sequence: int = 0
     output_tail: deque[str] = field(default_factory=deque)
     cancel_requested: bool = False
     process: Any = None
@@ -52,6 +54,8 @@ class DemucsJobState:
             "created_at": self.created_at,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
+            "updated_at": self.updated_at,
+            "sequence": self.sequence,
             "output_tail": list(self.output_tail),
             "cancel_requested": self.cancel_requested,
             "no_vocals_path": self.no_vocals_path,
@@ -65,11 +69,15 @@ class DemucsJobStore:
         self._tail_limit = tail_limit
         self._jobs: dict[str, DemucsJobState] = {}
         self._lock = RLock()
+        self._condition = Condition(self._lock)
 
     def create(self, job: DemucsJobState) -> DemucsJobState:
         with self._lock:
             job.output_tail = deque(maxlen=self._tail_limit)
+            job.sequence = max(1, int(job.sequence))
+            job.updated_at = utc_now()
             self._jobs[job.job_id] = job
+            self._condition.notify_all()
             return job
 
     def get(self, job_id: str) -> DemucsJobState | None:
@@ -88,12 +96,18 @@ class DemucsJobStore:
             job = self.require(job_id)
             for key, value in changes.items():
                 setattr(job, key, value)
+            job.sequence += 1
+            job.updated_at = utc_now()
+            self._condition.notify_all()
             return job
 
     def append_output(self, job_id: str, line: str) -> DemucsJobState:
         with self._lock:
             job = self.require(job_id)
             job.output_tail.append(line)
+            job.sequence += 1
+            job.updated_at = utc_now()
+            self._condition.notify_all()
             return job
 
     def all(self) -> list[DemucsJobState]:
@@ -102,4 +116,29 @@ class DemucsJobStore:
 
     def delete(self, job_id: str) -> DemucsJobState | None:
         with self._lock:
-            return self._jobs.pop(job_id, None)
+            job = self._jobs.pop(job_id, None)
+            if job is not None:
+                self._condition.notify_all()
+            return job
+
+    def wait_for_update(
+        self,
+        job_id: str,
+        after_sequence: int,
+        timeout_seconds: float | None = None,
+    ) -> tuple[DemucsJobState | None, bool, bool]:
+        with self._condition:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None, False, True
+            if job.sequence > after_sequence:
+                return job, True, False
+
+            self._condition.wait(timeout_seconds)
+
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None, False, True
+            if job.sequence > after_sequence:
+                return job, True, False
+            return job, False, False

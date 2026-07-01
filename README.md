@@ -11,6 +11,7 @@ Lightweight AI-powered karaoke application for home use.
 - **Subtitle Workflow**: Admin-only ASS/Aegisub and SRT/SubtitleEdit editor for round-tripping synced JSON lyrics
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
+- **Mobile-Friendly Reconnects**: Lifecycle-aware websocket recovery on queue, lyrics, and stage pages for faster return after backgrounding or screen-off on mobile browsers
 - **Live Queue Presence**: Queue page shows active guests and join toasts in real time
 - **Frontend Language Switching**: English and Simplified Chinese UI labels with a header selector
 
@@ -160,7 +161,7 @@ and `/static/...`.
        - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
        - View current runtime settings
        - Log out of the active admin session from the settings page
-       - Update Demucs URL, direct-media cutoff, Demucs poll interval, FFmpeg preset/CRF, media/cache paths, tool paths, outbound proxy URL, and WhisperX alignment defaults
+       - Update Demucs URL, direct-media cutoff, Demucs fallback poll interval, FFmpeg preset/CRF, media/cache paths, tool paths, outbound proxy URL, and WhisperX alignment defaults
        - Optionally set a Demucs API key for WAN or CG-NAT deployments; when blank, the service stays open as before
        - Check the configured proxy egress IP, org, and city/country from the backend using `ipinfo.io/json`
        - Enable/disable concurrent yt-dlp search mode
