@@ -1237,9 +1237,11 @@ The Demucs service response ZIP still contains the standard `no_vocals` and `voc
 
 `metadata.json` inside the ZIP records the same file list for downstream consumers.
 
-The main app polls `GET /jobs/{job_id}` about once per second while a remote Demucs job is running,
-then fetches `GET /jobs/{job_id}/result` after the job reaches `completed`. The interval is
-configurable through `demucs_poll_interval_seconds` in runtime settings.
+The preferred path is `GET /jobs/{job_id}/events`, which streams the same job state over SSE as a
+single long-lived connection. The main app uses that stream for live progress, then fetches
+`GET /jobs/{job_id}/result` after the terminal event and still calls `DELETE /jobs/{job_id}/artifacts`
+after it has durably stored the returned stems. If the stream is unavailable, the client falls back
+to polling `GET /jobs/{job_id}` on the cadence controlled by `demucs_poll_interval_seconds`.
 After the main app has durably committed the returned stems or aligned lyrics locally, it can call
 `DELETE /jobs/{job_id}/artifacts` to remove the corresponding retained remote `incoming/` and `output/`
 directories. This is separate from cancellation so failed jobs can keep their artifacts for later diagnosis.

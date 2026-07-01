@@ -1,3 +1,4 @@
+import asyncio
 import gc
 import os
 import json
@@ -16,7 +17,7 @@ from typing import Literal
 from html import escape
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import ValidationError
 
 try:
@@ -360,6 +361,22 @@ def _job_to_status_response(job: DemucsJobState) -> DemucsJobStatusResponse:
         value = data[key]
         data[key] = value.isoformat() if value is not None else None
     return DemucsJobStatusResponse(**data)
+
+
+def _job_to_event_payload(job: DemucsJobState) -> dict[str, object]:
+    payload = _job_to_status_response(job).model_dump()
+    payload["sequence"] = job.sequence
+    payload["updated_at"] = job.updated_at.isoformat() if job.updated_at is not None else None
+    return payload
+
+
+def _format_sse_event(event: str, data: dict[str, object], *, event_id: int | None = None) -> str:
+    lines = []
+    if event_id is not None:
+        lines.append(f"id: {event_id}")
+    lines.append(f"event: {event}")
+    lines.append(f"data: {json.dumps(data, separators=(',', ':'))}")
+    return "\n".join(lines) + "\n\n"
 
 
 def _job_to_metrics_response(job: DemucsJobState) -> DemucsMetricsJobResponse:
@@ -1322,6 +1339,72 @@ def get_job(job_id: str):
     except KeyError as error:
         raise HTTPException(status_code=404, detail="Job not found") from error
     return _job_to_status_response(job)
+
+
+def _parse_last_event_id(request: Request) -> int:
+    headers = getattr(request, "headers", {}) or {}
+    raw_value = headers.get("last-event-id", "").strip()
+    if not raw_value:
+        return 0
+    try:
+        return max(0, int(raw_value))
+    except ValueError:
+        return 0
+
+
+async def _stream_job_events(request: Request, job_id: str):
+    last_sequence = _parse_last_event_id(request)
+    heartbeat_timeout = 15.0
+    terminal_statuses = {"completed", "failed", "canceled"}
+
+    try:
+        initial_job = job_store.require(job_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Job not found") from error
+
+    if initial_job.sequence > last_sequence:
+        last_sequence = initial_job.sequence
+        yield _format_sse_event("job", _job_to_event_payload(initial_job), event_id=initial_job.sequence)
+        if initial_job.status in terminal_statuses:
+            return
+
+    while True:
+        if await request.is_disconnected():
+            return
+
+        job, changed, missing = await asyncio.to_thread(
+            job_store.wait_for_update,
+            job_id,
+            last_sequence,
+            heartbeat_timeout,
+        )
+        if missing or job is None:
+            return
+        if not changed:
+            yield ": keep-alive\n\n"
+            continue
+
+        last_sequence = job.sequence
+        yield _format_sse_event("job", _job_to_event_payload(job), event_id=job.sequence)
+        if job.status in terminal_statuses:
+            return
+
+
+@app.get("/jobs/{job_id}/events")
+async def stream_job_events(job_id: str, request: Request):
+    try:
+        job_store.require(job_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Job not found") from error
+    return StreamingResponse(
+        _stream_job_events(request, job_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/jobs/{job_id}/result")

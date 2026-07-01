@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import importlib
 import logging
 import time
+import threading
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -1199,6 +1201,80 @@ def test_delete_job_artifacts_rejects_active_job(tmp_path, monkeypatch):
     assert response.status_code == 409
     assert "still active" in response.json()["detail"]
     assert demucs_app.job_store.get(job_id) is not None
+
+
+def test_job_events_stream_emits_updates_and_closes_on_terminal_state(monkeypatch, tmp_path):
+    _clear_job_store()
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    job_id = "job-stream"
+    demucs_app.job_store.create(
+        demucs_app.DemucsJobState(
+            job_id=job_id,
+            model="htdemucs",
+            device="cpu",
+            output_format="wav",
+            mp3_bitrate=None,
+            original_filename="input.wav",
+            status="queued",
+        )
+    )
+
+    class FakeRequest:
+        headers = {}
+
+        async def is_disconnected(self):
+            return False
+
+    async def collect_events():
+        agen = demucs_app._stream_job_events(FakeRequest(), job_id)
+        try:
+            first = await anext(agen)
+
+            def updater():
+                time.sleep(0.05)
+                demucs_app.job_store.update(
+                    job_id,
+                    status="running",
+                    progress_percent=42,
+                    progress_message="Running Demucs",
+                )
+                demucs_app.job_store.update(
+                    job_id,
+                    status="completed",
+                    progress_percent=100,
+                    progress_message="Completed",
+                    finished_at=demucs_app.utc_now(),
+                )
+
+            thread = threading.Thread(target=updater, daemon=True)
+            thread.start()
+            second = await anext(agen)
+            try:
+                await anext(agen)
+                raise AssertionError("Expected the stream to close after the terminal event")
+            except StopAsyncIteration:
+                pass
+            thread.join(timeout=1)
+            return first, second
+        finally:
+            await agen.aclose()
+
+    first, second = asyncio.run(collect_events())
+    assert "event: job" in first
+    assert '"status":"queued"' in first
+    assert '"sequence":1' in first
+    assert "event: job" in second
+    assert '"status":"completed"' in second
+    assert '"progress_percent":100' in second
+
+
+def test_job_events_stream_returns_404_for_unknown_job():
+    with TestClient(demucs_app.app) as client:
+        response = client.get("/jobs/missing-job/events")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Job not found"
 
 
 def test_get_io_usage_reports_current_folder_size_and_counts(monkeypatch, tmp_path):
