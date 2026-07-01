@@ -47,13 +47,18 @@
         </aside>
 
         <section class="trim-editor-workspace">
-            <header class="trim-mobile-title">
-                <a href="{{ app_url('/media') }}" aria-label="{{ t('trim.back_to_media') }}">
-                    <span class="material-symbols-outlined">arrow_back</span>
+            <header class="trim-mobile-title items-center gap-3 max-w-full overflow-hidden">
+                <a
+                href="{{ app_url('/media') }}"
+                aria-label="{{ t('trim.back_to_media') }}"
+                class="grid size-11 shrink-0 place-items-center rounded-full"
+                >
+                <span class="material-symbols-outlined pointer-events-none">arrow_back</span>
                 </a>
-                <div>
-                    <h2>{{ trim_info.title }}</h2>
-                    <p>{{ trim_info.artist or t('common.unknown_artist') }}</p>
+
+                <div class="min-w-0 overflow-hidden">
+                    <h2 class="truncate">{{ trim_info.title }}</h2>
+                    <p class="truncate">{{ trim_info.artist or t('common.unknown_artist') }}</p>
                 </div>
             </header>
 
