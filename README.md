@@ -504,15 +504,13 @@ C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe -m uvicorn ap
 Then verify from Linux host:
 
 ```bash
-curl http://10.10.120.191:8001/health
-curl http://10.10.120.191:8001/metrics
-```
+auth_header=()
+if [ -n "$DEMUCS_API_KEY" ]; then
+  auth_header=(-H "X-API-Key: $DEMUCS_API_KEY")
+fi
 
-If auth is enabled:
-
-```bash
-curl -H "X-API-Key: $DEMUCS_API_KEY" http://10.10.120.191:8001/health
-curl -H "X-API-Key: $DEMUCS_API_KEY" http://10.10.120.191:8001/metrics
+curl "${auth_header[@]}" http://10.10.120.191:8001/health
+curl "${auth_header[@]}" http://10.10.120.191:8001/metrics
 ```
 
 If you run the local stub proxy on `localhost:8002`, keep `DEMUCS_API_URL=http://localhost:8002` for the main app and set `UPSTREAM_DEMUCS_API_URL=http://10.10.120.191:8001` for the stub.

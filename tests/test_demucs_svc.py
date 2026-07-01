@@ -1256,6 +1256,25 @@ def test_transfer_page_renders_upload_download_and_cli_instructions():
     assert "/transfer/download/random-25mb" in body
     assert "curl -X POST" in body
     assert "wget --method=POST" in body
+    assert "$DEMUCS_API_KEY" not in body
+
+
+def test_transfer_page_includes_api_key_header_when_configured():
+    original_api_key = demucs_settings.settings.api_key
+    demucs_settings.settings.api_key = "shared-secret"
+    try:
+        with patch("demucs_svc.app.preload_models", return_value=[]), patch(
+            "demucs_svc.app.subprocess.run",
+            return_value=SimpleNamespace(returncode=0),
+        ):
+            with TestClient(demucs_app.app) as client:
+                response = client.get("/transfer")
+
+        assert response.status_code == 200
+        assert "$DEMUCS_API_KEY" in response.text
+        assert "X-API-Key" in response.text
+    finally:
+        demucs_settings.settings.api_key = original_api_key
 
 
 def test_transfer_upload_multipart_discards_bytes_and_reports_count():

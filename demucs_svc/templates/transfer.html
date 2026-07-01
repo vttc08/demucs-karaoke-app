@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demucs Transfer Bench</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-soft: #1f2937;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #22c55e;
+      --accent-strong: #16a34a;
+      --border: rgba(148, 163, 184, 0.25);
+      --shadow: 0 16px 48px rgba(0, 0, 0, 0.24);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(34, 197, 94, 0.16), transparent 32%),
+        radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.14), transparent 24%),
+        var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    main {
+      width: min(1100px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+    .hero {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    h1, h2, p { margin: 0; }
+    h1 {
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+    .lede {
+      max-width: 70ch;
+      color: var(--muted);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .card {
+      grid-column: span 12;
+      background: linear-gradient(180deg, rgba(17, 24, 39, 0.94), rgba(15, 23, 42, 0.94));
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    @media (min-width: 900px) {
+      .card.upload { grid-column: span 7; }
+      .card.download, .card.commands { grid-column: span 5; }
+    }
+    .section-title {
+      font-size: 1.1rem;
+      margin-bottom: 10px;
+    }
+    .muted {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      color: #04130a;
+      font-weight: 700;
+      padding: 0.8rem 1rem;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .button.secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+    input[type="file"] {
+      width: 100%;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text);
+    }
+    progress {
+      width: 100%;
+      height: 18px;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    progress::-webkit-progress-bar {
+      background: rgba(148, 163, 184, 0.12);
+    }
+    progress::-webkit-progress-value {
+      background: linear-gradient(90deg, #34d399, #22c55e);
+    }
+    progress::-moz-progress-bar {
+      background: linear-gradient(90deg, #34d399, #22c55e);
+    }
+    pre {
+      margin: 0;
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .status {
+      min-height: 1.5em;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .result {
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: #dcfce7;
+      min-height: 3rem;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    label {
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <h1>Demucs Transfer Bench</h1>
+      <p class="lede">
+        Admin throughput test page for the standalone Demucs service.
+        Use it to measure upload, download, and round-trip latency between your browser or CLI
+        tools and the Demucs host without invoking separation or alignment work.
+      </p>
+      <p class="muted">Service base: <code>__BASE_URL__</code></p>
+    </section>
+
+    <section class="grid">
+      <article class="card upload">
+        <div class="stack">
+          <div>
+            <h2 class="section-title">Upload test</h2>
+            <p class="muted">
+              Multipart or raw upload for browser testing. The server reads the bytes, counts them,
+              and discards them immediately.
+            </p>
+          </div>
+          <form id="transfer-upload-form" class="stack" action="__MULTIPART_UPLOAD_URL__" method="post" enctype="multipart/form-data">
+            <div class="field">
+              <label for="transfer-api-key">API key</label>
+              <input id="transfer-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="Optional when auth is disabled">
+              <p class="muted">Stored locally in this browser and sent as <code>X-API-Key</code>.</p>
+            </div>
+            <div class="field">
+              <label for="transfer-upload-file">Choose any file</label>
+              <input id="transfer-upload-file" name="file" type="file" required>
+            </div>
+            <div class="actions">
+              <button class="button" type="submit">Upload selected file</button>
+              <button class="button secondary" id="transfer-raw-upload-btn" type="button">Upload raw body</button>
+            </div>
+          </form>
+          <progress id="transfer-upload-progress" value="0" max="100"></progress>
+          <div id="transfer-upload-status" class="status">Idle.</div>
+          <div id="transfer-upload-speed" class="muted">Transfer speed will appear here during upload.</div>
+          <div id="transfer-upload-result" class="result">Waiting for an upload.</div>
+        </div>
+      </article>
+
+      <article class="card download">
+        <div class="stack">
+          <div>
+            <h2 class="section-title">Download test</h2>
+            <p class="muted">
+              Downloads a cached 25 MiB random file. The first request creates the payload; later
+              requests reuse the same file.
+            </p>
+          </div>
+          <div class="actions">
+            <button class="button" id="transfer-download-btn" type="button">Download 25 MiB file</button>
+          </div>
+          <p class="muted">
+            The browser or your CLI client can measure transfer time, throughput, and completion.
+          </p>
+        </div>
+      </article>
+
+      <article class="card commands">
+        <div class="stack">
+          <div>
+            <h2 class="section-title">curl / wget</h2>
+            <p class="muted">Use these when you want a simple command-line throughput check.</p>
+          </div>
+          <pre><code>__COMMANDS_BLOCK__</code></pre>
+        </div>
+      </article>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const form = document.getElementById("transfer-upload-form");
+      const fileInput = document.getElementById("transfer-upload-file");
+      const apiKeyInput = document.getElementById("transfer-api-key");
+      const rawUploadButton = document.getElementById("transfer-raw-upload-btn");
+      const downloadButton = document.getElementById("transfer-download-btn");
+      const progress = document.getElementById("transfer-upload-progress");
+      const status = document.getElementById("transfer-upload-status");
+      const speed = document.getElementById("transfer-upload-speed");
+      const result = document.getElementById("transfer-upload-result");
+      const uploadUrl = __MULTIPART_UPLOAD_URL_JSON__;
+      const rawUploadUrl = __RAW_UPLOAD_URL_JSON__;
+      const downloadUrl = __DOWNLOAD_URL_JSON__;
+      const apiKeyStorageKey = "demucs.transfer.apiKey";
+
+      function formatBytes(bytes) {
+        const units = ["B", "KB", "MB", "GB"];
+        let value = bytes;
+        let unitIndex = 0;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+          value /= 1024;
+          unitIndex += 1;
+        }
+        return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+      }
+
+      function readApiKey() {
+        return apiKeyInput ? apiKeyInput.value.trim() : "";
+      }
+
+      function writeApiKey(value) {
+        try {
+          window.localStorage.setItem(apiKeyStorageKey, value);
+        } catch (_) {
+          // Keep the UI usable when storage is unavailable.
+        }
+      }
+
+      function loadApiKey() {
+        try {
+          const value = window.localStorage.getItem(apiKeyStorageKey) || "";
+          if (apiKeyInput) {
+            apiKeyInput.value = value;
+          }
+        } catch (_) {
+          // Ignore storage errors.
+        }
+      }
+
+      function authHeaders() {
+        const apiKey = readApiKey();
+        return apiKey ? {"X-API-Key": apiKey} : {};
+      }
+
+      function setUiDisabled(disabled) {
+        if (fileInput) {
+          fileInput.disabled = disabled;
+        }
+        if (apiKeyInput) {
+          apiKeyInput.disabled = disabled;
+        }
+        if (rawUploadButton) {
+          rawUploadButton.disabled = disabled;
+        }
+        if (downloadButton) {
+          downloadButton.disabled = disabled;
+        }
+      }
+
+      function loadResponsePayload(xhr) {
+        if (xhr.response && typeof xhr.response === "object") {
+          return xhr.response;
+        }
+        try {
+          return JSON.parse(xhr.responseText || "{}");
+        } catch (_) {
+          return {};
+        }
+      }
+
+      async function downloadRandomFile() {
+        setUiDisabled(true);
+        status.textContent = "Starting download...";
+        speed.textContent = "Measuring transfer speed...";
+        result.textContent = "Downloading...";
+        try {
+          const response = await fetch(downloadUrl, {
+            headers: authHeaders(),
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.detail || `Download failed with HTTP ${response.status}.`);
+          }
+          const blob = await response.blob();
+          const objectUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = objectUrl;
+          link.download = "random-25mb.bin";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
+          status.textContent = `Completed download of ${formatBytes(blob.size)}.`;
+          speed.textContent = "Download completed.";
+          result.textContent = "Browser download started.";
+        } catch (error) {
+          const message = String(error.message || "Download failed.");
+          status.textContent = message;
+          speed.textContent = "Transfer speed unavailable.";
+          result.textContent = message;
+        } finally {
+          setUiDisabled(false);
+        }
+      }
+
+      function startUpload(mode) {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) {
+          status.textContent = "Choose a file first.";
+          return;
+        }
+
+        setUiDisabled(true);
+
+        const start = performance.now();
+        let timer = null;
+        const xhr = new XMLHttpRequest();
+        const isMultipart = mode === "multipart";
+        const content = isMultipart ? new FormData() : file;
+        if (isMultipart) {
+          content.append("file", file, file.name);
+        }
+
+        progress.removeAttribute("value");
+        progress.max = 1;
+        progress.value = 0;
+        status.textContent = isMultipart ? "Starting multipart upload..." : "Starting raw upload...";
+        speed.textContent = "Measuring transfer speed...";
+        result.textContent = "Uploading...";
+
+        xhr.open("POST", isMultipart ? uploadUrl : rawUploadUrl, true);
+        xhr.responseType = "json";
+        if (!isMultipart) {
+          xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        }
+        const headers = authHeaders();
+        Object.entries(headers).forEach(([name, value]) => {
+          xhr.setRequestHeader(name, value);
+        });
+
+        let lastSampleAt = start;
+        let lastSampleLoaded = 0;
+        let smoothedRate = 0;
+
+        function updateSpeed(now = performance.now()) {
+          const loaded = progress.hasAttribute("value") ? progress.value : 0;
+          const elapsedSeconds = (now - start) / 1000;
+          const sampleSeconds = (now - lastSampleAt) / 1000;
+          const sampleLoaded = loaded - lastSampleLoaded;
+          const instantRate = sampleSeconds > 0 && sampleLoaded > 0 ? sampleLoaded / sampleSeconds : 0;
+
+          if (instantRate > 0) {
+            smoothedRate = smoothedRate > 0 ? (smoothedRate * 0.75) + (instantRate * 0.25) : instantRate;
+            lastSampleAt = now;
+            lastSampleLoaded = loaded;
+          }
+
+          const total = progress.hasAttribute("max") ? progress.max : 0;
+          const speedText = smoothedRate > 0 ? ` at ${formatBytes(smoothedRate)}/s` : "";
+          if (total) {
+            status.textContent = `${formatBytes(loaded)} / ${formatBytes(total)} uploaded`;
+          } else {
+            status.textContent = `${formatBytes(loaded)} uploaded`;
+          }
+          speed.textContent = elapsedSeconds > 0 || loaded > 0 ? `Estimated transfer speed${speedText}` : "Measuring transfer speed...";
+        }
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            progress.max = event.total;
+            progress.value = event.loaded;
+          } else {
+            progress.removeAttribute("max");
+            progress.value = event.loaded;
+          }
+          updateSpeed();
+        };
+
+        xhr.onloadstart = () => {
+          timer = window.setInterval(() => {
+            updateSpeed();
+          }, 250);
+        };
+
+        xhr.onerror = () => {
+          window.clearInterval(timer);
+          status.textContent = "Upload failed.";
+          result.textContent = "The request failed before the server responded.";
+        };
+
+        xhr.onload = () => {
+          window.clearInterval(timer);
+          const elapsedMs = performance.now() - start;
+          const payload = loadResponsePayload(xhr);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const received = payload.received_bytes ?? file.size;
+            const modeLabel = payload.transfer_mode || (isMultipart ? "multipart" : "raw");
+            status.textContent = `Completed ${modeLabel} upload in ${(elapsedMs / 1000).toFixed(2)}s.`;
+            speed.textContent = `Average transfer speed ${formatBytes(received / Math.max(elapsedMs / 1000, 0.001))}/s`;
+            result.textContent = `Server received ${formatBytes(received)} and discarded it.`;
+            progress.max = received || 1;
+            progress.value = received || 1;
+          } else {
+            status.textContent = `Upload failed with HTTP ${xhr.status}.`;
+            speed.textContent = "Transfer speed unavailable.";
+            result.textContent = payload.detail || "The server rejected the upload.";
+          }
+        };
+
+        xhr.onloadend = () => {
+          window.clearInterval(timer);
+          setUiDisabled(false);
+        };
+
+        xhr.send(content);
+      }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        startUpload("multipart");
+      });
+
+      if (rawUploadButton) {
+        rawUploadButton.addEventListener("click", () => {
+          startUpload("raw");
+        });
+      }
+
+      if (downloadButton) {
+        downloadButton.addEventListener("click", () => {
+          downloadRandomFile();
+        });
+      }
+
+      if (apiKeyInput) {
+        apiKeyInput.addEventListener("input", () => {
+          writeApiKey(apiKeyInput.value.trim());
+        });
+      }
+
+      loadApiKey();
+    })();
+  </script>
+</body>
+</html>
