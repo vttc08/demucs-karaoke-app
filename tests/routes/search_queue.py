@@ -1309,6 +1309,38 @@ def test_queue_page_renders_clickable_processing_items_with_task_ids(client):
     assert 'data-task-progress-stage="extract_audio"' in response.text
     assert 'cursor-pointer hover:border-primary/30' in response.text
 
+def test_queue_page_renders_ready_items_linking_to_media(client):
+    """Completed queue items should be clickable and carry their media id."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="queue-media-link",
+            title="Queue Media Link",
+            artist="Artist",
+            media_path="/media/queue-media-link.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1000,
+            requested_karaoke=False,
+            status=QueueStatus.READY,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+        media_id = media.id
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert f'data-media-id="{media_id}"' in response.text
+    assert 'data-status="ready"' in response.text
+    assert 'cursor-pointer hover:border-primary/30' in response.text
+
 def test_media_management_page_renders_progress_stage_for_finalize_tasks(client):
     """Media task cards should expose their stage for optimistic progress rendering."""
     authenticate_admin_client(client)
