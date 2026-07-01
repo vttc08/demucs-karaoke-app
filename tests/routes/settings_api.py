@@ -9,6 +9,7 @@ def test_get_runtime_settings(client):
     assert response.status_code == 200
     data = response.json()
     assert "demucs_api_url" in data
+    assert "demucs_api_key" in data
     assert "demucs_model" in data
     assert "demucs_device" in data
     assert "demucs_output_format" in data
@@ -112,6 +113,7 @@ def test_update_runtime_settings(client):
         "/api/settings/",
         json={
             "demucs_api_url": "http://127.0.0.1:9001",
+            "demucs_api_key": "shared-secret",
             "demucs_model": "htdemucs_ft",
             "demucs_device": "cpu",
             "demucs_output_format": "mp3",
@@ -143,6 +145,7 @@ def test_update_runtime_settings(client):
     assert response.status_code == 200
     data = response.json()
     assert data["demucs_api_url"] == "http://127.0.0.1:9001"
+    assert data["demucs_api_key"] == "shared-secret"
     assert data["demucs_model"] == "htdemucs_ft"
     assert data["demucs_device"] == "cpu"
     assert data["demucs_output_format"] == "mp3"
@@ -185,6 +188,7 @@ def test_update_runtime_settings_persists_to_database(client):
             "/api/settings/",
             json={
                 "stage_qr_url": "https://karaoke.test/queue",
+                "demucs_api_key": "persisted-secret",
                 "stage_lobby_media_path": "/media/stage-lobby.mp4",
                 "stage_vocals_volume_default": 0.25,
                 "whisperx_transcription_model": "tiny",
@@ -204,6 +208,9 @@ def test_update_runtime_settings_persists_to_database(client):
     db = TestingSessionLocal()
     try:
         stage_qr = db.query(RuntimeSetting).filter(RuntimeSetting.key == "stage_qr_url").first()
+        api_key = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "demucs_api_key"
+        ).first()
         stage_lobby = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "stage_lobby_media_path"
         ).first()
@@ -242,6 +249,7 @@ def test_update_runtime_settings_persists_to_database(client):
         ).first()
         assert stage_qr is not None
         assert stage_qr.value == "https://karaoke.test/queue"
+        assert api_key.value == "persisted-secret"
         assert stage_lobby is not None
         assert stage_lobby.value == "/media/stage-lobby.mp4"
         assert stage_vocals_volume_default is not None

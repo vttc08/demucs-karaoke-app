@@ -1249,7 +1249,8 @@ The remote service also exposes `GET /io` for a current scratch-space size snaps
 The Demucs service reads its own configuration from environment variables and from
 `demucs_svc/.env` by default. `DEMUCS_IO_ROOT` controls the scratch root used for `incoming/` and
 `output/`; it defaults to `demucs_svc/io`. Set `DEMUCS_ENV_FILE` if you want the service to read a
-different `.env` file without affecting the main app config.
+different `.env` file without affecting the main app config. If `DEMUCS_API_KEY` is set, the
+service requires `X-API-Key` on all request paths except the plain `/transfer` HTML page.
 
 For existing guide vocals, the main app can use the Demucs align-only job API:
 
@@ -1285,6 +1286,8 @@ The standalone Demucs host also serves a small throughput-testing page and helpe
 
 - `GET /transfer`
   - browser page with a multipart upload form, a download button, a progress bar, and CLI examples
+  - when `DEMUCS_API_KEY` is configured, the page keeps working but the browser must send `X-API-Key`
+    with the upload and download requests
 - `POST /transfer/upload`
   - multipart upload endpoint for browser testing
   - the service reads the uploaded bytes and discards them immediately
@@ -1303,6 +1306,7 @@ curl -X POST --data-binary "@/path/to/media.bin" "http://127.0.0.1:8001/transfer
 curl -OJ "http://127.0.0.1:8001/transfer/download/random-25mb"
 wget --method=POST --body-file=/path/to/media.bin -O - "http://127.0.0.1:8001/transfer/upload/raw"
 wget -O random-25mb.bin "http://127.0.0.1:8001/transfer/download/random-25mb"
+curl -H "X-API-Key: $DEMUCS_API_KEY" -F "file=@/path/to/media.bin" "http://127.0.0.1:8001/transfer/upload"
 ```
 
 At startup the service logs a healthy or degraded readiness summary, and WhisperX preload

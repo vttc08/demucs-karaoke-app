@@ -67,6 +67,7 @@ class Settings(BaseSettings):
 
     # External services
     demucs_api_url: str = "http://localhost:8001"
+    demucs_api_key: str = ""
     demucs_model: str = "htdemucs"
     demucs_device: str = "cuda"
     demucs_output_format: str = "wav"

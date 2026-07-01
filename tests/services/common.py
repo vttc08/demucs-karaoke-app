@@ -79,13 +79,16 @@ def reset_proxy_url_setting():
     """Keep yt-dlp runtime settings isolated from mutations in other cases."""
     original_proxy = settings.ytdlp_proxy_url
     original_deno_path = settings.ytdlp_deno_path
+    original_demucs_api_key = settings.demucs_api_key
     settings.ytdlp_proxy_url = ""
     settings.ytdlp_deno_path = ""
+    settings.demucs_api_key = ""
     try:
         yield
     finally:
         settings.ytdlp_proxy_url = original_proxy
         settings.ytdlp_deno_path = original_deno_path
+        settings.demucs_api_key = original_demucs_api_key
 
 
 @pytest.fixture

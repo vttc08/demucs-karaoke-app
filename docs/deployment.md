@@ -41,7 +41,11 @@ YTDLP_PATH=yt-dlp
 YTDLP_DENO_PATH=/usr/local/bin/deno
 FFMPEG_PATH=ffmpeg
 DEMUCS_API_URL=http://demucs-host:8001
+DEMUCS_API_KEY=
 ```
+
+If the Demucs host is protected, set the same key on both sides so the main app sends `X-API-Key`
+on every request. Leave the value blank when the service is intentionally open on a trusted LAN.
 
 ### Bundle Deno In The Image
 
@@ -175,6 +179,8 @@ For unattended startup, use Task Scheduler or a service wrapper such as NSSM. St
 ## Security And Operations
 
 - Do not expose `/settings`, `/media`, or admin APIs directly to the public internet without a trusted reverse proxy and access policy.
+- If you expose `demucs_svc` beyond the LAN, set `DEMUCS_API_KEY` there and in the main app so
+  remote requests carry `X-API-Key`.
 - Keep admin credentials out of environment files and logs.
 - Do not log proxy credentials or full external tool payloads.
 - Keep `yt-dlp` current from `/settings` or with `uv pip install --upgrade yt-dlp`.

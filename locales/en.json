@@ -585,6 +585,8 @@
   "settings.check_version": "Check version",
   "settings.description": "Manage karaoke processing, storage paths, search behavior, and stage links. Saved changes apply to new requests immediately.",
   "settings.demucs_api_url": "Demucs API URL",
+  "settings.demucs_api_key": "Demucs API key",
+  "settings.demucs_api_key_detail": "Optional. Sent as X-API-Key when connecting to a protected Demucs service.",
   "settings.demucs_device": "Demucs Device",
   "settings.demucs_model": "Demucs Model",
   "settings.demucs_direct_media_cutoff": "Demucs direct media cutoff (MB)",

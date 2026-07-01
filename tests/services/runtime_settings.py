@@ -1058,6 +1058,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
     try:
         db_session.add_all(
             [
+                RuntimeSetting(key="demucs_api_key", value="persisted-api-key"),
                 RuntimeSetting(key="demucs_model", value="persisted-model"),
                 RuntimeSetting(key="stage_qr_url", value="https://karaoke.test/stage"),
                 RuntimeSetting(key="stage_lobby_media_path", value="/media/stage-lobby.mp4"),
@@ -1077,6 +1078,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         db_session.commit()
 
         settings.demucs_model = "temporary-model"
+        settings.demucs_api_key = ""
         settings.stage_qr_url = ""
         settings.stage_lobby_media_path = ""
         settings.stage_vocals_volume_default = 1.0
@@ -1093,6 +1095,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         applied = service.load_persisted_settings(db_session)
 
         assert "demucs_model" in applied
+        assert "demucs_api_key" in applied
         assert "stage_qr_url" in applied
         assert "stage_lobby_media_path" in applied
         assert "stage_vocals_volume_default" in applied
@@ -1101,6 +1104,7 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         assert "demucs_direct_media_max_mb" in applied
         assert "demucs_poll_interval_seconds" in applied
         assert settings.demucs_model == "persisted-model"
+        assert settings.demucs_api_key == "persisted-api-key"
         assert settings.stage_qr_url == "https://karaoke.test/stage"
         assert settings.stage_lobby_media_path == "/media/stage-lobby.mp4"
         assert settings.stage_vocals_volume_default == 0.35
