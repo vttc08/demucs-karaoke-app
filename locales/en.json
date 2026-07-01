@@ -663,6 +663,8 @@
   "settings.unavailable": "Unavailable",
   "settings.version_unknown": "Unknown",
   "settings.ytdlp_path": "yt-dlp Path",
+  "settings.ytdlp_deno_path": "Deno path",
+  "settings.ytdlp_deno_path_detail": "Leave empty to keep yt-dlp default behavior. Set this for videos that require external JS execution.",
   "settings.ytdlp_proxy": "yt-dlp Proxy URL",
   "settings.ytdlp_resolution_1080": "1080p",
   "settings.ytdlp_resolution_2160": "2160p",

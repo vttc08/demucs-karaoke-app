@@ -33,6 +33,14 @@ class YtDlpAdapter:
             return ["--proxy", settings.ytdlp_proxy_url]
         return []
 
+    @staticmethod
+    def _js_runtime_args() -> List[str]:
+        """Build external JavaScript runtime arguments when configured."""
+        deno_path = (settings.ytdlp_deno_path or "").strip()
+        if not deno_path:
+            return []
+        return ["--js-runtimes", f"deno:{deno_path}"]
+
     @classmethod
     def _video_resolution_sort_args(cls) -> List[str]:
         """Build yt-dlp sorting args for the configured maximum video resolution."""
@@ -72,6 +80,7 @@ class YtDlpAdapter:
             "--no-playlist",
             "--no-warnings",
         ]
+        cmd.extend(self._js_runtime_args())
         cmd.extend(self._proxy_args())
 
         logger.info("Executing YouTube search query=%r max_results=%s", query, max_results)
@@ -151,6 +160,7 @@ class YtDlpAdapter:
             ]
             if use_extractor_args and client:
                 cmd[2:2] = ["--extractor-args", f"youtube:player_client={client}"]
+            cmd.extend(self._js_runtime_args())
             cmd.extend(self._proxy_args())
             try:
                 result = subprocess.run(
@@ -460,6 +470,7 @@ class YtDlpAdapter:
                     ]
                 )
             cmd.extend(resolution_args)
+            cmd.extend(self._js_runtime_args())
             cmd.extend(self._proxy_args())
 
             try:

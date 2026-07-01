@@ -44,6 +44,15 @@ _VIDEO_SUFFIXES = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
 _DOCS_ROOT = "/help"
 
 
+def _current_guest_id(request: Request) -> str | None:
+    """Return the normalized persistent guest id for the current request."""
+    guest_id = request.cookies.get("karaoke_guest_id")
+    if guest_id is None:
+        return None
+    cleaned = " ".join(guest_id.split()).strip()
+    return cleaned or None
+
+
 def app_url(path: str | None) -> str:
     """Prefix app-local absolute URLs with the configured deployment base path."""
     if not path:
@@ -332,10 +341,13 @@ async def media_management_page(request: Request, db: Session = Depends(get_db))
     media_items = media_library_service.list_media_items(db)
     media_stats = media_library_service.get_media_stats(db)
     is_admin = get_admin_user(request, db) is not None
-    task_items = (
-        processing_task_service.list_tasks(db, include_done=False, include_failed=True, limit=20)
-        if is_admin
-        else []
+    task_items = processing_task_service.list_tasks_for_viewer(
+        db,
+        is_admin=is_admin,
+        requester_id=_current_guest_id(request),
+        include_done=False,
+        include_failed=True,
+        limit=20,
     )
     return templates.TemplateResponse(
         "media_management.html",

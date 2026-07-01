@@ -272,7 +272,8 @@ The stage page uses a websocket-first model:
   - `vocals` is persisted separately to canonical `vocals_path` as `/media/<stem>.vocals.<ext>`
 - Karaoke input prep chooses the Demucs source after a local file exists:
   - audio-only inputs always go directly to Demucs
-  - small video/media files can go directly to Demucs based on the persisted direct-media cutoff
+  - small video/media files can go directly to Demucs based on the persisted direct-media cutoff only when ffprobe finds at least one audio stream
+  - YouTube-backed video-only downloads keep the video for playback/final remuxing and fall back to a separate audio-only yt-dlp download for Demucs
   - large YouTube or local video files fall back to the existing audio-only prep path
 - Local media karaoke finalization stages both outputs before updating the media row:
   - video inputs remux the `no_vocals` stem with the original video stream

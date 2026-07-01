@@ -185,6 +185,11 @@
                         <input id="ytdlp_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
                     </label>
                     <label class="flex flex-col gap-1.5">
+                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ytdlp_deno_path') }}</span>
+                        <input id="ytdlp_deno_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" placeholder="/usr/local/bin/deno" />
+                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.ytdlp_deno_path_detail') }}</span>
+                    </label>
+                    <label class="flex flex-col gap-1.5">
                         <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ytdlp_video_resolution') }}</span>
                         <select id="ytdlp_video_resolution" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
                             <option value="default">{{ t('settings.ytdlp_resolution_default') }}</option>

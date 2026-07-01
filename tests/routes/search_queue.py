@@ -559,6 +559,77 @@ def test_cancel_task_route_guest_requires_own_queue_item(client):
     asyncio.run(task_stream_manager.clear_task(owned_task_id))
     asyncio.run(task_stream_manager.clear_task(other_task_id))
 
+
+def test_list_tasks_route_returns_only_guest_owned_tasks(client):
+    """Guest task lists should only include the viewer's queue-backed tasks."""
+    with TestingSessionLocal() as db:
+        owned_media = MediaItem(
+            youtube_id="list-owned-media",
+            file_stem="list-owned-media",
+            title="List Owned Media",
+            media_path="/media/list-owned-media.mp4",
+            missing=False,
+        )
+        other_media = MediaItem(
+            youtube_id="list-other-media",
+            file_stem="list-other-media",
+            title="List Other Media",
+            media_path="/media/list-other-media.mp4",
+            missing=False,
+        )
+        db.add_all([owned_media, other_media])
+        db.commit()
+        db.refresh(owned_media)
+        db.refresh(other_media)
+
+        owned_queue = QueueItem(
+            media_id=owned_media.id,
+            position=1,
+            requested_karaoke=False,
+            user_id="guest-owner",
+            status=QueueStatus.FAILED.value,
+        )
+        other_queue = QueueItem(
+            media_id=other_media.id,
+            position=2,
+            requested_karaoke=False,
+            user_id="guest-other",
+            status=QueueStatus.FAILED.value,
+        )
+        db.add_all([owned_queue, other_queue])
+        db.commit()
+        db.refresh(owned_queue)
+        db.refresh(other_queue)
+
+        owned_task = ProcessingTask(
+            task_type="queue_prepare",
+            source_kind="youtube",
+            target_queue_item_id=owned_queue.id,
+            target_media_item_id=owned_media.id,
+            status=ProcessingTaskStatus.FAILED.value,
+            stage="failed",
+        )
+        other_task = ProcessingTask(
+            task_type="queue_prepare",
+            source_kind="youtube",
+            target_queue_item_id=other_queue.id,
+            target_media_item_id=other_media.id,
+            status=ProcessingTaskStatus.FAILED.value,
+            stage="failed",
+        )
+        db.add_all([owned_task, other_task])
+        db.commit()
+        db.refresh(owned_task)
+        db.refresh(other_task)
+
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+    response = client.get("/api/tasks/")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["id"] for item in payload] == [owned_task.id]
+
+
 def test_delete_canceled_task_route_removes_orphaned_media_and_task(client, tmp_path):
     """Admins should be able to delete a canceled task and its orphaned media row."""
     authenticate_admin_client(client)
@@ -623,6 +694,178 @@ def test_delete_canceled_task_route_removes_orphaned_media_and_task(client, tmp_
         settings.media_path = original_media
 
 
+def test_delete_failed_task_route_removes_orphaned_media_and_task(client, tmp_path):
+    """Admins should be able to delete a failed task and its orphaned media row."""
+    authenticate_admin_client(client)
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "delete-failed.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                youtube_id="delete-failed",
+                file_stem="delete-failed",
+                title="Delete Failed",
+                media_path="/media/delete-failed.mp4",
+                missing=True,
+            )
+            db.add(media)
+            db.commit()
+            db.refresh(media)
+
+            queue_item = QueueItem(
+                media_id=media.id,
+                position=1,
+                requested_karaoke=False,
+                status=QueueStatus.FAILED.value,
+            )
+            db.add(queue_item)
+            db.commit()
+            db.refresh(queue_item)
+
+            task = ProcessingTask(
+                task_type="queue_prepare",
+                source_kind="youtube",
+                target_queue_item_id=queue_item.id,
+                target_media_item_id=media.id,
+                status=ProcessingTaskStatus.FAILED.value,
+                stage="failed",
+            )
+            db.add(task)
+            db.commit()
+            task_id = task.id
+            media_id = media.id
+            queue_item_id = queue_item.id
+
+        response = client.delete(f"/api/tasks/{task_id}")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["deleted_task_id"] == task_id
+        assert payload["deleted_queue_item_id"] == queue_item_id
+        assert payload["deleted_media_item_id"] == media_id
+
+        with TestingSessionLocal() as db:
+            assert db.query(ProcessingTask).filter(ProcessingTask.id == task_id).first() is None
+            assert db.query(QueueItem).filter(QueueItem.id == queue_item_id).first() is None
+        assert db.query(MediaItem).filter(MediaItem.id == media_id).first() is None
+        assert not media_file.exists()
+    finally:
+        settings.media_path = original_media
+
+
+def test_delete_failed_task_route_allows_owner_guest(client, tmp_path):
+    """Guests should be able to delete their own failed task and orphaned media row."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "delete-failed-guest.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                youtube_id="delete-failed-guest",
+                file_stem="delete-failed-guest",
+                title="Delete Failed Guest",
+                media_path="/media/delete-failed-guest.mp4",
+                missing=True,
+            )
+            db.add(media)
+            db.commit()
+            db.refresh(media)
+
+            queue_item = QueueItem(
+                media_id=media.id,
+                position=1,
+                requested_karaoke=False,
+                user_id="guest-owner",
+                status=QueueStatus.FAILED.value,
+            )
+            db.add(queue_item)
+            db.commit()
+            db.refresh(queue_item)
+
+            task = ProcessingTask(
+                task_type="queue_prepare",
+                source_kind="youtube",
+                target_queue_item_id=queue_item.id,
+                target_media_item_id=media.id,
+                status=ProcessingTaskStatus.FAILED.value,
+                stage="failed",
+            )
+            db.add(task)
+            db.commit()
+            task_id = task.id
+            media_id = media.id
+            queue_item_id = queue_item.id
+
+        client.cookies.set("karaoke_guest_id", "guest-owner")
+        response = client.delete(f"/api/tasks/{task_id}")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["deleted_task_id"] == task_id
+        assert payload["deleted_queue_item_id"] == queue_item_id
+        assert payload["deleted_media_item_id"] == media_id
+
+        with TestingSessionLocal() as db:
+            assert db.query(ProcessingTask).filter(ProcessingTask.id == task_id).first() is None
+            assert db.query(QueueItem).filter(QueueItem.id == queue_item_id).first() is None
+            assert db.query(MediaItem).filter(MediaItem.id == media_id).first() is None
+        assert not media_file.exists()
+    finally:
+        settings.media_path = original_media
+
+
+def test_delete_failed_task_route_rejects_non_owner_guest(client):
+    """Guests should not delete another guest's failed task."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="delete-failed-other-guest",
+            file_stem="delete-failed-other-guest",
+            title="Delete Failed Other Guest",
+            media_path="/media/delete-failed-other-guest.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1,
+            requested_karaoke=False,
+            user_id="guest-owner",
+            status=QueueStatus.FAILED.value,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+
+        task = ProcessingTask(
+            task_type="queue_prepare",
+            source_kind="youtube",
+            target_queue_item_id=queue_item.id,
+            target_media_item_id=media.id,
+            status=ProcessingTaskStatus.FAILED.value,
+            stage="failed",
+        )
+        db.add(task)
+        db.commit()
+        task_id = task.id
+
+    client.cookies.set("karaoke_guest_id", "guest-other")
+    response = client.delete(f"/api/tasks/{task_id}")
+
+    assert response.status_code == 403
+
+
 def test_retry_canceled_media_task_route_resets_and_starts_task(client):
     """Admins should be able to retry a canceled media Demucs/WhisperX task."""
     authenticate_admin_client(client)
@@ -668,6 +911,110 @@ def test_retry_canceled_media_task_route_resets_and_starts_task(client):
         assert refreshed.stage == "queued"
         assert refreshed.finished_at is None
 
+    asyncio.run(task_stream_manager.clear_task(task_id))
+
+
+def test_retry_failed_queue_task_route_allows_owner_guest(client):
+    """Guests should be able to retry their own failed queue task."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="retry-failed-guest",
+            file_stem="retry-failed-guest",
+            title="Retry Failed Guest",
+            media_path="/media/retry-failed-guest.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1,
+            requested_karaoke=False,
+            user_id="guest-owner",
+            status=QueueStatus.FAILED.value,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+
+        task = ProcessingTask(
+            task_type="queue_prepare",
+            source_kind="youtube",
+            target_queue_item_id=queue_item.id,
+            target_media_item_id=media.id,
+            status=ProcessingTaskStatus.FAILED.value,
+            stage="failed",
+            last_error_summary="old error",
+            last_error_detail="old detail",
+        )
+        db.add(task)
+        db.commit()
+        task_id = task.id
+
+    client.cookies.set("karaoke_guest_id", "guest-owner")
+
+    with patch("routes.tasks.task_execution_coordinator.start") as mock_start:
+        response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == task_id
+    assert payload["status"] == ProcessingTaskStatus.PENDING.value
+    mock_start.assert_called_once_with(task_id)
+
+    with TestingSessionLocal() as db:
+        refreshed = db.query(ProcessingTask).filter(ProcessingTask.id == task_id).first()
+        assert refreshed is not None
+        assert refreshed.status == ProcessingTaskStatus.PENDING.value
+        assert refreshed.stage == "queued"
+        assert refreshed.last_error_summary is None
+
+    asyncio.run(task_stream_manager.clear_task(task_id))
+
+
+def test_retry_failed_queue_task_route_rejects_non_owner_guest(client):
+    """Guests should not retry another guest's failed queue task."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="retry-failed-other",
+            file_stem="retry-failed-other",
+            title="Retry Failed Other",
+            media_path="/media/retry-failed-other.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1,
+            requested_karaoke=False,
+            user_id="guest-owner",
+            status=QueueStatus.FAILED.value,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+
+        task = ProcessingTask(
+            task_type="queue_prepare",
+            source_kind="youtube",
+            target_queue_item_id=queue_item.id,
+            target_media_item_id=media.id,
+            status=ProcessingTaskStatus.FAILED.value,
+            stage="failed",
+        )
+        db.add(task)
+        db.commit()
+        task_id = task.id
+
+    client.cookies.set("karaoke_guest_id", "guest-other")
+    response = client.post(f"/api/tasks/{task_id}/retry")
+
+    assert response.status_code == 403
     asyncio.run(task_stream_manager.clear_task(task_id))
 
 

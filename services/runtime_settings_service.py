@@ -69,6 +69,7 @@ class RuntimeSettingsService:
         "ffmpeg_preset",
         "ffmpeg_crf",
         "ytdlp_path",
+        "ytdlp_deno_path",
         "ytdlp_proxy_url",
         "ytdlp_video_resolution",
         "concurrent_ytdlp_search_enabled",
@@ -239,6 +240,7 @@ class RuntimeSettingsService:
             ffmpeg_preset=settings.ffmpeg_preset,
             ffmpeg_crf=settings.ffmpeg_crf,
             ytdlp_path=settings.ytdlp_path,
+            ytdlp_deno_path=settings.ytdlp_deno_path,
             ytdlp_proxy_url=settings.ytdlp_proxy_url,
             ytdlp_video_resolution=settings.ytdlp_video_resolution,
             concurrent_ytdlp_search_enabled=settings.concurrent_ytdlp_search_enabled,
@@ -418,6 +420,11 @@ class RuntimeSettingsService:
             settings.ytdlp_path = self._resolve_executable_path(ytdlp_input)
             updated_fields.append("ytdlp_path")
 
+        if payload.ytdlp_deno_path is not None:
+            snapshot.setdefault("ytdlp_deno_path", settings.ytdlp_deno_path)
+            settings.ytdlp_deno_path = payload.ytdlp_deno_path.strip()
+            updated_fields.append("ytdlp_deno_path")
+
         if payload.ytdlp_proxy_url is not None:
             proxy = self._validate_proxy_url(payload.ytdlp_proxy_url)
             snapshot.setdefault("ytdlp_proxy_url", settings.ytdlp_proxy_url)
@@ -563,6 +570,8 @@ class RuntimeSettingsService:
             settings.ffmpeg_crf = int(raw_value)
         elif field_name == "ytdlp_path":
             settings.ytdlp_path = self._resolve_executable_path(raw_value.strip())
+        elif field_name == "ytdlp_deno_path":
+            settings.ytdlp_deno_path = raw_value.strip()
         elif field_name == "ytdlp_proxy_url":
             settings.ytdlp_proxy_url = raw_value
         elif field_name == "ytdlp_video_resolution":

@@ -76,13 +76,16 @@ def db_session():
 
 @pytest.fixture(autouse=True)
 def reset_proxy_url_setting():
-    """Keep HTTP client tests isolated from proxy-setting mutations in other cases."""
+    """Keep yt-dlp runtime settings isolated from mutations in other cases."""
     original_proxy = settings.ytdlp_proxy_url
+    original_deno_path = settings.ytdlp_deno_path
     settings.ytdlp_proxy_url = ""
+    settings.ytdlp_deno_path = ""
     try:
         yield
     finally:
         settings.ytdlp_proxy_url = original_proxy
+        settings.ytdlp_deno_path = original_deno_path
 
 
 @pytest.fixture

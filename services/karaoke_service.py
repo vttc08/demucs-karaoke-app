@@ -440,7 +440,51 @@ class KaraokeService:
         loop = asyncio.get_running_loop()
         if existing_media_path:
             await self._raise_if_canceled(cancel_event, task.id)
-            if self._should_use_direct_media_input(existing_media_path):
+            existing_has_audio = self.ffmpeg.has_audio_stream(existing_media_path)
+            if not existing_has_audio:
+                if media_item.youtube_id:
+                    logger.warning(
+                        "Existing media has no audio stream; downloading fresh audio for Demucs "
+                        "task_id=%s media_id=%s media_path=%s youtube_id=%s",
+                        task.id,
+                        media_item.id,
+                        existing_media_path,
+                        media_item.youtube_id,
+                    )
+                    await processing_task_service.set_stage(
+                        db,
+                        task.id,
+                        status=ProcessingTaskStatus.DOWNLOADING,
+                        stage="download",
+                        progress_label="Downloading audio",
+                        progress_label_key="task.downloading_audio",
+                        progress_percent=0,
+                        progress_step_index=1,
+                        progress_step_total=3,
+                    )
+                    audio_path = await asyncio.to_thread(
+                        lambda: self._download_audio_for_task(
+                            media_item.youtube_id,
+                            self._task_cache_dir("ytdlp", task.id),
+                            loop,
+                            task.id,
+                            queue_item_id,
+                            step_index=1,
+                            step_total=3,
+                            cancel_event=cancel_event,
+                        )
+                    )
+                    await self._raise_if_canceled(cancel_event, task.id)
+                    audio_path = await asyncio.to_thread(
+                        self._rename_downloaded_file,
+                        audio_path,
+                        media_stem,
+                        "audio",
+                    )
+                    return existing_media_path, audio_path
+                raise RuntimeError("Media file has no audio stream for Demucs input")
+
+            if self._should_use_direct_media_input(existing_media_path, has_audio=existing_has_audio):
                 logger.info(
                     "Using direct media for Demucs media_path=%s size_bytes=%s cutoff_mb=%s",
                     existing_media_path,
@@ -539,7 +583,17 @@ class KaraokeService:
             "media",
         )
         await self._raise_if_canceled(cancel_event, task.id)
-        if self._should_use_direct_media_input(video_path):
+        downloaded_video_has_audio = self.ffmpeg.has_audio_stream(video_path)
+        if not downloaded_video_has_audio:
+            logger.warning(
+                "Downloaded video has no audio stream; downloading separate audio for Demucs "
+                "task_id=%s media_id=%s media_path=%s youtube_id=%s",
+                task.id,
+                media_item.id,
+                video_path,
+                media_item.youtube_id,
+            )
+        if self._should_use_direct_media_input(video_path, has_audio=downloaded_video_has_audio):
             logger.info(
                 "Using direct media for Demucs media_path=%s size_bytes=%s cutoff_mb=%s",
                 video_path,
@@ -796,8 +850,17 @@ class KaraokeService:
         """Return the current local file size in bytes."""
         return media_path.stat().st_size
 
-    def _should_use_direct_media_input(self, media_path: Path) -> bool:
+    def _should_use_direct_media_input(
+        self,
+        media_path: Path,
+        *,
+        has_audio: bool | None = None,
+    ) -> bool:
         """Return whether the file should be sent directly to Demucs."""
+        if has_audio is None:
+            has_audio = self.ffmpeg.has_audio_stream(media_path)
+        if not has_audio:
+            return False
         if self._is_audio_only_media_path(media_path):
             return True
         cutoff_mb = max(0, settings.demucs_direct_media_max_mb)

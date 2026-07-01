@@ -151,6 +151,28 @@ class FFmpegAdapter:
             return False
         return bool((result.stdout or "").strip())
 
+    def has_audio_stream(self, source_path: Path) -> bool:
+        """Return whether the source file exposes at least one audio stream."""
+        probe_cmd = [
+            self.ffprobe_path,
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_streams",
+            "-select_streams",
+            "a",
+            str(source_path),
+        ]
+        try:
+            result = subprocess.run(probe_cmd, check=True, capture_output=True, text=True)
+            payload = json.loads(result.stdout or "{}")
+        except (FileNotFoundError, subprocess.CalledProcessError, json.JSONDecodeError):
+            return False
+
+        streams = payload.get("streams") if isinstance(payload, dict) else []
+        return isinstance(streams, list) and bool(streams)
+
     @property
     def ffprobe_path(self) -> str:
         """Resolve ffprobe next to a configured ffmpeg binary when possible."""

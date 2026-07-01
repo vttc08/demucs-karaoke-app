@@ -76,6 +76,7 @@ def client():
     original_ffmpeg_preset = settings.ffmpeg_preset
     original_ffmpeg_crf = settings.ffmpeg_crf
     original_ytdlp_path = settings.ytdlp_path
+    original_ytdlp_deno_path = settings.ytdlp_deno_path
     original_ytdlp_proxy_url = settings.ytdlp_proxy_url
     original_lyrics_provider_netease_enabled = settings.lyrics_provider_netease_enabled
     original_lyrics_provider_lrclib_enabled = settings.lyrics_provider_lrclib_enabled
@@ -119,6 +120,7 @@ def client():
     settings.ffmpeg_preset = original_ffmpeg_preset
     settings.ffmpeg_crf = original_ffmpeg_crf
     settings.ytdlp_path = original_ytdlp_path
+    settings.ytdlp_deno_path = original_ytdlp_deno_path
     settings.ytdlp_proxy_url = original_ytdlp_proxy_url
     settings.lyrics_provider_netease_enabled = original_lyrics_provider_netease_enabled
     settings.lyrics_provider_lrclib_enabled = original_lyrics_provider_lrclib_enabled

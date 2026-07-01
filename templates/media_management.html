@@ -172,7 +172,7 @@
                 </div>
             </section>
 
-            {% if is_admin %}
+            {% if is_admin or task_items %}
             <section
                 id="media-task-panel"
                 class="glass-card rounded-2xl border border-white/10 p-3 {% if not task_items %}hidden{% endif %}"
@@ -215,7 +215,7 @@
                             {% elif task.last_error_summary %}
                             <p class="mt-3 line-clamp-3 text-[11px] text-error">{{ task.last_error_summary }}</p>
                             {% endif %}
-                            {% if task.status.value == 'canceled' %}
+                            {% if task.status.value in ('canceled', 'failed') %}
                             <div class="mt-3 flex justify-end gap-3">
                                 <button
                                     type="button"
@@ -233,25 +233,11 @@
                                     data-action="delete-task"
                                     data-task-id="{{ task.id }}"
                                     class="inline-flex items-center gap-2 rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-60"
-                                    title="{{ t('media.delete_task') }}"
-                                    aria-label="{{ t('media.delete_task') }}"
+                                    title="{{ t('common.delete') }}"
+                                    aria-label="{{ t('common.delete') }}"
                                 >
                                     <span class="material-symbols-outlined text-[16px]">delete</span>
-                                    <span>{{ t('media.delete_task') }}</span>
-                                </button>
-                            </div>
-                            {% elif task.status.value == 'failed' %}
-                            <div class="mt-3 flex justify-end">
-                                <button
-                                    type="button"
-                                    data-action="retry-task"
-                                    data-task-id="{{ task.id }}"
-                                    class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60"
-                                    title="{{ t('common.retry') }}"
-                                    aria-label="{{ t('common.retry') }}"
-                                >
-                                    <span class="material-symbols-outlined text-[16px]">refresh</span>
-                                    <span>{{ t('common.retry') }}</span>
+                                    <span>{{ t('common.delete') }}</span>
                                 </button>
                             </div>
                             {% else %}
