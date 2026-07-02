@@ -1242,6 +1242,12 @@ single long-lived connection. The main app uses that stream for live progress, t
 `GET /jobs/{job_id}/result` after the terminal event and still calls `DELETE /jobs/{job_id}/artifacts`
 after it has durably stored the returned stems. If the stream is unavailable, the client falls back
 to polling `GET /jobs/{job_id}` on the cadence controlled by `demucs_poll_interval_seconds`.
+Job create/status/SSE payloads include backward-compatible `progress_percent` and `progress_message`
+fields plus optional `progress_stage` and `progress_mode` fields. `progress_stage="demucs"` uses
+determinate Demucs subprocess progress capped at 90 until separation exits. `progress_stage="whisperx"`
+uses checkpoint messages such as `whisperx_loading_audio`, `whisperx_loading_model`,
+`whisperx_detecting_language`, `whisperx_loading_alignment_model`, and `whisperx_aligning_lyrics`;
+checkpoint messages use `progress_mode="indeterminate"` until actual alignment begins.
 After the main app has durably committed the returned stems or aligned lyrics locally, it can call
 `DELETE /jobs/{job_id}/artifacts` to remove the corresponding retained remote `incoming/` and `output/`
 directories. This is separate from cancellation so failed jobs can keep their artifacts for later diagnosis.

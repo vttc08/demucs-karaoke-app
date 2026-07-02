@@ -7,13 +7,15 @@ import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 try:
     from .lyrics_line_processor import process_lyric_lines
 except ImportError:
     from lyrics_line_processor import process_lyric_lines
 
 logger = logging.getLogger(__name__)
+
+ProgressCallback = Callable[[str, int | None, str], None]
 
 try:
     import pylrc  # type: ignore
@@ -482,10 +484,13 @@ def align_lyrics(
     max_line_length_cjk: int,
     device: str,
     compute_type: str | None,
+    progress_callback: ProgressCallback | None = None,
 ) -> list[dict[str, Any]]:
     if whisperx is None:
         raise RuntimeError("WhisperX is not installed in this environment")
 
+    if progress_callback is not None:
+        progress_callback("whisperx_loading_audio", 5, "indeterminate")
     audio = whisperx.load_audio(str(audio_path))
     audio_length = float(len(audio) / 16000.0) if hasattr(audio, "__len__") else 0.0
 
@@ -508,6 +513,9 @@ def align_lyrics(
             return []
 
     if detect_language or not align_language:
+        if progress_callback is not None:
+            progress_callback("whisperx_loading_model", 10, "indeterminate")
+            progress_callback("whisperx_detecting_language", 20, "indeterminate")
         language_code = _detect_language(
             audio,
             transcription_model=transcription_model,
@@ -517,6 +525,8 @@ def align_lyrics(
     else:
         language_code = _normalize_language_code(align_language)
 
+    if progress_callback is not None:
+        progress_callback("whisperx_loading_alignment_model", 30, "indeterminate")
     align_model, metadata = _get_align_model(language_code, device)
 
     if parsed_is_synced and use_synced_lyrics:
@@ -524,6 +534,8 @@ def align_lyrics(
     else:
         transcript = _flatten_segments(parsed_segments, audio_length)
 
+    if progress_callback is not None:
+        progress_callback("whisperx_aligning_lyrics", 50, "indeterminate")
     aligned = whisperx.align(
         transcript,
         align_model,

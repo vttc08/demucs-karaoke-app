@@ -692,6 +692,98 @@ def test_parse_progress_line_extracts_percent_and_message():
     assert "45%" in message
 
 
+def test_run_job_caps_demucs_subprocess_progress_at_90(tmp_path, monkeypatch):
+    _clear_job_store()
+    input_path = tmp_path / "input.wav"
+    input_path.write_bytes(b"audio")
+    no_vocals_path = tmp_path / "no_vocals.wav"
+    vocals_path = tmp_path / "vocals.wav"
+    no_vocals_path.write_bytes(b"no-vocals")
+    vocals_path.write_bytes(b"vocals")
+    config = demucs_models.SeparateConfig()
+    job_id = "progress-cap"
+    demucs_app.job_store.create(
+        demucs_app.DemucsJobState(
+            job_id=job_id,
+            model=config.model,
+            device=config.device,
+            output_format=config.output_format,
+            mp3_bitrate=config.mp3_bitrate,
+            original_filename=input_path.name,
+        )
+    )
+    updates = []
+    original_update = demucs_app.job_store.update
+
+    class FakeProcess:
+        stdout = iter([" 100%|##########| 1/1 [00:01<00:00]\n"])
+
+    def record_update(target_job_id, **changes):
+        updates.append(changes)
+        return original_update(target_job_id, **changes)
+
+    monkeypatch.setattr(demucs_app.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
+    monkeypatch.setattr(demucs_app, "_build_command", lambda *args, **kwargs: ["demucs"])
+    monkeypatch.setattr(demucs_app, "_wait_for_process", lambda process: 0)
+    monkeypatch.setattr(demucs_app, "build_expected_output_paths", lambda *args: (no_vocals_path, vocals_path))
+    monkeypatch.setattr(demucs_app, "_run_garbage_collection", lambda **kwargs: None)
+    monkeypatch.setattr(demucs_app, "_cleanup_expired_jobs", lambda: None)
+    monkeypatch.setattr(demucs_app.job_store, "update", record_update)
+
+    demucs_app._run_job(job_id, input_path, config)
+
+    demucs_updates = [
+        update
+        for update in updates
+        if update.get("progress_stage") == "demucs" and "progress_percent" in update
+    ]
+    assert any(update["progress_percent"] == 90 for update in demucs_updates)
+    assert demucs_app.job_store.require(job_id).progress_percent == 100
+
+
+def test_whisperx_alignment_emits_progress_checkpoints(monkeypatch, tmp_path):
+    whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
+    fake_whisperx = SimpleNamespace(
+        load_audio=lambda path: [0] * 16000,
+        align=lambda transcript, model, metadata, audio, device, return_char_alignments: {
+            "segments": [
+                {
+                    "text": "hello",
+                    "start": 0.0,
+                    "end": 1.0,
+                    "words": [{"word": "hello", "start": 0.0, "end": 1.0}],
+                }
+            ]
+        },
+    )
+    monkeypatch.setattr(whisperx_pipeline, "whisperx", fake_whisperx)
+    monkeypatch.setattr(whisperx_pipeline, "_get_align_model", lambda language, device: ("model", {"language": language}))
+    events = []
+
+    aligned = whisperx_pipeline.align_lyrics(
+        tmp_path / "vocals.wav",
+        "hello",
+        lyrics_format="txt",
+        transcription_model="tiny",
+        align_language="en",
+        detect_language=False,
+        use_synced_lyrics=False,
+        process_lyrics_lines=False,
+        max_line_length=36,
+        max_line_length_cjk=12,
+        device="cpu",
+        compute_type=None,
+        progress_callback=lambda stage, percent, mode: events.append((stage, percent, mode)),
+    )
+
+    assert aligned[0]["text"] == "hello"
+    assert events == [
+        ("whisperx_loading_audio", 5, "indeterminate"),
+        ("whisperx_loading_alignment_model", 30, "indeterminate"),
+        ("whisperx_aligning_lyrics", 0, "determinate"),
+    ]
+
+
 def test_run_demucs_on_file_mp3_builds_expected_command_and_paths(tmp_path, monkeypatch):
     incoming = tmp_path / "incoming"
     output = tmp_path / "output"

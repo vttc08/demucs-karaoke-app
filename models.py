@@ -365,6 +365,7 @@ class QueueItemResponse(BaseModel):
     processing_label: Optional[str] = None
     processing_label_key: Optional[str] = None
     processing_label_args: Optional[dict[str, Any]] = None
+    processing_mode: Optional[str] = None
     processing_step_index: Optional[int] = None
     processing_step_total: Optional[int] = None
     created_at: datetime
@@ -377,6 +378,7 @@ class ProcessingTaskSnapshotResponse(BaseModel):
     progress_label: Optional[str] = None
     progress_label_key: Optional[str] = None
     progress_label_args: Optional[dict[str, Any]] = None
+    progress_mode: Optional[str] = None
     progress_step_index: Optional[int] = None
     progress_step_total: Optional[int] = None
     event_sequence: int = 0

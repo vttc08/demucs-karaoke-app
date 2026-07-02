@@ -94,6 +94,8 @@ class DemucsJobCreateResponse(BaseModel):
     status: str
     progress_percent: int
     progress_message: str
+    progress_stage: str | None = None
+    progress_mode: str | None = None
     status_url: str
     result_url: str
     cancel_url: str
@@ -111,6 +113,8 @@ class DemucsJobStatusResponse(BaseModel):
     status: Literal["queued", "running", "completed", "failed", "canceled"]
     progress_percent: int
     progress_message: str
+    progress_stage: str | None = None
+    progress_mode: str | None = None
     error_detail: str | None = None
     duration_ms: int | None = None
     model: str
@@ -164,6 +168,8 @@ class DemucsMetricsJobResponse(BaseModel):
     job_kind: Literal["separation", "separation_with_lyrics", "lyrics_alignment"]
     progress_percent: int
     progress_message: str
+    progress_stage: str | None = None
+    progress_mode: str | None = None
     model: str
     device: str
     output_format: str

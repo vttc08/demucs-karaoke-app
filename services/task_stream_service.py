@@ -48,6 +48,7 @@ class TaskStreamManager:
                     "progress_label": None,
                     "progress_label_key": None,
                     "progress_label_args": None,
+                    "progress_mode": None,
                     "progress_step_index": None,
                     "progress_step_total": None,
                     "event_sequence": 0,
@@ -150,6 +151,7 @@ class TaskStreamManager:
         progress_label: str | None = None,
         progress_label_key: str | None = None,
         progress_label_args: dict[str, Any] | None = None,
+        progress_mode: str | None = None,
         progress_step_index: int | None = None,
         progress_step_total: int | None = None,
         message: str | None = None,
@@ -167,6 +169,7 @@ class TaskStreamManager:
                     "progress_label": None,
                     "progress_label_key": None,
                     "progress_label_args": None,
+                    "progress_mode": None,
                     "progress_step_index": None,
                     "progress_step_total": None,
                     "event_sequence": 0,
@@ -187,6 +190,10 @@ class TaskStreamManager:
                 state["progress_label_key"] = progress_label_key
             if progress_label_args is not None:
                 state["progress_label_args"] = deepcopy(progress_label_args)
+            if progress_mode is not None:
+                state["progress_mode"] = progress_mode
+            elif progress_percent is not None and progress_percent >= 100:
+                state["progress_mode"] = "determinate"
             if progress_step_index is not None:
                 state["progress_step_index"] = progress_step_index
             if progress_step_total is not None:
@@ -207,6 +214,7 @@ class TaskStreamManager:
                 "progress_label": state.get("progress_label"),
                 "progress_label_key": state.get("progress_label_key"),
                 "progress_label_args": deepcopy(state.get("progress_label_args")),
+                "progress_mode": state.get("progress_mode"),
                 "progress_step_index": state.get("progress_step_index"),
                 "progress_step_total": state.get("progress_step_total"),
                 "message": message,

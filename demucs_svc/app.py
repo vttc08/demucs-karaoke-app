@@ -3,7 +3,9 @@ import gc
 import os
 import json
 import logging
+import math
 import multiprocessing
+import queue as queue_module
 import shutil
 import subprocess
 import sys
@@ -390,6 +392,8 @@ def _job_to_metrics_response(job: DemucsJobState) -> DemucsMetricsJobResponse:
         job_kind=data["job_kind"],
         progress_percent=data["progress_percent"],
         progress_message=data["progress_message"],
+        progress_stage=data["progress_stage"],
+        progress_mode=data["progress_mode"],
         model=data["model"],
         device=data["device"],
         output_format=data["output_format"],
@@ -701,12 +705,23 @@ def _ensure_gc_scheduler_started() -> None:
     _gc_scheduler_thread.start()
 
 
-def _update_job_progress(job_id: str, *, percent: int | None = None, message: str | None = None) -> None:
+def _update_job_progress(
+    job_id: str,
+    *,
+    percent: int | None = None,
+    message: str | None = None,
+    stage: str | None = None,
+    mode: str | None = None,
+) -> None:
     changes = {}
     if percent is not None:
         changes["progress_percent"] = max(0, min(99, percent))
     if message:
         changes["progress_message"] = message
+    if stage:
+        changes["progress_stage"] = stage
+    if mode:
+        changes["progress_mode"] = mode
     if changes:
         job_store.update(job_id, **changes)
 
@@ -724,6 +739,7 @@ def _align_lyrics(
     config: SeparateConfig,
     vocals_path: Path,
     output_dir: Path,
+    progress_callback=None,
 ) -> Path | None:
     lyrics_text = config.lyrics_text
     if not lyrics_text:
@@ -742,6 +758,7 @@ def _align_lyrics(
         max_line_length_cjk=config.max_line_length_cjk,
         device=config.device,
         compute_type=config.compute_type,
+        progress_callback=progress_callback,
     )
     aligned_path = output_dir / "aligned_lyrics.json"
     aligned_path.write_text(dump_aligned_lyrics_json(aligned_segments), encoding="utf-8")
@@ -757,13 +774,27 @@ def _alignment_child_entry(
     vocals_path_raw: str,
     output_dir_raw: str,
     error_path_raw: str,
+    progress_queue,
 ) -> None:
+    def emit_progress(stage: str, percent: int | None, mode: str) -> None:
+        try:
+            progress_queue.put(
+                {
+                    "stage": stage,
+                    "percent": percent,
+                    "mode": mode,
+                }
+            )
+        except Exception:
+            pass
+
     try:
         _preload_whisperx_models(config)
         _align_lyrics(
             config=config,
             vocals_path=Path(vocals_path_raw),
             output_dir=Path(output_dir_raw),
+            progress_callback=emit_progress,
         )
     except Exception as error:
         Path(error_path_raw).write_text(str(error), encoding="utf-8")
@@ -784,22 +815,42 @@ def _align_lyrics_in_child_process(
     error_path = output_dir / "alignment_error.txt"
     if error_path.exists():
         error_path.unlink()
+    progress_queue = multiprocessing.Queue()
 
     process = multiprocessing.Process(
         target=_alignment_child_entry,
-        args=(config, str(vocals_path), str(output_dir), str(error_path)),
+        args=(config, str(vocals_path), str(output_dir), str(error_path), progress_queue),
         daemon=True,
         name=f"demucs-align-worker-{job_id}",
     )
     process.start()
     job_store.update(job_id, process=process)
 
+    def drain_progress_events() -> None:
+        while True:
+            try:
+                event = progress_queue.get_nowait()
+            except queue_module.Empty:
+                return
+            message_key = str(event.get("stage") or "whisperx_aligning_lyrics")
+            percent = event.get("percent")
+            mode = str(event.get("mode") or "indeterminate")
+            _update_job_progress(
+                job_id,
+                percent=int(percent) if percent is not None else None,
+                message=message_key,
+                stage="whisperx",
+                mode=mode,
+            )
+
     while _process_is_running(process):
+        drain_progress_events()
         job = job_store.require(job_id)
         if job.cancel_requested:
             _terminate_process(process)
             raise _JobCanceled()
         time.sleep(0.25)
+    drain_progress_events()
 
     job = job_store.require(job_id)
     if job.cancel_requested or job.status == "canceled":
@@ -847,6 +898,8 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
         started_at=utc_now(),
         progress_percent=0,
         progress_message="Starting Demucs",
+        progress_stage="demucs",
+        progress_mode="determinate",
         process=process,
     )
 
@@ -858,7 +911,14 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
                 continue
             job_store.append_output(job_id, line)
             percent, message = parse_progress_line(line)
-            _update_job_progress(job_id, percent=percent, message=message)
+            mapped_percent = math.ceil(percent * 0.9) if percent is not None else None
+            _update_job_progress(
+                job_id,
+                percent=mapped_percent,
+                message=message,
+                stage="demucs",
+                mode="determinate",
+            )
 
             job = job_store.require(job_id)
             if job.cancel_requested:
@@ -891,8 +951,10 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
         if config.lyrics_text:
             job_store.update(
                 job_id,
-                progress_percent=95,
-                progress_message="Aligning lyrics",
+                progress_percent=0,
+                progress_message="whisperx_loading_audio",
+                progress_stage="whisperx",
+                progress_mode="indeterminate",
             )
             aligned_lyrics_path = _align_lyrics_in_child_process(
                 job_id,
@@ -908,6 +970,8 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
             duration_ms=duration_ms,
             progress_percent=100,
             progress_message="Completed",
+            progress_stage="completed",
+            progress_mode="determinate",
             no_vocals_path=str(no_vocals_path),
             vocals_path=str(vocals_path),
             aligned_lyrics_path=str(aligned_lyrics_path) if aligned_lyrics_path else None,
@@ -981,7 +1045,9 @@ def _run_alignment_job(job_id: str, input_path: Path, config: SeparateConfig) ->
             status="running",
             started_at=utc_now(),
             progress_percent=5,
-            progress_message="Aligning lyrics",
+            progress_message="whisperx_loading_audio",
+            progress_stage="whisperx",
+            progress_mode="indeterminate",
         )
         if not config.lyrics_text:
             raise RuntimeError("lyrics_text is required for alignment")
@@ -1001,6 +1067,8 @@ def _run_alignment_job(job_id: str, input_path: Path, config: SeparateConfig) ->
             duration_ms=duration_ms,
             progress_percent=100,
             progress_message="Completed",
+            progress_stage="completed",
+            progress_mode="determinate",
             aligned_lyrics_path=str(aligned_lyrics_path),
             process=None,
         )
@@ -1273,6 +1341,8 @@ async def create_job(
         status=job.status,
         progress_percent=job.progress_percent,
         progress_message=job.progress_message,
+        progress_stage=job.progress_stage,
+        progress_mode=job.progress_mode,
         status_url=f"{base}/jobs/{job.job_id}",
         result_url=f"{base}/jobs/{job.job_id}/result",
         cancel_url=f"{base}/jobs/{job.job_id}",
@@ -1326,6 +1396,8 @@ async def create_alignment_job(
         status=job.status,
         progress_percent=job.progress_percent,
         progress_message=job.progress_message,
+        progress_stage=job.progress_stage,
+        progress_mode=job.progress_mode,
         status_url=f"{base}/jobs/{job.job_id}",
         result_url=f"{base}/align-jobs/{job.job_id}/result",
         cancel_url=f"{base}/jobs/{job.job_id}",

@@ -6,6 +6,7 @@
     const TAIL_DECAY_MS = 4500;
     const TICK_MS = 120;
     const OPTIMISTIC_STAGES = new Set(["extract_audio", "whisperx", "finalize"]);
+    const INDETERMINATE_MODE = "indeterminate";
 
     const stateByKey = new Map();
     let tickHandle = null;
@@ -28,11 +29,14 @@
     }
 
     function shouldApplyOptimisticProgress(entry) {
-        return ACTIVE_STATUSES.has(entry.status) && OPTIMISTIC_STAGES.has(entry.stage);
+        return entry.mode !== INDETERMINATE_MODE && ACTIVE_STATUSES.has(entry.status) && OPTIMISTIC_STAGES.has(entry.stage);
     }
 
     function estimatePercent(entry, nowMs) {
         const reported = parsePercent(entry.reportedPercent);
+        if (entry.mode === INDETERMINATE_MODE) {
+            return null;
+        }
         if (!shouldApplyOptimisticProgress(entry) || reported >= 100 || reported > 0) {
             return reported;
         }
@@ -64,6 +68,7 @@
         const nextStartedAtMs = parseTimestamp(node.dataset.taskProgressStartedAt);
         const nextStatus = String(node.dataset.taskProgressStatus || "");
         const nextStage = String(node.dataset.taskProgressStage || "");
+        const nextMode = String(node.dataset.taskProgressMode || "");
         const nextLabel = node.dataset.taskProgressLabel || "";
         const nextLabelText = node.dataset.taskProgressLabelText || "";
 
@@ -73,6 +78,7 @@
         current.status = nextStatus || current.status || "";
         const stageChanged = nextStage !== current.stage;
         current.stage = nextStage || current.stage || "";
+        current.mode = nextMode || "";
         current.reportedPercent = nextReportedPercent;
         current.label = nextLabel;
         current.labelText = nextLabelText;
@@ -89,15 +95,27 @@
         }
         stateByKey.set(key, current);
 
-        const displayPercent = Math.round(estimatePercent(current, nowMs));
+        const estimatedPercent = estimatePercent(current, nowMs);
+        const isIndeterminate = estimatedPercent === null;
+        const displayPercent = isIndeterminate ? 100 : Math.round(estimatedPercent);
         const fill = node.querySelector("[data-task-progress-fill]");
         if (fill) {
-            fill.style.width = `${displayPercent}%`;
-            fill.setAttribute("aria-valuenow", String(displayPercent));
+            fill.style.width = isIndeterminate ? "45%" : `${displayPercent}%`;
+            fill.classList.toggle("animate-pulse", isIndeterminate);
+            fill.classList.toggle("transition-all", !isIndeterminate);
+            const progressbar = fill.closest('[role="progressbar"]');
+            if (progressbar) {
+                if (isIndeterminate) {
+                    progressbar.removeAttribute("aria-valuenow");
+                } else {
+                    progressbar.setAttribute("aria-valuenow", String(displayPercent));
+                }
+            }
         }
         const percentLabel = node.querySelector("[data-task-progress-percent-text]");
         if (percentLabel) {
-            percentLabel.textContent = `${displayPercent}%`;
+            percentLabel.textContent = isIndeterminate ? "" : `${displayPercent}%`;
+            percentLabel.classList.toggle("hidden", isIndeterminate);
         }
         return shouldApplyOptimisticProgress(current) && nextReportedPercent <= 0 && displayPercent < 100;
     }

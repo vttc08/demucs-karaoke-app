@@ -870,6 +870,54 @@ def test_karaoke_progress_callback_throttles_to_about_once_per_second():
     assert mock_run.call_count == 3
     assert len(emitted) == 3
 
+
+def test_demucs_progress_callback_maps_whisperx_checkpoint_mode(monkeypatch):
+    service = KaraokeService()
+    emitted = []
+
+    async def noop():
+        return None
+
+    def fake_emit_progress(*args, **kwargs):
+        emitted.append(kwargs)
+        return noop()
+
+    def close_coroutine(loop, coroutine):
+        coroutine.close()
+
+    monkeypatch.setattr(processing_task_service, "emit_progress", fake_emit_progress)
+    monkeypatch.setattr(KaraokeService, "_dispatch_loop_coroutine", staticmethod(close_coroutine))
+
+    class FakeLoop:
+        def time(self):
+            return 1.0
+
+    callback = service._demucs_progress_callback(
+        FakeLoop(),
+        task_id=123,
+        step_index=3,
+        step_total=4,
+        status=ProcessingTaskStatus.PROCESSING.value,
+        stage="demucs",
+        queue_item_id=456,
+        has_whisperx=True,
+    )
+
+    callback(
+        5,
+        "whisperx_loading_audio",
+        {
+            "job_id": "remote-job",
+            "progress_stage": "whisperx",
+            "progress_mode": "indeterminate",
+        },
+    )
+
+    assert emitted[-1]["stage"] == "whisperx"
+    assert emitted[-1]["progress_label_key"] == "task.whisperx_loading_audio"
+    assert emitted[-1]["progress_mode"] == "indeterminate"
+
+
 def test_karaoke_service_resolves_whisperx_alignment_settings_override():
     """Per-queue-item WhisperX overrides should bypass auto-detect."""
     service = KaraokeService()

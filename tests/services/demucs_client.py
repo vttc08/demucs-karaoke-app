@@ -363,7 +363,9 @@ def test_demucs_client_align_lyrics_uses_stream_and_fetches_result(tmp_path, mon
                     yield "event: job"
                     yield (
                         'data: {"job_id":"remote-job","status":"running","progress_percent":5,'
-                        '"progress_message":"Aligning lyrics","output_tail":[],"sequence":1,"updated_at":"2026-01-01T00:00:00+00:00"}'
+                        '"progress_message":"whisperx_loading_audio","progress_stage":"whisperx",'
+                        '"progress_mode":"indeterminate","output_tail":[],"sequence":1,'
+                        '"updated_at":"2026-01-01T00:00:00+00:00"}'
                     )
                     yield ""
                     yield "id: 2"
@@ -393,15 +395,26 @@ def test_demucs_client_align_lyrics_uses_stream_and_fetches_result(tmp_path, mon
     )
 
     client = DemucsClient(api_url="http://demucs.local", poll_interval_seconds=0)
+    progress_events = []
 
     result_path, job_id = asyncio.run(
         client.align_lyrics(
             vocals_path,
             lyrics_text="hello",
             lyrics_format="txt",
+            progress_callback=lambda percent, message, metadata: progress_events.append(
+                (percent, message, metadata)
+            ),
         )
     )
 
     assert result_path.name == "vocals_remote-job_aligned_lyrics.json"
     assert job_id == "remote-job"
     assert fake_client.deleted_jobs == []
+    assert any(
+        percent == 5
+        and message == "whisperx_loading_audio"
+        and metadata["progress_stage"] == "whisperx"
+        and metadata["progress_mode"] == "indeterminate"
+        for percent, message, metadata in progress_events
+    )

@@ -23,6 +23,8 @@ class DemucsJobState:
     status: str = "queued"
     progress_percent: int = 0
     progress_message: str = "Queued"
+    progress_stage: str | None = None
+    progress_mode: str | None = None
     error_detail: str | None = None
     duration_ms: int | None = None
     no_vocals_path: str | None = None
@@ -43,6 +45,8 @@ class DemucsJobState:
             "status": self.status,
             "progress_percent": self.progress_percent,
             "progress_message": self.progress_message,
+            "progress_stage": self.progress_stage,
+            "progress_mode": self.progress_mode,
             "error_detail": self.error_detail,
             "duration_ms": self.duration_ms,
             "model": self.model,

@@ -1581,6 +1581,16 @@ class KaraokeService:
         queue_item_id: int | None = None,
         has_whisperx: bool = False,
     ):
+        whisperx_label_keys = {
+            "whisperx_loading_audio": ("Loading audio", "task.whisperx_loading_audio"),
+            "whisperx_loading_model": ("Loading WhisperX model", "task.whisperx_loading_model"),
+            "whisperx_detecting_language": ("Detecting language", "task.whisperx_detecting_language"),
+            "whisperx_loading_alignment_model": (
+                "Loading alignment model",
+                "task.whisperx_loading_alignment_model",
+            ),
+            "whisperx_aligning_lyrics": ("Aligning lyrics", "task.whisperx_aligning_lyrics"),
+        }
         last_emit_time = float("-inf")
         last_emit_percent: int | None = None
         last_emit_message: str | None = None
@@ -1593,7 +1603,27 @@ class KaraokeService:
             nonlocal last_emit_message, last_logged_job_message, whisperx_started
             mapped = max(0, min(100, int(percent)))
             current_message = message or "Separating vocals"
-            if (
+            metadata_stage = str(metadata.get("progress_stage") or "") if metadata else ""
+            progress_mode = str(metadata.get("progress_mode") or "determinate") if metadata else "determinate"
+            if has_whisperx and metadata_stage == "whisperx" and not whisperx_started:
+                whisperx_started = True
+                KaraokeService._dispatch_loop_coroutine(
+                    loop,
+                    processing_task_service.emit_progress(
+                        task_id,
+                        queue_item_id=queue_item_id,
+                        progress_percent=100,
+                        progress_label="Separating vocals",
+                        progress_label_key="task.separating_vocals",
+                        progress_mode="determinate",
+                        status=status,
+                        stage="demucs",
+                        progress_step_index=step_index,
+                        progress_step_total=step_total,
+                    ),
+                )
+                current_stage = "whisperx"
+            elif (
                 has_whisperx
                 and not whisperx_started
                 and current_message == "Aligning lyrics"
@@ -1608,6 +1638,7 @@ class KaraokeService:
                         progress_percent=100,
                         progress_label="Separating vocals",
                         progress_label_key="task.separating_vocals",
+                        progress_mode="determinate",
                         status=status,
                         stage="demucs",
                         progress_step_index=step_index,
@@ -1616,9 +1647,25 @@ class KaraokeService:
                 )
                 current_stage = "whisperx"
                 mapped = 0
+            elif metadata_stage in {"demucs", "whisperx"}:
+                current_stage = metadata_stage
             elif whisperx_started and mapped < 100:
                 current_stage = "whisperx"
+
+            if current_stage == "whisperx":
+                current_message, label_key = whisperx_label_keys.get(
+                    current_message,
+                    (current_message or "Aligning lyrics", "task.whisperx_aligning_lyrics"),
+                )
+                if progress_mode == "determinate" and mapped > 0 and mapped < 100:
+                    mapped = 0
+            else:
+                label_key = "task.separating_vocals"
+                progress_mode = "determinate"
+
+            if whisperx_started and current_stage == "whisperx" and mapped < 100 and progress_mode != "indeterminate":
                 current_message = "Aligning lyrics"
+                label_key = "task.whisperx_aligning_lyrics"
                 mapped = 0
             now = loop.time()
             if (
@@ -1645,11 +1692,8 @@ class KaraokeService:
                     queue_item_id=queue_item_id,
                     progress_percent=mapped,
                     progress_label=current_message,
-                    progress_label_key=(
-                        "task.aligning_lyrics"
-                        if current_stage == "whisperx"
-                        else "task.separating_vocals"
-                    ),
+                    progress_label_key=label_key,
+                    progress_mode=progress_mode,
                     status=status,
                     stage=current_stage,
                     progress_step_index=step_index,
@@ -1670,11 +1714,8 @@ class KaraokeService:
                         stage=current_stage,
                         progress_percent=mapped,
                         progress_label=current_message,
-                        progress_label_key=(
-                            "task.aligning_lyrics"
-                            if current_stage == "whisperx"
-                            else "task.separating_vocals"
-                        ),
+                        progress_label_key=label_key,
+                        progress_mode=progress_mode,
                         progress_step_index=step_index,
                         progress_step_total=step_total,
                     ),

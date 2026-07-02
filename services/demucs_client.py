@@ -134,6 +134,16 @@ class DemucsClient:
             callback(max(0, min(100, int(percent))), message, metadata)
 
     @staticmethod
+    def _progress_metadata(job_id: str, payload: dict, *, status: str | None = None) -> dict:
+        return {
+            "job_id": job_id,
+            "status": status if status is not None else payload.get("status"),
+            "error_detail": payload.get("error_detail"),
+            "progress_stage": payload.get("progress_stage"),
+            "progress_mode": payload.get("progress_mode"),
+        }
+
+    @staticmethod
     def _emit_remote_log_lines(
         callback: LogCallback | None,
         output_tail: list[str],
@@ -234,11 +244,7 @@ class DemucsClient:
                 progress_callback,
                 int(status_payload.get("progress_percent", 0)),
                 str(status_payload.get("progress_message") or running_message),
-                {
-                    "job_id": job_id,
-                    "status": status,
-                    "error_detail": status_payload.get("error_detail"),
-                },
+                self._progress_metadata(job_id, status_payload, status=status),
             )
 
             if status == "completed":
@@ -263,7 +269,12 @@ class DemucsClient:
                         progress_callback,
                         100,
                         final_completed_message,
-                        {"job_id": job_id, "status": status},
+                        {
+                            "job_id": job_id,
+                            "status": status,
+                            "progress_stage": "completed",
+                            "progress_mode": "determinate",
+                        },
                     )
                     return DemucsResponse(
                         job_id=job_id,
@@ -278,7 +289,12 @@ class DemucsClient:
                     progress_callback,
                     100,
                     final_completed_message,
-                    {"job_id": job_id, "status": status},
+                    {
+                        "job_id": job_id,
+                        "status": status,
+                        "progress_stage": "completed",
+                        "progress_mode": "determinate",
+                    },
                 )
                 return aligned_output_path, job_id
 
@@ -356,11 +372,7 @@ class DemucsClient:
                                     progress_callback,
                                     int(payload.get("progress_percent", 0)),
                                     str(payload.get("progress_message") or running_message),
-                                    {
-                                        "job_id": job_id,
-                                        "status": status,
-                                        "error_detail": payload.get("error_detail"),
-                                    },
+                                    self._progress_metadata(job_id, payload, status=status),
                                 )
                                 if status == "completed":
                                     result_response = await client.get(
@@ -384,7 +396,12 @@ class DemucsClient:
                                             progress_callback,
                                             100,
                                             final_completed_message,
-                                            {"job_id": job_id, "status": status},
+                                            {
+                                                "job_id": job_id,
+                                                "status": status,
+                                                "progress_stage": "completed",
+                                                "progress_mode": "determinate",
+                                            },
                                         )
                                         return DemucsResponse(
                                             job_id=job_id,
@@ -399,7 +416,12 @@ class DemucsClient:
                                         progress_callback,
                                         100,
                                         final_completed_message,
-                                        {"job_id": job_id, "status": status},
+                                        {
+                                            "job_id": job_id,
+                                            "status": status,
+                                            "progress_stage": "completed",
+                                            "progress_mode": "determinate",
+                                        },
                                     )
                                     return aligned_output_path, job_id
                                 if status == "failed":
@@ -498,7 +520,7 @@ class DemucsClient:
                 progress_callback,
                 int(payload.get("progress_percent", 0)),
                 str(payload.get("progress_message") or "Queued"),
-                {"job_id": job_id, "status": payload.get("status")},
+                self._progress_metadata(job_id, payload),
             )
             if log_callback is not None:
                 log_callback("remote", f"Started remote Demucs job {job_id}")

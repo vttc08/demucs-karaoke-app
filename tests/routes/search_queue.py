@@ -1309,6 +1309,50 @@ def test_queue_page_renders_clickable_processing_items_with_task_ids(client):
     assert 'data-task-progress-stage="extract_audio"' in response.text
     assert 'cursor-pointer hover:border-primary/30' in response.text
 
+
+def test_queue_page_renders_indeterminate_progress_mode(client):
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="queue-progress-mode",
+            title="Queue Progress Mode",
+            artist="Artist",
+            media_path="/media/queue-progress-mode.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1000,
+            requested_karaoke=True,
+            status=QueueStatus.PROCESSING,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+
+        task = processing_task_service.get_or_create_queue_task(db, queue_item.id)
+        asyncio.run(
+            processing_task_service.set_stage(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.PROCESSING,
+                stage="whisperx",
+                progress_label="Loading audio",
+                progress_label_key="task.whisperx_loading_audio",
+                progress_mode="indeterminate",
+                progress_percent=5,
+            )
+        )
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert 'data-task-progress-stage="whisperx"' in response.text
+    assert 'data-task-progress-mode="indeterminate"' in response.text
+
 def test_queue_page_renders_ready_items_linking_to_media(client):
     """Completed queue items should be clickable and carry their media id."""
     with TestingSessionLocal() as db:
@@ -1374,3 +1418,39 @@ def test_media_management_page_renders_progress_stage_for_finalize_tasks(client)
     assert f'data-task-id="{task.id}"' in response.text
     assert 'data-task-progress-stage="finalize"' in response.text
     assert '/static/media_management.js?v=' in response.text
+
+
+def test_media_management_page_renders_indeterminate_progress_mode(client):
+    authenticate_admin_client(client)
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="media-task-progress-mode",
+            title="Media Task Progress Mode",
+            artist="Artist",
+            media_path="/media/media-task-progress-mode.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+
+        task = processing_task_service.get_or_create_media_task(db, media.id)
+        asyncio.run(
+            processing_task_service.set_stage(
+                db,
+                task.id,
+                status=ProcessingTaskStatus.PROCESSING,
+                stage="whisperx",
+                progress_label="Loading audio",
+                progress_label_key="task.whisperx_loading_audio",
+                progress_mode="indeterminate",
+                progress_percent=5,
+            )
+        )
+
+    response = client.get("/media")
+
+    assert response.status_code == 200
+    assert f'data-task-id="{task.id}"' in response.text
+    assert 'data-task-progress-stage="whisperx"' in response.text
+    assert 'data-task-progress-mode="indeterminate"' in response.text

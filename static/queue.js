@@ -1828,12 +1828,14 @@ function renderQueueProgressBlock(item) {
     const progressValue = item.processing_progress;
     const percent = Number.isFinite(Number(progressValue)) ? Number(progressValue) : 0;
     const label = getQueueProgressLabel(item);
+    const mode = item.processing_mode || '';
+    const separator = mode === 'indeterminate' ? '' : ' • ';
     return `
-        <div class="mt-2 max-w-xs" data-task-progress-key="queue-${item.id}" data-task-progress-status="${escapeHtml(item.status)}" data-task-progress-stage="${escapeHtml(item.processing_stage || '')}" data-task-progress-reported-percent="${Math.max(0, Math.min(100, percent))}" data-task-progress-label="${escapeHtml(label)}">
+        <div class="mt-2 max-w-xs" data-task-progress-key="queue-${item.id}" data-task-progress-status="${escapeHtml(item.status)}" data-task-progress-stage="${escapeHtml(item.processing_stage || '')}" data-task-progress-mode="${escapeHtml(mode)}" data-task-progress-reported-percent="${Math.max(0, Math.min(100, percent))}" data-task-progress-label="${escapeHtml(label)}">
             <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.max(0, Math.min(100, percent))}">
                 <div class="h-full rounded-full bg-tertiary transition-all duration-300 ease-out" data-task-progress-fill style="width: ${Math.max(0, Math.min(100, percent))}%"></div>
             </div>
-            <p class="mt-1 text-[10px] text-on-surface-variant">${escapeHtml(label)} • <span data-task-progress-percent-text>${escapeHtml(String(percent))}%</span></p>
+            <p class="mt-1 text-[10px] text-on-surface-variant">${escapeHtml(label)}${separator}<span data-task-progress-percent-text class="${mode === 'indeterminate' ? 'hidden' : ''}">${escapeHtml(String(percent))}%</span></p>
         </div>
     `;
 }

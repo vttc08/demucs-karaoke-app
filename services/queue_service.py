@@ -785,6 +785,9 @@ class QueueService:
             processing_label_args=(
                 task_snapshot.get("progress_label_args") if task_snapshot is not None else None
             ),
+            processing_mode=(
+                task_snapshot.get("progress_mode") if task_snapshot is not None else None
+            ),
             processing_step_index=(
                 task_snapshot.get("progress_step_index") if task_snapshot is not None else None
             ),

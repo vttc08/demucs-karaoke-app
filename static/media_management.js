@@ -834,12 +834,14 @@ function renderTaskProgressBlock(task) {
     const progress = task?.live?.progress_percent;
     const label = getTaskProgressLabel(task);
     const percent = Number.isFinite(Number(progress)) ? Number(progress) : 0;
+    const mode = task?.live?.progress_mode || "";
+    const separator = mode === "indeterminate" ? "" : " • ";
     return `
-        <div class="mt-3 max-w-xs" data-task-progress-key="media-${task.id}" data-task-progress-status="${escapeHtml(task.status)}" data-task-progress-stage="${escapeHtml(task.stage || '')}" data-task-progress-reported-percent="${Math.max(0, Math.min(100, percent))}" data-task-progress-label="${escapeHtml(label)}">
+        <div class="mt-3 max-w-xs" data-task-progress-key="media-${task.id}" data-task-progress-status="${escapeHtml(task.status)}" data-task-progress-stage="${escapeHtml(task.stage || '')}" data-task-progress-mode="${escapeHtml(mode)}" data-task-progress-reported-percent="${Math.max(0, Math.min(100, percent))}" data-task-progress-label="${escapeHtml(label)}">
             <div class="h-2 overflow-hidden rounded-full bg-surface-container-highest" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.max(0, Math.min(100, percent))}">
                 <div class="h-full rounded-full bg-primary transition-all duration-300 ease-out" data-task-progress-fill style="width: ${Math.max(0, Math.min(100, percent))}%"></div>
             </div>
-            <p class="mt-1 text-[11px] text-on-surface-variant">${escapeHtml(label)} • <span data-task-progress-percent-text>${escapeHtml(String(percent))}%</span></p>
+            <p class="mt-1 text-[11px] text-on-surface-variant">${escapeHtml(label)}${separator}<span data-task-progress-percent-text class="${mode === 'indeterminate' ? 'hidden' : ''}">${escapeHtml(String(percent))}%</span></p>
         </div>
     `;
 }
@@ -1224,6 +1226,7 @@ function updateTaskLiveSnapshot(task, snapshot) {
     const nextLabel = snapshot.progress_label;
     const nextLabelKey = snapshot.progress_label_key;
     const nextLabelArgs = snapshot.progress_label_args;
+    const nextMode = snapshot.progress_mode;
     const nextStepIndex = snapshot.progress_step_index;
     const nextStepTotal = snapshot.progress_step_total;
     const nextSequence = snapshot.sequence ?? snapshot.event_sequence ?? task.live?.event_sequence ?? 0;
@@ -1231,6 +1234,7 @@ function updateTaskLiveSnapshot(task, snapshot) {
     const currentLabel = task.live?.progress_label;
     const currentLabelKey = task.live?.progress_label_key;
     const currentLabelArgs = task.live?.progress_label_args;
+    const currentMode = task.live?.progress_mode;
     const currentStepIndex = task.live?.progress_step_index;
     const currentStepTotal = task.live?.progress_step_total;
     const currentSequence = task.live?.event_sequence ?? 0;
@@ -1240,6 +1244,7 @@ function updateTaskLiveSnapshot(task, snapshot) {
         currentLabel !== nextLabel ||
         currentLabelKey !== nextLabelKey ||
         JSON.stringify(currentLabelArgs || null) !== JSON.stringify(nextLabelArgs || null) ||
+        currentMode !== nextMode ||
         currentStepIndex !== nextStepIndex ||
         currentStepTotal !== nextStepTotal ||
         currentSequence !== nextSequence;
@@ -1254,6 +1259,7 @@ function updateTaskLiveSnapshot(task, snapshot) {
         progress_label: nextLabel ?? null,
         progress_label_key: nextLabelKey ?? null,
         progress_label_args: nextLabelArgs ?? null,
+        progress_mode: nextMode ?? null,
         progress_step_index: nextStepIndex ?? null,
         progress_step_total: nextStepTotal ?? null,
         event_sequence: nextSequence,

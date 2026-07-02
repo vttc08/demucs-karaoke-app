@@ -117,7 +117,7 @@ value so automatic reconnects do not append the same buffered log lines twice.
 - admin task views still receive the task stream snapshot/log replay directly
 - callback failure or timeout tears down the child `yt-dlp` process before the error is surfaced
 - download attempts try yt-dlp's default selection first, then retry explicit audio/video/progressive selectors as fallbacks
-- the browser-only optimistic progress helper is limited to ffmpeg extraction and finalization stages, while download and Demucs stages rely on real progress updates
+- the browser-only optimistic progress helper is limited to ffmpeg extraction, WhisperX alignment, and finalization stages; download and Demucs separation rely on real progress updates
 
 When mocks or legacy callers are used in tests, the orchestration falls back to the non-streaming youtube service methods.
 
@@ -143,7 +143,13 @@ If the stream is unavailable, the client falls back to status polling using the 
 `demucs_poll_interval_seconds` runtime setting. That fallback cadence is still throttled to keep
 long-running jobs responsive without flooding the Demucs host with status checks.
 
-When WhisperX lyrics alignment is requested, the remote job's `Aligning lyrics` phase is surfaced as its own local `whisperx` stage so the browser can apply the optimistic progress helper there instead of letting the Demucs bar stall at the end of the separation run.
+Demucs separation progress is mapped to the first 90% of the local Demucs stage. The remaining tail is reserved for subprocess exit/output validation so the UI does not sit at 99% while Demucs is no longer reporting useful work.
+
+When WhisperX lyrics alignment is requested, the remote job emits optional `progress_stage` and
+`progress_mode` metadata. The main app surfaces model/audio/language checkpoints as local
+`whisperx` progress with `progress_mode="indeterminate"`, then switches to determinate optimistic
+progress once the actual WhisperX alignment call begins. This avoids treating model load or language
+detection as a percent-complete alignment estimate.
 
 Browsers do not connect directly to the Demucs host. Remote job ids are intentionally live-only and are not persisted in SQLite. On restart, any interrupted local task is restarted from the beginning with a fresh remote Demucs job.
 
