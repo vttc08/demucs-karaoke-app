@@ -27,10 +27,12 @@ def test_get_runtime_settings(client):
     assert "ytdlp_deno_path" in data
     assert "ytdlp_proxy_url" in data
     assert "ytdlp_video_resolution" in data
+    assert "ytdlp_video_codec" in data
     assert "concurrent_ytdlp_search_enabled" in data
     assert "lyrics_provider_netease_enabled" in data
     assert "lyrics_provider_lrclib_enabled" in data
     assert "ffmpeg_path" in data
+    assert "ffmpeg_audio_codec" in data
     assert "media_path" in data
     assert "cache_path" in data
     assert "demucs_healthy" in data
@@ -133,10 +135,12 @@ def test_update_runtime_settings(client):
             "ytdlp_deno_path": "/usr/local/bin/deno",
             "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
             "ytdlp_video_resolution": "720",
+            "ytdlp_video_codec": "avc",
             "concurrent_ytdlp_search_enabled": True,
             "lyrics_provider_netease_enabled": False,
             "lyrics_provider_lrclib_enabled": True,
             "ffmpeg_path": "ffmpeg",
+            "ffmpeg_audio_codec": "aac",
             "stage_qr_url": "https://karaoke.test/queue",
             "stage_lobby_media_path": "/media/stage-lobby.mp4",
             "stage_vocals_volume_default": 0.35,
@@ -164,9 +168,11 @@ def test_update_runtime_settings(client):
     assert data["ytdlp_deno_path"] == "/usr/local/bin/deno"
     assert data["ytdlp_proxy_url"] == "socks5://127.0.0.1:1080"
     assert data["ytdlp_video_resolution"] == "720"
+    assert data["ytdlp_video_codec"] == "avc"
     assert data["concurrent_ytdlp_search_enabled"] is True
     assert data["lyrics_provider_netease_enabled"] is False
     assert data["lyrics_provider_lrclib_enabled"] is True
+    assert data["ffmpeg_audio_codec"] == "aac"
     assert data["stage_qr_url"] == "https://karaoke.test/queue"
     assert data["stage_lobby_media_path"] == "/media/stage-lobby.mp4"
     assert data["stage_vocals_volume_default"] == 0.35
@@ -197,7 +203,9 @@ def test_update_runtime_settings_persists_to_database(client):
                 "whisperx_use_synced_lyrics": False,
                 "whisperx_preload_models": "transcription=tiny",
                 "ytdlp_video_resolution": "1080",
+                "ytdlp_video_codec": "avc",
                 "ytdlp_deno_path": "/usr/local/bin/deno",
+                "ffmpeg_audio_codec": "aac",
                 "concurrent_ytdlp_search_enabled": True,
                 "demucs_direct_media_max_mb": 333,
                 "demucs_poll_interval_seconds": 1.25,
@@ -219,6 +227,12 @@ def test_update_runtime_settings_persists_to_database(client):
         ).first()
         resolution = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "ytdlp_video_resolution"
+        ).first()
+        video_codec = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "ytdlp_video_codec"
+        ).first()
+        audio_codec = db.query(RuntimeSetting).filter(
+            RuntimeSetting.key == "ffmpeg_audio_codec"
         ).first()
         deno_path = db.query(RuntimeSetting).filter(
             RuntimeSetting.key == "ytdlp_deno_path"
@@ -256,6 +270,10 @@ def test_update_runtime_settings_persists_to_database(client):
         assert stage_vocals_volume_default.value == "0.25"
         assert resolution is not None
         assert resolution.value == "1080"
+        assert video_codec is not None
+        assert video_codec.value == "avc"
+        assert audio_codec is not None
+        assert audio_codec.value == "aac"
         assert deno_path is not None
         assert deno_path.value == "/usr/local/bin/deno"
         assert cutoff is not None
@@ -276,6 +294,21 @@ def test_update_runtime_settings_persists_to_database(client):
         assert whisperx_preload_models.value == "transcription=tiny"
     finally:
         db.close()
+
+def test_update_runtime_settings_rejects_invalid_ytdlp_video_codec(client):
+    """Runtime settings endpoint should validate the yt-dlp video codec flag."""
+    authenticate_admin_client(client)
+    response = client.patch("/api/settings/", json={"ytdlp_video_codec": "vp9"})
+    assert response.status_code == 400
+    assert "ytdlp_video_codec" in response.json()["detail"]
+
+
+def test_update_runtime_settings_rejects_invalid_ffmpeg_audio_codec(client):
+    """Runtime settings endpoint should validate the final audio remux codec flag."""
+    authenticate_admin_client(client)
+    response = client.patch("/api/settings/", json={"ffmpeg_audio_codec": "mp3"})
+    assert response.status_code == 400
+    assert "ffmpeg_audio_codec" in response.json()["detail"]
 
 def test_get_demucs_health(client):
     """Demucs health endpoint returns current health state."""

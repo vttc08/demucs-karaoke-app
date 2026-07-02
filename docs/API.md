@@ -1081,7 +1081,9 @@ endpoint reflects the latest saved UI configuration after the app has booted.
   "ytdlp_deno_path": "/usr/local/bin/deno",
   "ytdlp_proxy_url": "socks5://127.0.0.1:1080",
   "ytdlp_video_resolution": "default",
+  "ytdlp_video_codec": "",
   "ffmpeg_path": "/usr/bin/ffmpeg",
+  "ffmpeg_audio_codec": "",
   "stage_qr_url": "https://karaoke.example/queue",
   "stage_lobby_media_path": "/media/stage-lobby.mp4",
   "stage_vocals_volume_default": 1.0
@@ -1181,7 +1183,9 @@ and restarts when no explicit `.env` override is present.
   "ytdlp_deno_path": "",
   "ytdlp_proxy_url": "",
   "ytdlp_video_resolution": "default",
+  "ytdlp_video_codec": "",
   "ffmpeg_path": "ffmpeg",
+  "ffmpeg_audio_codec": "",
   "stage_qr_url": "https://karaoke.example/queue",
   "stage_lobby_media_path": "/media/stage-lobby.mp4",
   "stage_vocals_volume_default": 0.75
@@ -1207,6 +1211,8 @@ Validation:
 - `ytdlp_deno_path` is optional; blank keeps yt-dlp default behavior, while a value adds `--js-runtimes deno:<path>` to yt-dlp commands
 - `ytdlp_proxy_url` must be empty or use one of: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`
 - `ytdlp_video_resolution` must be `default` or one of: `360`, `480`, `720`, `1080`, `2160`
+- `ytdlp_video_codec` must be blank or `avc`
+- `ffmpeg_audio_codec` must be blank or `aac`
 - executable paths cannot be empty
 - `media_path` and `cache_path` cannot be empty when provided
 - `stage_vocals_volume_default` must be between `0.0` and `1.0`
@@ -1217,6 +1223,8 @@ Notes:
 - `ytdlp_proxy_url` applies to yt-dlp operations and lyrics-provider outbound requests.
 - `ytdlp_deno_path` applies to yt-dlp search, metadata, and download commands for videos that require external JavaScript execution.
 - `ytdlp_video_resolution` applies to yt-dlp video and progressive video+audio downloads by adding a resolution sort cap such as `-S "res:720"` when a cap is selected.
+- `ytdlp_video_codec=avc` constrains yt-dlp downloads to avc1-prefixed video streams and keeps the existing behavior when blank.
+- `ffmpeg_audio_codec=aac` switches the final karaoke remux audio from stream copy to AAC re-encoding while keeping video stream copy.
 
 ---
 

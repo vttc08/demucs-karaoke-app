@@ -470,10 +470,12 @@ class RuntimeSettingsResponse(BaseModel):
     ytdlp_deno_path: str
     ytdlp_proxy_url: str
     ytdlp_video_resolution: str
+    ytdlp_video_codec: str
     concurrent_ytdlp_search_enabled: bool
     lyrics_provider_netease_enabled: bool
     lyrics_provider_lrclib_enabled: bool
     ffmpeg_path: str
+    ffmpeg_audio_codec: str
     media_path: str
     cache_path: str
     stage_qr_url: str
@@ -503,10 +505,12 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     ytdlp_deno_path: Optional[str] = None
     ytdlp_proxy_url: Optional[str] = None
     ytdlp_video_resolution: Optional[str] = None
+    ytdlp_video_codec: Optional[str] = None
     concurrent_ytdlp_search_enabled: Optional[bool] = None
     lyrics_provider_netease_enabled: Optional[bool] = None
     lyrics_provider_lrclib_enabled: Optional[bool] = None
     ffmpeg_path: Optional[str] = None
+    ffmpeg_audio_codec: Optional[str] = None
     media_path: Optional[str] = None
     cache_path: Optional[str] = None
     stage_qr_url: Optional[str] = None

@@ -619,6 +619,8 @@ def test_runtime_settings_update_settings_accepts_demucs_advanced_fields():
     original_whisperx_detect_language = settings.whisperx_detect_language
     original_whisperx_use_synced_lyrics = settings.whisperx_use_synced_lyrics
     original_whisperx_preload_models = settings.whisperx_preload_models
+    original_ytdlp_video_codec = settings.ytdlp_video_codec
+    original_ffmpeg_audio_codec = settings.ffmpeg_audio_codec
     try:
         with patch.object(
             RuntimeSettingsService,
@@ -642,6 +644,8 @@ def test_runtime_settings_update_settings_accepts_demucs_advanced_fields():
                     whisperx_detect_language=True,
                     whisperx_use_synced_lyrics=True,
                     whisperx_preload_models="transcription=tiny,align=en,align=zh",
+                    ytdlp_video_codec="avc",
+                    ffmpeg_audio_codec="aac",
                 )
             )
         assert result.demucs_model == "htdemucs_ft"
@@ -655,6 +659,8 @@ def test_runtime_settings_update_settings_accepts_demucs_advanced_fields():
         assert result.whisperx_detect_language is True
         assert result.whisperx_use_synced_lyrics is True
         assert result.whisperx_preload_models == "transcription=tiny,align=en,align=zh"
+        assert result.ytdlp_video_codec == "avc"
+        assert result.ffmpeg_audio_codec == "aac"
     finally:
         settings.demucs_model = original_model
         settings.demucs_device = original_device
@@ -667,6 +673,8 @@ def test_runtime_settings_update_settings_accepts_demucs_advanced_fields():
         settings.whisperx_detect_language = original_whisperx_detect_language
         settings.whisperx_use_synced_lyrics = original_whisperx_use_synced_lyrics
         settings.whisperx_preload_models = original_whisperx_preload_models
+        settings.ytdlp_video_codec = original_ytdlp_video_codec
+        settings.ffmpeg_audio_codec = original_ffmpeg_audio_codec
 
 def test_runtime_settings_update_settings_rejects_invalid_demucs_fields():
     """Runtime settings should validate demucs advanced fields."""
@@ -685,6 +693,15 @@ def test_runtime_settings_update_settings_rejects_invalid_demucs_fields():
         service.update_settings(RuntimeSettingsUpdateRequest(demucs_poll_interval_seconds=0.1))
     with pytest.raises(ValueError, match="whisperx_transcription_model"):
         service.update_settings(RuntimeSettingsUpdateRequest(whisperx_transcription_model=" "))
+
+
+def test_runtime_settings_update_settings_rejects_invalid_video_codec_settings():
+    """Runtime settings should validate iOS compatibility codec toggles."""
+    service = RuntimeSettingsService()
+    with pytest.raises(ValueError, match="ytdlp_video_codec"):
+        service.update_settings(RuntimeSettingsUpdateRequest(ytdlp_video_codec="vp9"))
+    with pytest.raises(ValueError, match="ffmpeg_audio_codec"):
+        service.update_settings(RuntimeSettingsUpdateRequest(ffmpeg_audio_codec="mp3"))
 
 def test_runtime_settings_update_settings_rejects_empty_media_path():
     """Runtime settings should reject blank media path values."""
@@ -989,6 +1006,8 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
     original_netease = settings.lyrics_provider_netease_enabled
     original_lrclib = settings.lyrics_provider_lrclib_enabled
     original_resolution = settings.ytdlp_video_resolution
+    original_video_codec = settings.ytdlp_video_codec
+    original_audio_codec = settings.ffmpeg_audio_codec
     original_deno_path = settings.ytdlp_deno_path
     original_cutoff = settings.demucs_direct_media_max_mb
     original_poll_interval_seconds = settings.demucs_poll_interval_seconds
@@ -1013,7 +1032,9 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
                     lyrics_provider_netease_enabled=False,
                     lyrics_provider_lrclib_enabled=True,
                     ytdlp_video_resolution="1080",
+                    ytdlp_video_codec="avc",
                     ytdlp_deno_path="/usr/local/bin/deno",
+                    ffmpeg_audio_codec="aac",
                     demucs_direct_media_max_mb=1234,
                     demucs_poll_interval_seconds=1.75,
                     whisperx_transcription_model="tiny",
@@ -1032,7 +1053,9 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert result.lyrics_provider_netease_enabled is False
         assert result.lyrics_provider_lrclib_enabled is True
         assert result.ytdlp_video_resolution == "1080"
+        assert result.ytdlp_video_codec == "avc"
         assert result.ytdlp_deno_path == "/usr/local/bin/deno"
+        assert result.ffmpeg_audio_codec == "aac"
         assert result.demucs_direct_media_max_mb == 1234
         assert result.demucs_poll_interval_seconds == 1.75
         assert result.whisperx_transcription_model == "tiny"
@@ -1052,7 +1075,9 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         assert stored["lyrics_provider_netease_enabled"] == "false"
         assert stored["lyrics_provider_lrclib_enabled"] == "true"
         assert stored["ytdlp_video_resolution"] == "1080"
+        assert stored["ytdlp_video_codec"] == "avc"
         assert stored["ytdlp_deno_path"] == "/usr/local/bin/deno"
+        assert stored["ffmpeg_audio_codec"] == "aac"
         assert stored["demucs_direct_media_max_mb"] == "1234"
         assert stored["demucs_poll_interval_seconds"] == "1.75"
         assert stored["whisperx_transcription_model"] == "tiny"
@@ -1071,6 +1096,8 @@ def test_runtime_settings_update_settings_persists_to_database(db_session):
         settings.lyrics_provider_netease_enabled = original_netease
         settings.lyrics_provider_lrclib_enabled = original_lrclib
         settings.ytdlp_video_resolution = original_resolution
+        settings.ytdlp_video_codec = original_video_codec
+        settings.ffmpeg_audio_codec = original_audio_codec
         settings.ytdlp_deno_path = original_deno_path
         settings.demucs_direct_media_max_mb = original_cutoff
         settings.demucs_poll_interval_seconds = original_poll_interval_seconds
@@ -1097,7 +1124,9 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
                 RuntimeSetting(key="stage_vocals_volume_default", value="0.35"),
                 RuntimeSetting(key="ffmpeg_preset", value="veryslow"),
                 RuntimeSetting(key="ytdlp_video_resolution", value="720"),
+                RuntimeSetting(key="ytdlp_video_codec", value="avc"),
                 RuntimeSetting(key="ytdlp_deno_path", value="/opt/deno/bin/deno"),
+                RuntimeSetting(key="ffmpeg_audio_codec", value="aac"),
                 RuntimeSetting(key="demucs_direct_media_max_mb", value="777"),
                 RuntimeSetting(key="demucs_poll_interval_seconds", value="1.25"),
                 RuntimeSetting(key="whisperx_transcription_model", value="base"),
@@ -1115,7 +1144,9 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         settings.stage_lobby_media_path = ""
         settings.stage_vocals_volume_default = 1.0
         settings.ytdlp_video_resolution = "default"
+        settings.ytdlp_video_codec = ""
         settings.ytdlp_deno_path = ""
+        settings.ffmpeg_audio_codec = ""
         settings.demucs_direct_media_max_mb = 500
         settings.demucs_poll_interval_seconds = 1.0
         settings.whisperx_transcription_model = "tiny"
@@ -1132,7 +1163,9 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         assert "stage_lobby_media_path" in applied
         assert "stage_vocals_volume_default" in applied
         assert "ytdlp_video_resolution" in applied
+        assert "ytdlp_video_codec" in applied
         assert "ytdlp_deno_path" in applied
+        assert "ffmpeg_audio_codec" in applied
         assert "demucs_direct_media_max_mb" in applied
         assert "demucs_poll_interval_seconds" in applied
         assert settings.demucs_model == "persisted-model"
@@ -1141,7 +1174,9 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
         assert settings.stage_lobby_media_path == "/media/stage-lobby.mp4"
         assert settings.stage_vocals_volume_default == 0.35
         assert settings.ytdlp_video_resolution == "720"
+        assert settings.ytdlp_video_codec == "avc"
         assert settings.ytdlp_deno_path == "/opt/deno/bin/deno"
+        assert settings.ffmpeg_audio_codec == "aac"
         assert settings.demucs_direct_media_max_mb == 777
         assert settings.demucs_poll_interval_seconds == 1.25
         assert settings.whisperx_transcription_model == "base"

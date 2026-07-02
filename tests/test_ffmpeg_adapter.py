@@ -35,6 +35,39 @@ def test_combine_audio_video_uses_stream_copy(monkeypatch, tmp_path):
     assert cmd[cmd.index("-c:a") + 1] == "copy"
 
 
+def test_combine_audio_video_uses_aac_when_requested(monkeypatch, tmp_path):
+    """Final karaoke combine should switch audio to AAC for iOS compatibility when enabled."""
+    adapter = FFmpegAdapter(ffmpeg_path="/bin/ffmpeg")
+    captured_cmd = {}
+
+    def fake_run(cmd, check, capture_output):
+        captured_cmd["cmd"] = cmd
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    video_path = tmp_path / "in.mp4"
+    audio_path = tmp_path / "in.wav"
+    output_path = tmp_path / "out.mp4"
+    video_path.write_bytes(b"v")
+    audio_path.write_bytes(b"a")
+
+    adapter.combine_audio_video(
+        video_path=video_path,
+        audio_path=audio_path,
+        output_path=output_path,
+        audio_codec="aac",
+    )
+
+    cmd = captured_cmd["cmd"]
+    assert "-c:v" in cmd
+    assert cmd[cmd.index("-c:v") + 1] == "copy"
+    assert "-c:a" in cmd
+    assert cmd[cmd.index("-c:a") + 1] == "aac"
+    assert "-b:a" in cmd
+    assert cmd[cmd.index("-b:a") + 1] == "192k"
+
+
 def test_extract_audio_uses_stream_copy(monkeypatch, tmp_path):
     """Audio extraction for Demucs input should avoid transcoding."""
     adapter = FFmpegAdapter(ffmpeg_path="/bin/ffmpeg")

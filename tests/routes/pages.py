@@ -376,6 +376,8 @@ def test_settings_page_loads_for_admin(client):
     assert b">Refresh<" in response.content
     assert 'href="/help/"' in response.text
     assert 'aria-label="Open documentation"' in response.text
+    assert 'id="ytdlp_video_codec"' in response.text
+    assert 'id="ffmpeg_audio_codec"' in response.text
     assert b"Admin Access" not in response.content
     assert 'aria-label="Settings"' in response.text
     assert 'aria-label="Media"' in response.text

@@ -21,6 +21,7 @@ class FFmpegAdapter:
         audio_path: Path,
         output_path: Path,
         *,
+        audio_codec: str | None = None,
         cancel_event: threading.Event | None = None,
     ) -> Path:
         """
@@ -34,12 +35,18 @@ class FFmpegAdapter:
         Returns:
             Path to output file
         """
+        codec = (audio_codec if audio_codec is not None else settings.ffmpeg_audio_codec)
+        codec = (codec or "").strip().lower()
+        if codec == "aac":
+            audio_args = ["-c:a", "aac", "-b:a", "192k"]
+        else:
+            audio_args = ["-c:a", "copy"]
         cmd = [
             self.ffmpeg_path,
             "-i", str(video_path),
             "-i", str(audio_path),
             "-c:v", "copy",
-            "-c:a", "copy",
+            *audio_args,
             "-map", "0:v:0",
             "-map", "1:a:0",
             "-shortest",

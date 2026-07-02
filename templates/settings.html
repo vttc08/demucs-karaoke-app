@@ -114,6 +114,11 @@
                         </label>
                     </div>
                     <label class="flex flex-col gap-1.5">
+                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ffmpeg_audio_codec') }}</span>
+                        <input id="ffmpeg_audio_codec" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" inputmode="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="aac" />
+                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.ffmpeg_audio_codec_detail') }}</span>
+                    </label>
+                    <label class="flex flex-col gap-1.5">
                         <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_direct_media_cutoff') }}</span>
                         <input id="demucs_direct_media_max_mb" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="number" min="0" max="5000" step="1" required />
                     </label>
@@ -205,6 +210,11 @@
                             <option value="2160">{{ t('settings.ytdlp_resolution_2160') }}</option>
                         </select>
                         <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.ytdlp_video_resolution_detail') }}</span>
+                    </label>
+                    <label class="flex flex-col gap-1.5">
+                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ytdlp_video_codec') }}</span>
+                        <input id="ytdlp_video_codec" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" inputmode="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="avc" />
+                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.ytdlp_video_codec_detail') }}</span>
                     </label>
                     <div class="rounded-xl border border-white/10 bg-surface-container-highest/20 p-3">
                         <div class="flex flex-wrap items-center justify-between gap-2">
