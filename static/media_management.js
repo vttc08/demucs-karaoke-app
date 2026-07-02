@@ -121,6 +121,13 @@ function isSyncedJsonLyrics(lyricsPath, lyricsKind = "") {
     return String(lyricsPath || "").trim().toLowerCase().endsWith(".json");
 }
 
+function isCdgLyricsPath(lyricsPath, lyricsKind = "") {
+    if (String(lyricsKind || "").trim().toLowerCase() === "cdg") {
+        return true;
+    }
+    return String(lyricsPath || "").trim().toLowerCase().endsWith(".cdg");
+}
+
 async function refreshEditDemucsHealth() {
     if (editAiToggle) {
         editAiToggle.disabled = true;
@@ -162,6 +169,7 @@ let activeEditLyricsPath = "";
 let activeEditLyricsBaselineHash = "";
 let activeEditLyricsBaselineFormat = "";
 let activeEditLyricsBaselineProvider = "";
+let activeEditLyricsIsCdg = false;
 let activeEditLyricsLoadToken = 0;
 let activeEditLyricsLoadPromise = null;
 let activeEditInitialTitle = "";
@@ -265,6 +273,9 @@ function inferLyricsFormatFromPath(lyricsPath) {
     if (lyricsPath && String(lyricsPath).toLowerCase().endsWith(".lrc")) {
         return "lrc";
     }
+    if (lyricsPath && String(lyricsPath).toLowerCase().endsWith(".cdg")) {
+        return "cdg";
+    }
     if (suffix === "txt") {
         return "txt";
     }
@@ -286,6 +297,7 @@ function resetMediaEditLyricsState() {
     activeEditLyricsBaselineHash = "";
     activeEditLyricsBaselineFormat = "";
     activeEditLyricsBaselineProvider = "";
+    activeEditLyricsIsCdg = false;
     activeEditLyricsLoadToken += 1;
     activeEditLyricsLoadPromise = null;
 }
@@ -300,9 +312,10 @@ function resetMediaEditInitialState() {
 function updateMediaEditLyricsControls() {
     if (!lyricsManager) return;
     const state = lyricsManager.getState();
+    const isCdg = Boolean(activeEditLyricsIsCdg);
     const isEnabled = Boolean(state.lyricsEnabled);
     const isSynced = Boolean(isEnabled && state.format === "json");
-    const isLocked = Boolean(isSynced);
+    const isLocked = Boolean(isSynced || isCdg);
     const hasText = Boolean((state.text || "").trim());
     const canAlign = Boolean(isEnabled && hasText && !isLocked && demucsHealth.healthy);
     if (!canAlign && state.processLyricsLines) {
@@ -310,7 +323,7 @@ function updateMediaEditLyricsControls() {
     }
 
     if (editLyricsToggle) {
-        editLyricsToggle.checked = isEnabled;
+        editLyricsToggle.checked = Boolean(isEnabled && !isCdg);
         editLyricsToggle.disabled = isLocked;
     }
 
@@ -338,7 +351,10 @@ function updateMediaEditLyricsControls() {
     }
 
     if (editLyricsStatus) {
-        if (isLocked) {
+        if (isCdg) {
+            editLyricsStatus.textContent = t("media.cdg_lyrics_disabled");
+            editLyricsStatus.className = "text-[10px] leading-tight text-warning";
+        } else if (isLocked) {
             editLyricsStatus.textContent = t("media.already_synced_lyrics");
             editLyricsStatus.className = "text-[10px] leading-tight text-on-surface-variant";
         } else {
@@ -355,7 +371,9 @@ function updateMediaEditLyricsControls() {
         setSwitchToggleState(editLyricsAlignToggle, Boolean(canAlign && alignRequested), !canAlign);
     }
     if (editLyricsAlignStatus) {
-        if (isLocked) {
+        if (isCdg) {
+            editLyricsAlignStatus.textContent = t("media.cdg_lyrics_disabled");
+        } else if (isLocked) {
             editLyricsAlignStatus.textContent = t("lyrics.align_json_unsupported");
         } else if (!demucsHealth.healthy) {
             editLyricsAlignStatus.textContent = t("lyrics.align_demucs_unavailable");
@@ -371,6 +389,7 @@ function setLoadedLyricsState(text, format, providerLabel) {
     if (!lyricsManager) return;
     const normalizedText = String(text || "").trim();
     const normalizedFormat = format || "txt";
+    activeEditLyricsIsCdg = false;
     lyricsManager.setEnabled(true);
     lyricsManager.setMetadata(editTitleInput?.value || "", editArtistInput?.value || "", editTitleInput?.value || "");
     lyricsManager.setLyricsDraft(normalizedText, providerLabel, {
@@ -387,6 +406,7 @@ function setLoadedLyricsState(text, format, providerLabel) {
 
 function setLockedSyncedLyricsState() {
     if (!lyricsManager) return;
+    activeEditLyricsIsCdg = false;
     lyricsManager.reset();
     lyricsManager.setEnabled(true);
     lyricsManager.setMetadata(editTitleInput?.value || "", editArtistInput?.value || "", editTitleInput?.value || "");
@@ -402,11 +422,26 @@ function setLockedSyncedLyricsState() {
     updateMediaEditLyricsControls();
 }
 
+function setCdgLyricsState() {
+    if (!lyricsManager) return;
+    lyricsManager.reset();
+    lyricsManager.setEnabled(false);
+    lyricsManager.setMetadata(editTitleInput?.value || "", editArtistInput?.value || "", editTitleInput?.value || "");
+    lyricsManager.setAlignLyricsRequested(false);
+    lyricsManager.setLineProcessingSettings(false);
+    activeEditLyricsBaselineHash = "";
+    activeEditLyricsBaselineFormat = "cdg";
+    activeEditLyricsBaselineProvider = "";
+    updateMediaEditLyricsControls();
+}
+
 async function loadCurrentLyricsForEdit(itemNode) {
     const lyricsPath = String(itemNode?.dataset?.lyricsPath || "").trim();
     const hasLyrics = itemNode?.dataset?.hasLyrics === "true";
+    const lyricsKind = String(itemNode?.dataset?.lyricsKind || "").trim().toLowerCase();
     const loadToken = ++activeEditLyricsLoadToken;
     activeEditLyricsPath = lyricsPath;
+    activeEditLyricsIsCdg = isCdgLyricsPath(lyricsPath, lyricsKind);
 
     if (!hasLyrics || !lyricsPath) {
         activeEditLyricsBaselineHash = "";
@@ -421,9 +456,14 @@ async function loadCurrentLyricsForEdit(itemNode) {
         return;
     }
 
+    if (activeEditLyricsIsCdg) {
+        setCdgLyricsState();
+        return;
+    }
+
     const cached = mediaLyricsCache.get(lyricsPath);
     const normalizedPath = appUrl(lyricsPath);
-    const format = inferLyricsFormatFromPath(lyricsPath) || (String(itemNode?.dataset?.lyricsKind || "").toLowerCase() === "json" ? "json" : "txt");
+    const format = inferLyricsFormatFromPath(lyricsPath) || (lyricsKind === "json" ? "json" : "txt");
 
     if (isSyncedJsonLyrics(lyricsPath, itemNode?.dataset?.lyricsKind)) {
         if (loadToken !== activeEditLyricsLoadToken) {
@@ -510,17 +550,21 @@ function getMediaFileKindLabel(kind, extension = "") {
     if (normalizedExtension === "txt") {
         return t("media.file_lyrics_txt");
     }
+    if (normalizedExtension === "cdg") {
+        return t("media.file_lyrics_cdg");
+    }
     return t("media.file_lyrics");
 }
 
-function mediaFileKindIcon(kind) {
+function mediaFileKindIcon(kind, extension = "") {
+    const normalizedExtension = String(extension || "").toLowerCase();
     switch (String(kind || "").toLowerCase()) {
         case "main":
             return "music_video";
         case "vocals":
             return "mic_external_on";
         case "lyrics":
-            return "lyrics";
+            return normalizedExtension === "cdg" ? "image" : "lyrics";
         default:
             return "draft";
     }
@@ -585,7 +629,7 @@ function renderMediaFilesList(manifest) {
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2">
                             <span class="inline-flex items-center gap-1 rounded-full border border-white/10 bg-surface-container-highest/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-                                <span class="material-symbols-outlined text-[13px]">${mediaFileKindIcon(kind)}</span>
+                                <span class="material-symbols-outlined text-[13px]">${mediaFileKindIcon(kind, extension)}</span>
                                 ${escapeHtml(label)}
                             </span>
                         </div>
@@ -596,6 +640,7 @@ function renderMediaFilesList(manifest) {
                             type="button"
                             data-action="download-media-file"
                             data-media-file-kind="${escapeHtml(kind)}"
+                            data-media-file-extension="${escapeHtml(extension)}"
                             data-media-file-url="${escapeHtml(downloadUrl)}"
                             class="col-start-3 col-span-1 inline-flex w-full min-w-0 items-center justify-center gap-1 rounded-full border border-white/10 bg-surface-container-high/70 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-surface transition-colors hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                             ${downloadable ? "" : "disabled"}
@@ -606,6 +651,7 @@ function renderMediaFilesList(manifest) {
                             type="button"
                             data-action="delete-media-file"
                             data-media-file-kind="${escapeHtml(kind)}"
+                            data-media-file-extension="${escapeHtml(extension)}"
                             data-media-file-url="${escapeHtml(deleteUrl)}"
                             class="inline-flex w-full min-w-0 items-center justify-center gap-1 rounded-full border border-error/25 bg-error/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-error transition-colors hover:bg-error/15 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                             ${deletable ? "" : "disabled"}
@@ -627,6 +673,7 @@ function syncEditManifestState(manifest) {
     activeEditHasMulti = Boolean(manifest.has_multi_track);
     const hasLyrics = Boolean(manifest.has_lyrics);
     const lyricsKind = String(manifest.lyrics_kind || "");
+    activeEditLyricsIsCdg = lyricsKind === "cdg";
     const displayTitle = editTitleInput?.value?.trim() || activeEditInitialTitle || manifest.title || "";
     const displayArtist = editArtistInput?.value?.trim() || activeEditInitialArtist || manifest.artist || "";
     updateMediaItemDisplay(
@@ -651,6 +698,8 @@ function syncEditManifestState(manifest) {
         activeEditLyricsBaselineHash = "";
         activeEditLyricsBaselineFormat = "";
         activeEditLyricsBaselineProvider = "";
+    } else if (activeEditLyricsIsCdg && lyricsManager) {
+        setCdgLyricsState();
     }
     updateMediaEditLyricsControls();
     updateFilenamePreview();
@@ -717,7 +766,7 @@ async function deleteMediaFile(button) {
         return;
     }
     const kind = button.dataset.mediaFileKind || "";
-    const label = getMediaFileKindLabel(kind, "");
+    const label = getMediaFileKindLabel(kind, button.dataset.mediaFileExtension || "");
     if (kind === "main") {
         showToast(t("media.main_file_not_deletable"));
         return;
@@ -902,6 +951,7 @@ function updateMediaItemDisplay(itemId, title, artist, hasMulti, hasLyrics, lyri
     const normalizedArtist = normalizeArtistValue(artist);
     const normalizedLyricsKind = String(lyricsKind || "").trim().toLowerCase();
     const hasSyncedLyrics = normalizedLyricsKind === "json";
+    const hasCdgLyrics = normalizedLyricsKind === "cdg";
     const nodes = getMediaItemNodes(itemId);
     nodes.forEach((node) => {
         node.dataset.title = normalizedTitle.toLowerCase();
@@ -931,10 +981,16 @@ function updateMediaItemDisplay(itemId, title, artist, hasMulti, hasLyrics, lyri
                 "tracking-widest",
                 hasSyncedLyrics
                     ? "border border-tertiary/30 bg-tertiary/10 text-tertiary"
+                    : hasCdgLyrics
+                        ? "border border-secondary/30 bg-secondary/10 text-secondary"
                     : "border border-primary/30 bg-primary/10 text-primary",
                 hasLyrics ? "" : "hidden",
             ].filter(Boolean).join(" ");
-            lyricsChip.textContent = hasSyncedLyrics ? t("media.lyrics_synced") : t("media.lyrics_plain");
+            lyricsChip.textContent = hasSyncedLyrics
+                ? t("media.lyrics_synced")
+                : hasCdgLyrics
+                    ? t("media.lyrics_cdg")
+                    : t("media.lyrics_plain");
         }
 
         const titleImage = node.querySelector("img[alt]");
@@ -1498,6 +1554,7 @@ function openEditModal(itemNode, { syncHistory = true } = {}) {
     const lyricsPath = itemNode.dataset.lyricsPath || "";
     const hasMulti = itemNode.dataset.hasMultiTrack === "true";
     const hasLyrics = itemNode.dataset.hasLyrics === "true";
+    const lyricsKind = String(itemNode.dataset.lyricsKind || "").trim().toLowerCase();
 
     if (!itemId || !currentTitle) {
         return;
@@ -1509,6 +1566,7 @@ function openEditModal(itemNode, { syncHistory = true } = {}) {
     resetMediaEditLyricsState();
     resetMediaEditInitialState();
     activeEditLyricsPath = lyricsPath;
+    activeEditLyricsIsCdg = isCdgLyricsPath(lyricsPath, lyricsKind);
     activeEditInitialTitle = currentTitle;
     activeEditInitialArtist = currentArtist;
     activeEditInitialRenameOnDisk = true;
@@ -1570,7 +1628,9 @@ function openEditModal(itemNode, { syncHistory = true } = {}) {
     if (lyricsManager) {
         lyricsManager.reset();
         lyricsManager.setMetadata(currentTitle, currentArtist, currentTitle);
-        if (hasLyrics) {
+        if (hasLyrics && activeEditLyricsIsCdg) {
+            setCdgLyricsState();
+        } else if (hasLyrics) {
             activeEditLyricsLoadPromise = loadCurrentLyricsForEdit(itemNode);
         } else {
             lyricsManager.setEnabled(false);
@@ -1650,6 +1710,7 @@ async function saveEditModal(event) {
 
     const aiRequested = Boolean(editAiToggle?.checked && !activeEditHasMulti);
     const alignRequested = Boolean(
+        !activeEditLyricsIsCdg &&
         currentLyricsState?.alignLyricsRequested &&
         currentLyricsState?.lyricsEnabled &&
         currentLyricsText &&
@@ -1693,7 +1754,7 @@ async function saveEditModal(event) {
         };
 
         // Add lyrics if available
-        if ((lyricsPayloadChanged || alignRequested) && currentLyricsState?.lyricsEnabled && currentLyricsText) {
+        if (!activeEditLyricsIsCdg && (lyricsPayloadChanged || alignRequested) && currentLyricsState?.lyricsEnabled && currentLyricsText) {
             requestBody.lyrics_text = currentLyricsText;
             requestBody.lyrics_format = currentLyricsFormat;
             requestBody.process_lyrics_lines = Boolean(currentLyricsState.processLyricsLines);
@@ -2130,7 +2191,7 @@ editForm?.addEventListener("submit", saveEditModal);
 if (editLyricsToggle) {
     editLyricsToggle.addEventListener('change', () => {
         initializeMediaEditLyricsManager();
-        if (lyricsManager) {
+        if (lyricsManager && !activeEditLyricsIsCdg) {
             const nextEnabled = editLyricsToggle.checked;
             syncMediaEditLyricsMetadata();
             lyricsManager.setEnabled(nextEnabled);
@@ -2141,7 +2202,7 @@ if (editLyricsAlignToggle) {
     editLyricsAlignToggle.addEventListener("click", (event) => {
         event.preventDefault();
         initializeMediaEditLyricsManager();
-        if (lyricsManager) {
+        if (lyricsManager && !activeEditLyricsIsCdg) {
             const currentState = lyricsManager.getState();
             lyricsManager.setAlignLyricsRequested(!currentState.alignLyricsRequested);
         }

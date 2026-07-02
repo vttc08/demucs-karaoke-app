@@ -50,7 +50,7 @@ media_trim_service = MediaTrimService()
 _UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v", ".zip"}
 _MEDIA_UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
 _ZIP_THUMBNAIL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
-_ZIP_LYRICS_EXTENSIONS = (".json", ".lrc", ".srt", ".txt")
+_ZIP_LYRICS_EXTENSIONS = (".json", ".lrc", ".srt", ".txt", ".cdg")
 _ZIP_VOCALS_EXTENSIONS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm")
 _MEDIA_FILE_KINDS = {"main", "vocals", "lyrics"}
 

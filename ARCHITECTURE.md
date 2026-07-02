@@ -90,6 +90,8 @@ This project currently uses two services:
   can apply one-off language choices without changing `/settings` defaults.
 - Legacy MP3+G support stays sidecar-based: adjacent `.cdg` files are discovered as lyrics, stored in
   `lyrics_path`, and rendered client-side on `/stage` without adding a backend video transcode path.
+- In `/media`, `.cdg` remains a lyrics sidecar for discovery and file management, but the edit modal
+  treats it as display-only so the text-lyrics editor and WhisperX alignment controls stay disabled.
 
 ## Real-time queue update architecture
 

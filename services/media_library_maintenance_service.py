@@ -426,6 +426,8 @@ class MediaLibraryMaintenanceService:
             return "txt"
         if suffix == ".srt":
             return "srt"
+        if suffix == ".cdg":
+            return "cdg"
         return "lyrics"
 
     @staticmethod

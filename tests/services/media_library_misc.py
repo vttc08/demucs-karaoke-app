@@ -200,6 +200,36 @@ def test_media_library_service_marks_json_lyrics_kind(db_session, tmp_path):
     finally:
         settings.media_path = original_media
 
+def test_media_library_service_marks_cdg_lyrics_kind(db_session, tmp_path):
+    """Media page rows should expose CDG lyrics as a distinct lyrics kind."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "cdg-song.mp3"
+        media_file.write_text("audio", encoding="utf-8")
+
+        db_session.add(
+            MediaItem(
+                title="CDG Song",
+                media_path="/media/cdg-song.mp3",
+                lyrics_path="/media/cdg-song.cdg",
+                missing=False,
+            )
+        )
+        db_session.commit()
+
+        service = MediaLibraryService()
+        items = service.list_media_items(db_session)
+
+        assert len(items) == 1
+        assert items[0]["has_lyrics"] is True
+        assert items[0]["lyrics_path"] == "/media/cdg-song.cdg"
+        assert items[0]["lyrics_kind"] == "cdg"
+    finally:
+        settings.media_path = original_media
+
 def test_media_thumbnail_service_uses_embedded_art_extraction_for_audio(tmp_path, monkeypatch):
     """Audio thumbnails should use embedded-art extraction instead of video frame capture."""
     original_cache = settings.cache_path

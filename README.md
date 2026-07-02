@@ -187,7 +187,7 @@ and `/static/...`.
           - The edit modal can enable **AI Karaoke** for single-track media when Demucs is online; saving creates a monitored media-processing task, and WhisperX lyrics alignment can use a per-save language override
           - Existing multi-track items show AI Karaoke as enabled but locked, preventing duplicate separation work
           - Admin users can use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
-          - Lyrics sidecars are classified by suffix: `.lrc` and `.txt` stay under the normal lyrics badge, while WhisperX word-aligned `.json` sidecars get a separate badge
+          - Lyrics sidecars are classified by suffix: `.lrc` and `.txt` stay under the normal lyrics badge, while WhisperX word-aligned `.json` sidecars get a separate badge; legacy `.cdg` sidecars are treated as read-only display assets and do not unlock the text-lyrics editor
           - Admin users can open **Lossless Trim** from the edit modal to retain an intro/outro interval without re-encoding; video boundaries snap outward to I-frames and attached vocals/lyrics are shifted to the same interval
           - Admin users can open **Add Vocals** from the edit modal to prepare a vocal source from YouTube or upload, review the estimated sync offset, and commit a new guide-vocal sidecar
           - Admin users can open **Lyrics Editor** from the edit modal to export ASS or SRT subtitle files, edit them in Aegisub or SubtitleEdit, and import the result back into the canonical JSON lyrics sidecar

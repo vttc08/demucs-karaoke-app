@@ -321,10 +321,12 @@
                                 <span class="rounded-full border border-secondary/30 bg-secondary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-secondary {% if not item.has_multi_track %}hidden{% endif %}">{{ t('common.multi_track') }}</span>
                                 <span
                                     data-lyrics-chip="media"
-                                    class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest {% if not item.has_lyrics %}hidden{% endif %} {% if item.lyrics_kind == 'json' %}border border-tertiary/30 bg-tertiary/10 text-tertiary{% else %}border border-primary/30 bg-primary/10 text-primary{% endif %}"
+                                    class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest {% if not item.has_lyrics %}hidden{% endif %} {% if item.lyrics_kind == 'json' %}border border-tertiary/30 bg-tertiary/10 text-tertiary{% elif item.lyrics_kind == 'cdg' %}border border-secondary/30 bg-secondary/10 text-secondary{% else %}border border-primary/30 bg-primary/10 text-primary{% endif %}"
                                 >
                                     {% if item.lyrics_kind == 'json' %}
                                     {{ t('media.lyrics_synced') }}
+                                    {% elif item.lyrics_kind == 'cdg' %}
+                                    {{ t('media.lyrics_cdg') }}
                                     {% else %}
                                     {{ t('media.lyrics_plain') }}
                                     {% endif %}
@@ -393,10 +395,12 @@
                                         <span class="rounded-full border border-secondary/30 bg-secondary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-secondary {% if not item.has_multi_track %}hidden{% endif %}">{{ t('common.multi_track') }}</span>
                                         <span
                                             data-lyrics-chip="media"
-                                            class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest {% if not item.has_lyrics %}hidden{% endif %} {% if item.lyrics_kind == 'json' %}border border-tertiary/30 bg-tertiary/10 text-tertiary{% else %}border border-primary/30 bg-primary/10 text-primary{% endif %}"
+                                            class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest {% if not item.has_lyrics %}hidden{% endif %} {% if item.lyrics_kind == 'json' %}border border-tertiary/30 bg-tertiary/10 text-tertiary{% elif item.lyrics_kind == 'cdg' %}border border-secondary/30 bg-secondary/10 text-secondary{% else %}border border-primary/30 bg-primary/10 text-primary{% endif %}"
                                         >
                                             {% if item.lyrics_kind == 'json' %}
                                             {{ t('media.lyrics_synced') }}
+                                            {% elif item.lyrics_kind == 'cdg' %}
+                                            {{ t('media.lyrics_cdg') }}
                                             {% else %}
                                             {{ t('media.lyrics_plain') }}
                                             {% endif %}
@@ -711,7 +715,7 @@
                                         </button>
                                         <a id="media-edit-lyrics-google-btn" href="https://www.google.com/search?q=lyrics" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 rounded-full bg-tertiary/20 px-3 py-1.5 text-[10px] font-bold text-tertiary transition-all hover:bg-tertiary/30 active:scale-95">
                                             <span class="material-symbols-outlined text-sm">open_in_new</span>
-                                            Google
+                                            {{ t('lyrics.google') }}
                                         </a>
                                         <button type="button" id="media-edit-lyrics-upload-btn" class="inline-flex items-center gap-1 rounded-full bg-primary/20 px-3 py-1.5 text-[10px] font-bold text-primary transition-all hover:bg-primary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
                                             <span class="material-symbols-outlined text-sm">upload_file</span>
