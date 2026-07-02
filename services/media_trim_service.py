@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import threading
 import uuid
 from datetime import timedelta
@@ -308,6 +309,10 @@ class MediaTrimService:
         end: float,
     ) -> None:
         suffix = source.suffix.lower()
+        if suffix == ".cdg":
+            shutil.copy2(source, output)
+            return
+
         text = source.read_text(encoding="utf-8")
         if suffix == ".lrc":
             shifted = self._shift_lrc(text, start, end)

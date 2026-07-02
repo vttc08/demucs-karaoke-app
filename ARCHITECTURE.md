@@ -88,6 +88,8 @@ This project currently uses two services:
 - Queue items store per-song WhisperX language overrides on `queue_items`; standalone media-library
   karaoke/alignment tasks store per-task overrides on `processing_tasks` so `/upload` and `/media`
   can apply one-off language choices without changing `/settings` defaults.
+- Legacy MP3+G support stays sidecar-based: adjacent `.cdg` files are discovered as lyrics, stored in
+  `lyrics_path`, and rendered client-side on `/stage` without adding a backend video transcode path.
 
 ## Real-time queue update architecture
 
@@ -171,6 +173,8 @@ The stage page uses a websocket-first model:
   and includes it in low-frequency `stage_state_update` broadcasts.
 - Playback clock fan-out uses a dedicated `stage_time_update` event instead of reusing
   `stage_state_update` for every timer tick.
+- Lyrics sidecar repair includes legacy `.cdg` graphics files so MP3+G items continue to behave like
+  karaoke lyrics during scans, queue responses, and stage playback.
 - Queue REST routes broadcast immediate state changes:
   - `queue_item_added`
   - `queue_item_updated` for admin reorders and status refreshes

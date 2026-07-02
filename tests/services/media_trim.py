@@ -143,7 +143,7 @@ def test_trim_media_item_replaces_media_vocals_and_lyrics_together(
         service.thumbnail_service, "ensure_thumbnail_for_media_file", lambda _path: None
     )
 
-    result = service.trim_media_item(db_session, media.id, 6.0, 18.0)
+    result = service.trim_media_item(db_session, media.id, 5.0, 20.0)
 
     assert result["resolved_start"] == 5.0
     assert result["resolved_end"] == 20.0
@@ -158,6 +158,45 @@ def test_trim_media_item_replaces_media_vocals_and_lyrics_together(
     db_session.refresh(media)
     assert media.updated_at >= previous_updated_at
     assert not list(media_root.glob(".*.trim-*"))
+
+
+def test_trim_media_item_copies_cdg_sidecars_without_reencoding(
+    db_session, tmp_path, monkeypatch
+):
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", tmp_path / "cache")
+
+    media_file = media_root / "song.mp3"
+    cdg_file = media_root / "song.cdg"
+    media_file.write_bytes(b"audio")
+    cdg_file.write_bytes(b"cdg-bytes")
+    media = MediaItem(
+        title="Song",
+        artist="Artist",
+        media_path="/media/song.mp3",
+        lyrics_path="/media/song.cdg",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    fake_ffmpeg = FakeFFmpeg()
+    service = MediaTrimService(ffmpeg=fake_ffmpeg)
+    monkeypatch.setattr(
+        service.thumbnail_service, "remove_thumbnail_for_media_file", lambda _path: None
+    )
+    monkeypatch.setattr(
+        service.thumbnail_service, "ensure_thumbnail_for_media_file", lambda _path: None
+    )
+
+    result = service.trim_media_item(db_session, media.id, 5.0, 20.0)
+
+    assert result["trimmed_sidecars"] == ["lyrics"]
+    assert cdg_file.read_bytes() == b"cdg-bytes"
+    assert len(fake_ffmpeg.trim_calls) == 1
 
 
 def test_trim_rejects_media_that_is_currently_playing(

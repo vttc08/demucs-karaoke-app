@@ -110,6 +110,42 @@ def test_media_library_sync_service_scans_one_item_sidecars(db_session, tmp_path
     finally:
         settings.media_path = original_media
 
+def test_media_library_sync_service_scans_one_item_cdg_sidecar(db_session, tmp_path, monkeypatch):
+    """Single-item scans should treat adjacent CDG graphics as a lyrics sidecar."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "cdg-item.mp3"
+        cdg_file = settings.media_path / "cdg-item.cdg"
+        media_file.write_text("audio", encoding="utf-8")
+        cdg_file.write_bytes(b"cdg-bytes")
+
+        media = MediaItem(
+            title="CDG Item",
+            media_path="/media/cdg-item.mp3",
+            missing=True,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibrarySyncService()
+        monkeypatch.setattr(
+            service.thumbnail_service,
+            "ensure_thumbnail_for_media_file",
+            lambda path: False,
+        )
+
+        summary = service.scan_media_item(db_session, media.id)
+
+        assert summary["scanned_files"] == 1
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.lyrics_path == "/media/cdg-item.cdg"
+    finally:
+        settings.media_path = original_media
+
 def test_media_library_sync_service_detects_json_lyrics_sidecar(db_session, tmp_path, monkeypatch):
     """Single-item scans should treat adjacent JSON lyrics as a valid sidecar."""
     original_media = settings.media_path
@@ -222,6 +258,7 @@ def test_media_library_sync_service_skips_sidecars_as_primary_media(db_session, 
 
         (settings.media_path / "track.vocals.mp3").write_text("vocals", encoding="utf-8")
         (settings.media_path / "track.lrc").write_text("[00:00.00]line", encoding="utf-8")
+        (settings.media_path / "track.cdg").write_bytes(b"cdg")
 
         service = MediaLibrarySyncService()
         summary = service.scan_library(db_session)

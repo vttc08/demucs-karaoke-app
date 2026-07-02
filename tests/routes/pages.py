@@ -43,6 +43,30 @@ def test_get_current_item_empty(client):
     assert response.status_code == 200
     assert response.json() is None
 
+def test_get_current_item_includes_cdg_lyrics_path(client):
+    """Current item responses should preserve CDG lyrics sidecars."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "cdg-current-1", "title": "CDG Current", "is_karaoke": False},
+    ).json()
+
+    db = TestingSessionLocal()
+    try:
+        row = db.query(QueueItem).filter(QueueItem.id == created["id"]).first()
+        assert row is not None
+        assert row.media is not None
+        row.status = QueueStatus.PLAYING
+        row.media.lyrics_path = "/media/cdg-current.cdg"
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get("/api/queue/current")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload is not None
+    assert payload["lyrics_path"] == "/media/cdg-current.cdg"
+
 def test_get_next_item_empty(client):
     """Test getting next item when queue is empty."""
     response = client.get("/api/queue/next")
@@ -280,6 +304,7 @@ def test_stage_page_loads_for_admin(client):
     assert re.search(rb'id="stage-lyrics-overlay"[^>]*class="[^"]*\bhidden\b', response.content)
     assert b"stage-lyric-word--highlighted" in response.content
     assert b"/static/stage-lyrics.js" in response.content
+    assert b"let currentItem = INITIAL_CURRENT_ITEM;" in response.content
     assert b'aria-label="Fullscreen"' in response.content
 
 

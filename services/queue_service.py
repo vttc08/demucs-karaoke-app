@@ -15,7 +15,7 @@ from services.task_stream_service import task_stream_manager
 
 logger = logging.getLogger(__name__)
 _AUDIO_SUFFIXES = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm"}
-_LYRICS_SUFFIXES = {".json", ".lrc", ".srt", ".txt"}
+_LYRICS_SUFFIXES = {".json", ".lrc", ".srt", ".txt", ".cdg"}
 
 
 class QueueService:

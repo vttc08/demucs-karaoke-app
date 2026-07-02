@@ -100,6 +100,45 @@ def test_queue_service_prefers_adjacent_thumbnail_for_local_media(db_session, tm
     assert result.thumbnail == MediaThumbnailService.thumbnail_url_for_media_file(media_file)
     assert result.thumbnail == MediaThumbnailService.public_url_for_path(adjacent_thumb)
 
+def test_queue_service_treats_cdg_sidecars_as_lyrics(db_session, tmp_path, monkeypatch):
+    """Queue sidecar repair should keep adjacent CDG graphics attached as lyrics."""
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+
+    media_file = media_root / "karaoke-track.mp3"
+    cdg_file = media_root / "karaoke-track.cdg"
+    media_file.write_bytes(b"media")
+    cdg_file.write_bytes(b"cdg")
+
+    db_session.add(
+        MediaItem(
+            youtube_id=None,
+            title="Karaoke Track",
+            artist="Artist",
+            media_path="/media/karaoke-track.mp3",
+            lyrics_path="/media/karaoke-track.cdg",
+            missing=False,
+        )
+    )
+    db_session.commit()
+
+    service = QueueService()
+    row = db_session.query(MediaItem).filter(MediaItem.title == "Karaoke Track").first()
+    assert row is not None
+
+    vocals_path, lyrics_path = service._repair_sidecar_fields(
+        row.media_path,
+        row.vocals_path,
+        row.lyrics_path,
+    )
+
+    assert vocals_path is None
+    assert lyrics_path == "/media/karaoke-track.cdg"
+
 def test_queue_service_prefers_local_thumbnail_over_youtube_fallback(db_session, tmp_path, monkeypatch):
     """Queue responses should prefer local thumbnail sidecars over YouTube thumbs."""
     media_root = tmp_path / "media"

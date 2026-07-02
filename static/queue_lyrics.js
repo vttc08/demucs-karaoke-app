@@ -258,6 +258,10 @@ function setModeBadge(text = "") {
     modeBadge.classList.toggle("hidden", !text);
 }
 
+function isCdgLyricsPath(path) {
+    return String(path || "").toLowerCase().split("?")[0].endsWith(".cdg");
+}
+
 function getPlaybackSeconds() {
     if (paused) {
         return basePlaybackSeconds;
@@ -1021,6 +1025,14 @@ async function refreshCurrentItem() {
         }
         currentDisplaySource = null;
         renderNoLyricsState(null);
+        return;
+    }
+
+    if (isCdgLyricsPath(currentItem?.lyrics_path)) {
+        currentDisplaySource = null;
+        seedLyricsManagerForCurrentItem(null);
+        renderNoLyricsState(currentItem);
+        initialLoadCompleted = true;
         return;
     }
 

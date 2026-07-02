@@ -146,6 +146,7 @@ and `/static/...`.
      - When the queue is empty, stage loops lobby media; when a song becomes playable, stage switches to it automatically and returns to lobby when queue drains
      - Responsive controls overlay: desktop adds a dedicated playback seek bar row, while mobile stays icon-first and moves detailed vocals volume adjustment to `/queue`
      - Toggle the lyrics overlay on or off while playback is running; vocal mix and lyrics visibility persist across song changes, and the centered karaoke-style overlay only appears in fullscreen so it does not block stage controls on mobile
+     - Legacy MP3+G/CDG sidecars discovered from the media library render directly in the browser canvas instead of going through the timed-text lyrics pipeline
      - Desktop stage also includes keyboard shortcuts, lyrics-style customization, and a help icon: `←`/`→` seek 5 seconds, `R` resync, `V` vocals, `L` lyrics, `Q` QR, `?` help; the help panel stays open until you close it explicitly
      - Lyrics style settings are stored in the browser for quick per-device JSON download/apply/upload and include CJK-safe font presets, size, color, outline, line-window, animation options, and optional fullscreen background image/video media from `/media/...`, including a crop-style fill for aligned karaoke cues; admins can also manage shared lyric presets from the stage panel, name each stage display locally, receive targeted preset changes from `/queue`, and toggle the background video off directly without going through preset override
      - New `/stage` tabs auto-name themselves from device/platform and screen size with a short local id suffix until you set a custom display name
@@ -177,6 +178,7 @@ and `/static/...`.
 5. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
           - Browse existing database-backed media entries in responsive card/table layouts
           - View title, artist, and capability badges (multi-track, lyrics)
+          - Legacy MP3+G/CDG sidecars are discovered as lyrics sidecars and stored in `lyrics_path`
           - Local thumbnails prefer an adjacent same-name image sidecar (`.png`, `.jpg`, `.jpeg`, or `.webp`)
           - Local audio files reuse embedded album art by writing a durable adjacent thumbnail sidecar when cover art is available
           - Use **Add to Queue** to enqueue a local media row through the existing queue API
