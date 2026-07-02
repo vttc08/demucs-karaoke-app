@@ -958,7 +958,7 @@
         background-repeat: no-repeat;
         background-size: cover;
         transform: scale(1.08);
-        filter: blur(18px) saturate(1.05);
+        filter: blur(8px) saturate(1.05);
         opacity: 0;
         transition: opacity 180ms ease;
     }
@@ -985,41 +985,6 @@
         inset: 0;
         background:
             linear-gradient(180deg, rgba(0, 0, 0, 0.58) 0%, rgba(0, 0, 0, 0.2) 32%, rgba(0, 0, 0, 0.72) 100%);
-    }
-
-    .stage-audio-plate {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: min(38vw, 24rem);
-        aspect-ratio: 1;
-        transform: translate(-50%, -50%);
-        border-radius: 1.5rem;
-        background: rgba(255, 255, 255, 0.08);
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-        overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        backdrop-filter: blur(10px);
-    }
-
-    .stage-audio-plate img {
-        display: block;
-        height: 100%;
-        width: 100%;
-        object-fit: cover;
-    }
-
-    .stage-audio-plate-placeholder {
-        display: flex;
-        height: 100%;
-        width: 100%;
-        align-items: center;
-        justify-content: center;
-        background:
-            linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(17, 24, 39, 0.65)),
-            rgba(0, 0, 0, 0.35);
-        color: rgba(255, 255, 255, 0.9);
-        font-size: clamp(3rem, 6vw, 5rem);
     }
 
     @media (min-width: 960px) {
@@ -1147,17 +1112,6 @@
                 <div id="stage-audio-cover-bg" class="stage-audio-cover{% if current_is_audio and current and current.thumbnail %} is-visible{% endif %}"{% if current_is_audio and current and current.thumbnail %} style="background-image: url('{{ current.thumbnail|public_url }}');"{% endif %}></div>
                 <div id="stage-audio-placeholder" class="stage-audio-placeholder{% if current_is_audio and (not current or not current.thumbnail) %} is-visible{% endif %}"></div>
                 <div class="stage-audio-vignette"></div>
-                <div class="stage-audio-plate">
-                    <img
-                        id="stage-audio-cover-img"
-                        class="{% if not current_is_audio or not current or not current.thumbnail %}hidden{% endif %}"
-                        src="{{ current.thumbnail|public_url if current_is_audio and current and current.thumbnail else '' }}"
-                        alt="{{ t('media.cover') }}"
-                    />
-                    <div id="stage-audio-cover-fallback" class="stage-audio-plate-placeholder{% if current_is_audio and current and current.thumbnail %} hidden{% endif %}">
-                        <span class="material-symbols-outlined">album</span>
-                    </div>
-                </div>
             </div>
             <video
                 id="stage-video-player"
