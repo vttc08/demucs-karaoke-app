@@ -33,18 +33,6 @@ logger = logging.getLogger(__name__)
 
 class RuntimeSettingsService:
     """Manage runtime-editable settings and apply them in-process."""
-
-    ALLOWED_FFMPEG_PRESETS = {
-        "ultrafast",
-        "superfast",
-        "veryfast",
-        "faster",
-        "fast",
-        "medium",
-        "slow",
-        "slower",
-        "veryslow",
-    }
     ALLOWED_DEMUCS_DEVICES = {"cuda", "cpu"}
     ALLOWED_DEMUCS_OUTPUT_FORMATS = {"wav", "mp3"}
     ALLOWED_PROXY_SCHEMES = {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
@@ -69,8 +57,6 @@ class RuntimeSettingsService:
         "whisperx_detect_language",
         "whisperx_use_synced_lyrics",
         "whisperx_preload_models",
-        "ffmpeg_preset",
-        "ffmpeg_crf",
         "ytdlp_path",
         "ytdlp_deno_path",
         "ytdlp_proxy_url",
@@ -243,8 +229,6 @@ class RuntimeSettingsService:
             whisperx_detect_language=settings.whisperx_detect_language,
             whisperx_use_synced_lyrics=settings.whisperx_use_synced_lyrics,
             whisperx_preload_models=settings.whisperx_preload_models,
-            ffmpeg_preset=settings.ffmpeg_preset,
-            ffmpeg_crf=settings.ffmpeg_crf,
             ytdlp_path=settings.ytdlp_path,
             ytdlp_deno_path=settings.ytdlp_deno_path,
             ytdlp_proxy_url=settings.ytdlp_proxy_url,
@@ -405,25 +389,6 @@ class RuntimeSettingsService:
             snapshot.setdefault("whisperx_preload_models", settings.whisperx_preload_models)
             settings.whisperx_preload_models = preload_models
             updated_fields.append("whisperx_preload_models")
-
-        if payload.ffmpeg_preset is not None:
-            preset = payload.ffmpeg_preset.strip().lower()
-            if preset not in self.ALLOWED_FFMPEG_PRESETS:
-                raise ValueError(
-                    "ffmpeg_preset must be one of: "
-                    + ", ".join(sorted(self.ALLOWED_FFMPEG_PRESETS))
-                )
-            snapshot.setdefault("ffmpeg_preset", settings.ffmpeg_preset)
-            settings.ffmpeg_preset = preset
-            updated_fields.append("ffmpeg_preset")
-
-        if payload.ffmpeg_crf is not None:
-            crf = payload.ffmpeg_crf
-            if crf < 0 or crf > 51:
-                raise ValueError("ffmpeg_crf must be between 0 and 51")
-            snapshot.setdefault("ffmpeg_crf", settings.ffmpeg_crf)
-            settings.ffmpeg_crf = crf
-            updated_fields.append("ffmpeg_crf")
 
         if payload.ytdlp_path is not None:
             ytdlp_input = payload.ytdlp_path.strip()
@@ -598,13 +563,6 @@ class RuntimeSettingsService:
             settings.whisperx_use_synced_lyrics = raw_value.lower() in {"1", "true", "yes", "on"}
         elif field_name == "whisperx_preload_models":
             settings.whisperx_preload_models = raw_value.strip()
-        elif field_name == "ffmpeg_preset":
-            preset = raw_value.strip().lower()
-            if preset not in self.ALLOWED_FFMPEG_PRESETS:
-                raise ValueError(f"Invalid persisted ffmpeg_preset: {raw_value}")
-            settings.ffmpeg_preset = preset
-        elif field_name == "ffmpeg_crf":
-            settings.ffmpeg_crf = int(raw_value)
         elif field_name == "ytdlp_path":
             settings.ytdlp_path = self._resolve_executable_path(raw_value.strip())
         elif field_name == "ytdlp_deno_path":

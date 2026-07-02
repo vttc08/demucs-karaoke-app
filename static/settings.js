@@ -60,8 +60,6 @@ const fields = {
     whisperx_detect_language: document.getElementById("whisperx_detect_language"),
     whisperx_use_synced_lyrics: document.getElementById("whisperx_use_synced_lyrics"),
     whisperx_preload_models: document.getElementById("whisperx_preload_models"),
-    ffmpeg_preset: document.getElementById("ffmpeg_preset"),
-    ffmpeg_crf: document.getElementById("ffmpeg_crf"),
     media_path: document.getElementById("media_path"),
     cache_path: document.getElementById("cache_path"),
     ytdlp_path: document.getElementById("ytdlp_path"),
@@ -574,8 +572,6 @@ function applySettingsToForm(data) {
     fields.whisperx_detect_language.checked = Boolean(data.whisperx_detect_language);
     fields.whisperx_use_synced_lyrics.checked = Boolean(data.whisperx_use_synced_lyrics);
     fields.whisperx_preload_models.value = data.whisperx_preload_models || "transcription=tiny,align=en";
-    fields.ffmpeg_preset.value = data.ffmpeg_preset || "veryfast";
-    fields.ffmpeg_crf.value = String(data.ffmpeg_crf ?? 23);
     fields.media_path.value = data.media_path || "";
     fields.cache_path.value = data.cache_path || "";
     fields.ytdlp_path.value = data.ytdlp_path || "";
@@ -649,8 +645,6 @@ async function saveSettings() {
         demucs_model: fields.demucs_model.value,
         demucs_device: fields.demucs_device.value,
         demucs_output_format: fields.demucs_output_format.value,
-        ffmpeg_preset: fields.ffmpeg_preset.value,
-        ffmpeg_crf: Number(fields.ffmpeg_crf.value),
         demucs_direct_media_max_mb: Number(fields.demucs_direct_media_max_mb.value),
         demucs_poll_interval_seconds: Number(fields.demucs_poll_interval_seconds.value),
         whisperx_transcription_model: fields.whisperx_transcription_model.value.trim(),

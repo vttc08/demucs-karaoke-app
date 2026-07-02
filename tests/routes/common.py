@@ -74,8 +74,6 @@ def client():
     original_whisperx_detect_language = settings.whisperx_detect_language
     original_whisperx_use_synced_lyrics = settings.whisperx_use_synced_lyrics
     original_whisperx_preload_models = settings.whisperx_preload_models
-    original_ffmpeg_preset = settings.ffmpeg_preset
-    original_ffmpeg_crf = settings.ffmpeg_crf
     original_ytdlp_path = settings.ytdlp_path
     original_ytdlp_deno_path = settings.ytdlp_deno_path
     original_ytdlp_proxy_url = settings.ytdlp_proxy_url
@@ -119,8 +117,6 @@ def client():
     settings.whisperx_detect_language = original_whisperx_detect_language
     settings.whisperx_use_synced_lyrics = original_whisperx_use_synced_lyrics
     settings.whisperx_preload_models = original_whisperx_preload_models
-    settings.ffmpeg_preset = original_ffmpeg_preset
-    settings.ffmpeg_crf = original_ffmpeg_crf
     settings.ytdlp_path = original_ytdlp_path
     settings.ytdlp_deno_path = original_ytdlp_deno_path
     settings.ytdlp_proxy_url = original_ytdlp_proxy_url

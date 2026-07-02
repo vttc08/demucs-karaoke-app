@@ -780,7 +780,7 @@ def test_whisperx_alignment_emits_progress_checkpoints(monkeypatch, tmp_path):
     assert events == [
         ("whisperx_loading_audio", 5, "indeterminate"),
         ("whisperx_loading_alignment_model", 30, "indeterminate"),
-        ("whisperx_aligning_lyrics", 0, "determinate"),
+        ("whisperx_aligning_lyrics", 50, "indeterminate"),
     ]
 
 

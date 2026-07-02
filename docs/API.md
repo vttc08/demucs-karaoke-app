@@ -1070,8 +1070,6 @@ endpoint reflects the latest saved UI configuration after the app has booted.
   "whisperx_detect_language": false,
   "whisperx_use_synced_lyrics": false,
   "whisperx_preload_models": "transcription=tiny,align=en",
-  "ffmpeg_preset": "superfast",
-  "ffmpeg_crf": 23,
   "concurrent_ytdlp_search_enabled": false,
   "lyrics_provider_netease_enabled": true,
   "lyrics_provider_lrclib_enabled": true,
@@ -1172,8 +1170,6 @@ and restarts when no explicit `.env` override is present.
   "whisperx_detect_language": false,
   "whisperx_use_synced_lyrics": false,
   "whisperx_preload_models": "transcription=tiny,align=en",
-  "ffmpeg_preset": "veryfast",
-  "ffmpeg_crf": 23,
   "concurrent_ytdlp_search_enabled": true,
   "lyrics_provider_netease_enabled": false,
   "lyrics_provider_lrclib_enabled": true,
@@ -1193,8 +1189,6 @@ and restarts when no explicit `.env` override is present.
 ```
 
 Validation:
-- `ffmpeg_preset` must be one of FFmpeg preset values (`ultrafast` ... `veryslow`)
-- `ffmpeg_crf` must be between `0` and `51`
 - `demucs_device` must be `cuda` or `cpu`
 - `demucs_output_format` must be `wav` or `mp3`
 - `demucs_mp3_bitrate` must be between `64` and `320`
