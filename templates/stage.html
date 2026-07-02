@@ -2576,6 +2576,7 @@ async function loadLyricsCues() {
         lyricsState.available = false;
         stageLyrics.setEnabled(false);
         updateLyricsUi();
+        syncStageBackgroundEligibility();
         return;
     }
 
@@ -2592,6 +2593,7 @@ async function loadLyricsCues() {
             lyricsState.available = false;
             stageLyrics.setEnabled(false);
             updateLyricsUi();
+            syncStageBackgroundEligibility();
             return;
         }
 
@@ -2604,6 +2606,7 @@ async function loadLyricsCues() {
         lyricsState.available = stageLyrics.hasCues();
         stageLyrics.setEnabled(lyricsState.available && lyricsState.enabled);
         updateLyricsUi();
+        syncStageBackgroundEligibility();
         updateLyricsForTime(getPrimaryCurrentTime());
     } catch (error) {
         if (requestId !== lyricsLoadRequestId || currentItemId !== itemId) {
@@ -2614,6 +2617,7 @@ async function loadLyricsCues() {
         lyricsState.available = false;
         stageLyrics.setEnabled(false);
         updateLyricsUi();
+        syncStageBackgroundEligibility();
     }
 }
 
@@ -2632,9 +2636,13 @@ function updateNowPlayingMeta(item) {
     nowPlayingBadge.textContent = item.is_karaoke ? t("app.karaoke") : t("app.original");
 }
 
+function syncStageBackgroundEligibility() {
+    stageLyrics.setBackgroundEligible(Boolean(hasCurrentQueueItem && lyricsState.available));
+}
+
 function updatePlaybackModeFlags(item) {
     hasCurrentQueueItem = Boolean(item && item.id);
-    stageLyrics.setBackgroundEligible(hasCurrentQueueItem);
+    syncStageBackgroundEligibility();
     if (video) {
         video.loop = !hasCurrentQueueItem;
     }
@@ -2679,6 +2687,7 @@ async function applyCurrentPlaybackItem(item) {
     currentItemId = nextItemId;
     currentPrimaryKind = nextMediaKind;
     currentPrimarySrc = nextMediaSrc;
+    lyricsState.available = false;
     updatePlaybackModeFlags(item);
     updateNowPlayingMeta(item);
     updateAudioArtwork(item);
