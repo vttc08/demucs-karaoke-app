@@ -1122,7 +1122,6 @@ def test_runtime_settings_load_persisted_settings_applies_db_values(db_session):
                 RuntimeSetting(key="stage_qr_url", value="https://karaoke.test/stage"),
                 RuntimeSetting(key="stage_lobby_media_path", value="/media/stage-lobby.mp4"),
                 RuntimeSetting(key="stage_vocals_volume_default", value="0.35"),
-                RuntimeSetting(key="ffmpeg_preset", value="veryslow"),
                 RuntimeSetting(key="ytdlp_video_resolution", value="720"),
                 RuntimeSetting(key="ytdlp_video_codec", value="avc"),
                 RuntimeSetting(key="ytdlp_deno_path", value="/opt/deno/bin/deno"),

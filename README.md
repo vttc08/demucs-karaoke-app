@@ -61,10 +61,6 @@ Set `KARAOKE_BASE_PATH=/karaoke` only when a reverse proxy forwards requests wit
 preserved. Leave it empty to serve the app at `/`, which is the default and keeps existing local
 URLs unchanged.
 
-For faster karaoke rendering, tune:
-- `FFMPEG_PRESET` (default `veryfast`; faster options include `superfast`, `ultrafast`)
-- `FFMPEG_CRF` (default `23`; higher is faster/smaller but lower quality)
-
 6. **Initialize database**:
 Database is created automatically on first run.
 
@@ -161,7 +157,7 @@ and `/static/...`.
        - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
        - View current runtime settings
        - Log out of the active admin session from the settings page
-       - Update Demucs URL, direct-media cutoff, Demucs fallback poll interval, FFmpeg preset/CRF, media/cache paths, tool paths, outbound proxy URL, and WhisperX alignment defaults
+       - Update Demucs URL, direct-media cutoff, Demucs fallback poll interval, media/cache paths, tool paths, outbound proxy URL, and WhisperX alignment defaults
        - Optionally set a Demucs API key for WAN or CG-NAT deployments; when blank, the service stays open as before
        - Check the configured proxy egress IP, org, and city/country from the backend using `ipinfo.io/json`
        - Enable/disable concurrent yt-dlp search mode

@@ -21,8 +21,6 @@ def test_get_runtime_settings(client):
     assert "whisperx_detect_language" in data
     assert "whisperx_use_synced_lyrics" in data
     assert "whisperx_preload_models" in data
-    assert "ffmpeg_preset" in data
-    assert "ffmpeg_crf" in data
     assert "ytdlp_path" in data
     assert "ytdlp_deno_path" in data
     assert "ytdlp_proxy_url" in data
@@ -127,8 +125,6 @@ def test_update_runtime_settings(client):
             "whisperx_detect_language": True,
             "whisperx_use_synced_lyrics": True,
             "whisperx_preload_models": "transcription=tiny,align=en,align=zh",
-            "ffmpeg_preset": "superfast",
-            "ffmpeg_crf": 28,
             "media_path": "/tmp/karaoke_media_test",
             "cache_path": "/tmp/karaoke_cache_test",
             "ytdlp_path": "yt-dlp",
@@ -161,8 +157,6 @@ def test_update_runtime_settings(client):
     assert data["whisperx_detect_language"] is True
     assert data["whisperx_use_synced_lyrics"] is True
     assert data["whisperx_preload_models"] == "transcription=tiny,align=en,align=zh"
-    assert data["ffmpeg_preset"] == "superfast"
-    assert data["ffmpeg_crf"] == 28
     assert data["media_path"] == "/tmp/karaoke_media_test"
     assert data["cache_path"] == "/tmp/karaoke_cache_test"
     assert data["ytdlp_deno_path"] == "/usr/local/bin/deno"
@@ -480,13 +474,6 @@ def test_trigger_demucs_gc(client):
     data = response.json()
     assert data["executed_mode"] == "full"
     assert data["running_job_count"] == 0
-
-def test_update_runtime_settings_rejects_invalid_crf(client):
-    """Runtime settings endpoint should validate ffmpeg_crf."""
-    authenticate_admin_client(client)
-    response = client.patch("/api/settings/", json={"ffmpeg_crf": 60})
-    assert response.status_code == 400
-    assert "ffmpeg_crf" in response.json()["detail"]
 
 def test_update_runtime_settings_rejects_invalid_ytdlp_resolution(client):
     """Runtime settings endpoint should validate yt-dlp video resolution caps."""

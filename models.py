@@ -464,8 +464,6 @@ class RuntimeSettingsResponse(BaseModel):
     whisperx_detect_language: bool
     whisperx_use_synced_lyrics: bool
     whisperx_preload_models: str | None
-    ffmpeg_preset: str
-    ffmpeg_crf: int
     ytdlp_path: str
     ytdlp_deno_path: str
     ytdlp_proxy_url: str
@@ -499,8 +497,6 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     whisperx_detect_language: Optional[bool] = None
     whisperx_use_synced_lyrics: Optional[bool] = None
     whisperx_preload_models: Optional[str] = None
-    ffmpeg_preset: Optional[str] = None
-    ffmpeg_crf: Optional[int] = None
     ytdlp_path: Optional[str] = None
     ytdlp_deno_path: Optional[str] = None
     ytdlp_proxy_url: Optional[str] = None

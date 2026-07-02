@@ -529,8 +529,6 @@ This is applied at command build time, so new operations use updated proxy setti
   - `demucs_device`
   - `demucs_output_format`
   - `demucs_mp3_bitrate`
-  - `ffmpeg_preset`
-  - `ffmpeg_crf`
   - `whisperx_transcription_model`
   - `whisperx_align_language`
   - `whisperx_detect_language`

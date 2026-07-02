@@ -97,8 +97,6 @@ class Settings(BaseSettings):
     lyrics_provider_lrclib_enabled: bool = True
     lyrics_provider_custom_paths: str = ""
     ffmpeg_path: str = "ffmpeg"
-    ffmpeg_preset: str = "veryfast"
-    ffmpeg_crf: int = 23
     ffmpeg_audio_codec: str = ""
 
     # Logging
