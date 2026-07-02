@@ -38,6 +38,13 @@ env/
 .mcp.json
 .codex/
 .wrangler/
+.impeccable.md
+.playwright/
+.claude
+.agents
+.github/agents/
+.github/hooks/
+.github/skills/
 
 # Database
 *.db
@@ -69,3 +76,4 @@ Thumbs.db
 .artifacts/
 static/docs/
 docs-site/site/
+

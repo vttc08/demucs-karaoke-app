@@ -484,7 +484,7 @@ ffmpeg -version
 `ffmpeg` is still required for karaoke media extraction/remux operations.
 
 ### Demucs service not available
-Karaoke mode requires Demucs service running. Configure `DEMUCS_API_URL` for the main app and `UPSTREAM_DEMUCS_API_URL` for the stub in `.env`.
+Karaoke mode requires Demucs service running. Configure `DEMUCS_API_URL` for the main app.
 If you expose `demucs_svc` outside a trusted LAN, set the same optional `DEMUCS_API_KEY` on both
 the main app and the Demucs service so requests carry `X-API-Key`.
 
@@ -513,8 +513,6 @@ fi
 curl "${auth_header[@]}" http://10.10.120.191:8001/health
 curl "${auth_header[@]}" http://10.10.120.191:8001/metrics
 ```
-
-If you run the local stub proxy on `localhost:8002`, keep `DEMUCS_API_URL=http://localhost:8002` for the main app and set `UPSTREAM_DEMUCS_API_URL=http://10.10.120.191:8001` for the stub.
 
 ## License
 
