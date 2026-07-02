@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     ytdlp_deno_path: str = ""
     ytdlp_proxy_url: str = ""
     ytdlp_video_resolution: str = "default"
+    ytdlp_video_codec: str = ""
     concurrent_ytdlp_search_enabled: bool = False
     lyrics_provider_netease_enabled: bool = True
     lyrics_provider_lrclib_enabled: bool = True
@@ -98,6 +99,7 @@ class Settings(BaseSettings):
     ffmpeg_path: str = "ffmpeg"
     ffmpeg_preset: str = "veryfast"
     ffmpeg_crf: int = 23
+    ffmpeg_audio_codec: str = ""
 
     # Logging
     log_level: str = "INFO"

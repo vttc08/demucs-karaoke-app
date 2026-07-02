@@ -746,6 +746,7 @@ class KaraokeService:
                         video_path=video_path,
                         audio_path=no_vocals_path,
                         output_path=output_path,
+                        audio_codec=settings.ffmpeg_audio_codec,
                     )
                 )
             else:
@@ -754,6 +755,7 @@ class KaraokeService:
                         video_path=video_path,
                         audio_path=no_vocals_path,
                         output_path=output_path,
+                        audio_codec=settings.ffmpeg_audio_codec,
                         cancel_event=cancel_event,
                     )
                 )

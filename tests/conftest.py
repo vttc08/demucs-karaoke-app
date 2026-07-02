@@ -15,9 +15,14 @@ def fast_websocket_heartbeat():
     from config import settings
 
     original_interval = settings.ws_heartbeat_interval
+    original_ytdlp_video_codec = settings.ytdlp_video_codec
+    original_ffmpeg_audio_codec = settings.ffmpeg_audio_codec
     settings.ws_heartbeat_interval = 1
+    settings.ytdlp_video_codec = ""
+    settings.ffmpeg_audio_codec = ""
     try:
         yield
     finally:
         settings.ws_heartbeat_interval = original_interval
-
+        settings.ytdlp_video_codec = original_ytdlp_video_codec
+        settings.ffmpeg_audio_codec = original_ffmpeg_audio_codec

@@ -260,6 +260,8 @@ def test_stage_page_loads_for_admin(client):
     assert b'stage-control-label' in response.content
     assert b'id="stage-playbar-slider"' in response.content
     assert b'stage-vocals-volume-slider' in response.content
+    assert b'id="stage-ios-vocals-warning"' in response.content
+    assert b'Guide vocals disabled on iPhone/iPad' in response.content
     assert b'stage-fullscreen-button' in response.content
     assert b'id="stage-shortcuts-btn"' in response.content
     assert b'id="stage-shortcuts-panel"' in response.content
@@ -374,6 +376,8 @@ def test_settings_page_loads_for_admin(client):
     assert b">Refresh<" in response.content
     assert 'href="/help/"' in response.text
     assert 'aria-label="Open documentation"' in response.text
+    assert 'id="ytdlp_video_codec"' in response.text
+    assert 'id="ffmpeg_audio_codec"' in response.text
     assert b"Admin Access" not in response.content
     assert 'aria-label="Settings"' in response.text
     assert 'aria-label="Media"' in response.text

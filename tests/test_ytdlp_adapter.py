@@ -130,6 +130,95 @@ def test_download_video_applies_resolution_cap(monkeypatch, tmp_path):
     assert "res:720" in calls[0]
 
 
+def test_download_video_with_progress_prefers_avc1_only_video_streams(monkeypatch, tmp_path):
+    """Streaming video downloads should honor the avc1-only codec setting too."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "avc-progress123"
+    expected_output = tmp_path / f"{youtube_id}.mp4"
+    calls = []
+    original_video_codec = settings.ytdlp_video_codec
+    settings.ytdlp_video_codec = "avc"
+
+    def fake_streaming_download(
+        cmd,
+        *,
+        progress_callback=None,
+        log_callback=None,
+        cancel_event=None,
+    ):
+        calls.append(cmd)
+        expected_output.write_bytes(b"video")
+        if progress_callback:
+            progress_callback(42, "[download] 42.0%")
+
+    monkeypatch.setattr(adapter, "_run_streaming_download", fake_streaming_download)
+    try:
+        result = adapter.download_video_with_progress(
+            youtube_id,
+            tmp_path,
+            progress_callback=lambda percent, line: None,
+        )
+    finally:
+        settings.ytdlp_video_codec = original_video_codec
+
+    assert result == expected_output
+    assert "bestvideo[vcodec^=avc1]" in calls[0]
+    assert all("bestvideo/best" not in call for call in calls)
+
+
+def test_download_video_prefers_avc1_only_video_streams(monkeypatch, tmp_path):
+    """Video downloads should restrict the selected stream to avc1 when configured."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "avc-video123"
+    expected_output = tmp_path / f"{youtube_id}.mp4"
+    calls = []
+    original_video_codec = settings.ytdlp_video_codec
+    settings.ytdlp_video_codec = "avc"
+
+    def fake_run(cmd, check, capture_output, timeout):
+        calls.append(cmd)
+        expected_output.write_bytes(b"video")
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    try:
+        result = adapter.download_video(youtube_id, tmp_path)
+    finally:
+        settings.ytdlp_video_codec = original_video_codec
+
+    assert result == expected_output
+    assert any("-f" in call for call in calls)
+    assert "bestvideo[vcodec^=avc1]" in calls[0]
+
+
+def test_download_video_with_audio_prefers_avc1_only_progressive_streams(
+    monkeypatch,
+    tmp_path,
+):
+    """Progressive downloads should stay on avc1 when the compatibility toggle is enabled."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "avc-prog123"
+    expected_output = tmp_path / f"{youtube_id}.mp4"
+    calls = []
+    original_video_codec = settings.ytdlp_video_codec
+    settings.ytdlp_video_codec = "avc"
+
+    def fake_run(cmd, check, capture_output, timeout):
+        calls.append(cmd)
+        expected_output.write_bytes(b"video-audio")
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    try:
+        result = adapter.download_video_with_audio(youtube_id, tmp_path)
+    finally:
+        settings.ytdlp_video_codec = original_video_codec
+
+    assert result == expected_output
+    assert "best[ext=mp4][vcodec^=avc1]" in calls[0]
+    assert all("best[ext=mp4]/best" not in call for call in calls)
+
+
 def test_download_audio_ignores_video_resolution_cap(monkeypatch, tmp_path):
     """Audio downloads should not inherit the video resolution cap."""
     adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")

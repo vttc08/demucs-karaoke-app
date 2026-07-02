@@ -55,6 +55,43 @@ class YtDlpAdapter:
             return []
         return ["-S", f"res:{resolution}"]
 
+    @staticmethod
+    def _prefer_avc1_video_codec() -> bool:
+        """Return whether downloads should be constrained to avc1 video streams."""
+        return (settings.ytdlp_video_codec or "").strip().lower() == "avc"
+
+    @classmethod
+    def _video_download_attempts(
+        cls,
+        *,
+        with_audio: bool,
+    ) -> List[Tuple[Optional[str], Optional[str], bool, bool]]:
+        """Return yt-dlp format fallbacks for the current codec policy."""
+        if cls._prefer_avc1_video_codec():
+            if with_audio:
+                return [
+                    ("best[ext=mp4][vcodec^=avc1]", None, False, False),
+                    ("best[ext=mp4][vcodec^=avc1]", "web", False, True),
+                ]
+            return [
+                ("bestvideo[vcodec^=avc1]", None, False, False),
+                ("bestvideo[vcodec^=avc1]", "web", False, True),
+            ]
+
+        if with_audio:
+            return [
+                (None, None, False, False),
+                ("best[ext=mp4]/best", "web", False, True),
+                ("best", "web", False, True),
+            ]
+
+        return [
+            (None, None, False, False),
+            ("bestvideo/best", None, False, False),
+            ("bestvideo[ext=mp4]/best[ext=mp4]/bestvideo/best", "web", False, True),
+            ("bestvideo/best", "web", False, True),
+        ]
+
     def search(self, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
         """
         Search YouTube for videos.
@@ -304,18 +341,12 @@ class YtDlpAdapter:
 
         Returns:
             Path to downloaded video file
-            
+
         Raises:
             RuntimeError: If download fails
         """
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
-        # Karaoke flow only needs a video track; avoid merge-heavy selectors.
-        attempts = [
-            (None, None, False, False),
-            ("bestvideo/best", None, False, False),
-            ("bestvideo[ext=mp4]/best[ext=mp4]/bestvideo/best", "web", False, True),
-            ("bestvideo/best", "web", False, True),
-        ]
+        attempts = self._video_download_attempts(with_audio=False)
         return self._download_with_attempts(
             youtube_id=youtube_id,
             output_dir=output_dir,
@@ -338,12 +369,7 @@ class YtDlpAdapter:
     ) -> Path:
         """Download video while streaming progress and log lines."""
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
-        attempts = [
-            (None, None, False, False),
-            ("bestvideo/best", None, False, False),
-            ("bestvideo[ext=mp4]/best[ext=mp4]/bestvideo/best", "web", False, True),
-            ("bestvideo/best", "web", False, True),
-        ]
+        attempts = self._video_download_attempts(with_audio=False)
         return self._download_with_attempts(
             youtube_id=youtube_id,
             output_dir=output_dir,
@@ -378,11 +404,7 @@ class YtDlpAdapter:
             RuntimeError: If download fails
         """
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
-        attempts = [
-            (None, None, False, False),
-            ("best[ext=mp4]/best", "web", False, True),
-            ("best", "web", False, True),
-        ]
+        attempts = self._video_download_attempts(with_audio=True)
         return self._download_with_attempts(
             youtube_id=youtube_id,
             output_dir=output_dir,
@@ -405,11 +427,7 @@ class YtDlpAdapter:
     ) -> Path:
         """Download progressive video while streaming progress and log lines."""
         output_template = str(output_dir / f"{youtube_id}.%(ext)s")
-        attempts = [
-            (None, None, False, False),
-            ("best[ext=mp4]/best", "web", False, True),
-            ("best", "web", False, True),
-        ]
+        attempts = self._video_download_attempts(with_audio=True)
         return self._download_with_attempts(
             youtube_id=youtube_id,
             output_dir=output_dir,

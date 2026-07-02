@@ -68,10 +68,12 @@ const fields = {
     ytdlp_deno_path: document.getElementById("ytdlp_deno_path"),
     ytdlp_proxy_url: document.getElementById("ytdlp_proxy_url"),
     ytdlp_video_resolution: document.getElementById("ytdlp_video_resolution"),
+    ytdlp_video_codec: document.getElementById("ytdlp_video_codec"),
     concurrent_ytdlp_search_enabled: document.getElementById("concurrent_ytdlp_search_enabled"),
     lyrics_provider_netease_enabled: document.getElementById("lyrics_provider_netease_enabled"),
     lyrics_provider_lrclib_enabled: document.getElementById("lyrics_provider_lrclib_enabled"),
     ffmpeg_path: document.getElementById("ffmpeg_path"),
+    ffmpeg_audio_codec: document.getElementById("ffmpeg_audio_codec"),
     stage_qr_url: document.getElementById("stage_qr_url"),
     stage_lobby_media_path: document.getElementById("stage_lobby_media_path"),
     stage_vocals_volume_default: document.getElementById("stage_vocals_volume_default"),
@@ -580,10 +582,12 @@ function applySettingsToForm(data) {
     fields.ytdlp_deno_path.value = data.ytdlp_deno_path || "";
     fields.ytdlp_proxy_url.value = data.ytdlp_proxy_url || "";
     fields.ytdlp_video_resolution.value = data.ytdlp_video_resolution || "default";
+    fields.ytdlp_video_codec.value = data.ytdlp_video_codec || "";
     fields.concurrent_ytdlp_search_enabled.checked = Boolean(data.concurrent_ytdlp_search_enabled);
     fields.lyrics_provider_netease_enabled.checked = Boolean(data.lyrics_provider_netease_enabled ?? true);
     fields.lyrics_provider_lrclib_enabled.checked = Boolean(data.lyrics_provider_lrclib_enabled ?? true);
     fields.ffmpeg_path.value = data.ffmpeg_path || "";
+    fields.ffmpeg_audio_codec.value = data.ffmpeg_audio_codec || "";
     if (fields.stage_qr_url) {
         fields.stage_qr_url.value = data.stage_qr_url || "";
     }
@@ -660,10 +664,12 @@ async function saveSettings() {
         ytdlp_deno_path: fields.ytdlp_deno_path.value.trim(),
         ytdlp_proxy_url: fields.ytdlp_proxy_url.value.trim(),
         ytdlp_video_resolution: fields.ytdlp_video_resolution.value,
+        ytdlp_video_codec: fields.ytdlp_video_codec.value.trim(),
         concurrent_ytdlp_search_enabled: fields.concurrent_ytdlp_search_enabled.checked,
         lyrics_provider_netease_enabled: fields.lyrics_provider_netease_enabled.checked,
         lyrics_provider_lrclib_enabled: fields.lyrics_provider_lrclib_enabled.checked,
         ffmpeg_path: fields.ffmpeg_path.value.trim(),
+        ffmpeg_audio_codec: fields.ffmpeg_audio_codec.value.trim(),
         stage_qr_url: fields.stage_qr_url ? fields.stage_qr_url.value.trim() : "",
         stage_lobby_media_path: fields.stage_lobby_media_path ? fields.stage_lobby_media_path.value.trim() : "",
         stage_vocals_volume_default: fields.stage_vocals_volume_default

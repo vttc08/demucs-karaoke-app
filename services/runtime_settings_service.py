@@ -49,6 +49,8 @@ class RuntimeSettingsService:
     ALLOWED_DEMUCS_OUTPUT_FORMATS = {"wav", "mp3"}
     ALLOWED_PROXY_SCHEMES = {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
     ALLOWED_YTDLP_VIDEO_RESOLUTIONS = {"default", "360", "480", "720", "1080", "2160"}
+    ALLOWED_YTDLP_VIDEO_CODECS = {"", "avc"}
+    ALLOWED_FFMPEG_AUDIO_CODECS = {"", "aac"}
     DEMUCS_DIRECT_MEDIA_MAX_MB_RANGE = (0, 5000)
     DEMUCS_POLL_INTERVAL_SECONDS_RANGE = (0.25, 10.0)
     PROXY_INFO_TIMEOUT_SECONDS = 10.0
@@ -73,10 +75,12 @@ class RuntimeSettingsService:
         "ytdlp_deno_path",
         "ytdlp_proxy_url",
         "ytdlp_video_resolution",
+        "ytdlp_video_codec",
         "concurrent_ytdlp_search_enabled",
         "lyrics_provider_netease_enabled",
         "lyrics_provider_lrclib_enabled",
         "ffmpeg_path",
+        "ffmpeg_audio_codec",
         "media_path",
         "cache_path",
         "stage_qr_url",
@@ -245,10 +249,12 @@ class RuntimeSettingsService:
             ytdlp_deno_path=settings.ytdlp_deno_path,
             ytdlp_proxy_url=settings.ytdlp_proxy_url,
             ytdlp_video_resolution=settings.ytdlp_video_resolution,
+            ytdlp_video_codec=settings.ytdlp_video_codec,
             concurrent_ytdlp_search_enabled=settings.concurrent_ytdlp_search_enabled,
             lyrics_provider_netease_enabled=settings.lyrics_provider_netease_enabled,
             lyrics_provider_lrclib_enabled=settings.lyrics_provider_lrclib_enabled,
             ffmpeg_path=settings.ffmpeg_path,
+            ffmpeg_audio_codec=settings.ffmpeg_audio_codec,
             media_path=str(settings.media_path),
             cache_path=str(settings.cache_path),
             stage_qr_url=settings.stage_qr_url,
@@ -449,6 +455,17 @@ class RuntimeSettingsService:
             settings.ytdlp_video_resolution = resolution
             updated_fields.append("ytdlp_video_resolution")
 
+        if payload.ytdlp_video_codec is not None:
+            video_codec = payload.ytdlp_video_codec.strip().lower()
+            if video_codec not in self.ALLOWED_YTDLP_VIDEO_CODECS:
+                raise ValueError(
+                    "ytdlp_video_codec must be blank or one of: "
+                    + ", ".join(sorted(value for value in self.ALLOWED_YTDLP_VIDEO_CODECS if value))
+                )
+            snapshot.setdefault("ytdlp_video_codec", settings.ytdlp_video_codec)
+            settings.ytdlp_video_codec = video_codec
+            updated_fields.append("ytdlp_video_codec")
+
         if payload.concurrent_ytdlp_search_enabled is not None:
             snapshot.setdefault(
                 "concurrent_ytdlp_search_enabled", settings.concurrent_ytdlp_search_enabled
@@ -477,6 +494,17 @@ class RuntimeSettingsService:
             snapshot.setdefault("ffmpeg_path", settings.ffmpeg_path)
             settings.ffmpeg_path = self._resolve_executable_path(ffmpeg_input)
             updated_fields.append("ffmpeg_path")
+
+        if payload.ffmpeg_audio_codec is not None:
+            audio_codec = payload.ffmpeg_audio_codec.strip().lower()
+            if audio_codec not in self.ALLOWED_FFMPEG_AUDIO_CODECS:
+                raise ValueError(
+                    "ffmpeg_audio_codec must be blank or one of: "
+                    + ", ".join(sorted(value for value in self.ALLOWED_FFMPEG_AUDIO_CODECS if value))
+                )
+            snapshot.setdefault("ffmpeg_audio_codec", settings.ffmpeg_audio_codec)
+            settings.ffmpeg_audio_codec = audio_codec
+            updated_fields.append("ffmpeg_audio_codec")
 
         if payload.media_path is not None:
             media_path_input = payload.media_path.strip()
@@ -588,6 +616,11 @@ class RuntimeSettingsService:
             if resolution not in self.ALLOWED_YTDLP_VIDEO_RESOLUTIONS:
                 raise ValueError(f"Invalid persisted ytdlp_video_resolution: {raw_value}")
             settings.ytdlp_video_resolution = resolution
+        elif field_name == "ytdlp_video_codec":
+            video_codec = raw_value.strip().lower()
+            if video_codec not in self.ALLOWED_YTDLP_VIDEO_CODECS:
+                raise ValueError(f"Invalid persisted ytdlp_video_codec: {raw_value}")
+            settings.ytdlp_video_codec = video_codec
         elif field_name == "concurrent_ytdlp_search_enabled":
             settings.concurrent_ytdlp_search_enabled = raw_value.lower() in {"1", "true", "yes", "on"}
         elif field_name == "lyrics_provider_netease_enabled":
@@ -606,6 +639,11 @@ class RuntimeSettingsService:
             }
         elif field_name == "ffmpeg_path":
             settings.ffmpeg_path = self._resolve_executable_path(raw_value.strip())
+        elif field_name == "ffmpeg_audio_codec":
+            audio_codec = raw_value.strip().lower()
+            if audio_codec not in self.ALLOWED_FFMPEG_AUDIO_CODECS:
+                raise ValueError(f"Invalid persisted ffmpeg_audio_codec: {raw_value}")
+            settings.ffmpeg_audio_codec = audio_codec
         elif field_name == "media_path":
             settings.media_path = Path(raw_value)
         elif field_name == "cache_path":

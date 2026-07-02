@@ -666,6 +666,78 @@
         z-index: 25;
     }
 
+    .stage-ios-vocals-warning {
+        position: absolute;
+        left: 50%;
+        top: 4.75rem;
+        z-index: 28;
+        width: min(34rem, calc(100vw - 2rem));
+        transform: translateX(-50%);
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 216, 79, 0.32);
+        background: rgba(14, 14, 14, 0.9);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.42);
+        padding: 0.9rem 1rem;
+        color: rgba(255, 248, 223, 0.96);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+    }
+
+    .stage-ios-vocals-warning.hidden {
+        display: none !important;
+    }
+
+    .stage-ios-vocals-warning-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 999px;
+        background: rgba(255, 216, 79, 0.14);
+        color: rgb(255, 216, 79);
+        flex: 0 0 auto;
+    }
+
+    .stage-ios-vocals-warning-content {
+        min-width: 0;
+        flex: 1 1 auto;
+        display: grid;
+        gap: 0.18rem;
+    }
+
+    .stage-ios-vocals-warning-title {
+        font-size: 0.92rem;
+        font-weight: 800;
+        color: rgba(255, 248, 223, 0.98);
+    }
+
+    .stage-ios-vocals-warning-text {
+        font-size: 0.82rem;
+        line-height: 1.35;
+        color: rgba(255, 248, 223, 0.76);
+    }
+
+    .stage-ios-vocals-warning-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.92);
+        flex: 0 0 auto;
+    }
+
+    .stage-ios-vocals-warning-close:hover {
+        background: rgba(255, 255, 255, 0.12);
+    }
+
     .stage-media:not(.is-fullscreen) .stage-lyrics-overlay {
         display: none !important;
     }
@@ -1105,8 +1177,8 @@
             >
                 <source src="{{ current.media_path|public_url if current_is_audio else '' }}">
             </audio>
-            <audio id="stage-vocals-player" preload="auto" crossorigin="anonymous">
-                <source src="{{ current.vocals_path|public_url if current and current.vocals_path else '' }}">
+            <audio id="stage-vocals-player" preload="{% if current and current.vocals_path and ('iPhone' in request.headers.get('user-agent', '') or 'iPad' in request.headers.get('user-agent', '')) %}none{% else %}auto{% endif %}" crossorigin="anonymous">
+                <source src="{{ current.vocals_path|public_url if current and current.vocals_path and ('iPhone' not in request.headers.get('user-agent', '') and 'iPad' not in request.headers.get('user-agent', '')) else '' }}">
             </audio>
 
             <div id="stage-lyrics-background" class="stage-lyrics-background" aria-hidden="true">
@@ -1137,6 +1209,23 @@
                         {{ t('app.karaoke') if current and current.is_karaoke else (t('app.original') if current else t('stage.lobby_badge')) }}
                     </span>
                 </div>
+            </div>
+
+            <div id="stage-ios-vocals-warning" class="stage-ios-vocals-warning hidden" role="alert" aria-live="polite">
+                <span class="stage-ios-vocals-warning-icon material-symbols-outlined text-base">warning</span>
+                <div class="stage-ios-vocals-warning-content">
+                    <div class="stage-ios-vocals-warning-title">{{ t('stage.ios_vocals_warning_title') }}</div>
+                    <div class="stage-ios-vocals-warning-text">{{ t('stage.ios_vocals_warning_detail') }}</div>
+                </div>
+                <button
+                    id="stage-ios-vocals-warning-close"
+                    type="button"
+                    class="stage-ios-vocals-warning-close"
+                    aria-label="{{ t('common.close') }}"
+                    title="{{ t('common.close') }}"
+                >
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
             </div>
 
             <div class="stage-controls-shell pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-3 pb-3 sm:px-5 sm:pb-5">
@@ -1573,10 +1662,12 @@ const STAGE_LOBBY_MEDIA_URL = {{ stage_lobby_media_url|public_url|tojson }};
 const STAGE_QR_STORAGE_KEY = "karaoke.stage.qrDisplay";
 const STAGE_DISPLAY_ID_STORAGE_KEY = "karaoke.stage.displayId";
 const STAGE_DISPLAY_NAME_STORAGE_KEY = "karaoke.stage.displayName";
+const STAGE_IOS_VOCALS_WARNING_STORAGE_KEY = "karaoke.stage.iosVocalsWarningDismissed";
 const STAGE_QR_DEFAULT_SIZE = 320;
 const STAGE_QR_MIN_SIZE = 128;
 const STAGE_QR_MAX_SIZE = 640;
 const STAGE_QR_EDGE_PADDING = 24;
+const IOS_STAGE_BROWSER = /iPhone|iPad/.test(window.navigator?.userAgent || "");
 let currentItemId = {{ (current.id if current else None) | tojson }};
 const INITIAL_CURRENT_ITEM = {{ {
     "id": (current.id if current else None),
@@ -1590,6 +1681,8 @@ const INITIAL_CURRENT_ITEM = {{ {
 const video = document.getElementById("stage-video-player");
 const primaryAudio = document.getElementById("stage-audio-player");
 const vocalsAudio = document.getElementById("stage-vocals-player");
+const iosVocalsWarning = document.getElementById("stage-ios-vocals-warning");
+const iosVocalsWarningClose = document.getElementById("stage-ios-vocals-warning-close");
 const audioHero = document.getElementById("stage-audio-hero");
 const audioCoverBg = document.getElementById("stage-audio-cover-bg");
 const audioPlaceholder = document.getElementById("stage-audio-placeholder");
@@ -2034,7 +2127,8 @@ let lyricsState = {
     enabled: true,
     available: false,
 };
-let vocalsAvailable = Boolean(vocalsAudio);
+let vocalsAvailable = Boolean(INITIAL_CURRENT_ITEM.vocals_path);
+let vocalsPlaybackSupported = vocalsAvailable && !IOS_STAGE_BROWSER;
 let audioContext = null;
 let vocalsSourceNode = null;
 let vocalsGainNode = null;
@@ -2046,7 +2140,7 @@ let lyricsLoadRequestId = 0;
 let syncOperationId = 0;
 let lastHandledSyncVersion = 0;
 let hardSyncInProgress = false;
-let initialMultitrackResyncCompleted = !vocalsAvailable;
+let initialMultitrackResyncCompleted = !canPlayGuideVocals();
 let currentPrimaryKind = null;
 let currentPrimarySrc = null;
 let lastPlaybackStateBroadcastAt = 0;
@@ -2371,6 +2465,42 @@ function updateAudioArtwork(item) {
     }
 }
 
+function loadIosVocalsWarningDismissed() {
+    try {
+        return window.localStorage?.getItem(STAGE_IOS_VOCALS_WARNING_STORAGE_KEY) === "1";
+    } catch (_) {
+        return false;
+    }
+}
+
+let iosVocalsWarningDismissed = loadIosVocalsWarningDismissed();
+
+function setIosVocalsWarningVisible(visible) {
+    if (!iosVocalsWarning) {
+        return;
+    }
+    iosVocalsWarning.classList.toggle("hidden", !visible);
+}
+
+function updateIosVocalsWarning() {
+    const shouldWarn = IOS_STAGE_BROWSER && vocalsAvailable && !iosVocalsWarningDismissed;
+    setIosVocalsWarningVisible(shouldWarn);
+}
+
+function dismissIosVocalsWarning() {
+    iosVocalsWarningDismissed = true;
+    try {
+        window.localStorage?.setItem(STAGE_IOS_VOCALS_WARNING_STORAGE_KEY, "1");
+    } catch (_) {
+        // Local dismissal is best-effort only.
+    }
+    setIosVocalsWarningVisible(false);
+}
+
+function canPlayGuideVocals() {
+    return vocalsAvailable && vocalsPlaybackSupported;
+}
+
 function updateLyricsUi() {
     if (!lyricsToggleBtn || !lyricsToggleLabel || !lyricsToggleIcon) return;
     const connected = !!stageSocket && stageSocket.readyState === WebSocket.OPEN;
@@ -2554,7 +2684,9 @@ async function applyCurrentPlaybackItem(item) {
     updateAudioArtwork(item);
     updatePlaybarUi(0);
     vocalsAvailable = Boolean(nextVocalsSrc);
+    vocalsPlaybackSupported = vocalsAvailable && !IOS_STAGE_BROWSER;
     if (!sourceChanged) {
+        updateIosVocalsWarning();
         updateVocalsUi();
         await loadLyricsCues();
         updatePlaybarUi();
@@ -2565,7 +2697,7 @@ async function applyCurrentPlaybackItem(item) {
     if (vocalsAudio) {
         vocalsAudio.pause();
         vocalsAudio.currentTime = 0;
-        setAudioSource(vocalsAudio, nextVocalsSrc);
+        setAudioSource(vocalsAudio, vocalsPlaybackSupported ? nextVocalsSrc : "");
     }
     video.pause();
     if (primaryAudio) {
@@ -2589,13 +2721,14 @@ async function applyCurrentPlaybackItem(item) {
     if (vocalsAudio) {
         vocalsAudio.load();
     }
-    initialMultitrackResyncCompleted = !vocalsAvailable;
+    initialMultitrackResyncCompleted = !canPlayGuideVocals();
+    updateIosVocalsWarning();
     updateVocalsUi();
     await loadLyricsCues();
     try {
         await ensureAudioGraph();
         await playPrimary();
-        if (vocalsAvailable) {
+        if (canPlayGuideVocals()) {
             syncVocalsToVideo(true);
             startSyncTimer();
         } else if (vocalsAudio) {
@@ -2639,20 +2772,28 @@ function updatePlayPauseUi() {
 
 function updateVocalsUi() {
     if (!vocalsToggleBtn || !vocalsToggleLabel || !vocalsVolumeSlider) return;
-    vocalsToggleBtn.disabled = !vocalsAvailable;
-    vocalsToggleBtn.setAttribute("aria-pressed", mixState.vocals_enabled ? "true" : "false");
-    vocalsToggleBtn.setAttribute("aria-label", mixState.vocals_enabled ? t("stage.vocals_on") : t("stage.vocals_off"));
-    vocalsToggleBtn.setAttribute("title", mixState.vocals_enabled ? t("stage.vocals_on") : t("stage.vocals_off"));
-    vocalsVolumeSlider.disabled = !vocalsAvailable;
+    const hasVocalsTrack = vocalsAvailable;
+    const supported = canPlayGuideVocals();
+    const label = !hasVocalsTrack
+        ? t("stage.vocals_off")
+        : supported
+        ? (mixState.vocals_enabled ? t("stage.vocals_on") : t("stage.vocals_off"))
+        : t("stage.vocals_unsupported");
+    vocalsToggleBtn.disabled = !hasVocalsTrack || !supported;
+    vocalsToggleBtn.setAttribute("aria-pressed", supported && mixState.vocals_enabled ? "true" : "false");
+    vocalsToggleBtn.setAttribute("aria-label", label);
+    vocalsToggleBtn.setAttribute("title", label);
+    vocalsVolumeSlider.disabled = !hasVocalsTrack || !supported;
     if (vocalsToggleIcon) {
-        vocalsToggleIcon.textContent = mixState.vocals_enabled ? "mic" : "mic_off";
+        vocalsToggleIcon.textContent = supported && mixState.vocals_enabled ? "mic" : "mic_off";
     }
-    vocalsToggleLabel.textContent = mixState.vocals_enabled ? t("stage.vocals_on") : t("stage.vocals_off");
+    vocalsToggleLabel.textContent = supported && mixState.vocals_enabled ? t("stage.vocals_on") : t("stage.vocals_off");
     vocalsVolumeSlider.value = String(Math.round(mixState.vocals_volume * 100));
+    vocalsVolumeSlider.setAttribute("aria-label", label);
 }
 
 async function ensureAudioGraph() {
-    if (!vocalsAvailable || !vocalsAudio) {
+    if (!canPlayGuideVocals() || !vocalsAudio) {
         return;
     }
     if (!audioContext) {
@@ -2671,14 +2812,14 @@ async function ensureAudioGraph() {
 }
 
 function applyVocalsMix() {
-    if (!vocalsGainNode) return;
+    if (!vocalsGainNode || !canPlayGuideVocals()) return;
     const targetGain = mixState.vocals_enabled ? mixState.vocals_volume : 0.0;
     vocalsGainNode.gain.value = targetGain;
 }
 
 function syncVocalsToVideo(forceSeek = false) {
     const primary = getPrimaryPlayer();
-    if (!vocalsAvailable || !primary || !vocalsAudio) return;
+    if (!canPlayGuideVocals() || !primary || !vocalsAudio) return;
     if (primary.paused) {
         if (!vocalsAudio.paused) {
             vocalsAudio.pause();
@@ -2722,7 +2863,7 @@ function sendPlaybackTimeUpdate(force = false) {
 }
 
 function startSyncTimer() {
-    if (syncTimer || !vocalsAvailable) return;
+    if (syncTimer || !canPlayGuideVocals()) return;
     syncTimer = window.setInterval(() => syncVocalsToVideo(false), 250);
 }
 
@@ -2844,11 +2985,11 @@ async function seekAndResyncPlayback(targetTime, shouldPausePlayback) {
     suppressSeekBroadcastTemporarily();
     primary.pause();
     stopSyncTimer();
-    if (vocalsAudio && !vocalsAudio.paused) {
+    if (canPlayGuideVocals() && vocalsAudio && !vocalsAudio.paused) {
         vocalsAudio.pause();
     }
     const seeks = [seekMediaElement(primary, seekTime)];
-    if (vocalsAvailable && vocalsAudio) {
+    if (canPlayGuideVocals() && vocalsAudio) {
         seeks.push(seekMediaElement(vocalsAudio, seekTime));
     }
     await Promise.all(seeks);
@@ -2898,7 +3039,7 @@ async function hardResyncPlayback({
     stopSyncTimer();
     stopLyricsTicker();
     primary.pause();
-    if (vocalsAudio && !vocalsAudio.paused) {
+    if (canPlayGuideVocals() && vocalsAudio && !vocalsAudio.paused) {
         vocalsAudio.pause();
     }
 
@@ -2906,18 +3047,18 @@ async function hardResyncPlayback({
         hardSyncInProgress = true;
         if (reloadMedia) {
             const reloads = [reloadMediaElement(primary, seekTime)];
-            if (vocalsAvailable && vocalsAudio) {
+            if (canPlayGuideVocals() && vocalsAudio) {
                 reloads.push(reloadMediaElement(vocalsAudio, seekTime));
             }
             await Promise.all(reloads);
         } else {
             const seeks = [seekMediaElement(primary, seekTime)];
-            if (vocalsAvailable && vocalsAudio) {
+            if (canPlayGuideVocals() && vocalsAudio) {
                 seeks.push(seekMediaElement(vocalsAudio, seekTime));
             }
             await Promise.all(seeks);
             const readiness = [waitForMediaReady(primary)];
-            if (vocalsAvailable && vocalsAudio) {
+            if (canPlayGuideVocals() && vocalsAudio) {
                 readiness.push(waitForMediaReady(vocalsAudio));
             }
             await Promise.all(readiness);
@@ -2933,7 +3074,7 @@ async function hardResyncPlayback({
 
         await ensureAudioGraph();
         await playPrimary();
-        if (vocalsAvailable && vocalsAudio) {
+        if (canPlayGuideVocals() && vocalsAudio) {
             vocalsAudio.currentTime = getPrimaryCurrentTime() || seekTime;
             await vocalsAudio.play();
         }
@@ -2991,7 +3132,7 @@ async function forceResyncPlayback(broadcast = true, syncVersion = null) {
 
 async function runInitialMultitrackResync() {
     const primary = getPrimaryPlayer();
-    if (!primary || !vocalsAvailable || initialMultitrackResyncCompleted || hardSyncInProgress) {
+    if (!primary || !canPlayGuideVocals() || initialMultitrackResyncCompleted || hardSyncInProgress) {
         return false;
     }
     initialMultitrackResyncCompleted = true;
@@ -3031,7 +3172,7 @@ function applyStageStateFromServer(data) {
     }
     updateVocalsUi();
     applyVocalsMix();
-    if (vocalsAvailable && !isPrimaryPaused()) {
+    if (canPlayGuideVocals() && !isPrimaryPaused()) {
         ensureAudioGraph()
             .then(() => syncVocalsToVideo(false))
             .catch((error) => {
@@ -3652,7 +3793,7 @@ function bindPrimaryMediaEvents(mediaElement) {
         }
         stopSyncTimer();
         stopLyricsTicker();
-        if (vocalsAudio) {
+        if (canPlayGuideVocals() && vocalsAudio) {
             vocalsAudio.pause();
             vocalsAudio.currentTime = 0;
         }
@@ -3703,7 +3844,7 @@ function bindPrimaryMediaEvents(mediaElement) {
         updatePlaybarUi(mediaElement.currentTime || 0);
         stopSyncTimer();
         stopLyricsTicker();
-        if (vocalsAudio && !vocalsAudio.paused) {
+        if (canPlayGuideVocals() && vocalsAudio && !vocalsAudio.paused) {
             vocalsAudio.pause();
         }
     });
@@ -3721,7 +3862,7 @@ function bindPrimaryMediaEvents(mediaElement) {
         }
         updatePlaybarUi(mediaElement.currentTime || 0);
         sendPlaybackTimeUpdate(true);
-        if (vocalsAvailable && vocalsAudio) {
+        if (canPlayGuideVocals() && vocalsAudio) {
             vocalsAudio.currentTime = mediaElement.currentTime || 0;
             if (mediaElement.paused && !vocalsAudio.paused) {
                 vocalsAudio.pause();
@@ -3743,6 +3884,8 @@ function bindPrimaryMediaEvents(mediaElement) {
 bindPrimaryMediaEvents(video);
 bindPrimaryMediaEvents(primaryAudio);
 updatePlayPauseUi();
+updateVocalsUi();
+updateIosVocalsWarning();
 
 if (playPauseBtn) {
     playPauseBtn.addEventListener("click", async () => {
@@ -3770,7 +3913,7 @@ if (playPauseBtn) {
 
 if (vocalsToggleBtn) {
     vocalsToggleBtn.addEventListener("click", async () => {
-        if (!vocalsAvailable) return;
+        if (!canPlayGuideVocals()) return;
         const nextEnabled = !mixState.vocals_enabled;
         const sent = sendStageCommand("set_vocals_enabled", { vocals_enabled: nextEnabled });
         if (!sent) {
@@ -3784,7 +3927,7 @@ if (vocalsToggleBtn) {
 
 if (vocalsVolumeSlider) {
     vocalsVolumeSlider.addEventListener("input", async () => {
-        if (!vocalsAvailable) return;
+        if (!canPlayGuideVocals()) return;
         const nextVolume = Number(vocalsVolumeSlider.value) / 100;
         const sent = sendStageCommand("set_vocals_volume", { vocals_volume: nextVolume });
         if (!sent) {
@@ -3954,12 +4097,18 @@ document.addEventListener("fullscreenchange", () => {
 if (vocalsAudio) {
     vocalsAudio.addEventListener("error", () => {
         vocalsAvailable = false;
+        vocalsPlaybackSupported = false;
+        updateIosVocalsWarning();
         updateVocalsUi();
         stopSyncTimer();
     });
     vocalsAudio.addEventListener("ended", () => {
         syncVocalsToVideo(true);
     });
+}
+
+if (iosVocalsWarningClose) {
+    iosVocalsWarningClose.addEventListener("click", dismissIosVocalsWarning);
 }
 
 window.addEventListener("keydown", async (event) => {

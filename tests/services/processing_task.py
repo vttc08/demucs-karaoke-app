@@ -1,4 +1,5 @@
 from .common import *
+from types import SimpleNamespace
 
 
 def _write_task_cache_artifacts(cache_root, task_id):
@@ -10,6 +11,94 @@ def _write_task_cache_artifacts(cache_root, task_id):
         artifact.write_bytes(b"scratch")
         artifacts.append(artifact)
     return artifacts
+
+
+@pytest.mark.parametrize("audio_codec,expected_audio_codec", [("", ""), ("aac", "aac")])
+def test_process_karaoke_passes_configured_audio_codec_to_ffmpeg(
+    db_session,
+    tmp_path,
+    monkeypatch,
+    audio_codec,
+    expected_audio_codec,
+):
+    media_root = tmp_path / "media"
+    cache_root = tmp_path / "cache"
+    media_root.mkdir()
+    cache_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", cache_root)
+    monkeypatch.setattr(settings, "ffmpeg_audio_codec", audio_codec)
+
+    media = MediaItem(
+        title="Codec Test",
+        file_stem="codec-test",
+        media_path="/media/codec-test.mp4",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    task = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="youtube",
+        target_media_item_id=media.id,
+        status=ProcessingTaskStatus.PENDING.value,
+        stage="queued",
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    service = KaraokeService()
+    video_path = cache_root / "input.mp4"
+    audio_path = cache_root / "input.wav"
+    no_vocals_path = cache_root / "demucs" / "no_vocals.wav"
+    vocals_path = cache_root / "demucs" / "vocals.wav"
+    video_path.write_bytes(b"video")
+    audio_path.write_bytes(b"audio")
+    no_vocals_path.parent.mkdir(parents=True, exist_ok=True)
+    no_vocals_path.write_bytes(b"no-vocals")
+    vocals_path.write_bytes(b"vocals")
+
+    combine_calls = {}
+
+    async def fake_separate_vocals_with_retry(*_args, **_kwargs):
+        return SimpleNamespace(
+            job_id="demo-job",
+            no_vocals_path=str(no_vocals_path),
+            vocals_path=str(vocals_path),
+            aligned_lyrics_path=None,
+        )
+
+    def fake_combine_audio_video(**kwargs):
+        combine_calls["kwargs"] = kwargs
+        output_path = kwargs["output_path"]
+        output_path.write_bytes(b"combined")
+        return output_path
+
+    async def fake_noop(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(service, "_separate_vocals_with_retry", fake_separate_vocals_with_retry)
+    monkeypatch.setattr(service.ffmpeg, "combine_audio_video", fake_combine_audio_video)
+    monkeypatch.setattr(service, "_install_karaoke_outputs", lambda **kwargs: (media_root / "codec-test.mp4", media_root / "codec-test.vocals.wav"))
+    monkeypatch.setattr(service, "_set_media_item_output_paths", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, "_cleanup_remote_demucs_job", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service, "_raise_if_canceled", fake_noop)
+    monkeypatch.setattr(service, "_is_audio_only_media_path", lambda _path: False)
+    monkeypatch.setattr(processing_task_service, "set_stage", AsyncMock())
+    monkeypatch.setattr(processing_task_service, "emit_progress", AsyncMock())
+
+    asyncio.run(
+        service._process_karaoke(
+            db_session,
+            task,
+            queue_item=None,
+            media_item=media,
+            video_path=video_path,
+            audio_path=audio_path,
+        )
+    )
+
+    assert combine_calls["kwargs"]["audio_codec"] == expected_audio_codec
 
 
 def test_successful_processing_task_removes_only_its_cache(db_session, tmp_path, monkeypatch):
