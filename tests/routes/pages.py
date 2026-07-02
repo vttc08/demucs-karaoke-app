@@ -260,6 +260,8 @@ def test_stage_page_loads_for_admin(client):
     assert b'stage-control-label' in response.content
     assert b'id="stage-playbar-slider"' in response.content
     assert b'stage-vocals-volume-slider' in response.content
+    assert b'id="stage-ios-vocals-warning"' in response.content
+    assert b'Guide vocals disabled on iPhone/iPad' in response.content
     assert b'stage-fullscreen-button' in response.content
     assert b'id="stage-shortcuts-btn"' in response.content
     assert b'id="stage-shortcuts-panel"' in response.content

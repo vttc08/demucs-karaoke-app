@@ -36,6 +36,11 @@ which browser event caused the drift.
 - For multi-track items, stage also runs one automatic hard resync at the beginning of playback so
   each item starts from the same reset path as the manual button.
 
+## iPhone/iPad behavior
+- On iPhone and iPad browsers, the current dual-track stage path is treated as unsupported.
+- Standalone playback for the base media and vocals sidecar can still work, but playing them together on iOS WebKit has shown severe skip/stutter in current testing.
+- The stage UI therefore disables guide vocals on iPhone/iPad instead of trying to tune the dual-element sync path for those browsers.
+
 ## Why sync can still fail
 
 ## 1. Dual media elements = dual clocks
