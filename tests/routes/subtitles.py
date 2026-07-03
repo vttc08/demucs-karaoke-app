@@ -7,6 +7,10 @@ def test_subtitle_routes_require_admin(client):
     assert client.get("/api/media/42/subtitles/ass").status_code == 403
     assert client.get("/api/media/42/subtitles/srt").status_code == 403
     assert client.post(
+        "/api/media/42/subtitles/import",
+        files={"file": ("lyrics.json", b"{}", "application/json")},
+    ).status_code == 403
+    assert client.post(
         "/api/media/42/subtitles/preview",
         files={"file": ("edited.ass", b"", "text/plain")},
     ).status_code == 403
@@ -143,6 +147,103 @@ def test_media_subtitles_page_shows_404_for_cdg_lyrics(client, tmp_path, monkeyp
     assert response.status_code == 404
     assert "Subtitle workflow unavailable" in response.text
     assert "does not have synced JSON lyrics" in response.text
+    assert 'data-subtitle-import-form' in response.text
+
+
+@pytest.mark.parametrize(
+    ("filename", "content", "expected_suffix", "expected_page_status"),
+    [
+        ("lyrics.json", json.dumps({"segments": []}).encode("utf-8"), ".json", 200),
+        ("lyrics.lrc", b"[00:00.00]hello", ".lrc", 404),
+    ],
+)
+def test_media_subtitles_import_endpoint_stores_raw_sidecars(
+    client,
+    tmp_path,
+    monkeypatch,
+    filename,
+    content,
+    expected_suffix,
+    expected_page_status,
+):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    media_file.write_bytes(b"video")
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path=None,
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.post(
+        f"/api/media/{media_id}/subtitles/import",
+        files={"file": (filename, content, "application/octet-stream")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["lyrics_format"] == expected_suffix.lstrip(".")
+    assert response.json()["lyrics_path"].endswith(expected_suffix)
+
+    with TestingSessionLocal() as db:
+        media = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+        assert media is not None
+        assert media.lyrics_path is not None
+        assert Path(media.lyrics_path).suffix == expected_suffix
+
+    page_response = client.get(f"/media-subtitles/{media_id}")
+    assert page_response.status_code == expected_page_status
+    if expected_page_status == 200:
+        assert 'id="subtitle-workflow-page"' in page_response.text
+    else:
+        assert "Subtitle workflow unavailable" in page_response.text
+
+
+def test_media_subtitles_import_endpoint_converts_ass_to_json(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    media_file.write_bytes(b"video")
+    ass_text = """[Script Info]\nTitle: Test\nScriptType: v4.00+\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,{\\k50}Hel{\\k50}lo\n"""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path=None,
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.post(
+        f"/api/media/{media_id}/subtitles/import",
+        files={"file": ("lyrics.ass", ass_text.encode("utf-8"), "text/plain")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["lyrics_format"] == "json"
+    assert response.json()["source_format"] == "ass"
+    assert response.json()["lyrics_path"].endswith(".json")
+
+    with TestingSessionLocal() as db:
+        media = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+        assert media is not None
+        assert media.lyrics_path is not None
+        assert Path(media.lyrics_path).suffix == ".json"
+
+    page_response = client.get(f"/media-subtitles/{media_id}")
+    assert page_response.status_code == 200
+    assert 'id="subtitle-workflow-page"' in page_response.text
 
 
 def test_media_subtitles_split_merge_page_renders_admin_shell(client, tmp_path, monkeypatch):

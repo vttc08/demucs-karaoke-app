@@ -481,9 +481,11 @@ async def media_subtitles_page(
             {
                 "request": request,
                 "subtitle_error": {
+                    "media_id": item_id,
                     "title": translate(locale, "subtitle.not_available"),
                     "detail": detail,
                     "back_url": app_url("/media"),
+                    "import_url": app_url(f"/api/media/{item_id}/subtitles/import"),
                     "history_back": translate(locale, "subtitle.go_back_previous"),
                 },
             },
