@@ -409,10 +409,10 @@ function updateMediaEditToolAvailability() {
         }
     });
     subtitleButtons.forEach((button) => {
-        button.disabled = isCdg;
-        button.classList.toggle("opacity-50", isCdg);
-        button.classList.toggle("cursor-not-allowed", isCdg);
-        button.setAttribute("aria-disabled", String(isCdg));
+        button.disabled = false;
+        button.classList.toggle("opacity-50", false);
+        button.classList.toggle("cursor-not-allowed", false);
+        button.setAttribute("aria-disabled", "false");
     });
 }
 
@@ -2152,7 +2152,7 @@ function handleActionClick(event) {
     }
 
     if (action === "open-subtitle-editor") {
-        if (activeEditItemId && !activeEditLyricsIsCdg) {
+        if (activeEditItemId) {
             window.location.href = appUrl(`/media-subtitles/${activeEditItemId}`);
         }
         return;

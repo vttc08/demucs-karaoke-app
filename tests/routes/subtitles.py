@@ -118,6 +118,33 @@ def test_media_subtitles_page_shows_404_when_lyrics_sidecar_is_missing(client, t
     assert "could not be found" in response.text
 
 
+def test_media_subtitles_page_shows_404_for_cdg_lyrics(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    lyrics_file = tmp_path / "song.cdg"
+    media_file.write_bytes(b"video")
+    lyrics_file.write_bytes(b"cdg")
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path="/media/song.cdg",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.get(f"/media-subtitles/{media_id}")
+
+    assert response.status_code == 404
+    assert "Subtitle workflow unavailable" in response.text
+    assert "does not have synced JSON lyrics" in response.text
+
+
 def test_media_subtitles_split_merge_page_renders_admin_shell(client, tmp_path, monkeypatch):
     authenticate_admin_client(client)
     monkeypatch.setattr(settings, "media_path", tmp_path)
