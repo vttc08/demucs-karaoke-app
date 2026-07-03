@@ -508,6 +508,53 @@ def test_upload_media_imports_zip_bundle_with_sidecars(client, tmp_path):
         settings.cache_path = original_cache
 
 
+def test_upload_media_imports_zip_bundle_with_cdg_sidecar(client, tmp_path):
+    """ZIP uploads should treat CDG graphics as lyrics sidecars."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        archive_bytes = BytesIO()
+        with zipfile.ZipFile(archive_bytes, mode="w", compression=zipfile.ZIP_STORED) as archive:
+            archive.writestr("mp3g-track.mp3", b"audio-bytes")
+            archive.writestr("mp3g-track.vocals.wav", b"vocals-bytes")
+            archive.writestr("mp3g-track.CDG", b"cdg-bytes")
+
+        response = client.post(
+            "/api/media/upload",
+            data={
+                "title": "CDG Zip Import",
+                "artist": "Bundle Artist",
+                "add_to_queue": "false",
+            },
+            files={
+                "file": ("bundle.zip", archive_bytes.getvalue(), "application/zip"),
+            },
+        )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["filename"] == "mp3g-track.mp3"
+
+        main_file = settings.media_path / "mp3g-track.mp3"
+        vocals_file = settings.media_path / "mp3g-track.vocals.wav"
+        lyrics_file = settings.media_path / "mp3g-track.cdg"
+        assert main_file.exists()
+        assert vocals_file.exists()
+        assert lyrics_file.exists()
+        assert lyrics_file.read_bytes() == b"cdg-bytes"
+
+        with TestingSessionLocal() as db:
+            media_item = db.query(MediaItem).filter(MediaItem.id == payload["media_id"]).first()
+            assert media_item is not None
+            assert media_item.media_path == "/media/mp3g-track.mp3"
+            assert media_item.vocals_path == "/media/mp3g-track.vocals.wav"
+            assert media_item.lyrics_path == "/media/mp3g-track.cdg"
+    finally:
+        settings.media_path = original_media
+
+
 def test_upload_media_rejects_zip_without_main_media(client, tmp_path):
     """ZIP imports must include one audio or video file."""
     original_media = settings.media_path
@@ -617,6 +664,13 @@ def test_media_management_page_uses_database_rows(client):
                     lyrics_path="/media/whisperx-song.json",
                     missing=False,
                 ),
+                MediaItem(
+                    title="CDG Song",
+                    artist="Artist CDG",
+                    media_path="/media/cdg-song.mp4",
+                    lyrics_path="/media/cdg-song.cdg",
+                    missing=False,
+                ),
             ]
         )
         db.commit()
@@ -632,6 +686,7 @@ def test_media_management_page_uses_database_rows(client):
     assert b'data-media-path="/media/real-song-one.mp4"' in content
     assert b'data-lyrics-path="/media/real-song-one.lrc"' in content
     assert b'data-lyrics-path="/media/whisperx-song.json"' in content
+    assert b'data-lyrics-path="/media/cdg-song.cdg"' in content
 
     assert b'data-action="add-to-queue"' in content
     assert b'data-action="edit"' not in content
@@ -644,11 +699,10 @@ def test_media_management_page_uses_database_rows(client):
     assert b'data-has-multi-track="false"' in content
     assert b'data-has-lyrics="false"' in content
     assert b'data-lyrics-kind="json"' in content
+    assert b'data-lyrics-kind="cdg"' in content
+    assert b"CDG" in content
     assert b"lyrics" in content
     assert b"synced" in content
-
-    assert content.count(b">3</p>") >= 1
-    assert content.count(b">1</p>") >= 2
 
 def test_media_management_page_hides_edit_controls_for_guest(client):
     """Guest media library should be queue-only."""

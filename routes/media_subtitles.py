@@ -165,3 +165,22 @@ async def upload_subtitles(
     except Exception as exc:
         logger.exception("Subtitle upload failed media_id=%s filename=%s", item_id, file.filename)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/import")
+async def import_lyrics_sidecar(
+    item_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Import a raw lyrics sidecar or convert ASS karaoke timing into JSON."""
+    try:
+        return subtitle_workflow_service.import_from_upload(db, item_id, file)
+    except SubtitleWorkflowNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SubtitleWorkflowConflictError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Subtitle import failed media_id=%s filename=%s", item_id, file.filename)
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

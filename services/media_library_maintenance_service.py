@@ -16,7 +16,7 @@ from services.queue_service import QueueService
 logger = logging.getLogger(__name__)
 
 _VOCALS_AUDIO_EXTENSIONS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm")
-_LYRICS_EXTENSIONS = (".json", ".lrc", ".srt", ".txt")
+_LYRICS_EXTENSIONS = (".json", ".lrc", ".srt", ".txt", ".cdg")
 _FILE_KIND_ORDER = ("main", "vocals", "lyrics")
 
 
@@ -426,6 +426,8 @@ class MediaLibraryMaintenanceService:
             return "txt"
         if suffix == ".srt":
             return "srt"
+        if suffix == ".cdg":
+            return "cdg"
         return "lyrics"
 
     @staticmethod

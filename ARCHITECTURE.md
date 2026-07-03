@@ -63,6 +63,8 @@ This project currently uses two services:
 - The edit modal links to the admin-only `/media-editor/{item_id}` page. It renders an immediate
   shell with the native browser media player, then hydrates duration and ffprobe I-frame timestamps
   asynchronously from `/api/media/{item_id}/trim-info` without introducing a frontend framework.
+  When the attached lyrics sidecar is CDG, the same page switches to a transcode fallback instead of
+  offering lossless trim.
 - The edit modal also links to the admin-only `/media-subtitles/{item_id}` page. It exports
   server-rendered ASS/SRT files from the current JSON lyrics sidecar, previews edited uploads for
   overlap warnings, and converts the chosen subtitle file back into the canonical JSON sidecar on
@@ -88,6 +90,11 @@ This project currently uses two services:
 - Queue items store per-song WhisperX language overrides on `queue_items`; standalone media-library
   karaoke/alignment tasks store per-task overrides on `processing_tasks` so `/upload` and `/media`
   can apply one-off language choices without changing `/settings` defaults.
+- Legacy MP3+G support stays sidecar-based: adjacent `.cdg` files are discovered as lyrics, stored in
+  `lyrics_path`, and rendered client-side on `/stage`. The library editor can also transcode a CDG
+  bundle into MP4 when the user wants a video form for other workflows.
+- In `/media`, `.cdg` remains a lyrics sidecar for discovery and file management, but the edit modal
+  treats it as display-only so the text-lyrics editor and WhisperX alignment controls stay disabled.
 
 ## Real-time queue update architecture
 
@@ -171,6 +178,8 @@ The stage page uses a websocket-first model:
   and includes it in low-frequency `stage_state_update` broadcasts.
 - Playback clock fan-out uses a dedicated `stage_time_update` event instead of reusing
   `stage_state_update` for every timer tick.
+- Lyrics sidecar repair includes legacy `.cdg` graphics files so MP3+G items continue to behave like
+  karaoke lyrics during scans, queue responses, and stage playback.
 - Queue REST routes broadcast immediate state changes:
   - `queue_item_added`
   - `queue_item_updated` for admin reorders and status refreshes

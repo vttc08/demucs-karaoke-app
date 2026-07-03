@@ -59,6 +59,38 @@ def test_media_library_maintenance_service_deletes_files_and_queue_rows(db_sessi
         settings.media_path = original_media
         settings.cache_path = original_cache
 
+
+def test_media_library_maintenance_service_deletes_cdg_sidecars(db_session, tmp_path):
+    """Deleting a media item should remove adjacent CDG sidecars too."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "delete-me.mp3"
+        cdg_file = settings.media_path / "delete-me.cdg"
+        media_file.write_bytes(b"audio")
+        cdg_file.write_bytes(b"cdg")
+
+        media = MediaItem(
+            title="Delete Me",
+            artist="Singer",
+            media_path="/media/delete-me.mp3",
+            lyrics_path="/media/delete-me.cdg",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        summary = service.delete_media_item(db_session, media.id)
+
+        assert summary["deleted_files"] >= 2
+        assert not media_file.exists()
+        assert not cdg_file.exists()
+    finally:
+        settings.media_path = original_media
+
 def test_media_library_maintenance_service_rejects_missing_item(db_session):
     """Deleting a missing media item should raise a not-found error."""
     service = MediaLibraryMaintenanceService()
@@ -134,6 +166,39 @@ def test_media_library_maintenance_service_builds_file_manifest(db_session, tmp_
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
+
+
+def test_media_library_maintenance_service_builds_cdg_file_manifest(db_session, tmp_path):
+    """File manifests should treat CDG graphics as lyrics sidecars."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "manifest-cdg.mp3"
+        cdg_file = settings.media_path / "manifest-cdg.cdg"
+        media_file.write_bytes(b"audio")
+        cdg_file.write_bytes(b"cdg")
+
+        media = MediaItem(
+            title="Manifest CDG",
+            artist="Manifest Artist",
+            media_path="/media/manifest-cdg.mp3",
+            lyrics_path="/media/manifest-cdg.cdg",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibraryMaintenanceService()
+        manifest = service.get_media_file_manifest(db_session, media.id)
+
+        assert manifest["has_lyrics"] is True
+        assert manifest["lyrics_kind"] == "cdg"
+        assert [entry["kind"] for entry in manifest["files"]] == ["main", "lyrics"]
+        assert manifest["files"][1]["filename"] == "manifest-cdg.cdg"
+    finally:
+        settings.media_path = original_media
 
 
 def test_media_library_maintenance_service_omits_missing_sidecars_from_manifest(

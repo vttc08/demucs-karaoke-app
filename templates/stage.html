@@ -658,6 +658,14 @@
         --stage-lyrics-outline-width: 7px;
     }
 
+    .stage-lyrics-overlay--cdg {
+        top: 0;
+        bottom: 0;
+        transform: none;
+        align-items: center;
+        justify-content: center;
+    }
+
     .stage-controls-shell {
         z-index: 30;
     }
@@ -762,6 +770,20 @@
         height: 100%;
         width: 100%;
         object-fit: cover;
+    }
+
+    .stage-cdg-canvas {
+        display: block;
+        width: min(100%, calc((100dvh - 4rem) * 1.3888888889), calc(100vw - 2rem));
+        max-width: 100%;
+        aspect-ratio: 300 / 216;
+        height: auto;
+        image-rendering: pixelated;
+    }
+
+    .stage-lyrics-overlay--cdg .stage-cdg-canvas {
+        width: min(100%, calc((100dvh - 10rem) * 1.3888888889), calc(100vw - 2rem));
+        max-height: calc(100dvh - 10rem);
     }
 
     .stage-lyrics-lines {
@@ -958,7 +980,7 @@
         background-repeat: no-repeat;
         background-size: cover;
         transform: scale(1.08);
-        filter: blur(18px) saturate(1.05);
+        filter: blur(8px) saturate(1.05);
         opacity: 0;
         transition: opacity 180ms ease;
     }
@@ -985,41 +1007,6 @@
         inset: 0;
         background:
             linear-gradient(180deg, rgba(0, 0, 0, 0.58) 0%, rgba(0, 0, 0, 0.2) 32%, rgba(0, 0, 0, 0.72) 100%);
-    }
-
-    .stage-audio-plate {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: min(38vw, 24rem);
-        aspect-ratio: 1;
-        transform: translate(-50%, -50%);
-        border-radius: 1.5rem;
-        background: rgba(255, 255, 255, 0.08);
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-        overflow: hidden;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        backdrop-filter: blur(10px);
-    }
-
-    .stage-audio-plate img {
-        display: block;
-        height: 100%;
-        width: 100%;
-        object-fit: cover;
-    }
-
-    .stage-audio-plate-placeholder {
-        display: flex;
-        height: 100%;
-        width: 100%;
-        align-items: center;
-        justify-content: center;
-        background:
-            linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(17, 24, 39, 0.65)),
-            rgba(0, 0, 0, 0.35);
-        color: rgba(255, 255, 255, 0.9);
-        font-size: clamp(3rem, 6vw, 5rem);
     }
 
     @media (min-width: 960px) {
@@ -1147,17 +1134,6 @@
                 <div id="stage-audio-cover-bg" class="stage-audio-cover{% if current_is_audio and current and current.thumbnail %} is-visible{% endif %}"{% if current_is_audio and current and current.thumbnail %} style="background-image: url('{{ current.thumbnail|public_url }}');"{% endif %}></div>
                 <div id="stage-audio-placeholder" class="stage-audio-placeholder{% if current_is_audio and (not current or not current.thumbnail) %} is-visible{% endif %}"></div>
                 <div class="stage-audio-vignette"></div>
-                <div class="stage-audio-plate">
-                    <img
-                        id="stage-audio-cover-img"
-                        class="{% if not current_is_audio or not current or not current.thumbnail %}hidden{% endif %}"
-                        src="{{ current.thumbnail|public_url if current_is_audio and current and current.thumbnail else '' }}"
-                        alt="{{ t('media.cover') }}"
-                    />
-                    <div id="stage-audio-cover-fallback" class="stage-audio-plate-placeholder{% if current_is_audio and current and current.thumbnail %} hidden{% endif %}">
-                        <span class="material-symbols-outlined">album</span>
-                    </div>
-                </div>
             </div>
             <video
                 id="stage-video-player"
@@ -1195,6 +1171,7 @@
             </div>
 
             <div id="stage-lyrics-overlay" class="stage-lyrics-overlay hidden" aria-live="polite">
+                <canvas id="stage-cdg-canvas" class="stage-cdg-canvas hidden"></canvas>
                 <div id="stage-lyrics-lines" class="stage-lyrics-lines"></div>
             </div>
 
@@ -1654,6 +1631,7 @@
 
 {% block scripts %}
 <script src="{{ app_url('/static/stage-lyrics.js') }}"></script>
+<script src="{{ app_url('/static/stage-cdg.js') }}"></script>
 <script>
 const API_BASE = window.KaraokeURLs.basePath;
 const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
@@ -1677,6 +1655,7 @@ const INITIAL_CURRENT_ITEM = {{ {
     "thumbnail": (current.thumbnail|public_url if current and current.thumbnail else None),
     "media_path": (current.media_path|public_url if current else None),
     "vocals_path": (current.vocals_path|public_url if current and current.vocals_path else None),
+    "lyrics_path": (current.lyrics_path|public_url if current and current.lyrics_path else None),
 }|tojson }};
 const video = document.getElementById("stage-video-player");
 const primaryAudio = document.getElementById("stage-audio-player");
@@ -1733,6 +1712,7 @@ const qrImage = document.getElementById("stage-qr-image");
 const stageMedia = document.querySelector(".stage-media");
 const stageControls = document.getElementById("stage-controls");
 const lyricsOverlay = document.getElementById("stage-lyrics-overlay");
+const cdgCanvas = document.getElementById("stage-cdg-canvas");
 const lyricsLines = document.getElementById("stage-lyrics-lines");
 const zenToggleBtn = document.getElementById("zen-toggle-btn");
 const stageLyrics = new window.StageLyricsController({
@@ -1787,6 +1767,7 @@ const stageLyrics = new window.StageLyricsController({
         backgroundMediaOpacityPctValue: document.getElementById("stage-lyrics-background-opacity-pct-value"),
     },
 });
+const stageCdg = new window.StageCdgRenderer(cdgCanvas);
 
 if (lyricsSettingsSave) {
     lyricsSettingsSave.addEventListener("click", () => {
@@ -2143,6 +2124,9 @@ let hardSyncInProgress = false;
 let initialMultitrackResyncCompleted = !canPlayGuideVocals();
 let currentPrimaryKind = null;
 let currentPrimarySrc = null;
+let currentLyricsKind = null;
+let currentLyricsSrc = "";
+let currentItem = INITIAL_CURRENT_ITEM;
 let lastPlaybackStateBroadcastAt = 0;
 let stageClockEnabled = false;
 let isPlaybarScrubbing = false;
@@ -2321,6 +2305,45 @@ function mediaKindFromItem(item) {
         return "video";
     }
     return AUDIO_EXTENSIONS.has(mediaExtensionFromSrc(item.media_path)) ? "audio" : "video";
+}
+
+function lyricsKindFromPath(path) {
+    return mediaExtensionFromSrc(path) === ".cdg" ? "cdg" : "text";
+}
+
+function hasLyricsSource(item) {
+    return Boolean(item?.lyrics_path);
+}
+
+function syncLyricsRendererVisibility() {
+    const isCdg = currentLyricsKind === "cdg";
+    lyricsOverlay?.classList.toggle("stage-lyrics-overlay--cdg", isCdg);
+    cdgCanvas?.classList.toggle("hidden", !isCdg);
+    lyricsLines?.classList.toggle("hidden", isCdg);
+}
+
+function clearLyricsRenderers() {
+    stageCdg.setEnabled(false);
+    stageLyrics.setEnabled(false);
+    stageLyrics.clearCues();
+    stageCdg.clear();
+    syncLyricsRendererVisibility();
+    setLyricsOverlayVisible(false);
+}
+
+function setActiveLyricsRendererEnabled(enabled) {
+    const shouldEnable = Boolean(enabled);
+    if (currentLyricsKind === "cdg") {
+        stageCdg.setEnabled(shouldEnable);
+        stageLyrics.setEnabled(false);
+        syncLyricsRendererVisibility();
+        setLyricsOverlayVisible(shouldEnable);
+        return;
+    }
+
+    stageCdg.setEnabled(false);
+    stageLyrics.setEnabled(shouldEnable);
+    syncLyricsRendererVisibility();
 }
 
 function getPrimaryPlayer() {
@@ -2522,7 +2545,7 @@ function setLyricsOverlayVisible(visible) {
 function setLyricsEnabled(enabled) {
     lyricsState.enabled = Boolean(enabled);
     const shouldRenderLyrics = lyricsState.available && lyricsState.enabled;
-    stageLyrics.setEnabled(shouldRenderLyrics);
+    setActiveLyricsRendererEnabled(shouldRenderLyrics);
     updateLyricsUi();
     if (shouldRenderLyrics) {
         updateLyricsForTime(getPrimaryCurrentTime());
@@ -2539,6 +2562,10 @@ function setBackgroundMediaEnabled(enabled) {
 }
 
 function updateLyricsForTime(currentTime) {
+    if (currentLyricsKind === "cdg") {
+        stageCdg.updateForTime(currentTime);
+        return;
+    }
     stageLyrics.updateForTime(currentTime);
 }
 
@@ -2572,26 +2599,47 @@ function stopLyricsTicker() {
 async function loadLyricsCues() {
     if (!currentItemId) {
         lyricsLoadRequestId += 1;
-        stageLyrics.clearCues();
+        currentLyricsKind = null;
+        currentLyricsSrc = "";
+        clearLyricsRenderers();
         lyricsState.available = false;
-        stageLyrics.setEnabled(false);
+        setActiveLyricsRendererEnabled(false);
         updateLyricsUi();
+        syncStageBackgroundEligibility();
         return;
     }
 
     const requestId = ++lyricsLoadRequestId;
     const itemId = currentItemId;
+    currentLyricsSrc = currentItem?.lyrics_path || currentLyricsSrc || "";
+    currentLyricsKind = currentLyricsSrc ? lyricsKindFromPath(currentLyricsSrc) : null;
+    syncLyricsRendererVisibility();
 
     try {
+        if (currentLyricsKind === "cdg") {
+            const loaded = await stageCdg.load(currentLyricsSrc);
+            if (requestId !== lyricsLoadRequestId || currentItemId !== itemId) {
+                return;
+            }
+            stageLyrics.clearCues();
+            lyricsState.available = loaded && stageCdg.hasContent();
+            setActiveLyricsRendererEnabled(lyricsState.available && lyricsState.enabled);
+            updateLyricsUi();
+            syncStageBackgroundEligibility();
+            updateLyricsForTime(getPrimaryCurrentTime());
+            return;
+        }
+
         const response = await fetch(window.KaraokeURLs.appUrl(`/api/queue/${itemId}/lyrics-cues`));
         if (requestId !== lyricsLoadRequestId || currentItemId !== itemId) {
             return;
         }
         if (!response.ok) {
-            stageLyrics.clearCues();
+            clearLyricsRenderers();
             lyricsState.available = false;
-            stageLyrics.setEnabled(false);
+            setActiveLyricsRendererEnabled(false);
             updateLyricsUi();
+            syncStageBackgroundEligibility();
             return;
         }
 
@@ -2601,19 +2649,22 @@ async function loadLyricsCues() {
         }
         const cues = Array.isArray(payload?.cues) ? payload.cues : [];
         stageLyrics.setCues(cues);
+        stageCdg.clear();
         lyricsState.available = stageLyrics.hasCues();
-        stageLyrics.setEnabled(lyricsState.available && lyricsState.enabled);
+        setActiveLyricsRendererEnabled(lyricsState.available && lyricsState.enabled);
         updateLyricsUi();
+        syncStageBackgroundEligibility();
         updateLyricsForTime(getPrimaryCurrentTime());
     } catch (error) {
         if (requestId !== lyricsLoadRequestId || currentItemId !== itemId) {
             return;
         }
         console.warn("Failed to load lyrics cues:", error);
-        stageLyrics.clearCues();
+        clearLyricsRenderers();
         lyricsState.available = false;
-        stageLyrics.setEnabled(false);
+        setActiveLyricsRendererEnabled(false);
         updateLyricsUi();
+        syncStageBackgroundEligibility();
     }
 }
 
@@ -2632,9 +2683,13 @@ function updateNowPlayingMeta(item) {
     nowPlayingBadge.textContent = item.is_karaoke ? t("app.karaoke") : t("app.original");
 }
 
+function syncStageBackgroundEligibility() {
+    stageLyrics.setBackgroundEligible(Boolean(hasCurrentQueueItem && lyricsState.available));
+}
+
 function updatePlaybackModeFlags(item) {
     hasCurrentQueueItem = Boolean(item && item.id);
-    stageLyrics.setBackgroundEligible(hasCurrentQueueItem);
+    syncStageBackgroundEligibility();
     if (video) {
         video.loop = !hasCurrentQueueItem;
     }
@@ -2676,15 +2731,20 @@ async function applyCurrentPlaybackItem(item) {
     const nextItemId = item?.id ?? null;
     const nextMediaKind = mediaKindFromItem(item);
     const sourceChanged = currentItemId !== nextItemId || currentPrimaryKind !== nextMediaKind || currentPrimarySrc !== nextMediaSrc;
+    currentItem = item || null;
     currentItemId = nextItemId;
     currentPrimaryKind = nextMediaKind;
     currentPrimarySrc = nextMediaSrc;
+    lyricsState.available = false;
     updatePlaybackModeFlags(item);
     updateNowPlayingMeta(item);
     updateAudioArtwork(item);
     updatePlaybarUi(0);
     vocalsAvailable = Boolean(nextVocalsSrc);
     vocalsPlaybackSupported = vocalsAvailable && !IOS_STAGE_BROWSER;
+    currentLyricsKind = item?.lyrics_path ? lyricsKindFromPath(item.lyrics_path) : null;
+    currentLyricsSrc = item?.lyrics_path || "";
+    syncLyricsRendererVisibility();
     if (!sourceChanged) {
         updateIosVocalsWarning();
         updateVocalsUi();
@@ -2693,7 +2753,7 @@ async function applyCurrentPlaybackItem(item) {
         return;
     }
     resetSyncStateForSourceSwap();
-    stageLyrics.clearCues();
+    clearLyricsRenderers();
     if (vocalsAudio) {
         vocalsAudio.pause();
         vocalsAudio.currentTime = 0;
@@ -4262,6 +4322,10 @@ syncFullscreenState();
 updateFullscreenUi();
 currentPrimaryKind = mediaKindFromItem(INITIAL_CURRENT_ITEM);
 currentPrimarySrc = INITIAL_CURRENT_ITEM?.media_path || STAGE_LOBBY_MEDIA_URL;
+currentItem = INITIAL_CURRENT_ITEM;
+currentLyricsKind = INITIAL_CURRENT_ITEM?.lyrics_path ? lyricsKindFromPath(INITIAL_CURRENT_ITEM.lyrics_path) : null;
+currentLyricsSrc = INITIAL_CURRENT_ITEM?.lyrics_path || "";
+syncLyricsRendererVisibility();
 updateAudioArtwork(INITIAL_CURRENT_ITEM);
 updateVocalsUi();
 updateLyricsUi();

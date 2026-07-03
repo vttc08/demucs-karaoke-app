@@ -57,6 +57,50 @@ class FFmpegAdapter:
         self._run_command(cmd, cancel_event=cancel_event)
         return output_path
 
+    def transcode_cdg_to_mp4(
+        self,
+        cdg_path: Path,
+        audio_path: Path,
+        output_path: Path,
+        *,
+        audio_codec: str | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> Path:
+        """Render CDG graphics and pair them with audio into an MP4 container."""
+        codec = (audio_codec if audio_codec is not None else settings.ffmpeg_audio_codec)
+        codec = (codec or "").strip().lower()
+        if codec == "aac":
+            audio_args = ["-c:a", "aac", "-b:a", "192k"]
+        else:
+            audio_args = ["-c:a", "copy"]
+        cmd = [
+            self.ffmpeg_path,
+            "-copyts",
+            "-i",
+            str(cdg_path),
+            "-i",
+            str(audio_path),
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "28",
+            "-tune",
+            "stillimage",
+            *audio_args,
+            "-shortest",
+        ]
+        cmd.extend(["-movflags", "+faststart", "-y", str(output_path)])
+        self._run_command(cmd, cancel_event=cancel_event)
+        return output_path
+
     def extract_audio(
         self,
         source_path: Path,

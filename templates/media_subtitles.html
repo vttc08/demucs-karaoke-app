@@ -36,6 +36,29 @@
                     <span>{{ t('subtitle.back_to_media') }}</span>
                 </a>
             </div>
+            <form
+                class="space-y-3 rounded-2xl border border-white/10 bg-surface-container-high/30 p-4"
+                data-subtitle-import-form
+                data-import-url="{{ subtitle_error.import_url }}"
+            >
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-[0.18em] text-primary">{{ t('subtitle.import_title') }}</p>
+                    <p class="mt-1 text-sm leading-relaxed text-on-surface-variant">{{ t('subtitle.import_detail') }}</p>
+                </div>
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <input
+                        type="file"
+                        class="min-w-0 flex-1 cursor-pointer overflow-hidden rounded-xl border border-white/10 bg-surface-container-highest/60 text-xs text-on-surface file:mr-3 file:h-8 file:border-0 file:bg-primary file:px-3 file:text-xs file:font-bold file:text-on-primary"
+                        accept=".json,.lrc,.ass"
+                    >
+                    <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-full border border-primary/30 bg-primary px-4 py-2 text-[11px] font-black uppercase tracking-wider text-on-primary hover:brightness-110">
+                        <span class="material-symbols-outlined text-[16px]">upload_file</span>
+                        <span>{{ t('subtitle.import_replace') }}</span>
+                    </button>
+                </div>
+                <p class="hidden rounded-2xl border border-white/10 bg-surface-container-high/30 px-3 py-2 text-sm font-semibold text-on-surface-variant" data-subtitle-import-message role="status" aria-live="polite"></p>
+                <p class="text-xs font-medium text-on-surface-variant">{{ t('subtitle.import_hint') }}</p>
+            </form>
         </div>
     </section>
 </main>

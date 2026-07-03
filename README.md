@@ -146,6 +146,7 @@ and `/static/...`.
      - When the queue is empty, stage loops lobby media; when a song becomes playable, stage switches to it automatically and returns to lobby when queue drains
      - Responsive controls overlay: desktop adds a dedicated playback seek bar row, while mobile stays icon-first and moves detailed vocals volume adjustment to `/queue`
      - Toggle the lyrics overlay on or off while playback is running; vocal mix and lyrics visibility persist across song changes, and the centered karaoke-style overlay only appears in fullscreen so it does not block stage controls on mobile
+     - Legacy MP3+G/CDG sidecars discovered from the media library render directly in the browser canvas instead of going through the timed-text lyrics pipeline
      - Desktop stage also includes keyboard shortcuts, lyrics-style customization, and a help icon: `←`/`→` seek 5 seconds, `R` resync, `V` vocals, `L` lyrics, `Q` QR, `?` help; the help panel stays open until you close it explicitly
      - Lyrics style settings are stored in the browser for quick per-device JSON download/apply/upload and include CJK-safe font presets, size, color, outline, line-window, animation options, and optional fullscreen background image/video media from `/media/...`, including a crop-style fill for aligned karaoke cues; admins can also manage shared lyric presets from the stage panel, name each stage display locally, receive targeted preset changes from `/queue`, and toggle the background video off directly without going through preset override
      - New `/stage` tabs auto-name themselves from device/platform and screen size with a short local id suffix until you set a custom display name
@@ -177,6 +178,7 @@ and `/static/...`.
 5. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
           - Browse existing database-backed media entries in responsive card/table layouts
           - View title, artist, and capability badges (multi-track, lyrics)
+          - Legacy MP3+G/CDG sidecars are discovered as lyrics sidecars and stored in `lyrics_path`
           - Local thumbnails prefer an adjacent same-name image sidecar (`.png`, `.jpg`, `.jpeg`, or `.webp`)
           - Local audio files reuse embedded album art by writing a durable adjacent thumbnail sidecar when cover art is available
           - Use **Add to Queue** to enqueue a local media row through the existing queue API
@@ -185,8 +187,8 @@ and `/static/...`.
           - The edit modal can enable **AI Karaoke** for single-track media when Demucs is online; saving creates a monitored media-processing task, and WhisperX lyrics alignment can use a per-save language override
           - Existing multi-track items show AI Karaoke as enabled but locked, preventing duplicate separation work
           - Admin users can use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
-          - Lyrics sidecars are classified by suffix: `.lrc` and `.txt` stay under the normal lyrics badge, while WhisperX word-aligned `.json` sidecars get a separate badge
-          - Admin users can open **Lossless Trim** from the edit modal to retain an intro/outro interval without re-encoding; video boundaries snap outward to I-frames and attached vocals/lyrics are shifted to the same interval
+          - Lyrics sidecars are classified by suffix: `.lrc` and `.txt` stay under the normal lyrics badge, while WhisperX word-aligned `.json` sidecars get a separate badge; legacy `.cdg` sidecars are treated as read-only display assets and do not unlock the text-lyrics editor
+          - Admin users can open **Lossless Trim** from the edit modal to retain an intro/outro interval without re-encoding; video boundaries snap outward to I-frames and attached vocals/lyrics are shifted to the same interval, while CDG sidecars relabel the same entry point to **Transcode to MP4** and use the editor's fallback path instead
           - Admin users can open **Add Vocals** from the edit modal to prepare a vocal source from YouTube or upload, review the estimated sync offset, and commit a new guide-vocal sidecar
           - Admin users can open **Lyrics Editor** from the edit modal to export ASS or SRT subtitle files, edit them in Aegisub or SubtitleEdit, and import the result back into the canonical JSON lyrics sidecar
           - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions

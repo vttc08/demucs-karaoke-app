@@ -2,8 +2,8 @@
     const root = document.getElementById("subtitle-workflow-page");
     if (!root) return;
 
-    const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
     const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
+    const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
     const filesRoot = document.getElementById("subtitle-associated-files");
     const refreshFilesBtn = document.getElementById("subtitle-refresh-files");
 
@@ -314,4 +314,72 @@
     bindDropzone("ass");
     bindDropzone("srt");
     loadAssociatedFiles();
+})();
+
+(() => {
+    const form = document.querySelector("[data-subtitle-import-form]");
+    if (!form) return;
+
+    const appUrl = window.KaraokeURLs?.appUrl || ((path) => path);
+    const t = window.KaraokeI18n?.t?.bind(window.KaraokeI18n) || ((key, params = {}) => key);
+    const uploadUrl = form.dataset.importUrl || "";
+    const input = form.querySelector('input[type="file"]');
+    const submitButton = form.querySelector('button[type="submit"]');
+    const messageBox = form.querySelector("[data-subtitle-import-message]");
+
+    function setMessage(text = "", isError = false) {
+        if (!messageBox) return;
+        messageBox.textContent = text;
+        messageBox.classList.toggle("hidden", !text);
+        messageBox.classList.toggle("border-error/30", Boolean(isError));
+        messageBox.classList.toggle("bg-error/10", Boolean(isError));
+        messageBox.classList.toggle("text-error", Boolean(isError));
+        messageBox.classList.toggle("text-on-surface-variant", !isError);
+        messageBox.classList.toggle("border-white/10", !isError);
+        messageBox.classList.toggle("bg-surface-container-high/30", !isError);
+    }
+
+    async function fetchJson(url, options = {}) {
+        const response = await fetch(url, {
+            credentials: "same-origin",
+            ...options,
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const detail = payload?.detail;
+            throw new Error(typeof detail === "string" ? detail : t("subtitle.request_failed"));
+        }
+        return payload;
+    }
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const file = input?.files?.[0] || null;
+        if (!file) {
+            setMessage(t("subtitle.choose_file_first"), true);
+            return;
+        }
+        if (submitButton) {
+            submitButton.disabled = true;
+        }
+        setMessage(t("subtitle.importing"), false);
+        try {
+            const formData = new FormData();
+            formData.append("file", file, file.name);
+            await fetchJson(uploadUrl, {
+                method: "POST",
+                body: formData,
+            });
+            setMessage(t("subtitle.import_complete_refreshing"), false);
+            window.setTimeout(() => {
+                window.location.reload();
+            }, 1200);
+        } catch (error) {
+            setMessage(error instanceof Error ? error.message : t("subtitle.request_failed"), true);
+        } finally {
+            if (submitButton) {
+                submitButton.disabled = false;
+            }
+        }
+    });
 })();

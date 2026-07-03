@@ -26,12 +26,20 @@
     const snapMessage = document.getElementById("trim-snap-message");
     const errorBox = document.getElementById("trim-error");
     const saveButton = document.getElementById("trim-save");
+    const timelinePanel = document.getElementById("trim-timeline-panel");
+    const statsPanel = document.getElementById("trim-stats-panel");
+    const cdgPanel = document.getElementById("trim-cdg-panel");
+    const cdgOverwriteCheckbox = document.getElementById("trim-cdg-overwrite");
+    const transcodeButton = document.getElementById("trim-transcode");
+    const transcodeProgress = document.getElementById("trim-transcode-progress");
+    const transcodeProgressLabel = document.querySelector("[data-trim-transcode-progress-label]");
     const setStartButton = document.getElementById("trim-set-start");
     const setEndButton = document.getElementById("trim-set-end");
     const jumpStartButton = document.getElementById("trim-jump-start");
     const jumpEndButton = document.getElementById("trim-jump-end");
 
     const mediaId = Number(root.dataset.mediaId);
+    const lyricsKind = String(root.dataset.lyricsKind || "").trim().toLowerCase();
     const SNAP_EPSILON = 0.000001;
     const DEFAULT_FRAME_RATE = 30;
     let duration = 0;
@@ -45,6 +53,7 @@
     let isSubmitting = false;
     let loadSequence = 0;
     let isDraggingPlayhead = false;
+    let isCdgMode = lyricsKind === "cdg";
 
     function setBusyState(isBusy) {
         root.dataset.editorState = isBusy ? "loading" : "ready";
@@ -86,6 +95,33 @@
         }
     }
 
+    function setCdgModeUi(isCdg) {
+        isCdgMode = Boolean(isCdg);
+        root.dataset.editorMode = isCdgMode ? "cdg" : "trim";
+        timelinePanel?.classList.toggle("hidden", isCdgMode);
+        statsPanel?.classList.toggle("hidden", isCdgMode);
+        cdgPanel?.classList.toggle("hidden", !isCdgMode);
+        if (saveButton) {
+            saveButton.classList.toggle("hidden", isCdgMode);
+        }
+        if (transcodeButton) {
+            transcodeButton.disabled = !isCdgMode || isSubmitting;
+        }
+        if (cdgOverwriteCheckbox) {
+            cdgOverwriteCheckbox.disabled = !isCdgMode || isSubmitting;
+        }
+        if (isCdgMode) {
+            setBusyState(false);
+            setControlsEnabled(false);
+            loadingState?.classList.add("hidden");
+            showError();
+            setLoadingStateVisible(false);
+            if (transcodeProgress) {
+                transcodeProgress.classList.add("hidden");
+            }
+        }
+    }
+
     function setTimelineBounds() {
         const max = String(duration);
         if (startRange) startRange.max = max;
@@ -120,6 +156,84 @@
     function showError(message = "") {
         errorBox.textContent = message;
         errorBox.classList.toggle("hidden", !message);
+    }
+
+    function renderTranscodeProgress({
+        visible = true,
+        statusText = "",
+        running = false,
+    } = {}) {
+        if (!transcodeProgress) {
+            return;
+        }
+        transcodeProgress.classList.toggle("hidden", !visible);
+        transcodeProgress.classList.toggle("is-running", running);
+        const fill = transcodeProgress.querySelector("[data-task-progress-fill]");
+        if (fill instanceof HTMLElement) {
+            fill.style.width = running ? "40%" : "0%";
+        }
+        if (transcodeProgressLabel) {
+            transcodeProgressLabel.textContent = statusText;
+        }
+    }
+
+    function updateTranscodeControlsDisabled(disabled) {
+        if (transcodeButton) {
+            transcodeButton.disabled = disabled;
+        }
+        if (cdgOverwriteCheckbox) {
+            cdgOverwriteCheckbox.disabled = disabled;
+        }
+    }
+
+    async function startTranscode() {
+        if (!isCdgMode || isSubmitting) {
+            return;
+        }
+        const overwriteOriginal = Boolean(cdgOverwriteCheckbox?.checked);
+        const confirmed = window.confirm(
+            overwriteOriginal
+                ? t("trim.cdg_overwrite_confirm")
+                : t("trim.cdg_keep_original_confirm"),
+        );
+        if (!confirmed) {
+            return;
+        }
+
+        isSubmitting = true;
+        updateTranscodeControlsDisabled(true);
+        renderTranscodeProgress({
+            visible: true,
+            statusText: t("trim.transcode_waiting"),
+            running: true,
+        });
+        try {
+            const response = await fetch(appUrl(`/api/media/${mediaId}/transcode-cdg`), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ overwrite_original: overwriteOriginal }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload.detail || t("trim.failed"));
+            }
+            if (payload?.status !== "ok") {
+                throw new Error(t("trim.failed"));
+            }
+            renderTranscodeProgress({
+                visible: true,
+                statusText: t("trim.transcode_running"),
+                running: true,
+            });
+            window.setTimeout(() => {
+                window.location.href = appUrl("/media");
+            }, 900);
+        } catch (error) {
+            showError(error instanceof Error ? error.message : t("trim.failed"));
+            updateTranscodeControlsDisabled(false);
+            isSubmitting = false;
+            renderTranscodeProgress({ visible: false, statusText: "" });
+        }
     }
 
     function updateUi(source = "") {
@@ -338,6 +452,10 @@
     }
 
     async function loadTrimInfo() {
+        if (isCdgMode) {
+            setCdgModeUi(true);
+            return;
+        }
         const sequence = ++loadSequence;
         setBusyState(true);
         setLoadingStateVisible(true);
@@ -363,6 +481,10 @@
             duration = Number(payload.duration);
             if (!Number.isFinite(duration) || duration <= 0) {
                 throw new Error(t("trim.loading_failed_detail"));
+            }
+            if (String(payload?.lyrics_kind || "").trim().toLowerCase() === "cdg") {
+                setCdgModeUi(true);
+                return;
             }
             frameRate = Number(payload.frame_rate);
             if (!Number.isFinite(frameRate) || frameRate <= 0) {
@@ -454,6 +576,10 @@
     });
 
     saveButton.addEventListener("click", async () => {
+        if (isCdgMode) {
+            await startTranscode();
+            return;
+        }
         if (!editorReady || isSubmitting) {
             return;
         }
@@ -493,6 +619,11 @@
         }
     });
 
+    transcodeButton?.addEventListener("click", () => {
+        startTranscode();
+    });
+
     window.addEventListener("resize", drawKeyframes);
+    setCdgModeUi(isCdgMode);
     loadTrimInfo();
 })();

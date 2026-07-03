@@ -16,6 +16,7 @@
     data-title="{{ trim_info.title }}"
     data-artist="{{ trim_info.artist or '' }}"
     data-has-video="{{ 'true' if trim_info.has_video else 'false' }}"
+    data-lyrics-kind="{{ trim_info.lyrics_kind or '' }}"
     data-editor-state="loading"
 >
     <div class="trim-editor-shell">
@@ -85,7 +86,42 @@
                 {% endif %}
             </section>
 
-            <section class="trim-timeline-panel">
+            <section id="trim-cdg-panel" class="trim-cdg-panel hidden" aria-live="polite">
+                <div class="trim-cdg-callout">
+                    <span class="material-symbols-outlined">music_video</span>
+                    <div>
+                        <strong>{{ t('trim.cdg_unsupported_title') }}</strong>
+                        <p>{{ t('trim.cdg_unsupported_detail') }}</p>
+                    </div>
+                </div>
+                <label class="trim-cdg-overwrite">
+                    <input id="trim-cdg-overwrite" type="checkbox">
+                    <span>{{ t('trim.transcode_overwrite_original') }}</span>
+                </label>
+                <div class="trim-cdg-actions">
+                    <button id="trim-transcode" type="button" disabled>
+                        <span class="material-symbols-outlined">conversion_path</span>
+                        <span>{{ t('trim.transcode_action') }}</span>
+                    </button>
+                </div>
+                <div
+                    id="trim-transcode-progress"
+                    class="trim-transcode-progress hidden"
+                    data-task-progress-key=""
+                    data-task-progress-status=""
+                    data-task-progress-stage=""
+                    data-task-progress-mode=""
+                    data-task-progress-reported-percent="0"
+                    data-task-progress-label=""
+                >
+                    <div class="h-2 overflow-hidden rounded-full bg-surface-container-highest" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <div class="h-full rounded-full bg-primary transition-all duration-300 ease-out" data-task-progress-fill style="width: 0%"></div>
+                    </div>
+                    <p class="mt-2 text-[11px] text-on-surface-variant" data-trim-transcode-progress-label>{{ t('trim.transcode_waiting') }}</p>
+                </div>
+            </section>
+
+            <section id="trim-timeline-panel" class="trim-timeline-panel">
                 <div class="trim-timeline-heading">
                     <p class="trim-eyebrow">{{ t('trim.timeline_precision') }}</p>
                     <div class="trim-keyframe-legend">
@@ -181,7 +217,7 @@
                 <p id="trim-error" class="trim-error hidden" role="alert"></p>
             </section>
 
-            <aside class="trim-stats-panel">
+            <aside id="trim-stats-panel" class="trim-stats-panel">
                 <p class="trim-eyebrow">{{ t('trim.trim_stats') }}</p>
                 <dl>
                     <div>

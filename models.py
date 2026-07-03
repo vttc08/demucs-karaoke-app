@@ -398,6 +398,12 @@ class MediaTrimRequest(BaseModel):
         return self
 
 
+class MediaCdgTranscodeRequest(BaseModel):
+    """Request to transcode legacy CDG graphics into an MP4 video."""
+
+    overwrite_original: bool = False
+
+
 class ProcessingTaskResponse(BaseModel):
     """Durable task response enriched with live snapshot when available."""
 

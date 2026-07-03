@@ -3,6 +3,7 @@ from .common import *
 from services.media_trim_service import (
     MediaTrimConflictError,
     MediaTrimService,
+    MediaTrimUnsupportedError,
 )
 
 
@@ -57,6 +58,35 @@ def test_get_trim_info_includes_frame_rate(db_session, tmp_path, monkeypatch):
     result = MediaTrimService(ffmpeg=FakeFFmpeg()).get_trim_info(db_session, media.id)
 
     assert result["frame_rate"] == 25.0
+    assert result["lyrics_kind"] is None
+
+
+def test_get_trim_info_infers_cdg_sidecar_without_db_lyrics_path(
+    db_session, tmp_path, monkeypatch
+):
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+
+    media_file = media_root / "song.mp3"
+    cdg_file = media_root / "song.cdg"
+    media_file.write_bytes(b"audio")
+    cdg_file.write_bytes(b"cdg")
+    media = MediaItem(
+        title="Song",
+        artist="Artist",
+        media_path="/media/song.mp3",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    result = MediaTrimService(ffmpeg=FakeFFmpeg()).get_trim_info(db_session, media.id)
+
+    assert result["lyrics_path"] == "/media/song.cdg"
+    assert result["lyrics_kind"] == "cdg"
+    assert result["lyrics_format"] == "cdg"
 
 
 def test_shift_timed_lyrics_formats():
@@ -143,7 +173,7 @@ def test_trim_media_item_replaces_media_vocals_and_lyrics_together(
         service.thumbnail_service, "ensure_thumbnail_for_media_file", lambda _path: None
     )
 
-    result = service.trim_media_item(db_session, media.id, 6.0, 18.0)
+    result = service.trim_media_item(db_session, media.id, 5.0, 20.0)
 
     assert result["resolved_start"] == 5.0
     assert result["resolved_end"] == 20.0
@@ -158,6 +188,42 @@ def test_trim_media_item_replaces_media_vocals_and_lyrics_together(
     db_session.refresh(media)
     assert media.updated_at >= previous_updated_at
     assert not list(media_root.glob(".*.trim-*"))
+
+
+def test_trim_media_item_rejects_cdg_sidecars(
+    db_session, tmp_path, monkeypatch
+):
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+    monkeypatch.setattr(settings, "cache_path", tmp_path / "cache")
+
+    media_file = media_root / "song.mp3"
+    cdg_file = media_root / "song.cdg"
+    media_file.write_bytes(b"audio")
+    cdg_file.write_bytes(b"cdg-bytes")
+    media = MediaItem(
+        title="Song",
+        artist="Artist",
+        media_path="/media/song.mp3",
+        lyrics_path="/media/song.cdg",
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    fake_ffmpeg = FakeFFmpeg()
+    service = MediaTrimService(ffmpeg=fake_ffmpeg)
+    monkeypatch.setattr(
+        service.thumbnail_service, "remove_thumbnail_for_media_file", lambda _path: None
+    )
+    monkeypatch.setattr(
+        service.thumbnail_service, "ensure_thumbnail_for_media_file", lambda _path: None
+    )
+
+    with pytest.raises(MediaTrimUnsupportedError, match="CDG lyrics sidecars"):
+        service.trim_media_item(db_session, media.id, 5.0, 20.0)
 
 
 def test_trim_rejects_media_that_is_currently_playing(

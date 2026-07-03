@@ -22,6 +22,8 @@ This document captures extension points for future lyric-style customization on 
   canonical `/media/...`; images render as cover-fit `<img>` and videos render as muted autoplay loop
   `<video>` with no controls.
   The layer appears only in fullscreen, above the original stage media and below `#stage-lyrics-overlay`.
+  The stage only marks the background eligible once lyric cues have loaded successfully for the
+  current queue item, so songs without external lyrics stay on the base stage media.
   If the configured file is missing or unsupported, the layer hides and playback continues normally.
 - Stage display identity is also browser-local: `karaoke.stage.displayId` stays stable per browser and
   `karaoke.stage.displayName` is only stored when the operator sets a custom name. Otherwise `/stage`

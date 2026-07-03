@@ -66,6 +66,11 @@ class MediaTrimService:
     def get_trim_info(self, db: Session, media_item_id: int) -> dict[str, object]:
         """Return media timing and sidecar information needed by the editor."""
         media_item, media_file = self._get_media_item_and_file(db, media_item_id)
+        _, normalized_lyrics_path = self.queue_service._repair_sidecar_fields(
+            media_item.media_path,
+            media_item.vocals_path,
+            media_item.lyrics_path,
+        )
         probe = self.ffmpeg.probe_media(media_file)
         keyframes = (
             self.ffmpeg.get_video_keyframes(media_file) if bool(probe["has_video"]) else []
@@ -85,10 +90,15 @@ class MediaTrimService:
             ),
             "keyframes": keyframes,
             "vocals_path": media_item.vocals_path,
-            "lyrics_path": media_item.lyrics_path,
+            "lyrics_path": normalized_lyrics_path,
+            "lyrics_kind": (
+                Path(normalized_lyrics_path).suffix.lower().lstrip(".")
+                if normalized_lyrics_path
+                else None
+            ),
             "lyrics_format": (
-                Path(media_item.lyrics_path).suffix.lower().lstrip(".")
-                if media_item.lyrics_path
+                Path(normalized_lyrics_path).suffix.lower().lstrip(".")
+                if normalized_lyrics_path
                 else None
             ),
         }
@@ -308,6 +318,11 @@ class MediaTrimService:
         end: float,
     ) -> None:
         suffix = source.suffix.lower()
+        if suffix == ".cdg":
+            raise MediaTrimUnsupportedError(
+                "CDG lyrics sidecars are not supported by lossless trim"
+            )
+
         text = source.read_text(encoding="utf-8")
         if suffix == ".lrc":
             shifted = self._shift_lrc(text, start, end)

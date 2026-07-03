@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 _ASS_KARAOKE_TAG_RE = re.compile(r"\{\\k(\d+)\}([^\{]*)")
 _SRT_SEGMENT_MARKER_RE = re.compile(r"^\s*//wx:(\d+)//\s*", re.IGNORECASE)
 _ALLOWED_UPLOAD_SUFFIXES = {".ass", ".ssa", ".srt"}
+_ALLOWED_IMPORT_SUFFIXES = {".ass", ".json", ".lrc"}
 _ALLOWED_SOURCE_SUFFIXES = {".json"}
 
 
@@ -119,6 +120,60 @@ class SubtitleWorkflowService:
             "preview": self._preview_summary(normalized_segments, all_warnings),
         }
 
+    def import_from_upload(self, db: Session, media_item_id: int, upload_file: UploadFile) -> dict[str, object]:
+        """Store uploaded lyrics files directly or convert ASS karaoke timing into JSON."""
+        media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
+        if media_item is None:
+            raise SubtitleWorkflowNotFoundError(f"Media item not found: {media_item_id}")
+        if media_item.missing:
+            raise SubtitleWorkflowNotFoundError("Media item file is missing")
+
+        media_file = self.queue_service._media_url_to_file(media_item.media_path)
+        if media_file is None or not media_file.exists() or not media_file.is_file():
+            raise SubtitleWorkflowNotFoundError("Media item file is missing")
+
+        filename = Path(upload_file.filename or "").name
+        suffix = Path(filename).suffix.lower()
+        if suffix not in _ALLOWED_IMPORT_SUFFIXES:
+            raise SubtitleWorkflowConflictError("Supported uploads are .json, .lrc, and .ass")
+
+        if suffix == ".ass":
+            subs = self._load_ass_subtitles(upload_file)
+            segments, warnings = self._normalize_segments(self._parse_ass_subtitles(subs))
+            lyrics_text = json.dumps({"segments": segments}, ensure_ascii=False, indent=2)
+            self.queue_service.store_lyrics_sidecar(
+                media_item,
+                lyrics_text,
+                lyrics_format="json",
+                storage="media",
+            )
+            imported_format = "json"
+            source_format = "ass"
+            warning_count = len(warnings)
+        else:
+            lyrics_text = self._read_upload_text(upload_file)
+            self.queue_service.store_lyrics_sidecar(
+                media_item,
+                lyrics_text,
+                lyrics_format=suffix.lstrip("."),
+                storage="media",
+            )
+            imported_format = suffix.lstrip(".")
+            source_format = imported_format
+            warning_count = 0
+
+        media_item.updated_at = utc_now()
+        db.commit()
+        db.refresh(media_item)
+        return {
+            "status": "ok",
+            "media_id": media_item.id,
+            "lyrics_path": media_item.lyrics_path,
+            "lyrics_format": imported_format,
+            "source_format": source_format,
+            "warning_count": warning_count,
+        }
+
     def _load_json_segments(self, media_item: MediaItem) -> list[dict[str, Any]]:
         payload = self.lyrics_service.load_lyrics_payload_from_media_url(media_item.lyrics_path or "")
         cues = payload.get("cues", [])
@@ -173,6 +228,36 @@ class SubtitleWorkflowService:
         if suffix in {".ass", ".ssa"}:
             return self._parse_ass_subtitles(subs), [], "ass"
         return self._parse_srt_subtitles(subs), [], "srt"
+
+    @staticmethod
+    def _read_upload_text(upload_file: UploadFile) -> str:
+        try:
+            upload_file.file.seek(0)
+        except Exception:
+            pass
+        data = upload_file.file.read()
+        if isinstance(data, bytes):
+            return data.decode("utf-8")
+        return str(data)
+
+    def _load_ass_subtitles(self, upload_file: UploadFile) -> pysubs2.SSAFile:
+        filename = Path(upload_file.filename or "").name
+        suffix = Path(filename).suffix.lower()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as handle:
+            temp_path = Path(handle.name)
+            try:
+                upload_file.file.seek(0)
+            except Exception:
+                pass
+            try:
+                handle.write(upload_file.file.read())
+            finally:
+                handle.flush()
+
+        try:
+            return pysubs2.load(str(temp_path))
+        finally:
+            temp_path.unlink(missing_ok=True)
 
     @staticmethod
     def _parse_ass_subtitles(subs: pysubs2.SSAFile) -> list[dict[str, Any]]:

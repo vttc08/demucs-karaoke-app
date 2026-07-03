@@ -13,8 +13,15 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from database import get_db
-from models import MediaItem, MediaTrimRequest, QueueItemCreate, normalize_line_processing_settings
+from models import (
+    MediaCdgTranscodeRequest,
+    MediaItem,
+    MediaTrimRequest,
+    QueueItemCreate,
+    normalize_line_processing_settings,
+)
 from routes.auth import require_admin_user
+from services.cdg_transcode_service import CdgTranscodeError, CdgTranscodeService
 from services.media_library_maintenance_service import (
     MediaItemDeleteConflictError,
     MediaItemNotFoundError,
@@ -47,10 +54,11 @@ media_thumbnail_service = MediaThumbnailService()
 queue_service = QueueService()
 runtime_settings_service = RuntimeSettingsService()
 media_trim_service = MediaTrimService()
+cdg_transcode_service = CdgTranscodeService()
 _UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v", ".zip"}
 _MEDIA_UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
 _ZIP_THUMBNAIL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
-_ZIP_LYRICS_EXTENSIONS = (".json", ".lrc", ".srt", ".txt")
+_ZIP_LYRICS_EXTENSIONS = (".json", ".lrc", ".srt", ".txt", ".cdg")
 _ZIP_VOCALS_EXTENSIONS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm")
 _MEDIA_FILE_KINDS = {"main", "vocals", "lyrics"}
 
@@ -100,6 +108,49 @@ def trim_media_item(
         db.rollback()
         logger.exception("Unexpected lossless media trim failure media_id=%s", item_id)
         raise HTTPException(status_code=500, detail="Lossless trim failed") from exc
+    return {"status": "ok", "summary": summary}
+
+
+@router.post("/{item_id}/transcode-cdg")
+def transcode_cdg_media_item(
+    item_id: int,
+    payload: MediaCdgTranscodeRequest,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Render a legacy CDG sidecar into a standalone MP4 video."""
+    media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
+    if media_item is None:
+        raise HTTPException(status_code=404, detail="Media item not found")
+
+    media_file = queue_service._media_url_to_file(media_item.media_path)
+    if media_item.missing or media_file is None or not media_file.is_file():
+        raise HTTPException(status_code=404, detail="Media item file is missing")
+
+    lyrics_file = queue_service._media_url_to_file(media_item.lyrics_path)
+    if lyrics_file is None or not lyrics_file.is_file() or lyrics_file.suffix.lower() != ".cdg":
+        raise HTTPException(status_code=422, detail="CDG lyrics sidecar is required")
+
+    try:
+        media_trim_service._assert_no_conflicts(db, item_id)
+        summary = cdg_transcode_service.transcode_media_item(
+            db,
+            item_id,
+            overwrite_original=payload.overwrite_original,
+        )
+    except MediaTrimConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except CdgTranscodeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        db.rollback()
+        logger.exception("CDG media transcode failed media_id=%s", item_id)
+        raise HTTPException(status_code=500, detail="CDG transcode failed") from exc
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Unexpected CDG media transcode failure media_id=%s", item_id)
+        raise HTTPException(status_code=500, detail="CDG transcode failed") from exc
+
     return {"status": "ok", "summary": summary}
 
 
