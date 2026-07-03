@@ -385,6 +385,37 @@ function updateMediaEditLyricsControls() {
     }
 }
 
+function updateMediaEditToolAvailability() {
+    const isCdg = Boolean(activeEditLyricsIsCdg);
+    const trimButtons = editModal?.querySelectorAll('button[data-action="open-trim-editor"]') || [];
+    const subtitleButtons = editModal?.querySelectorAll('button[data-action="open-subtitle-editor"]') || [];
+    trimButtons.forEach((button) => {
+        const toolSpans = button.querySelectorAll("span");
+        const iconSpan = toolSpans[0];
+        const labelSpan = toolSpans[1];
+        button.disabled = false;
+        button.classList.toggle("opacity-50", false);
+        button.classList.toggle("cursor-not-allowed", false);
+        button.setAttribute("aria-disabled", "false");
+        button.setAttribute(
+            "aria-label",
+            isCdg ? t("trim.transcode_action") : t("trim.lossless_trim"),
+        );
+        if (iconSpan) {
+            iconSpan.textContent = isCdg ? "conversion_path" : "content_cut";
+        }
+        if (labelSpan) {
+            labelSpan.textContent = isCdg ? t("trim.transcode_action") : t("trim.lossless_trim");
+        }
+    });
+    subtitleButtons.forEach((button) => {
+        button.disabled = isCdg;
+        button.classList.toggle("opacity-50", isCdg);
+        button.classList.toggle("cursor-not-allowed", isCdg);
+        button.setAttribute("aria-disabled", String(isCdg));
+    });
+}
+
 function setLoadedLyricsState(text, format, providerLabel) {
     if (!lyricsManager) return;
     const normalizedText = String(text || "").trim();
@@ -702,6 +733,7 @@ function syncEditManifestState(manifest) {
         setCdgLyricsState();
     }
     updateMediaEditLyricsControls();
+    updateMediaEditToolAvailability();
     updateFilenamePreview();
 }
 
@@ -1638,6 +1670,7 @@ function openEditModal(itemNode, { syncHistory = true } = {}) {
             updateMediaEditLyricsControls();
         }
     }
+    updateMediaEditToolAvailability();
 
     refreshMediaFileManifest();
 
@@ -2109,13 +2142,17 @@ function handleActionClick(event) {
 
     if (action === "open-trim-editor") {
         if (activeEditItemId) {
-            window.location.href = appUrl(`/media-editor/${activeEditItemId}`);
+            const url = new URL(appUrl(`/media-editor/${activeEditItemId}`), window.location.origin);
+            if (activeEditLyricsIsCdg) {
+                url.searchParams.set("mode", "cdg");
+            }
+            window.location.href = url.pathname + url.search;
         }
         return;
     }
 
     if (action === "open-subtitle-editor") {
-        if (activeEditItemId) {
+        if (activeEditItemId && !activeEditLyricsIsCdg) {
             window.location.href = appUrl(`/media-subtitles/${activeEditItemId}`);
         }
         return;

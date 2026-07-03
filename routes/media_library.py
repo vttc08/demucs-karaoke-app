@@ -13,7 +13,14 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from database import get_db
-from models import MediaItem, MediaTrimRequest, QueueItemCreate, normalize_line_processing_settings
+from models import (
+    MediaCdgTranscodeRequest,
+    MediaItem,
+    MediaTrimRequest,
+    ProcessingTaskResponse,
+    QueueItemCreate,
+    normalize_line_processing_settings,
+)
 from routes.auth import require_admin_user
 from services.media_library_maintenance_service import (
     MediaItemDeleteConflictError,
@@ -101,6 +108,43 @@ def trim_media_item(
         logger.exception("Unexpected lossless media trim failure media_id=%s", item_id)
         raise HTTPException(status_code=500, detail="Lossless trim failed") from exc
     return {"status": "ok", "summary": summary}
+
+
+@router.post("/{item_id}/transcode-cdg", response_model=ProcessingTaskResponse)
+def transcode_cdg_media_item(
+    item_id: int,
+    payload: MediaCdgTranscodeRequest,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Render a legacy CDG sidecar into a standalone MP4 video."""
+    media_item = db.query(MediaItem).filter(MediaItem.id == item_id).first()
+    if media_item is None:
+        raise HTTPException(status_code=404, detail="Media item not found")
+
+    media_file = queue_service._media_url_to_file(media_item.media_path)
+    if media_item.missing or media_file is None or not media_file.is_file():
+        raise HTTPException(status_code=404, detail="Media item file is missing")
+
+    lyrics_file = queue_service._media_url_to_file(media_item.lyrics_path)
+    if lyrics_file is None or not lyrics_file.is_file() or lyrics_file.suffix.lower() != ".cdg":
+        raise HTTPException(status_code=422, detail="CDG lyrics sidecar is required")
+
+    try:
+        media_trim_service._assert_no_conflicts(db, item_id)
+        task = processing_task_service.get_or_create_media_cdg_transcode_task(
+            db,
+            item_id,
+            overwrite_original=payload.overwrite_original,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if "not found" in message.lower():
+            raise HTTPException(status_code=404, detail=message) from exc
+        raise HTTPException(status_code=422, detail=message) from exc
+
+    task_execution_coordinator.start(task.id)
+    return processing_task_service.to_response(task)
 
 
 def _karaoke_availability(media_item: MediaItem) -> tuple[bool, str | None, str | None]:

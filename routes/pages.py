@@ -386,6 +386,21 @@ async def media_editor_page(
 
     media_suffix = Path(media_item.media_path).suffix.lower()
     is_video = media_suffix in _VIDEO_SUFFIXES
+    _, normalized_lyrics_path = queue_service._repair_sidecar_fields(
+        media_item.media_path,
+        media_item.vocals_path,
+        media_item.lyrics_path,
+    )
+    requested_mode = request.query_params.get("mode", "").strip().lower()
+    lyrics_kind = (
+        "cdg"
+        if requested_mode == "cdg"
+        else (
+            Path(normalized_lyrics_path).suffix.lower().lstrip(".")
+            if normalized_lyrics_path
+            else None
+        )
+    )
     return templates.TemplateResponse(
         "media_editor.html",
         {
@@ -396,6 +411,7 @@ async def media_editor_page(
                 "artist": media_item.artist,
                 "media_url": media_item.media_path,
                 "has_video": is_video,
+                "lyrics_kind": lyrics_kind,
             },
         },
     )

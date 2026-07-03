@@ -88,3 +88,125 @@ def test_media_editor_page_renders_loading_shell_without_keyframes_probe(
     assert "Test" in response.text
     assert "Artist" in response.text
     assert "/static/media_editor.js" in response.text
+
+
+def test_media_editor_page_renders_cdg_transcode_shell(
+    client, monkeypatch, tmp_path
+):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "cdg-track.mp3"
+    lyrics_file = tmp_path / "cdg-track.cdg"
+    media_file.write_bytes(b"audio")
+    lyrics_file.write_bytes(b"cdg")
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="CDG Track",
+            artist="Artist",
+            media_path="/media/cdg-track.mp3",
+            lyrics_path="/media/cdg-track.cdg",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.get(f"/media-editor/{media_id}")
+
+    assert response.status_code == 200
+    assert 'data-lyrics-kind="cdg"' in response.text
+    assert 'id="trim-cdg-panel"' in response.text
+    assert 'id="trim-transcode"' in response.text
+    assert "Transcode to MP4" in response.text
+
+
+def test_media_editor_page_honors_explicit_cdg_mode(
+    client, monkeypatch, tmp_path
+):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "cdg-track.mp3"
+    media_file.write_bytes(b"audio")
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="CDG Track",
+            artist="Artist",
+            media_path="/media/cdg-track.mp3",
+            lyrics_path=None,
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.get(f"/media-editor/{media_id}?mode=cdg")
+
+    assert response.status_code == 200
+    assert 'data-lyrics-kind="cdg"' in response.text
+    assert 'id="trim-cdg-panel"' in response.text
+
+
+def test_media_editor_page_infers_cdg_mode_from_sidecar_file(
+    client, monkeypatch, tmp_path
+):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "cdg-track.mp3"
+    lyrics_file = tmp_path / "cdg-track.cdg"
+    media_file.write_bytes(b"audio")
+    lyrics_file.write_bytes(b"cdg")
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="CDG Track",
+            artist="Artist",
+            media_path="/media/cdg-track.mp3",
+            lyrics_path=None,
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.get(f"/media-editor/{media_id}")
+
+    assert response.status_code == 200
+    assert 'data-lyrics-kind="cdg"' in response.text
+    assert 'id="trim-cdg-panel"' in response.text
+
+
+def test_media_cdg_transcode_route_creates_task(client, monkeypatch, tmp_path):
+    authenticate_admin_client(client)
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+
+    media_file = media_root / "cdg-track.mp3"
+    lyrics_file = media_root / "cdg-track.cdg"
+    media_file.write_bytes(b"audio")
+    lyrics_file.write_bytes(b"cdg")
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="CDG Track",
+            artist="Artist",
+            media_path="/media/cdg-track.mp3",
+            lyrics_path="/media/cdg-track.cdg",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.post(
+        f"/api/media/{media_id}/transcode-cdg",
+        json={"overwrite_original": True},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["task_type"] == "media_cdg_transcode"
+    assert payload["source_kind"] == "library_media_overwrite"
+    assert payload["target_media_item_id"] == media_id

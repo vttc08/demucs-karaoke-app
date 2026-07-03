@@ -68,6 +68,63 @@ def test_combine_audio_video_uses_aac_when_requested(monkeypatch, tmp_path):
     assert cmd[cmd.index("-b:a") + 1] == "192k"
 
 
+def test_transcode_cdg_to_mp4_uses_low_lag_video_settings(monkeypatch, tmp_path):
+    adapter = FFmpegAdapter(ffmpeg_path="/bin/ffmpeg")
+    captured_cmd = {}
+
+    def fake_run(cmd, check, capture_output):
+        captured_cmd["cmd"] = cmd
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    cdg_path = tmp_path / "lyrics.cdg"
+    audio_path = tmp_path / "audio.mp3"
+    output_path = tmp_path / "out.mp4"
+    cdg_path.write_bytes(b"cdg")
+    audio_path.write_bytes(b"audio")
+
+    adapter.transcode_cdg_to_mp4(cdg_path, audio_path, output_path)
+
+    cmd = captured_cmd["cmd"]
+    assert "-copyts" in cmd
+    assert cmd[cmd.index("-c:v") + 1] == "libx264"
+    assert cmd[cmd.index("-pix_fmt") + 1] == "yuv420p"
+    assert cmd[cmd.index("-preset") + 1] == "ultrafast"
+    assert cmd[cmd.index("-crf") + 1] == "28"
+    assert cmd[cmd.index("-tune") + 1] == "stillimage"
+    assert cmd[cmd.index("-c:a") + 1] == "copy"
+    assert "-map" in cmd
+    assert "0:v:0" in cmd
+    assert "1:a:0" in cmd
+    assert "-shortest" in cmd
+    assert "-movflags" in cmd
+    assert cmd[cmd.index("-movflags") + 1] == "+faststart"
+
+
+def test_transcode_cdg_to_mp4_switches_to_aac_when_requested(monkeypatch, tmp_path):
+    adapter = FFmpegAdapter(ffmpeg_path="/bin/ffmpeg")
+    captured_cmd = {}
+
+    def fake_run(cmd, check, capture_output):
+        captured_cmd["cmd"] = cmd
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    cdg_path = tmp_path / "lyrics.cdg"
+    audio_path = tmp_path / "audio.mp3"
+    output_path = tmp_path / "out.mp4"
+    cdg_path.write_bytes(b"cdg")
+    audio_path.write_bytes(b"audio")
+
+    adapter.transcode_cdg_to_mp4(cdg_path, audio_path, output_path, audio_codec="aac")
+
+    cmd = captured_cmd["cmd"]
+    assert cmd[cmd.index("-c:a") + 1] == "aac"
+    assert cmd[cmd.index("-b:a") + 1] == "192k"
+
+
 def test_extract_audio_uses_stream_copy(monkeypatch, tmp_path):
     """Audio extraction for Demucs input should avoid transcoding."""
     adapter = FFmpegAdapter(ffmpeg_path="/bin/ffmpeg")

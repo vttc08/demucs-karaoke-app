@@ -1005,7 +1005,7 @@ class QueueService:
                     break
 
         if not lyrics_path:
-            for ext in (".json", ".lrc", ".srt", ".txt"):
+            for ext in (".json", ".lrc", ".srt", ".txt", ".cdg"):
                 candidate = media_file.with_suffix(ext)
                 if candidate.exists():
                     try:

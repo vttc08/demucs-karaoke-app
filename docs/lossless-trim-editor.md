@@ -5,8 +5,14 @@
 The admin-only editor at `/media-editor/{item_id}` removes an intro and/or outro. It does not
 support crop, effects, filters, transitions, or re-encoding.
 
-Open a media row's edit modal on `/media`, then select **Lossless Trim**. The other two media-tool
-buttons are placeholders and remain disabled.
+CDG-backed items are not supported by the lossless trim path. When the attached lyrics sidecar is
+`.cdg`, the editor shows a transcode fallback instead of attempting to shift the graphics commands.
+That fallback renders the CDG plus audio into a new MP4 and can either keep the original MP3+CDG
+bundle or replace it in place.
+
+Open a media row's edit modal on `/media`, then select **Lossless Trim**. For CDG items, the trim
+button relabels to **Transcode to MP4** so admins can reach the fallback path instead of a dead
+end, while the subtitle editor remains disabled.
 
 The editor page renders the player shell immediately and then loads trim metadata and keyframes
 asynchronously. While the keyframes are loading, the trim controls stay disabled and the page shows
@@ -39,6 +45,7 @@ Timed lyrics are shifted to the resolved retained interval:
 - `.srt`: parsed, clipped, shifted, and serialized with `srt`
 - `.json`: WhisperX-style segment lists or objects containing `segments`, `cues`, `items`, or `lines`
 - `.txt`: copied unchanged because it has no timing data
+- `.cdg`: not shifted; the editor blocks lossless trim and routes the user to the transcode fallback
 
 JSON segments and nested words are clipped to the interval and shifted so the retained start is
 time zero.
@@ -54,6 +61,14 @@ rollback files are removed after success.
 
 The request is synchronous. The editor disables its submit button while FFmpeg and sidecar updates
 run, then returns to `/media` after success.
+
+When a CDG item is opened, the page switches to a transcode flow instead of trim:
+
+- the user can choose whether the original MP3+CDG bundle should remain on disk
+- FFmpeg renders the CDG graphics into a new MP4 with the original audio stream
+- the long-running task reports progress through the normal task stream
+- after success, the new MP4 appears in the media library as a separate row unless overwrite mode
+  was selected
 
 ## Dependencies
 

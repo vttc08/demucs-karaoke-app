@@ -14,3 +14,4 @@ from tests.services.media_trim import *  # noqa: F401,F403
 from tests.services.vocal_sync import *  # noqa: F401,F403
 from tests.services.lyrics_provider_loader import *  # noqa: F401,F403
 from tests.services.subtitles import *  # noqa: F401,F403
+from tests.services.cdg_transcode import *  # noqa: F401,F403
