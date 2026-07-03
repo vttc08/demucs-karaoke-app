@@ -66,7 +66,8 @@ When a CDG item is opened, the page switches to a transcode flow instead of trim
 
 - the user can choose whether the original MP3+CDG bundle should remain on disk
 - FFmpeg renders the CDG graphics into a new MP4 with the original audio stream
-- the long-running task reports progress through the normal task stream
+- the request runs synchronously; the editor shows an indeterminate running indicator because FFmpeg
+  does not report transcode progress here
 - after success, the new MP4 appears in the media library as a separate row unless overwrite mode
   was selected
 

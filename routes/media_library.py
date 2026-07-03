@@ -17,11 +17,11 @@ from models import (
     MediaCdgTranscodeRequest,
     MediaItem,
     MediaTrimRequest,
-    ProcessingTaskResponse,
     QueueItemCreate,
     normalize_line_processing_settings,
 )
 from routes.auth import require_admin_user
+from services.cdg_transcode_service import CdgTranscodeError, CdgTranscodeService
 from services.media_library_maintenance_service import (
     MediaItemDeleteConflictError,
     MediaItemNotFoundError,
@@ -54,6 +54,7 @@ media_thumbnail_service = MediaThumbnailService()
 queue_service = QueueService()
 runtime_settings_service = RuntimeSettingsService()
 media_trim_service = MediaTrimService()
+cdg_transcode_service = CdgTranscodeService()
 _UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v", ".zip"}
 _MEDIA_UPLOAD_EXTENSIONS = {".mp3", ".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
 _ZIP_THUMBNAIL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
@@ -110,7 +111,7 @@ def trim_media_item(
     return {"status": "ok", "summary": summary}
 
 
-@router.post("/{item_id}/transcode-cdg", response_model=ProcessingTaskResponse)
+@router.post("/{item_id}/transcode-cdg")
 def transcode_cdg_media_item(
     item_id: int,
     payload: MediaCdgTranscodeRequest,
@@ -132,19 +133,25 @@ def transcode_cdg_media_item(
 
     try:
         media_trim_service._assert_no_conflicts(db, item_id)
-        task = processing_task_service.get_or_create_media_cdg_transcode_task(
+        summary = cdg_transcode_service.transcode_media_item(
             db,
             item_id,
             overwrite_original=payload.overwrite_original,
         )
-    except ValueError as exc:
-        message = str(exc)
-        if "not found" in message.lower():
-            raise HTTPException(status_code=404, detail=message) from exc
-        raise HTTPException(status_code=422, detail=message) from exc
+    except MediaTrimConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except CdgTranscodeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        db.rollback()
+        logger.exception("CDG media transcode failed media_id=%s", item_id)
+        raise HTTPException(status_code=500, detail="CDG transcode failed") from exc
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Unexpected CDG media transcode failure media_id=%s", item_id)
+        raise HTTPException(status_code=500, detail="CDG transcode failed") from exc
 
-    task_execution_coordinator.start(task.id)
-    return processing_task_service.to_response(task)
+    return {"status": "ok", "summary": summary}
 
 
 def _karaoke_availability(media_item: MediaItem) -> tuple[bool, str | None, str | None]:

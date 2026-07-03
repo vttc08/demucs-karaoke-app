@@ -15,7 +15,6 @@ from adapters.ffmpeg import FFmpegAdapter
 from config import settings
 from models import MediaItem, ProcessingTask, ProcessingTaskStatus, QueueItem
 from services.demucs_client import DemucsClient
-from services.cdg_transcode_service import CdgTranscodeService
 from services.media_naming import build_media_stem
 from services.processing_task_service import processing_task_service
 from services.queue_service import QueueService
@@ -36,7 +35,6 @@ class KaraokeService:
         self.queue_service = QueueService()
         self.ffmpeg = FFmpegAdapter()
         self.vocal_sync_service = VocalSyncService()
-        self.cdg_transcode_service = CdgTranscodeService()
 
     @staticmethod
     def _task_cache_dir(category: str, task_id: int) -> Path:
@@ -89,11 +87,6 @@ class KaraokeService:
                 if media_item is None:
                     raise RuntimeError(f"Media item not found for task {task.id}")
                 await self._process_media_lyrics_align_task(db, task, media_item, cancel_event=cancel_event)
-            elif task.task_type == "media_cdg_transcode":
-                media_item = db.query(MediaItem).filter(MediaItem.id == task.target_media_item_id).first()
-                if media_item is None:
-                    raise RuntimeError(f"Media item not found for task {task.id}")
-                await self._process_media_cdg_transcode_task(db, task, media_item, cancel_event=cancel_event)
             elif task.task_type in {"media_vocal_sync_prepare_youtube", "media_vocal_sync_prepare_upload"}:
                 media_item = db.query(MediaItem).filter(MediaItem.id == task.target_media_item_id).first()
                 if media_item is None:
@@ -429,66 +422,6 @@ class KaraokeService:
             progress_percent=100,
         )
         self._cleanup_remote_demucs_job(remote_job_id, task_id=task.id, stage="whisperx")
-
-    async def _process_media_cdg_transcode_task(
-        self,
-        db: Session,
-        task: ProcessingTask,
-        media_item: MediaItem,
-        *,
-        cancel_event: threading.Event | None = None,
-    ):
-        overwrite_original = str(task.source_kind or "").strip().lower().endswith("_overwrite")
-        await self._raise_if_canceled(cancel_event, task.id)
-        await processing_task_service.set_stage(
-            db,
-            task.id,
-            status=ProcessingTaskStatus.PROCESSING,
-            stage="transcoding",
-            progress_label="Transcoding CDG to MP4",
-            progress_label_key="task.cdg_transcoding",
-            progress_percent=0,
-            progress_mode="indeterminate",
-            progress_step_index=1,
-            progress_step_total=3,
-        )
-        await self._raise_if_canceled(cancel_event, task.id)
-        result = self.cdg_transcode_service.transcode_media_item(
-            db,
-            media_item.id,
-            task_id=task.id,
-            overwrite_original=overwrite_original,
-            cancel_event=cancel_event,
-        )
-        await self._raise_if_canceled(cancel_event, task.id)
-        await processing_task_service.set_stage(
-            db,
-            task.id,
-            status=ProcessingTaskStatus.PROCESSING,
-            stage="finalize",
-            progress_label="Finalizing CDG transcode",
-            progress_label_key="task.cdg_finalizing",
-            progress_percent=90,
-            progress_mode="determinate",
-            progress_step_index=3,
-            progress_step_total=3,
-        )
-        await processing_task_service.set_status(
-            db,
-            task.id,
-            status=ProcessingTaskStatus.DONE,
-            stage="ready",
-            progress_label="Ready",
-            progress_label_key="task.ready",
-            progress_percent=100,
-        )
-        logger.info(
-            "CDG transcode task completed task_id=%s media_id=%s overwrite=%s output=%s",
-            task.id,
-            media_item.id,
-            overwrite_original,
-            result.get("output_media_path"),
-        )
 
     async def _prepare_karaoke_inputs(
         self,

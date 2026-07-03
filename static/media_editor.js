@@ -54,8 +54,6 @@
     let loadSequence = 0;
     let isDraggingPlayhead = false;
     let isCdgMode = lyricsKind === "cdg";
-    let transcodeTaskStream = null;
-    let activeTranscodeTaskId = null;
 
     function setBusyState(isBusy) {
         root.dataset.editorState = isBusy ? "loading" : "ready";
@@ -107,16 +105,16 @@
             saveButton.classList.toggle("hidden", isCdgMode);
         }
         if (transcodeButton) {
-            transcodeButton.disabled = !isCdgMode || isSubmitting || activeTranscodeTaskId !== null;
+            transcodeButton.disabled = !isCdgMode || isSubmitting;
         }
         if (cdgOverwriteCheckbox) {
-            cdgOverwriteCheckbox.disabled = !isCdgMode || isSubmitting || activeTranscodeTaskId !== null;
+            cdgOverwriteCheckbox.disabled = !isCdgMode || isSubmitting;
         }
         if (isCdgMode) {
             setBusyState(false);
             setControlsEnabled(false);
             loadingState?.classList.add("hidden");
-            showError(t("trim.cdg_unsupported_detail"));
+            showError();
             setLoadingStateVisible(false);
             if (transcodeProgress) {
                 transcodeProgress.classList.add("hidden");
@@ -160,34 +158,23 @@
         errorBox.classList.toggle("hidden", !message);
     }
 
-    function closeTranscodeTaskStream() {
-        if (transcodeTaskStream) {
-            transcodeTaskStream.close();
-            transcodeTaskStream = null;
-        }
-    }
-
     function renderTranscodeProgress({
         visible = true,
         statusText = "",
-        percent = 0,
-        indeterminate = false,
+        running = false,
     } = {}) {
         if (!transcodeProgress) {
             return;
         }
         transcodeProgress.classList.toggle("hidden", !visible);
-        transcodeProgress.dataset.taskProgressKey = activeTranscodeTaskId ? `cdg-${activeTranscodeTaskId}` : "";
-        transcodeProgress.dataset.taskProgressStatus = indeterminate ? "processing" : "";
-        transcodeProgress.dataset.taskProgressStage = indeterminate ? "transcoding" : "";
-        transcodeProgress.dataset.taskProgressMode = indeterminate ? "indeterminate" : "determinate";
-        transcodeProgress.dataset.taskProgressReportedPercent = String(Math.max(0, Math.min(100, percent)));
-        transcodeProgress.dataset.taskProgressLabel = statusText;
-        transcodeProgress.dataset.taskProgressLabelText = statusText;
+        transcodeProgress.classList.toggle("is-running", running);
+        const fill = transcodeProgress.querySelector("[data-task-progress-fill]");
+        if (fill instanceof HTMLElement) {
+            fill.style.width = running ? "40%" : "0%";
+        }
         if (transcodeProgressLabel) {
             transcodeProgressLabel.textContent = statusText;
         }
-        window.KaraokeTaskProgress?.sync(transcodeProgress);
     }
 
     function updateTranscodeControlsDisabled(disabled) {
@@ -199,72 +186,8 @@
         }
     }
 
-    function finishTranscodeTask() {
-        closeTranscodeTaskStream();
-        activeTranscodeTaskId = null;
-        renderTranscodeProgress({ visible: false, statusText: "" });
-        updateTranscodeControlsDisabled(false);
-    }
-
-    function followTranscodeTask(taskId) {
-        return new Promise((resolve, reject) => {
-            closeTranscodeTaskStream();
-            if (typeof EventSource === "undefined") {
-                reject(new Error(t("trim.failed")));
-                return;
-            }
-
-            let settled = false;
-            transcodeTaskStream = new EventSource(appUrl(`/api/tasks/${taskId}/stream`));
-            transcodeTaskStream.onmessage = (event) => {
-                let payload;
-                try {
-                    payload = JSON.parse(event.data);
-                } catch (_) {
-                    return;
-                }
-                if (Number(payload?.task_id) !== Number(taskId)) {
-                    return;
-                }
-                const label = payload?.progress_label_key
-                    ? t(payload.progress_label_key, payload.progress_label_args || {})
-                    : String(payload?.progress_label || payload?.stage || t("trim.transcode_waiting"));
-                renderTranscodeProgress({
-                    visible: true,
-                    statusText: label,
-                    percent: Number(payload?.progress_percent || 0),
-                    indeterminate: payload?.progress_mode === "indeterminate",
-                });
-                if (payload?.status === "done") {
-                    settled = true;
-                    finishTranscodeTask();
-                    resolve(payload);
-                    return;
-                }
-                if (payload?.status === "failed" || payload?.status === "canceled") {
-                    settled = true;
-                    const failureMessage = String(payload?.message || payload?.progress_label || t("trim.failed"));
-                    finishTranscodeTask();
-                    reject(new Error(failureMessage));
-                }
-            };
-
-            transcodeTaskStream.onerror = () => {
-                if (settled) {
-                    return;
-                }
-                renderTranscodeProgress({
-                    visible: true,
-                    statusText: t("media.task_stream_reconnecting"),
-                    percent: 0,
-                    indeterminate: true,
-                });
-            };
-        });
-    }
-
     async function startTranscode() {
-        if (!isCdgMode || isSubmitting || activeTranscodeTaskId !== null) {
+        if (!isCdgMode || isSubmitting) {
             return;
         }
         const overwriteOriginal = Boolean(cdgOverwriteCheckbox?.checked);
@@ -282,8 +205,7 @@
         renderTranscodeProgress({
             visible: true,
             statusText: t("trim.transcode_waiting"),
-            percent: 0,
-            indeterminate: true,
+            running: true,
         });
         try {
             const response = await fetch(appUrl(`/api/media/${mediaId}/transcode-cdg`), {
@@ -295,33 +217,22 @@
             if (!response.ok) {
                 throw new Error(payload.detail || t("trim.failed"));
             }
-            const taskId = Number(payload?.id);
-            if (!Number.isFinite(taskId) || taskId <= 0) {
+            if (payload?.status !== "ok") {
                 throw new Error(t("trim.failed"));
             }
-            activeTranscodeTaskId = taskId;
             renderTranscodeProgress({
                 visible: true,
-                statusText: t("trim.transcode_waiting"),
-                percent: 0,
-                indeterminate: true,
+                statusText: t("trim.transcode_running"),
+                running: true,
             });
-            await followTranscodeTask(taskId);
-            window.location.href = appUrl("/media");
+            window.setTimeout(() => {
+                window.location.href = appUrl("/media");
+            }, 900);
         } catch (error) {
             showError(error instanceof Error ? error.message : t("trim.failed"));
             updateTranscodeControlsDisabled(false);
-        } finally {
             isSubmitting = false;
-            if (activeTranscodeTaskId === null) {
-                renderTranscodeProgress({ visible: false, statusText: "" });
-            }
-            if (transcodeButton) {
-                transcodeButton.disabled = false;
-            }
-            if (cdgOverwriteCheckbox) {
-                cdgOverwriteCheckbox.disabled = false;
-            }
+            renderTranscodeProgress({ visible: false, statusText: "" });
         }
     }
 

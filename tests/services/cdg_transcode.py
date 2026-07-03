@@ -55,7 +55,7 @@ def test_cdg_transcode_creates_new_media_row(db_session, tmp_path, monkeypatch):
         service.thumbnail_service, "ensure_thumbnail_for_media_file", lambda _path: None
     )
 
-    result = service.transcode_media_item(db_session, media_item.id, task_id=77)
+    result = service.transcode_media_item(db_session, media_item.id)
 
     assert result["overwrite_original"] is False
     assert result["output_media_path"] == "/media/song - CDG.mp4"
@@ -96,7 +96,6 @@ def test_cdg_transcode_can_overwrite_original_item(db_session, tmp_path, monkeyp
     result = service.transcode_media_item(
         db_session,
         media_item.id,
-        task_id=88,
         overwrite_original=True,
     )
 

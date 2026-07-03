@@ -145,44 +145,6 @@ class ProcessingTaskService:
             max_line_length_cjk=max_line_length_cjk,
         )
 
-    def get_or_create_media_cdg_transcode_task(
-        self,
-        db: Session,
-        media_item_id: int,
-        *,
-        overwrite_original: bool = False,
-    ) -> ProcessingTask:
-        """Return an existing active CDG transcode task or create one."""
-        active = (
-            db.query(ProcessingTask)
-            .filter(
-                ProcessingTask.target_media_item_id == media_item_id,
-                ProcessingTask.target_queue_item_id.is_(None),
-                ProcessingTask.task_type == "media_cdg_transcode",
-                ProcessingTask.status.in_(self.ACTIVE_STATUSES),
-            )
-            .order_by(ProcessingTask.id.desc())
-            .first()
-        )
-        if active is not None:
-            return active
-
-        media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
-        if media_item is None:
-            raise ValueError(f"Media item not found: {media_item_id}")
-
-        task = ProcessingTask(
-            task_type="media_cdg_transcode",
-            source_kind="library_media_overwrite" if overwrite_original else "library_media",
-            target_media_item_id=media_item_id,
-            status=ProcessingTaskStatus.PENDING.value,
-            stage="queued",
-        )
-        db.add(task)
-        db.commit()
-        db.refresh(task)
-        return task
-
     def create_media_vocal_sync_prepare_task(
         self,
         db: Session,

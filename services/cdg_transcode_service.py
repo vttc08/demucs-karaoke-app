@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -34,9 +36,7 @@ class CdgTranscodeService:
         db: Session,
         media_item_id: int,
         *,
-        task_id: int,
         overwrite_original: bool = False,
-        cancel_event=None,
     ) -> dict[str, Any]:
         """Transcode one CDG-backed item into an MP4 file."""
         media_item = db.query(MediaItem).filter(MediaItem.id == media_item_id).first()
@@ -60,28 +60,30 @@ class CdgTranscodeService:
 
         output_path = settings.media_path / f"{output_stem}.mp4"
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        scratch_dir = settings.cache_path / "processed" / str(task_id)
+        scratch_dir = settings.cache_path / "cdg_transcode" / uuid.uuid4().hex
         scratch_dir.mkdir(parents=True, exist_ok=True)
         staged_output = scratch_dir / output_path.name
 
-        self.ffmpeg.transcode_cdg_to_mp4(
-            lyrics_file,
-            media_file,
-            staged_output,
-            audio_codec=settings.ffmpeg_audio_codec,
-            cancel_event=cancel_event,
-        )
+        try:
+            self.ffmpeg.transcode_cdg_to_mp4(
+                lyrics_file,
+                media_file,
+                staged_output,
+                audio_codec=settings.ffmpeg_audio_codec,
+            )
 
-        if not staged_output.exists() or staged_output.stat().st_size == 0:
-            raise CdgTranscodeError("Transcode produced an empty output")
+            if not staged_output.exists() or staged_output.stat().st_size == 0:
+                raise CdgTranscodeError("Transcode produced an empty output")
 
-        probe = self.ffmpeg.probe_media(staged_output)
-        if not probe["has_video"] or not probe["has_audio"]:
-            raise CdgTranscodeError("Transcode output is missing video or audio")
+            probe = self.ffmpeg.probe_media(staged_output)
+            if not probe["has_video"] or not probe["has_audio"]:
+                raise CdgTranscodeError("Transcode output is missing video or audio")
 
-        if output_path.exists():
-            output_path.unlink()
-        os.replace(staged_output, output_path)
+            if output_path.exists():
+                output_path.unlink()
+            os.replace(staged_output, output_path)
+        finally:
+            shutil.rmtree(scratch_dir, ignore_errors=True)
 
         if overwrite_original:
             original_media_path = media_file
@@ -109,7 +111,6 @@ class CdgTranscodeService:
                 "output_stem": output_stem,
                 "source_media_path": self.queue_service.build_media_url(original_media_path),
                 "source_lyrics_path": self.queue_service.build_media_url(original_lyrics_path),
-                "task_id": task_id,
             }
 
         new_media_item = MediaItem(
@@ -139,7 +140,6 @@ class CdgTranscodeService:
             "output_media_path": new_media_item.media_path,
             "overwrite_original": False,
             "output_stem": output_stem,
-            "task_id": task_id,
         }
 
     def _allocate_output_stem(

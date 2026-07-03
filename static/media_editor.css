@@ -179,6 +179,27 @@
     padding-top: 0.25rem;
 }
 
+.trim-transcode-progress.is-running [role="progressbar"] {
+    position: relative;
+}
+
+.trim-transcode-progress.is-running [data-task-progress-fill] {
+    position: relative;
+    width: 40%;
+    background: linear-gradient(90deg, rgba(0, 242, 255, 0.22), #00f2ff 50%, rgba(0, 242, 255, 0.22));
+    box-shadow: 0 0 16px rgba(0, 242, 255, 0.75);
+    animation: trim-transcode-sweep 1.15s ease-in-out infinite;
+}
+
+@keyframes trim-transcode-sweep {
+    0% {
+        transform: translateX(-125%);
+    }
+    100% {
+        transform: translateX(275%);
+    }
+}
+
 .trim-audio-art {
     display: grid;
     min-height: 17rem;
