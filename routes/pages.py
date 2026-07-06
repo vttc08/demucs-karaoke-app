@@ -186,6 +186,12 @@ async def home(request: Request):
     """Home page redirects to the queue without forcing guest identification."""
     return RedirectResponse(url=app_url("/queue"), status_code=302)
 
+@router.get("/demucs-karaoke-app")
+async def demucs_karaoke_app(request: Request):
+    """The docs redirect Github Pages user to /demucs-karaoke-app as this is where it's served on GHP.
+    Redirect user to the queue page for the actual app"""
+    return RedirectResponse(url=app_url("/queue"), status_code=302)
+
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, db: Session = Depends(get_db)):
