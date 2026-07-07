@@ -93,6 +93,7 @@ def test_media_subtitles_page_shows_404_when_synced_lyrics_are_missing(client, t
     assert "This media item does not have synced JSON lyrics" in response.text
     assert "history.back()" in response.text
     assert "/media" in response.text
+    assert 'accept=".json,.lrc,.ass,.ttml"' in response.text
 
 
 def test_media_subtitles_page_shows_404_when_lyrics_sidecar_is_missing(client, tmp_path, monkeypatch):
@@ -233,6 +234,63 @@ def test_media_subtitles_import_endpoint_converts_ass_to_json(client, tmp_path, 
     assert response.status_code == 200
     assert response.json()["lyrics_format"] == "json"
     assert response.json()["source_format"] == "ass"
+    assert response.json()["lyrics_path"].endswith(".json")
+
+    with TestingSessionLocal() as db:
+        media = db.query(MediaItem).filter(MediaItem.id == media_id).first()
+        assert media is not None
+        assert media.lyrics_path is not None
+        assert Path(media.lyrics_path).suffix == ".json"
+
+    page_response = client.get(f"/media-subtitles/{media_id}")
+    assert page_response.status_code == 200
+    assert 'id="subtitle-workflow-page"' in page_response.text
+
+
+def test_media_subtitles_import_endpoint_converts_ttml_to_json(client, tmp_path, monkeypatch):
+    authenticate_admin_client(client)
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    media_file = tmp_path / "song.mp4"
+    media_file.write_bytes(b"video")
+    ttml_text = """<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyrics">
+  <body>
+    <div itunes:song-part="Verse">
+      <p begin="00:00:15.053" end="00:00:20.562">
+        <span begin="00:00:15.053" end="00:00:15.522">I </span>
+        <span begin="00:00:15.522" end="00:00:16.021">know </span>
+        <span begin="00:00:16.021" end="00:00:16.437">that </span>
+        <span begin="00:00:16.437" end="00:00:16.704">the </span>
+        <span begin="00:00:16.704" end="00:00:17.104">bar </span>
+        <span begin="00:00:17.104" end="00:00:17.789">closes </span>
+        <span begin="00:00:17.789" end="00:00:18.256">at </span>
+        <span begin="00:00:18.256" end="00:00:20.562">11</span>
+      </p>
+    </div>
+  </body>
+</tt>
+"""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            title="Song",
+            artist="Artist",
+            media_path="/media/song.mp4",
+            lyrics_path=None,
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        media_id = media.id
+
+    response = client.post(
+        f"/api/media/{media_id}/subtitles/import",
+        files={"file": ("lyrics.ttml", ttml_text.encode("utf-8"), "application/xml")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["lyrics_format"] == "json"
+    assert response.json()["source_format"] == "ttml"
     assert response.json()["lyrics_path"].endswith(".json")
 
     with TestingSessionLocal() as db:
