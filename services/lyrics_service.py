@@ -15,6 +15,7 @@ import httpx
 from config import settings
 from services import lyrics_types as shared_lyrics_types
 from services.lyrics_provider_loader import load_custom_lyrics_providers
+from services.ttml_parser import TTMLParseError, is_valid_xml, parse_ttml_to_whisperx_segments
 
 logger = logging.getLogger(__name__)
 
@@ -1188,6 +1189,28 @@ class LyricsService:
                 "is_synced": False,
                 "cues": [],
                 "lines": lines,
+            }
+        if suffix == ".ttml":
+            if not is_valid_xml(raw_content):
+                raise ValueError("TTML lyrics must be valid XML")
+            try:
+                segments = parse_ttml_to_whisperx_segments(raw_content)
+            except TTMLParseError as exc:
+                raise ValueError(str(exc)) from exc
+            cues = [
+                {
+                    "time": float(segment["start"]),
+                    "end": float(segment["end"]),
+                    "text": str(segment["text"]),
+                    "words": list(segment.get("words") or []),
+                }
+                for segment in segments
+            ]
+            return {
+                "source_format": "ttml",
+                "is_synced": True,
+                "cues": cues,
+                "lines": [str(cue["text"]) for cue in cues],
             }
 
         raise ValueError(f"Unsupported lyrics format: {suffix}")

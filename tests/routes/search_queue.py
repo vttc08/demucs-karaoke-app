@@ -1,6 +1,25 @@
 from .common import *
 
 
+TTML_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyrics">
+  <body>
+    <div itunes:song-part="Verse">
+      <p begin="00:00:15.053" end="00:00:20.562">
+        <span begin="00:00:15.053" end="00:00:15.522">I </span>
+        <span begin="00:00:15.522" end="00:00:16.021">know </span>
+        <span begin="00:00:16.021" end="00:00:16.437">that </span>
+        <span begin="00:00:16.437" end="00:00:16.704">the </span>
+        <span begin="00:00:16.704" end="00:00:17.104">bar </span>
+        <span begin="00:00:17.104" end="00:00:17.789">closes </span>
+        <span begin="00:00:17.789" end="00:00:18.256">at </span>
+        <span begin="00:00:18.256" end="00:00:20.562">11</span>
+      </p>
+    </div>
+  </body>
+</tt>
+"""
+
 
 def test_health_check(client):
     """Test health check endpoint."""
@@ -1193,6 +1212,28 @@ def test_add_to_queue_persists_inline_lyrics_sidecar(client):
     data = response.json()
     expected_stem = build_media_stem("Queue Lyrics", "Singer", fallback="queue-lyrics-1")
     assert data["lyrics_path"] == f"/cache/lyrics/{expected_stem}.lrc"
+
+def test_add_to_queue_persists_ttml_lyrics_sidecar(client):
+    """Queue add should accept TTML lyrics and persist them as a TTML sidecar."""
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "queue-ttml-1",
+            "title": "Queue TTML",
+            "artist": "Singer",
+            "is_karaoke": True,
+            "lyrics_text": TTML_SAMPLE,
+            "lyrics_format": "ttml",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    expected_stem = build_media_stem("Queue TTML", "Singer", fallback="queue-ttml-1")
+    assert data["lyrics_path"] == f"/cache/lyrics/{expected_stem}.ttml"
+    with TestingSessionLocal() as db:
+        media_item = db.query(MediaItem).filter(MediaItem.id == data["media_id"]).first()
+        assert media_item is not None
+        assert media_item.lyrics_path == f"/cache/lyrics/{expected_stem}.ttml"
 
 def test_add_to_queue_with_media_item_id(client):
     """Queue endpoint should enqueue existing local media by media_item_id."""

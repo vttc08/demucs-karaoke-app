@@ -1,6 +1,25 @@
 from .common import *
 
 
+TTML_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyrics">
+  <body>
+    <div itunes:song-part="Verse">
+      <p begin="00:00:15.053" end="00:00:20.562">
+        <span begin="00:00:15.053" end="00:00:15.522">I </span>
+        <span begin="00:00:15.522" end="00:00:16.021">know </span>
+        <span begin="00:00:16.021" end="00:00:16.437">that </span>
+        <span begin="00:00:16.437" end="00:00:16.704">the </span>
+        <span begin="00:00:16.704" end="00:00:17.104">bar </span>
+        <span begin="00:00:17.104" end="00:00:17.789">closes </span>
+        <span begin="00:00:17.789" end="00:00:18.256">at </span>
+        <span begin="00:00:18.256" end="00:00:20.562">11</span>
+      </p>
+    </div>
+  </body>
+</tt>
+"""
+
 
 def test_upload_page_loads(client):
     """Test upload page renders with queue toggle and infer button."""
@@ -16,7 +35,7 @@ def test_upload_page_loads(client):
     assert 'id="upload-autopilot-btn"' in response.text
     assert "Infer from filename" in response.text
     assert 'accept=".mp3,.mp4,.webm,.mkv,.mov,.avi,.m4v,.zip"' in response.text
-    assert 'accept=".lrc,.txt,.json"' in response.text
+    assert 'accept=".lrc,.txt,.json,.ttml"' in response.text
     assert 'id="upload-lyrics-whisperx-language-code"' in response.text
     assert 'id="lyrics-process-lines-toggle"' in response.text
     assert 'id="lyrics-max-line-length"' in response.text
@@ -171,6 +190,59 @@ def test_upload_media_alignment_request_marks_queue_item(client, tmp_path):
             assert queue_item.max_line_length == 40
             assert queue_item.max_line_length_cjk == 14
             assert queue_item.media.lyrics_path == f"/media/{expected_stem}.lrc"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_upload_media_ttml_input_converts_to_json_and_skips_alignment(client, tmp_path):
+    """TTML input should be converted to JSON and skip WhisperX alignment."""
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+
+        healthy = DemucsHealthResponse(api_url="http://demucs", healthy=True, detail="ok")
+        with (
+            patch("routes.media_library.manager.broadcast_queue_item_added", new=AsyncMock()),
+            patch(
+                "routes.media_library.runtime_settings_service.get_demucs_health",
+                return_value=healthy,
+            ),
+            patch("routes.media_library.task_execution_coordinator.start") as mock_start,
+        ):
+            response = client.post(
+                "/api/media/upload",
+                data={
+                    "title": "TTML Upload",
+                    "artist": "Upload Artist",
+                    "add_to_queue": "true",
+                    "is_karaoke": "true",
+                    "align_lyrics": "true",
+                    "lyrics_text": TTML_SAMPLE,
+                    "lyrics_format": "ttml",
+                },
+                files={"file": ("ttml-upload.mp4", b"video-bytes", "video/mp4")},
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        expected_stem = build_media_stem("TTML Upload", "Upload Artist")
+        assert payload["lyrics_path"] == f"/media/{expected_stem}.json"
+        assert payload["karaoke_started"] is True
+        mock_start.assert_called()
+        saved_payload = json.loads((settings.media_path / f"{expected_stem}.json").read_text(encoding="utf-8"))
+        assert saved_payload["segments"][0]["text"] == "I know that the bar closes at 11"
+
+        with TestingSessionLocal() as db:
+            queue_item = db.query(QueueItem).filter(QueueItem.id == payload["queue_item_id"]).first()
+            assert queue_item is not None
+            assert queue_item.requested_karaoke is True
+            assert queue_item.requested_lyrics_alignment is False
+            assert queue_item.media.lyrics_path == f"/media/{expected_stem}.json"
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
@@ -1449,6 +1521,72 @@ def test_media_edit_patch_persists_json_lyrics_sidecar(client, tmp_path):
             stored = db.query(MediaItem).filter(MediaItem.id == media_id).first()
             assert stored is not None
             assert stored.lyrics_path == "/media/editable-json.json"
+    finally:
+        settings.media_path = original_media
+        settings.cache_path = original_cache
+
+
+def test_media_edit_patch_converts_ttml_and_skips_alignment(client, tmp_path):
+    """Media edit should convert TTML into JSON and skip WhisperX alignment."""
+    authenticate_admin_client(client)
+    original_media = settings.media_path
+    original_cache = settings.cache_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.cache_path = tmp_path / "cache"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        settings.cache_path.mkdir(parents=True, exist_ok=True)
+        media_file = settings.media_path / "editable-ttml.mp4"
+        media_file.write_text("video", encoding="utf-8")
+
+        with TestingSessionLocal() as db:
+            media = MediaItem(
+                title="Editable TTML",
+                artist="Singer",
+                file_stem="editable-ttml",
+                media_path="/media/editable-ttml.mp4",
+                missing=False,
+            )
+            db.add(media)
+            db.commit()
+            media_id = media.id
+
+        healthy = DemucsHealthResponse(api_url="http://demucs", healthy=True, detail="ok")
+        with (
+            patch("routes.media_library.runtime_settings_service.get_demucs_health", return_value=healthy),
+            patch("routes.media_library.task_execution_coordinator.start") as mock_start,
+        ):
+            response = client.patch(
+                f"/api/media/{media_id}",
+                json={
+                    "title": "Editable TTML",
+                    "artist": "Singer",
+                    "rename_on_disk": False,
+                    "is_karaoke": True,
+                    "align_lyrics": True,
+                    "process_lyrics_lines": True,
+                    "max_line_length": 42,
+                    "max_line_length_cjk": 15,
+                    "lyrics_text": TTML_SAMPLE,
+                    "lyrics_format": "ttml",
+                    "whisperx_align_language_override": "KO",
+                },
+            )
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["karaoke_started"] is True
+        assert payload["summary"]["lyrics_path"] == "/media/editable-ttml.json"
+        mock_start.assert_called()
+        saved_payload = json.loads((settings.media_path / "editable-ttml.json").read_text(encoding="utf-8"))
+        assert saved_payload["segments"][0]["text"] == "I know that the bar closes at 11"
+
+        with TestingSessionLocal() as db:
+            task = db.query(ProcessingTask).filter(
+                ProcessingTask.id == payload["karaoke_task_id"]
+            ).one()
+            assert task.task_type == "media_karaoke"
+            assert task.whisperx_align_language_override is None
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache

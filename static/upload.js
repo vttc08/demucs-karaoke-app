@@ -140,7 +140,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const state = lyricsManager.getState();
         const hasText = Boolean((state.text || '').trim());
         const jsonLyrics = state.format === 'json';
-        const canAlign = Boolean(state.lyricsEnabled && hasText && !jsonLyrics && demucsHealth.healthy);
+        const ttmlLyrics = state.format === 'ttml';
+        const canAlign = Boolean(state.lyricsEnabled && hasText && !jsonLyrics && !ttmlLyrics && demucsHealth.healthy);
         const alignRequested = Boolean(state.alignLyricsRequested);
         if (!canAlign && alignRequested) {
             lyricsManager.setAlignLyricsRequested(false);
@@ -154,6 +155,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 uploadLyricsAlignStatus.textContent = t('lyrics.align_demucs_unavailable');
             } else if (jsonLyrics) {
                 uploadLyricsAlignStatus.textContent = t('lyrics.align_json_unsupported');
+            } else if (ttmlLyrics) {
+                uploadLyricsAlignStatus.textContent = t('lyrics.align_xml_skipped');
             } else if (!hasText) {
                 uploadLyricsAlignStatus.textContent = t('lyrics.align_requires_text');
             } else {

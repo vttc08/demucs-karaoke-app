@@ -49,6 +49,7 @@
         if (normalizedExtension === "json") return t("subtitle.file_json");
         if (normalizedExtension === "lrc") return t("media.file_lyrics_lrc");
         if (normalizedExtension === "txt") return t("media.file_lyrics_txt");
+        if (normalizedExtension === "ttml") return t("media.file_lyrics_ttml");
         if (normalizedExtension === "srt") return t("subtitle.file_srt");
         return t("media.file_lyrics");
     }

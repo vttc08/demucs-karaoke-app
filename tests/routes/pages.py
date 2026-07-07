@@ -98,6 +98,7 @@ def test_queue_page_loads(client):
     assert 'href="/media"' in response.text
     assert 'href="/upload"' in response.text
     assert 'href="/queue/lyrics"' in response.text
+    assert 'accept=".lrc,.txt,.json,.ttml"' in response.text
     assert response.text.index('id="search-input"') < response.text.index('id="stage-remote-play-pause-btn"')
     assert 'id="queue-as-settings-panel"' not in response.text
     assert 'id="queue-config-queue-as-panel"' not in response.text

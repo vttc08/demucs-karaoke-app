@@ -115,6 +115,17 @@ class LyricsManager {
     if (/^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/m.test(trimmed)) {
       return 'lrc';
     }
+    if (trimmed.startsWith('<')) {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(trimmed, 'application/xml');
+        if (!doc.querySelector('parsererror')) {
+          return 'ttml';
+        }
+      } catch (_error) {
+        // Fall back to text when XML parsing is unavailable.
+      }
+    }
     if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
       try {
         const parsed = JSON.parse(trimmed);
@@ -135,6 +146,7 @@ class LyricsManager {
     const lower = String(filename || '').toLowerCase();
     if (lower.endsWith('.json')) return 'json';
     if (lower.endsWith('.lrc')) return 'lrc';
+    if (lower.endsWith('.ttml')) return 'ttml';
     return 'txt';
   }
 
@@ -146,6 +158,8 @@ class LyricsManager {
       case 'json':
         return LyricsManager.t('lyrics.synced');
       case 'lrc':
+        return LyricsManager.t('lyrics.timed');
+      case 'ttml':
         return LyricsManager.t('lyrics.timed');
       case 'txt':
         return LyricsManager.t('lyrics.plain');
@@ -362,6 +376,10 @@ class LyricsManager {
       this.state.lyricsState = 'manual';
       this.state.format = LyricsManager.inferFormat(trimmedText);
       this.state.isSynced = this.state.format !== 'txt';
+      if (this.state.format === 'ttml') {
+        this.state.alignLyricsRequested = false;
+        this.state.processLyricsLines = false;
+      }
     } else if (this.state.lyricsState === 'manual') {
       this.state.lyricsState = 'idle';
       this.state.format = 'txt';
@@ -386,6 +404,10 @@ class LyricsManager {
       this.state.isSynced = this.state.format !== 'txt';
       this.state.provider = `upload:${file.name}`;
       this.state.lyricsState = 'manual';
+      if (this.state.format === 'ttml') {
+        this.state.alignLyricsRequested = false;
+        this.state.processLyricsLines = false;
+      }
       this.notifyListeners();
     } catch (error) {
       console.error('Failed to read lyrics file:', error);
