@@ -735,6 +735,8 @@
   "stage.lyrics_background_media_hint": "使用 /media/... 图片或视频。仅在全屏时显示在歌词后方。",
   "stage.lyrics_background_opacity": "背景透明度",
   "stage.lyrics_custom_font": "自定义字体栈",
+  "stage.lyrics_custom_font_detail": "卡拉 OK 模式会在可用时向 Google Fonts 请求粗体字重；如果该字体没有提供，也会平滑回退。",
+  "stage.lyrics_custom_font_preview_empty": "输入字体名称即可预览卡拉 OK 字重。",
   "stage.lyrics_download": "下载",
   "stage.lyrics_apply": "应用",
   "stage.lyrics_font": "字体",

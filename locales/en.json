@@ -735,6 +735,8 @@
   "stage.lyrics_background_media_hint": "Use a /media/... image or video. It appears only in fullscreen behind lyrics.",
   "stage.lyrics_background_opacity": "Background opacity",
   "stage.lyrics_custom_font": "Custom font stack",
+  "stage.lyrics_custom_font_detail": "Karaoke mode will ask Google Fonts for bold faces when available, then fall back cleanly if the family does not ship them.",
+  "stage.lyrics_custom_font_preview_empty": "Enter a font family to preview the karaoke weight.",
   "stage.lyrics_download": "Download",
   "stage.lyrics_apply": "Apply",
   "stage.lyrics_font": "Typeface",

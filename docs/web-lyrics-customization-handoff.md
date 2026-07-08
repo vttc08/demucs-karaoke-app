@@ -35,7 +35,10 @@ This document captures extension points for future lyric-style customization on 
 - The karaoke preset uses the local `ZCOOL QingKe HuangYou` face instead of the decorative script fallback.
 - Custom font stacks are applied as CSS `font-family` values and only take effect when the user clicks
   the explicit Apply or Save actions. At that point the page requests the first non-generic,
-  non-local font family from Google Fonts once; typing in the textbox does not trigger network requests.
+  non-local font family from Google Fonts once, including bold weights for karaoke styling when the
+  family supports them; typing in the textbox does not trigger network requests.
+- The custom-font panel shows a live preview with a bold-first sample so operators can tell whether
+  a Google Font is legible before saving it for stage use.
 - Outline rendering is stroke-first on supporting browsers, with a shadow fallback for older engines.
 
 ## Recommended future customization surfaces

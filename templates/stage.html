@@ -493,6 +493,27 @@
         min-width: 0;
     }
 
+    .stage-lyrics-custom-font-preview {
+        display: flex;
+        align-items: center;
+        min-height: 2.5rem;
+        padding: 0.65rem 0.8rem;
+        border-radius: 0.95rem;
+        border: 1px dashed rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.04);
+        font-size: 0.92rem;
+        line-height: 1.15;
+        color: rgba(255, 255, 255, 0.86);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .stage-lyrics-custom-font-preview.is-empty {
+        color: rgba(255, 255, 255, 0.62);
+        font-style: italic;
+    }
+
     .stage-lyrics-settings-field--wide {
         grid-column: 1 / -1;
     }
@@ -1403,6 +1424,8 @@
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--half">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_custom_font') }}</span>
                                         <input id="stage-lyrics-custom-font" class="stage-lyrics-settings-input" type="text" placeholder='"Noto Sans SC", sans-serif' />
+                                        <span class="text-[11px] leading-tight text-on-surface-variant">{{ t('stage.lyrics_custom_font_detail') }}</span>
+                                        <p id="stage-lyrics-custom-font-preview" class="stage-lyrics-custom-font-preview" aria-live="polite" aria-atomic="true">{{ t('stage.lyrics_custom_font_preview_empty') }}</p>
                                     </label>
                                 </div>
                                 <div class="stage-lyrics-settings-grid">
@@ -1744,6 +1767,7 @@ const stageLyrics = new window.StageLyricsController({
     inputs: {
         fontPreset: document.getElementById("stage-lyrics-font-preset"),
         customFontFamily: document.getElementById("stage-lyrics-custom-font"),
+        customFontPreview: document.getElementById("stage-lyrics-custom-font-preview"),
         sizeVw: document.getElementById("stage-lyrics-size"),
         sizeVwValue: document.getElementById("stage-lyrics-size-value"),
         lineWidthPct: document.getElementById("stage-lyrics-line-width-pct"),
