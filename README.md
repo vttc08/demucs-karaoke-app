@@ -8,7 +8,7 @@ Lightweight AI-powered karaoke application for home use.
 - **Stage Page**: Auto-play queue with karaoke mode
 - **Karaoke Mode**: Vocal removal + optional sidecar lyrics overlay
 - **Queue Lyrics Viewer**: Phone-friendly lyrics page for the currently playing song (synced + unsynced, line-based cues, aligned JSON preferred when AI karaoke returns it)
-- **Subtitle Workflow**: Admin-only ASS/Aegisub and SRT/SubtitleEdit editor for round-tripping synced JSON lyrics
+- **Subtitle Workflow**: Admin-only ASS/Aegisub, SRT/SubtitleEdit, and TTML-to-JSON import workflow for round-tripping synced JSON lyrics
 - **Non-Karaoke Mode**: Play original videos
 - **Real-time Queue Updates**: WebSocket push with polling fallback
 - **Mobile-Friendly Reconnects**: Lifecycle-aware websocket recovery on queue, lyrics, and stage pages for faster return after backgrounding or screen-off on mobile browsers
@@ -190,7 +190,7 @@ and `/static/...`.
           - Lyrics sidecars are classified by suffix: `.lrc` and `.txt` stay under the normal lyrics badge, while WhisperX word-aligned `.json` sidecars get a separate badge; legacy `.cdg` sidecars are treated as read-only display assets and do not unlock the text-lyrics editor
           - Admin users can open **Lossless Trim** from the edit modal to retain an intro/outro interval without re-encoding; video boundaries snap outward to I-frames and attached vocals/lyrics are shifted to the same interval, while CDG sidecars relabel the same entry point to **Transcode to MP4** and use the editor's fallback path instead
           - Admin users can open **Add Vocals** from the edit modal to prepare a vocal source from YouTube or upload, review the estimated sync offset, and commit a new guide-vocal sidecar
-          - Admin users can open **Lyrics Editor** from the edit modal to export ASS or SRT subtitle files, edit them in Aegisub or SubtitleEdit, and import the result back into the canonical JSON lyrics sidecar
+          - Admin users can open **Lyrics Editor** from the edit modal to export ASS or SRT subtitle files, edit them in Aegisub or SubtitleEdit, and import the result back into the canonical JSON lyrics sidecar; the subtitle workflow page also accepts TTML uploads on the fallback import path and converts them to JSON
           - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
           - Admin users can open the media edit modal file panel to download the main file or tracked sidecars individually, delete sidecars when they want to re-run processing, or download the whole package as a ZIP; missing tracked sidecars are hidden so the panel only shows real on-disk files
           - Admin users can trigger **Scan Library** to reconcile DB with filesystem on demand

@@ -16,6 +16,12 @@ The subtitle editor is an admin-only workflow for round-tripping synced JSON lyr
 - The notebook uses `i * 10` for the marker index so users can insert lines between existing segments later.
 - SubtitleEdit is the preferred editor when the goal is word-level reshaping instead of karaoke timing.
 
+## Import path: TTML to JSON
+
+- TTML uploads on `/media-subtitles/{item_id}` are parsed directly into the app's canonical WhisperX JSON sidecar.
+- The parser uses Python's built-in XML support and follows the notebook-proven TTML notebook in `docs/ttml.ipynb`.
+- XML validation is kept separate so future upload flows can detect TTML or other XML inputs before deciding whether WhisperX alignment is needed.
+
 ## Split/Merge editor
 
 - `/media-subtitles/{item_id}/split-merge` opens the synced JSON split/merge editor for a single media item.
@@ -33,4 +39,4 @@ The subtitle editor is an admin-only workflow for round-tripping synced JSON lyr
 
 ## Authoritative source
 
-The current notebook notes in `docs/subtitles.ipynb` are the source of truth for the ASS and SRT conversion behavior.
+The current notebook notes in `docs/subtitles.ipynb` are the source of truth for the ASS and SRT conversion behavior. The TTML import notebook in `docs/ttml.ipynb` is the source of truth for TTML parsing behavior.

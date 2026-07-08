@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 from .common import *
 
 
@@ -34,7 +36,42 @@ def create_lyrics_preset(client, name: str = "TV Pink") -> int:
     return response.json()["id"]
 
 
+@contextmanager
+def connected_websocket(client, page: str):
+    """Open a websocket, verify the connected message, and subscribe it."""
+    with client.websocket_connect("/api/queue/ws") as websocket:
+        assert websocket.receive_json()["type"] == "connected"
+        subscribe_websocket(websocket, page)
+        yield websocket
 
+
+def drain_stage_clock_update(websocket):
+    """Consume the initial stage clock update emitted after stage subscribe."""
+    clock_state = receive_non_ping(websocket)
+    assert clock_state["type"] == "stage_clock_subscribers_update"
+    return clock_state
+
+
+def reset_stage_state():
+    """Restore the in-memory stage state to the default baseline."""
+    manager._stage_state = {
+        "is_paused": False,
+        "vocals_enabled": True,
+        "vocals_volume": settings.stage_vocals_volume_default,
+        "lyrics_enabled": True,
+        "current_time": 0.0,
+    }
+
+
+def assert_event_fields(event, event_type: str, **fields):
+    """Assert a websocket event type and selected data fields."""
+    assert event["type"] == event_type
+    for key, expected in fields.items():
+        actual = event["data"][key]
+        if callable(expected):
+            assert expected(actual)
+        else:
+            assert actual == expected
 def test_websocket_connect_and_receive_connected_message(client):
     """WebSocket endpoint should accept connections and send initial connected payload."""
     with client.websocket_connect("/api/queue/ws") as websocket:
@@ -112,6 +149,7 @@ def test_websocket_stage_presence_falls_back_to_stage_id_label(client):
 
 def test_websocket_targeted_lyrics_settings_requires_admin(client):
     """Remote lyrics style application should be admin-only."""
+    client.cookies.clear()
     with client.websocket_connect("/api/queue/ws") as sender:
         assert sender.receive_json()["type"] == "connected"
         subscribe_websocket(sender, "queue")
@@ -137,12 +175,16 @@ def test_websocket_targeted_lyrics_settings_requires_admin(client):
             )
 
             error = receive_non_ping(sender)
-            assert error["type"] == "error"
-            assert error["data"]["detail"] == "Admin session required for lyrics settings"
+            assert_event_fields(
+                error,
+                "error",
+                detail="Admin session required for lyrics settings",
+            )
 
 
 def test_websocket_background_toggle_requires_admin(client):
     """Remote background toggles should be admin-only."""
+    client.cookies.clear()
     with client.websocket_connect("/api/queue/ws") as sender:
         assert sender.receive_json()["type"] == "connected"
         subscribe_websocket(sender, "queue")
@@ -165,8 +207,11 @@ def test_websocket_background_toggle_requires_admin(client):
             )
 
             error = receive_non_ping(sender)
-            assert error["type"] == "error"
-            assert error["data"]["detail"] == "Admin session required for background settings"
+            assert_event_fields(
+                error,
+                "error",
+                detail="Admin session required for background settings",
+            )
 
 
 def test_websocket_targeted_lyrics_settings_auto_targets_single_stage(client):
@@ -197,13 +242,16 @@ def test_websocket_targeted_lyrics_settings_auto_targets_single_stage(client):
             )
 
             command = receive_non_ping(stage_socket)
-            assert command["type"] == "stage_control_command"
-            assert command["data"]["command"] == "apply_lyrics_settings"
-            assert command["data"]["target_stage_id"] == "stage-tv"
-            assert command["data"]["lyrics_enabled"] is False
-            assert command["data"]["background_media_enabled"] is False
-            assert command["data"]["preset_id"] == preset_id
-            assert command["data"]["override"] is False
+            assert_event_fields(
+                command,
+                "stage_control_command",
+                command="apply_lyrics_settings",
+                target_stage_id="stage-tv",
+                lyrics_enabled=False,
+                background_media_enabled=False,
+                preset_id=preset_id,
+                override=False,
+            )
 
 
 def test_websocket_targeted_lyrics_settings_override_keeps_manual_values(client):
@@ -236,13 +284,16 @@ def test_websocket_targeted_lyrics_settings_override_keeps_manual_values(client)
             )
 
             command = receive_non_ping(stage_socket)
-            assert command["type"] == "stage_control_command"
-            assert command["data"]["command"] == "apply_lyrics_settings"
-            assert command["data"]["target_stage_id"] == "stage-tv"
-            assert command["data"]["override"] is True
-            assert command["data"]["background_media_enabled"] is False
-            assert command["data"]["size_vw"] == 5.2
-            assert command["data"]["line_width_pct"] == 90
+            assert_event_fields(
+                command,
+                "stage_control_command",
+                command="apply_lyrics_settings",
+                target_stage_id="stage-tv",
+                override=True,
+                background_media_enabled=False,
+                size_vw=5.2,
+                line_width_pct=90,
+            )
 
 
 def test_websocket_targeted_lyrics_settings_requires_target_for_multiple_stages(client):
@@ -273,8 +324,11 @@ def test_websocket_targeted_lyrics_settings_requires_target_for_multiple_stages(
                 )
 
                 error = receive_non_ping(sender)
-                assert error["type"] == "error"
-                assert error["data"]["detail"] == "Lyrics settings require a target stage"
+                assert_event_fields(
+                    error,
+                    "error",
+                    detail="Lyrics settings require a target stage",
+                )
 
 
 def test_websocket_targeted_lyrics_settings_validates_payload(client):
@@ -301,8 +355,11 @@ def test_websocket_targeted_lyrics_settings_validates_payload(client):
                 }
             )
             missing = receive_non_ping(sender)
-            assert missing["type"] == "error"
-            assert missing["data"]["detail"] == "Lyrics preset not found"
+            assert_event_fields(
+                missing,
+                "error",
+                detail="Lyrics preset not found",
+            )
 
             sender.send_json(
                 {
@@ -317,8 +374,11 @@ def test_websocket_targeted_lyrics_settings_validates_payload(client):
                 }
             )
             bad_size = receive_non_ping(sender)
-            assert bad_size["type"] == "error"
-            assert bad_size["data"]["detail"] == "size_vw must be between 3.2 and 8.8"
+            assert_event_fields(
+                bad_size,
+                "error",
+                detail="size_vw must be between 3.2 and 8.8",
+            )
 
 
 def test_websocket_lyrics_settings_ack_forwards_to_queue_clients(client):
@@ -672,16 +732,13 @@ def test_websocket_broadcasts_queue_cleared(client):
             event = websocket.receive_json()
         assert event["type"] == "queue_cleared"
 
-def test_websocket_stage_command_pause_broadcasts_control_and_state(client):
-    """Pause stage command should broadcast control command and paused state."""
+def test_websocket_stage_command_state_broadcasts(client):
+    """Common stage state commands should broadcast the expected state updates."""
     authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "queue")
 
+    reset_stage_state()
+    with connected_websocket(client, "queue") as sender:
+        with connected_websocket(client, "queue") as receiver:
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -690,34 +747,26 @@ def test_websocket_stage_command_pause_broadcasts_control_and_state(client):
                 }
             )
 
-            control_event = receiver.receive_json()
-            if control_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                control_event = receiver.receive_json()
-            assert control_event["type"] == "stage_control_command"
-            assert control_event["data"]["command"] == "pause"
-            assert control_event["data"]["source"] == "queue"
+            control_event = receive_non_ping(receiver)
+            assert_event_fields(
+                control_event,
+                "stage_control_command",
+                command="pause",
+                source="queue",
+            )
+            state_event = receive_non_ping(receiver)
+            assert_event_fields(
+                state_event,
+                "stage_state_update",
+                is_paused=True,
+                vocals_enabled=True,
+                vocals_volume=1.0,
+                lyrics_enabled=True,
+            )
 
-            state_event = receiver.receive_json()
-            if state_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                state_event = receiver.receive_json()
-            assert state_event["type"] == "stage_state_update"
-            assert state_event["data"]["is_paused"] is True
-            assert state_event["data"]["vocals_enabled"] is True
-            assert state_event["data"]["vocals_volume"] == 1.0
-            assert state_event["data"]["lyrics_enabled"] is True
-
-def test_websocket_stage_command_set_lyrics_enabled_broadcasts_state(client):
-    """Lyrics toggle should broadcast a stage state update."""
-    authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "queue")
-
+    reset_stage_state()
+    with connected_websocket(client, "queue") as sender:
+        with connected_websocket(client, "queue") as receiver:
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -730,31 +779,34 @@ def test_websocket_stage_command_set_lyrics_enabled_broadcasts_state(client):
                 }
             )
 
-            state_event = receiver.receive_json()
-            if state_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                state_event = receiver.receive_json()
-            assert state_event["type"] == "stage_state_update"
-            assert state_event["data"]["lyrics_enabled"] is False
-            assert state_event["data"]["vocals_enabled"] is True
+            state_event = receive_non_ping(receiver)
+            assert_event_fields(
+                state_event,
+                "stage_state_update",
+                lyrics_enabled=False,
+                vocals_enabled=True,
+            )
 
-def test_websocket_guest_cannot_control_other_guest_current_item(client):
-    """Guest websocket stage commands should be denied for other guests' songs."""
+def test_websocket_guest_stage_command_authorization(client):
+    """Guest control should reject unauthorized items and allow owned/delegated ones."""
+    client.cookies.clear()
     client.cookies.set("karaoke_guest_id", "guest-owner")
-    first = client.post(
+    denied = client.post(
         "/api/queue/",
-        json={"youtube_id": "ws-guest-denied", "title": "WS Guest Denied", "is_karaoke": False},
+        json={
+            "youtube_id": "ws-guest-denied",
+            "title": "WS Guest Denied",
+            "is_karaoke": False,
+        },
     ).json()
 
     with TestingSessionLocal() as db:
-        row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        row = db.query(QueueItem).filter(QueueItem.id == denied["id"]).first()
         row.status = QueueStatus.PLAYING
         db.commit()
 
     client.cookies.set("karaoke_guest_id", "guest-other")
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
+    with connected_websocket(client, "queue") as sender:
         sender.send_json(
             {
                 "type": "stage_command",
@@ -763,32 +815,31 @@ def test_websocket_guest_cannot_control_other_guest_current_item(client):
             }
         )
 
-        response = sender.receive_json()
-        if response["type"] == "ping":
-            sender.send_json({"type": "pong"})
-            response = sender.receive_json()
-        assert response["type"] == "error"
-        assert response["data"]["detail"] == "Not allowed to control this stage item"
+        response = receive_non_ping(sender)
+        assert_event_fields(
+            response,
+            "error",
+            detail="Not allowed to control this stage item",
+        )
 
-def test_websocket_guest_can_control_owned_current_item(client):
-    """Guest websocket stage commands should be allowed for their own current song."""
+    client.cookies.clear()
     client.cookies.set("karaoke_guest_id", "guest-owner")
-    first = client.post(
+    owned = client.post(
         "/api/queue/",
-        json={"youtube_id": "ws-guest-owned", "title": "WS Guest Owned", "is_karaoke": False},
+        json={
+            "youtube_id": "ws-guest-owned",
+            "title": "WS Guest Owned",
+            "is_karaoke": False,
+        },
     ).json()
 
     with TestingSessionLocal() as db:
-        row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        row = db.query(QueueItem).filter(QueueItem.id == owned["id"]).first()
         row.status = QueueStatus.PLAYING
         db.commit()
 
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "queue")
+    with connected_websocket(client, "queue") as sender:
+        with connected_websocket(client, "queue") as receiver:
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -801,18 +852,17 @@ def test_websocket_guest_can_control_owned_current_item(client):
                 }
             )
 
-            state_event = receiver.receive_json()
-            if state_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                state_event = receiver.receive_json()
-            assert state_event["type"] == "stage_state_update"
-            assert state_event["data"]["lyrics_enabled"] is False
+            state_event = receive_non_ping(receiver)
+            assert_event_fields(
+                state_event,
+                "stage_state_update",
+                lyrics_enabled=False,
+            )
 
-def test_websocket_delegated_guest_can_control_admin_queued_current_item(client):
-    """A delegated guest should be authorized for websocket stage commands."""
+    client.cookies.clear()
     authenticate_admin_client(client)
     client.cookies.set("karaoke_guest_id", "guest-admin-device")
-    first = client.post(
+    delegated = client.post(
         "/api/queue/",
         json={
             "youtube_id": "ws-delegated-owned",
@@ -824,18 +874,14 @@ def test_websocket_delegated_guest_can_control_admin_queued_current_item(client)
     ).json()
 
     with TestingSessionLocal() as db:
-        row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        row = db.query(QueueItem).filter(QueueItem.id == delegated["id"]).first()
         row.status = QueueStatus.PLAYING
         db.commit()
 
-    client.cookies.pop(ADMIN_SESSION_COOKIE, None)
+    client.cookies.clear()
     client.cookies.set("karaoke_guest_id", "guest-owner")
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "queue")
+    with connected_websocket(client, "queue") as sender:
+        with connected_websocket(client, "queue") as receiver:
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -848,23 +894,20 @@ def test_websocket_delegated_guest_can_control_admin_queued_current_item(client)
                 }
             )
 
-            state_event = receiver.receive_json()
-            if state_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                state_event = receiver.receive_json()
-            assert state_event["type"] == "stage_state_update"
-            assert state_event["data"]["lyrics_enabled"] is False
+            state_event = receive_non_ping(receiver)
+            assert_event_fields(
+                state_event,
+                "stage_state_update",
+                lyrics_enabled=False,
+            )
 
-def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
-    """Seek stage command should broadcast target timestamp and paused state."""
+def test_websocket_stage_command_controls_and_validation(client):
+    """Common stage commands should broadcast or reject in predictable ways."""
     authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "queue")
 
+    reset_stage_state()
+    with connected_websocket(client, "queue") as sender:
+        with connected_websocket(client, "queue") as receiver:
             sender.send_json(
                 {
                     "type": "stage_command",
@@ -878,23 +921,289 @@ def test_websocket_stage_command_seek_broadcasts_control_and_state(client):
                 }
             )
 
-            control_event = receiver.receive_json()
-            if control_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                control_event = receiver.receive_json()
-            assert control_event["type"] == "stage_control_command"
-            assert control_event["data"]["command"] == "seek"
-            assert control_event["data"]["source"] == "queue"
-            assert control_event["data"]["seek_time"] == 42.5
-            assert control_event["data"]["is_paused"] is False
+            control_event = receive_non_ping(receiver)
+            assert_event_fields(
+                control_event,
+                "stage_control_command",
+                command="seek",
+                source="queue",
+                seek_time=42.5,
+                is_paused=False,
+            )
+            state_event = receive_non_ping(receiver)
+            assert_event_fields(
+                state_event,
+                "stage_state_update",
+                is_paused=False,
+                current_time=42.5,
+            )
 
-            state_event = receiver.receive_json()
-            if state_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                state_event = receiver.receive_json()
-            assert state_event["type"] == "stage_state_update"
-            assert state_event["data"]["is_paused"] is False
-            assert state_event["data"]["current_time"] == 42.5
+    reset_stage_state()
+    with connected_websocket(client, "queue") as sender:
+        with connected_websocket(client, "stage") as receiver:
+            drain_stage_clock_update(receiver)
+
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "seek_relative",
+                        "source": "queue",
+                        "offset_seconds": 5,
+                        "is_paused": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            control_event = receive_non_ping(receiver)
+            assert_event_fields(
+                control_event,
+                "stage_control_command",
+                command="seek_relative",
+                source="queue",
+                offset_seconds=5,
+                is_paused=False,
+            )
+
+    reset_stage_state()
+    with connected_websocket(client, "queue") as sender:
+        with connected_websocket(client, "queue") as receiver:
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {"command": "resync", "source": "queue"},
+                    "timestamp": 123,
+                }
+            )
+
+            control_event = receive_non_ping(receiver)
+            assert_event_fields(
+                control_event,
+                "stage_control_command",
+                command="resync",
+                source="queue",
+                sync_version=lambda value: isinstance(value, int),
+            )
+
+    reset_stage_state()
+    with connected_websocket(client, "stage") as sender:
+        drain_stage_clock_update(sender)
+        with connected_websocket(client, "stage") as receiver:
+            drain_stage_clock_update(receiver)
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "resync",
+                        "source": "stage",
+                        "seek_time": 12.75,
+                        "is_paused": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            control_event = receive_non_ping(receiver)
+            assert_event_fields(
+                control_event,
+                "stage_control_command",
+                command="resync",
+                source="stage",
+                seek_time=12.75,
+                is_paused=False,
+                sync_version=lambda value: isinstance(value, int),
+            )
+
+    reset_stage_state()
+    with connected_websocket(client, "queue") as sender:
+        with connected_websocket(client, "queue") as receiver:
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "set_vocals_enabled",
+                        "source": "queue",
+                        "vocals_enabled": False,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            state_event = receive_non_ping(receiver)
+            assert_event_fields(
+                state_event,
+                "stage_state_update",
+                vocals_enabled=False,
+                vocals_volume=1.0,
+            )
+
+    reset_stage_state()
+    with connected_websocket(client, "queue") as sender:
+        with connected_websocket(client, "queue") as receiver:
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "set_vocals_enabled",
+                        "source": "queue",
+                        "vocals_enabled": True,
+                    },
+                    "timestamp": 122,
+                }
+            )
+            bootstrap_event = receive_non_ping(receiver)
+            assert_event_fields(
+                bootstrap_event,
+                "stage_state_update",
+                vocals_enabled=True,
+            )
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {
+                        "command": "set_vocals_volume",
+                        "source": "queue",
+                        "vocals_volume": 0.35,
+                    },
+                    "timestamp": 123,
+                }
+            )
+
+            state_event = receive_non_ping(receiver)
+            assert_event_fields(
+                state_event,
+                "stage_state_update",
+                vocals_enabled=True,
+                vocals_volume=0.35,
+            )
+
+    reset_stage_state()
+    with connected_websocket(client, "queue") as sender:
+        sender.send_json(
+            {
+                "type": "stage_command",
+                "data": {"command": "seek", "source": "queue", "seek_time": -1},
+                "timestamp": 123,
+            }
+        )
+
+        response = receive_non_ping(sender)
+        assert_event_fields(
+            response,
+            "error",
+            detail="seek_time must be a non-negative finite number",
+        )
+
+    reset_stage_state()
+    with connected_websocket(client, "queue") as sender:
+        sender.send_json(
+            {
+                "type": "stage_command",
+                "data": {
+                    "command": "seek_relative",
+                    "source": "queue",
+                    "offset_seconds": "5",
+                },
+                "timestamp": 123,
+            }
+        )
+
+        response = receive_non_ping(sender)
+        assert_event_fields(
+            response,
+            "error",
+            detail="seek_relative requires numeric offset_seconds",
+        )
+
+    reset_stage_state()
+    with connected_websocket(client, "queue") as sender:
+        sender.send_json(
+            {
+                "type": "stage_command",
+                "data": {
+                    "command": "set_vocals_volume",
+                    "source": "queue",
+                    "vocals_volume": 2.0,
+                },
+                "timestamp": 123,
+            }
+        )
+
+        response = receive_non_ping(sender)
+        assert_event_fields(
+            response,
+            "error",
+            detail="vocals_volume must be between 0.0 and 1.0",
+        )
+
+    reset_stage_state()
+    first = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "ws-stage-skip-1",
+            "title": "WS Stage Skip 1",
+            "is_karaoke": False,
+        },
+    ).json()
+    second = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "ws-stage-skip-2",
+            "title": "WS Stage Skip 2",
+            "is_karaoke": False,
+        },
+    ).json()
+
+    with TestingSessionLocal() as db:
+        first_row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
+        second_row = db.query(QueueItem).filter(QueueItem.id == second["id"]).first()
+        first_row.status = QueueStatus.PLAYING
+        second_row.status = QueueStatus.READY
+        db.commit()
+
+    with connected_websocket(client, "queue") as sender:
+        with connected_websocket(client, "queue") as receiver:
+            sender.send_json(
+                {
+                    "type": "stage_command",
+                    "data": {"command": "skip", "source": "queue"},
+                    "timestamp": 123,
+                }
+            )
+
+            stage_control_event = None
+            current_changed_event = None
+            for _ in range(6):
+                event = receive_non_ping(receiver)
+                if event["type"] == "stage_control_command":
+                    stage_control_event = event
+                if event["type"] == "current_item_changed":
+                    current_changed_event = event
+                if stage_control_event and current_changed_event:
+                    break
+
+            assert stage_control_event is not None
+            assert_event_fields(
+                stage_control_event,
+                "stage_control_command",
+                command="skip",
+                source="queue",
+            )
+            assert current_changed_event is not None
+            assert_event_fields(
+                current_changed_event,
+                "current_item_changed",
+                id=second["id"],
+                previous_id=first["id"],
+            )
+
+    current = client.get("/api/queue/current")
+    assert current.status_code == 200
+    current_payload = current.json()
+    assert current_payload is not None
+    assert current_payload["id"] == second["id"]
+
 
 def test_websocket_stage_time_update_broadcasts_only_to_lyrics_viewers(client):
     """Stage time updates should refresh lyrics viewers without noisy queue/stage fanout."""
@@ -986,283 +1295,3 @@ def test_websocket_stage_time_update_requires_admin(client):
             response = sender.receive_json()
         assert response["type"] == "error"
         assert response["data"]["detail"] == "Admin session required for stage time updates"
-
-def test_websocket_stage_command_seek_rejects_invalid_time(client):
-    """Invalid seek_time values should return websocket error."""
-    authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        sender.send_json(
-            {
-                "type": "stage_command",
-                "data": {"command": "seek", "source": "queue", "seek_time": -1},
-                "timestamp": 123,
-            }
-        )
-
-        response = sender.receive_json()
-        if response["type"] == "ping":
-            sender.send_json({"type": "pong"})
-            response = sender.receive_json()
-        assert response["type"] == "error"
-        assert "seek_time must be a non-negative finite number" in response["data"]["detail"]
-
-def test_websocket_stage_command_seek_relative_broadcasts_control_only(client):
-    """Relative seek commands should be resolved by the stage client."""
-    authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "stage")
-            clock_state = receive_non_ping(receiver)
-            assert clock_state["type"] == "stage_clock_subscribers_update"
-
-            sender.send_json(
-                {
-                    "type": "stage_command",
-                    "data": {
-                        "command": "seek_relative",
-                        "source": "queue",
-                        "offset_seconds": 5,
-                        "is_paused": False,
-                    },
-                    "timestamp": 123,
-                }
-            )
-
-            control_event = receive_non_ping(receiver)
-            assert control_event["type"] == "stage_control_command"
-            assert control_event["data"]["command"] == "seek_relative"
-            assert control_event["data"]["source"] == "queue"
-            assert control_event["data"]["offset_seconds"] == 5
-            assert control_event["data"]["is_paused"] is False
-
-def test_websocket_stage_command_seek_relative_rejects_invalid_offset(client):
-    """Relative seek commands should require a finite numeric offset."""
-    authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        sender.send_json(
-            {
-                "type": "stage_command",
-                "data": {"command": "seek_relative", "source": "queue", "offset_seconds": "5"},
-                "timestamp": 123,
-            }
-        )
-
-        response = receive_non_ping(sender)
-        assert response["type"] == "error"
-        assert response["data"]["detail"] == "seek_relative requires numeric offset_seconds"
-
-def test_websocket_stage_command_resync_broadcasts_control(client):
-    """Resync stage command should broadcast control command with a sync version."""
-    authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "queue")
-            sender.send_json(
-                {
-                    "type": "stage_command",
-                    "data": {"command": "resync", "source": "queue"},
-                    "timestamp": 123,
-                }
-            )
-
-            control_event = receiver.receive_json()
-            if control_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                control_event = receiver.receive_json()
-            assert control_event["type"] == "stage_control_command"
-            assert control_event["data"]["command"] == "resync"
-            assert control_event["data"]["source"] == "queue"
-            assert isinstance(control_event["data"]["sync_version"], int)
-
-def test_websocket_stage_command_resync_accepts_optional_timeline(client):
-    """Resync can carry a concrete timeline when sent by the stage client."""
-    authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "stage")
-        clock_state = receive_non_ping(sender)
-        assert clock_state["type"] == "stage_clock_subscribers_update"
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "stage")
-            clock_state = receive_non_ping(receiver)
-            assert clock_state["type"] == "stage_clock_subscribers_update"
-            sender.send_json(
-                {
-                    "type": "stage_command",
-                    "data": {
-                        "command": "resync",
-                        "source": "stage",
-                        "seek_time": 12.75,
-                        "is_paused": False,
-                    },
-                    "timestamp": 123,
-                }
-            )
-
-            control_event = receiver.receive_json()
-            if control_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                control_event = receiver.receive_json()
-            assert control_event["type"] == "stage_control_command"
-            assert control_event["data"]["command"] == "resync"
-            assert control_event["data"]["source"] == "stage"
-            assert control_event["data"]["seek_time"] == 12.75
-            assert control_event["data"]["is_paused"] is False
-            assert isinstance(control_event["data"]["sync_version"], int)
-
-def test_websocket_stage_command_set_vocals_enabled_broadcasts_state(client):
-    """Vocals enabled command should broadcast updated stage mix state."""
-    authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "queue")
-            sender.send_json(
-                {
-                    "type": "stage_command",
-                    "data": {"command": "set_vocals_enabled", "source": "queue", "vocals_enabled": False},
-                    "timestamp": 123,
-                }
-            )
-
-            state_event = receiver.receive_json()
-            if state_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                state_event = receiver.receive_json()
-            assert state_event["type"] == "stage_state_update"
-            assert state_event["data"]["vocals_enabled"] is False
-            assert state_event["data"]["vocals_volume"] == 1.0
-
-def test_websocket_stage_command_set_vocals_volume_broadcasts_state(client):
-    """Vocals volume command should broadcast updated stage mix state."""
-    authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "queue")
-            sender.send_json(
-                {
-                    "type": "stage_command",
-                    "data": {"command": "set_vocals_enabled", "source": "queue", "vocals_enabled": True},
-                    "timestamp": 122,
-                }
-            )
-            bootstrap_event = receiver.receive_json()
-            if bootstrap_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                bootstrap_event = receiver.receive_json()
-            assert bootstrap_event["type"] == "stage_state_update"
-            sender.send_json(
-                {
-                    "type": "stage_command",
-                    "data": {"command": "set_vocals_volume", "source": "queue", "vocals_volume": 0.35},
-                    "timestamp": 123,
-                }
-            )
-
-            state_event = receiver.receive_json()
-            if state_event["type"] == "ping":
-                receiver.send_json({"type": "pong"})
-                state_event = receiver.receive_json()
-            assert state_event["type"] == "stage_state_update"
-            assert state_event["data"]["vocals_enabled"] is True
-            assert state_event["data"]["vocals_volume"] == 0.35
-
-def test_websocket_stage_command_set_vocals_volume_rejects_out_of_bounds(client):
-    """Out-of-range vocals volume should return websocket error and not broadcast state."""
-    authenticate_admin_client(client)
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        sender.send_json(
-            {
-                "type": "stage_command",
-                "data": {"command": "set_vocals_volume", "source": "queue", "vocals_volume": 2.0},
-                "timestamp": 123,
-            }
-        )
-
-        response = sender.receive_json()
-        if response["type"] == "ping":
-            sender.send_json({"type": "pong"})
-            response = sender.receive_json()
-        assert response["type"] == "error"
-        assert "vocals_volume must be between 0.0 and 1.0" in response["data"]["detail"]
-
-def test_websocket_stage_command_skip_broadcasts_and_changes_current(client):
-    """Skip stage command should advance queue and broadcast item change."""
-    authenticate_admin_client(client)
-    first = client.post(
-        "/api/queue/",
-        json={"youtube_id": "ws-stage-skip-1", "title": "WS Stage Skip 1", "is_karaoke": False},
-    ).json()
-    second = client.post(
-        "/api/queue/",
-        json={"youtube_id": "ws-stage-skip-2", "title": "WS Stage Skip 2", "is_karaoke": False},
-    ).json()
-
-    db = TestingSessionLocal()
-    try:
-        first_row = db.query(QueueItem).filter(QueueItem.id == first["id"]).first()
-        second_row = db.query(QueueItem).filter(QueueItem.id == second["id"]).first()
-        first_row.status = QueueStatus.PLAYING
-        second_row.status = QueueStatus.READY
-        db.commit()
-    finally:
-        db.close()
-
-    with client.websocket_connect("/api/queue/ws") as sender:
-        sender.receive_json()
-        subscribe_websocket(sender, "queue")
-        with client.websocket_connect("/api/queue/ws") as receiver:
-            receiver.receive_json()
-            subscribe_websocket(receiver, "queue")
-            sender.send_json(
-                {
-                    "type": "stage_command",
-                    "data": {"command": "skip", "source": "queue"},
-                    "timestamp": 123,
-                }
-            )
-
-            stage_control_event = None
-            current_changed_event = None
-            for _ in range(6):
-                event = receiver.receive_json()
-                if event["type"] == "ping":
-                    receiver.send_json({"type": "pong"})
-                    continue
-                if event["type"] == "stage_control_command":
-                    stage_control_event = event
-                if event["type"] == "current_item_changed":
-                    current_changed_event = event
-                if stage_control_event and current_changed_event:
-                    break
-
-            assert stage_control_event is not None
-            assert stage_control_event["data"]["command"] == "skip"
-            assert stage_control_event["data"]["source"] == "queue"
-            assert current_changed_event is not None
-            assert current_changed_event["data"]["id"] == second["id"]
-            assert current_changed_event["data"]["previous_id"] == first["id"]
-
-    current = client.get("/api/queue/current")
-    assert current.status_code == 200
-    current_payload = current.json()
-    assert current_payload is not None
-    assert current_payload["id"] == second["id"]

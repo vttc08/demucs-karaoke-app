@@ -566,7 +566,8 @@ function queueConfigLyricsCanAlign() {
     if (!lyricsEnabled || !demucsHealth.healthy) {
         return false;
     }
-    return inferQueueConfigLyricsFormat() !== 'json';
+    const format = inferQueueConfigLyricsFormat();
+    return format !== 'json' && format !== 'ttml';
 }
 
 function syncQueueConfigAlignControls() {
@@ -576,7 +577,7 @@ function syncQueueConfigAlignControls() {
     const lyricsState = lyricsManager?.state.lyricsState || 'idle';
     const canAlign = queueConfigLyricsCanAlign();
 
-    if (!lyricsEnabled || !demucsHealth.healthy || lyricsFormat === 'json') {
+    if (!lyricsEnabled || !demucsHealth.healthy || lyricsFormat === 'json' || lyricsFormat === 'ttml') {
         if (!modalConfigInitializing) {
             modalAlignLyricsEnabled = false;
             modalAlignLyricsAutoEnabled = false;
@@ -600,6 +601,8 @@ function syncQueueConfigAlignControls() {
             queueConfigAlignDetail.textContent = t('lyrics.align_demucs_unavailable');
         } else if (lyricsFormat === 'json') {
             queueConfigAlignDetail.textContent = t('lyrics.align_json_unsupported');
+        } else if (lyricsFormat === 'ttml') {
+            queueConfigAlignDetail.textContent = t('lyrics.align_xml_skipped');
         } else if (!lyricsText) {
             queueConfigAlignDetail.textContent = t('lyrics.align_requires_text');
         } else {
@@ -631,6 +634,8 @@ function syncQueueConfigAlignControls() {
             queueConfigLineProcessingDetail.textContent = t('lyrics.align_demucs_unavailable');
         } else if (lyricsFormat === 'json') {
             queueConfigLineProcessingDetail.textContent = t('queue.process_lyrics_lines_json_unsupported');
+        } else if (lyricsFormat === 'ttml') {
+            queueConfigLineProcessingDetail.textContent = t('lyrics.align_xml_skipped');
         } else if (!lyricsText) {
             queueConfigLineProcessingDetail.textContent = t('lyrics.align_requires_text');
         } else {
@@ -1316,7 +1321,7 @@ async function submitQueueItem(selection, buttonElement, options = {}) {
     
     const lyricsText = lyricsEnabled ? lyricsManager.getSubmissionText() : '';
     const lyricsFormat = lyricsText ? LyricsManager.inferFormat(lyricsText) : null;
-    const alignLyrics = Boolean(lyricsEnabled && modalAlignLyricsEnabled && lyricsText && lyricsFormat !== 'json');
+    const alignLyrics = Boolean(lyricsEnabled && modalAlignLyricsEnabled && lyricsText && lyricsFormat !== 'json' && lyricsFormat !== 'ttml');
     const processLyricsLines = Boolean(alignLyrics && modalProcessLyricsLinesEnabled);
     const whisperxAlignLanguageOverride = alignLyrics
         ? normalizeWhisperxLanguageCode(queueConfigLyricsLanguageInput?.value)

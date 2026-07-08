@@ -16,13 +16,14 @@ from sqlalchemy.orm import Session
 from models import MediaItem, utc_now
 from services.lyrics_service import LyricsService
 from services.queue_service import QueueService
+from services.ttml_parser import TTMLParseError, is_valid_xml, parse_ttml_to_whisperx_segments
 
 logger = logging.getLogger(__name__)
 
 _ASS_KARAOKE_TAG_RE = re.compile(r"\{\\k(\d+)\}([^\{]*)")
 _SRT_SEGMENT_MARKER_RE = re.compile(r"^\s*//wx:(\d+)//\s*", re.IGNORECASE)
 _ALLOWED_UPLOAD_SUFFIXES = {".ass", ".ssa", ".srt"}
-_ALLOWED_IMPORT_SUFFIXES = {".ass", ".json", ".lrc"}
+_ALLOWED_IMPORT_SUFFIXES = {".ass", ".json", ".lrc", ".ttml"}
 _ALLOWED_SOURCE_SUFFIXES = {".json"}
 
 
@@ -135,7 +136,7 @@ class SubtitleWorkflowService:
         filename = Path(upload_file.filename or "").name
         suffix = Path(filename).suffix.lower()
         if suffix not in _ALLOWED_IMPORT_SUFFIXES:
-            raise SubtitleWorkflowConflictError("Supported uploads are .json, .lrc, and .ass")
+            raise SubtitleWorkflowConflictError("Supported uploads are .json, .lrc, .ttml, and .ass")
 
         if suffix == ".ass":
             subs = self._load_ass_subtitles(upload_file)
@@ -149,6 +150,27 @@ class SubtitleWorkflowService:
             )
             imported_format = "json"
             source_format = "ass"
+            warning_count = len(warnings)
+        elif suffix == ".ttml":
+            lyrics_text = self._read_upload_text(upload_file)
+            if not is_valid_xml(lyrics_text):
+                raise SubtitleWorkflowConflictError("TTML uploads must be valid XML")
+            try:
+                segments = parse_ttml_to_whisperx_segments(lyrics_text)
+            except TTMLParseError as exc:
+                raise SubtitleWorkflowConflictError(str(exc)) from exc
+            segments, warnings = self._normalize_segments(segments)
+            if not segments:
+                raise SubtitleWorkflowConflictError("TTML upload did not contain any timed lyric cues")
+            lyrics_text = json.dumps({"segments": segments}, ensure_ascii=False, indent=2)
+            self.queue_service.store_lyrics_sidecar(
+                media_item,
+                lyrics_text,
+                lyrics_format="json",
+                storage="media",
+            )
+            imported_format = "json"
+            source_format = "ttml"
             warning_count = len(warnings)
         else:
             lyrics_text = self._read_upload_text(upload_file)

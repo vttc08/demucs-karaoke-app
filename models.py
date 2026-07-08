@@ -244,7 +244,7 @@ class QueueItemCreate(BaseModel):
     artist: Optional[str] = None
     is_karaoke: bool = False
     lyrics_text: Optional[str] = None
-    lyrics_format: Optional[Literal["lrc", "txt", "json"]] = None
+    lyrics_format: Optional[Literal["lrc", "txt", "json", "ttml"]] = None
     align_lyrics: bool = False
     whisperx_align_language_override: Optional[str] = None
     process_lyrics_lines: bool = False
@@ -625,7 +625,7 @@ class DemucsRequest(BaseModel):
 
     audio_path: str
     lyrics_text: Optional[str] = None
-    lyrics_format: Optional[Literal["lrc", "txt", "json"]] = None
+    lyrics_format: Optional[Literal["lrc", "txt", "json", "ttml"]] = None
     transcription_model: str = "tiny"
     align_language: Optional[str] = None
     detect_language: bool = False

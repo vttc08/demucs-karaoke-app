@@ -351,7 +351,12 @@ class LyricsUIAdapter {
     );
     if (!hasControls) return;
 
-    const enabled = Boolean(state.lyricsEnabled && state.alignLyricsRequested && state.format !== 'json');
+    const enabled = Boolean(
+      state.lyricsEnabled &&
+      state.alignLyricsRequested &&
+      state.format !== 'json' &&
+      state.format !== 'ttml'
+    );
     const processEnabled = Boolean(state.processLyricsLines);
 
     if (this.elements.processLinesToggle) {
@@ -390,6 +395,8 @@ class LyricsUIAdapter {
     if (this.elements.processLinesDetail) {
       if (!enabled && state.format === 'json') {
         this.elements.processLinesDetail.textContent = this.t('queue.process_lyrics_lines_json_unsupported');
+      } else if (!enabled && state.format === 'ttml') {
+        this.elements.processLinesDetail.textContent = this.t('lyrics.align_xml_skipped');
       } else {
         this.elements.processLinesDetail.textContent = this.t('queue.process_lyrics_lines_detail');
       }

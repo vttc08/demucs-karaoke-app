@@ -1,6 +1,25 @@
 from .common import *
 
 
+TTML_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyrics">
+  <body>
+    <div itunes:song-part="Verse">
+      <p begin="00:00:15.053" end="00:00:20.562">
+        <span begin="00:00:15.053" end="00:00:15.522">I </span>
+        <span begin="00:00:15.522" end="00:00:16.021">know </span>
+        <span begin="00:00:16.021" end="00:00:16.437">that </span>
+        <span begin="00:00:16.437" end="00:00:16.704">the </span>
+        <span begin="00:00:16.704" end="00:00:17.104">bar </span>
+        <span begin="00:00:17.104" end="00:00:17.789">closes </span>
+        <span begin="00:00:17.789" end="00:00:18.256">at </span>
+        <span begin="00:00:18.256" end="00:00:20.562">11</span>
+      </p>
+    </div>
+  </body>
+</tt>
+"""
+
 
 def test_lyrics_service_default_provider_order_includes_netease_between_musixmatch_and_lrclib():
     """Default provider chain should keep NetEase between Musixmatch and LRCLib."""
@@ -261,6 +280,27 @@ def test_lyrics_service_parse_json_to_cues_accepts_aligned_segments():
             ],
         },
     ]
+
+
+def test_lyrics_service_loads_ttml_sidecar_as_synced_cues(tmp_path):
+    """TTML sidecars should load as synced lyrics payloads."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+        (settings.media_path / "song.ttml").write_text(TTML_SAMPLE, encoding="utf-8")
+
+        service = LyricsService()
+        payload = service.load_lyrics_payload_from_media_url("/media/song.ttml")
+
+        assert payload["source_format"] == "ttml"
+        assert payload["is_synced"] is True
+        assert payload["cues"][0]["text"] == "I know that the bar closes at 11"
+        format_name, cues = service.load_cues_from_media_url("/media/song.ttml")
+        assert format_name == "ttml"
+        assert cues[0]["text"] == "I know that the bar closes at 11"
+    finally:
+        settings.media_path = original_media
 
 def test_lyrics_service_parse_json_to_cues_ignores_invalid_aligned_words():
     """JSON parser should keep line cues when nested word timing is unusable."""

@@ -317,7 +317,8 @@ function updateMediaEditLyricsControls() {
     const isSynced = Boolean(isEnabled && state.format === "json");
     const isLocked = Boolean(isSynced || isCdg);
     const hasText = Boolean((state.text || "").trim());
-    const canAlign = Boolean(isEnabled && hasText && !isLocked && demucsHealth.healthy);
+    const ttmlLyrics = state.format === "ttml";
+    const canAlign = Boolean(isEnabled && hasText && !isLocked && !ttmlLyrics && demucsHealth.healthy);
     if (!canAlign && state.processLyricsLines) {
         lyricsManager.setLineProcessingSettings(false);
     }
@@ -375,6 +376,8 @@ function updateMediaEditLyricsControls() {
             editLyricsAlignStatus.textContent = t("media.cdg_lyrics_disabled");
         } else if (isLocked) {
             editLyricsAlignStatus.textContent = t("lyrics.align_json_unsupported");
+        } else if (ttmlLyrics) {
+            editLyricsAlignStatus.textContent = t("lyrics.align_xml_skipped");
         } else if (!demucsHealth.healthy) {
             editLyricsAlignStatus.textContent = t("lyrics.align_demucs_unavailable");
         } else if (!hasText) {

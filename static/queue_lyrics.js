@@ -30,6 +30,7 @@ const PINYIN_DISPLAY_STORAGE_KEY = "karaoke.queueLyrics.pinyinDisplay";
 const DRAFT_STORAGE_PREFIX = "karaoke.queueLyrics.draft:";
 const LRC_TIMESTAMP_RE = /\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]/g;
 const LRC_OFFSET_RE = /^\[offset:([+-]?\d+)\]\s*$/i;
+const TTML_TIME_RE = /^(?:(\d+):)?(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/;
 
 const lyricsManager = new LyricsManager({ apiBase: API_BASE });
 const lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
@@ -656,6 +657,70 @@ function parseJsonLyrics(text) {
     return cues;
 }
 
+function parseTtmlTime(text) {
+    const match = String(text || "").trim().match(TTML_TIME_RE);
+    if (!match) {
+        return null;
+    }
+
+    const hours = Number(match[1] || 0);
+    const minutes = Number(match[2] || 0);
+    const seconds = Number(match[3] || 0);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes) || !Number.isFinite(seconds)) {
+        return null;
+    }
+
+    const fractionRaw = match[4] || "";
+    const fraction = fractionRaw ? Number(fractionRaw) / (10 ** fractionRaw.length) : 0;
+    const total = (hours * 3600) + (minutes * 60) + seconds + fraction;
+    return Number.isFinite(total) ? Math.max(0, total) : null;
+}
+
+function parseTtmlLyrics(text) {
+    const trimmed = String(text || "").trim();
+    if (!trimmed) {
+        return [];
+    }
+
+    try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(trimmed, "application/xml");
+        if (doc.querySelector("parsererror")) {
+            return [];
+        }
+
+        const nodes = Array.from(doc.getElementsByTagNameNS("*", "p"));
+        const cues = [];
+        for (const node of nodes) {
+            const time = parseTtmlTime(node.getAttribute("begin") || node.getAttribute("start") || node.getAttribute("time"));
+            if (time === null) {
+                continue;
+            }
+
+            const end = parseTtmlTime(node.getAttribute("end"));
+            const spans = Array.from(node.childNodes).filter((child) => child.nodeType === Node.ELEMENT_NODE && child.localName === "span");
+            const rawText = spans.length > 0
+                ? spans.map((span) => span.textContent || "").join("")
+                : (node.textContent || "");
+            const textValue = String(rawText).replace(/\s+/g, " ").trim();
+            if (!textValue) {
+                continue;
+            }
+
+            const cue = { time, text: textValue };
+            if (end !== null && end >= time) {
+                cue.end = end;
+            }
+            cues.push(cue);
+        }
+
+        cues.sort((a, b) => a.time - b.time);
+        return cues;
+    } catch (_) {
+        return [];
+    }
+}
+
 function formatLrcTimestamp(seconds) {
     const totalHundredths = Math.max(0, Math.round(Number(seconds || 0) * 100));
     const minutes = Math.floor(totalHundredths / 6000);
@@ -849,6 +914,17 @@ function buildSourceFromText(text, format = "txt") {
 
     if (inferredFormat === "lrc" || LyricsManager.inferFormat(trimmedText) === "lrc") {
         const parsedCues = parseLrcLyrics(trimmedText);
+        if (parsedCues.length > 0) {
+            return {
+                isSynced: true,
+                cues: parsedCues,
+                lines: parsedCues.map((cue) => cue.text),
+            };
+        }
+    }
+
+    if (inferredFormat === "ttml" || LyricsManager.inferFormat(trimmedText) === "ttml") {
+        const parsedCues = parseTtmlLyrics(trimmedText);
         if (parsedCues.length > 0) {
             return {
                 isSynced: true,

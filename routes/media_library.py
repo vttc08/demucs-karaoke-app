@@ -44,6 +44,7 @@ from services.media_trim_service import (
 from services.processing_task_service import processing_task_service, task_execution_coordinator
 from services.queue_service import QueueService
 from services.runtime_settings_service import RuntimeSettingsService
+from services.ttml_parser import TTMLParseError, is_valid_xml, parse_ttml_to_whisperx_segments
 from services.websocket_manager import manager
 
 logger = logging.getLogger(__name__)
@@ -182,6 +183,33 @@ def _validate_alignment_request(
         raise HTTPException(status_code=400, detail="lyrics_text is required for lyrics alignment")
     if lyrics_format == "json":
         raise HTTPException(status_code=400, detail="WhisperX alignment requires plain text or LRC lyrics")
+
+
+def _normalize_inline_lyrics_upload(
+    lyrics_text: str | None,
+    lyrics_format: str | None,
+    *,
+    align_lyrics: bool,
+) -> tuple[str | None, str | None, bool]:
+    text = (lyrics_text or "").strip()
+    normalized_format = (lyrics_format or "").strip().lower() or None
+    if normalized_format not in (None, "lrc", "txt", "json", "ttml", "xml"):
+        raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc', 'txt', 'json', 'ttml', or 'xml'")
+
+    if text and (normalized_format in {"ttml", "xml"} or is_valid_xml(text)):
+        if not is_valid_xml(text):
+            raise HTTPException(status_code=400, detail="TTML lyrics must be valid XML")
+        try:
+            segments = parse_ttml_to_whisperx_segments(text)
+        except TTMLParseError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not segments:
+            raise HTTPException(status_code=400, detail="TTML lyrics did not contain any timed lyric cues")
+        lyrics_text = json.dumps({"segments": segments}, ensure_ascii=False, indent=2)
+        normalized_format = "json"
+        align_lyrics = False
+
+    return lyrics_text, normalized_format, align_lyrics
 
 
 def _normalize_whisperx_align_language_override(value: object) -> str | None:
@@ -395,9 +423,11 @@ async def upload_media(
             db.flush()
             media_thumbnail_service.ensure_thumbnail_for_media_file(target_path)
 
-            lyrics_format = (lyrics_format or "").strip().lower() or None
-            if lyrics_format not in (None, "lrc", "txt", "json"):
-                raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc', 'txt', or 'json'")
+            lyrics_text, lyrics_format, alignment_requested = _normalize_inline_lyrics_upload(
+                lyrics_text,
+                lyrics_format,
+                align_lyrics=alignment_requested,
+            )
             _validate_alignment_request(
                 align_lyrics=alignment_requested,
                 lyrics_text=lyrics_text,
@@ -837,9 +867,6 @@ def rename_media_item(
     if lyrics_text is not None and not isinstance(lyrics_text, str):
         raise HTTPException(status_code=400, detail="lyrics_text must be a string or null")
     lyrics_format = payload.get("lyrics_format")
-    lyrics_format = (lyrics_format or "").strip().lower() or None
-    if lyrics_format not in (None, "lrc", "txt", "json"):
-        raise HTTPException(status_code=400, detail="lyrics_format must be 'lrc', 'txt', or 'json'")
     is_karaoke = payload.get("is_karaoke", False)
     if not isinstance(is_karaoke, bool):
         raise HTTPException(status_code=400, detail="is_karaoke must be a boolean")
@@ -858,6 +885,11 @@ def rename_media_item(
     max_line_length_cjk = payload.get("max_line_length_cjk")
     if max_line_length_cjk is not None and not isinstance(max_line_length_cjk, int):
         raise HTTPException(status_code=400, detail="max_line_length_cjk must be an integer or null")
+    lyrics_text, lyrics_format, align_lyrics = _normalize_inline_lyrics_upload(
+        lyrics_text,
+        lyrics_format,
+        align_lyrics=align_lyrics,
+    )
     (
         line_processing_requested,
         normalized_max_line_length,

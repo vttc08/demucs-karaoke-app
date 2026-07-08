@@ -15,7 +15,7 @@ from services.task_stream_service import task_stream_manager
 
 logger = logging.getLogger(__name__)
 _AUDIO_SUFFIXES = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm"}
-_LYRICS_SUFFIXES = {".json", ".lrc", ".srt", ".txt", ".cdg"}
+_LYRICS_SUFFIXES = {".json", ".lrc", ".srt", ".txt", ".cdg", ".ttml"}
 
 
 class QueueService:
@@ -534,6 +534,8 @@ class QueueService:
             return ".json"
         if requested_format == "lrc":
             return ".lrc"
+        if requested_format == "ttml":
+            return ".ttml"
         if requested_format == "txt":
             return ".txt"
         if re.search(r"^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]", lyrics_text, re.MULTILINE):

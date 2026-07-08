@@ -4,8 +4,9 @@ import json
 from io import BytesIO
 from starlette.datastructures import UploadFile
 
-from services.subtitle_workflow_service import SubtitleWorkflowService
+from services.subtitle_workflow_service import SubtitleWorkflowConflictError, SubtitleWorkflowService
 from services.subtitle_editor_service import subtitle_editor_service
+from services.ttml_parser import TTMLParseError, is_valid_xml, parse_ttml_to_whisperx_segments
 
 
 def _make_json_payload():
@@ -30,6 +31,121 @@ def _make_json_payload():
             },
         ]
     }
+
+
+TTML_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyrics">
+  <body>
+    <div itunes:song-part="Verse">
+      <p begin="00:00:15.053" end="00:00:20.562">
+        <span begin="00:00:15.053" end="00:00:15.522">I </span>
+        <span begin="00:00:15.522" end="00:00:16.021">know </span>
+        <span begin="00:00:16.021" end="00:00:16.437">that </span>
+        <span begin="00:00:16.437" end="00:00:16.704">the </span>
+        <span begin="00:00:16.704" end="00:00:17.104">bar </span>
+        <span begin="00:00:17.104" end="00:00:17.789">closes </span>
+        <span begin="00:00:17.789" end="00:00:18.256">at </span>
+        <span begin="00:00:18.256" end="00:00:20.562">11</span>
+      </p>
+      <p begin="00:00:22.204" end="00:00:27.959">
+        <span begin="00:00:22.204" end="00:00:22.490">But </span>
+        <span begin="00:00:22.490" end="00:00:22.908">I </span>
+        <span begin="00:00:22.908" end="00:00:23.340">hope </span>
+        <span begin="00:00:23.340" end="00:00:23.639">you </span>
+        <span begin="00:00:23.639" end="00:00:24.402">never </span>
+        <span begin="00:00:24.402" end="00:00:25.386">finish </span>
+        <span begin="00:00:25.386" end="00:00:25.884">that </span>
+        <span begin="00:00:25.884" end="00:00:27.959">beer</span>
+      </p>
+    </div>
+  </body>
+</tt>
+"""
+
+
+def test_ttml_parser_converts_sample_into_whisperx_segments():
+    assert is_valid_xml(TTML_SAMPLE)
+
+    segments = parse_ttml_to_whisperx_segments(TTML_SAMPLE)
+
+    assert [segment["text"] for segment in segments] == [
+        "I know that the bar closes at 11",
+        "But I hope you never finish that beer",
+    ]
+    assert segments[0]["start"] == 15.053
+    assert segments[0]["end"] == 20.562
+    assert segments[0]["words"][0] == {"word": "I", "start": 15.053, "end": 15.522}
+    assert segments[1]["words"][-1] == {"word": "beer", "start": 25.884, "end": 27.959}
+
+
+def test_ttml_parser_rejects_invalid_xml():
+    invalid_ttml = "<tt><body><p begin='00:00:01.0' end='00:00:02.0'><span>I"
+
+    assert not is_valid_xml(invalid_ttml)
+    with pytest.raises(TTMLParseError):
+        parse_ttml_to_whisperx_segments(invalid_ttml)
+
+
+def test_import_ttml_sidecar_converts_to_json(db_session, tmp_path, monkeypatch):
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+
+    media_file = media_root / "song.mp4"
+    media_file.write_bytes(b"video")
+
+    media = MediaItem(
+        title="Song",
+        artist="Artist",
+        media_path="/media/song.mp4",
+        lyrics_path=None,
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    result = SubtitleWorkflowService().import_from_upload(
+        db_session,
+        media.id,
+        UploadFile(file=BytesIO(TTML_SAMPLE.encode("utf-8")), filename="lyrics.ttml"),
+    )
+
+    assert result["lyrics_format"] == "json"
+    assert result["source_format"] == "ttml"
+    assert result["warning_count"] == 0
+    assert result["lyrics_path"] == "/media/song.json"
+
+    lyrics_file = media_root / "song.json"
+    saved_payload = json.loads(lyrics_file.read_text(encoding="utf-8"))
+    assert saved_payload["segments"][0]["text"] == "I know that the bar closes at 11"
+
+
+def test_import_ttml_sidecar_rejects_invalid_xml(db_session, tmp_path, monkeypatch):
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    monkeypatch.setattr(settings, "media_path", media_root)
+
+    media_file = media_root / "song.mp4"
+    media_file.write_bytes(b"video")
+
+    media = MediaItem(
+        title="Song",
+        artist="Artist",
+        media_path="/media/song.mp4",
+        lyrics_path=None,
+        missing=False,
+    )
+    db_session.add(media)
+    db_session.commit()
+    db_session.refresh(media)
+
+    with pytest.raises(SubtitleWorkflowConflictError):
+        SubtitleWorkflowService().import_from_upload(
+            db_session,
+            media.id,
+            UploadFile(file=BytesIO(b"<tt><body><p>broken"), filename="lyrics.ttml"),
+        )
 
 
 def test_export_ass_and_srt_from_json_normalizes_overlap(db_session, tmp_path, monkeypatch):
