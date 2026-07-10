@@ -14,6 +14,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -25,6 +26,7 @@ demucs_app = importlib.import_module("demucs_svc.app")
 demucs_models = importlib.import_module("demucs_svc.models")
 demucs_runner = importlib.import_module("demucs_svc.demucs_runner")
 demucs_settings = importlib.import_module("demucs_svc.settings")
+sherpa_provider = importlib.import_module("demucs_svc.separation.sherpa_spleeter")
 
 
 def _clear_job_store() -> None:
@@ -43,6 +45,88 @@ def test_separate_config_defaults_and_mp3_bitrate():
     assert config.detect_language is False
     assert config.use_synced_lyrics is False
     assert config.whisperx_preload_models == "transcription=tiny,align=en"
+    assert config.separation_backend == "demucs"
+    assert config.sherpa_spleeter_model == "fp16"
+
+
+def test_sherpa_model_variants_resolve_expected_model_pairs(tmp_path):
+    assert tuple(path.name for path in sherpa_provider.resolve_model_paths(tmp_path, "fp16")) == (
+        "vocals.fp16.onnx",
+        "accompaniment.fp16.onnx",
+    )
+    assert tuple(path.name for path in sherpa_provider.resolve_model_paths(tmp_path, "int8")) == (
+        "vocals.int8.onnx",
+        "accompaniment.int8.onnx",
+    )
+    assert tuple(path.name for path in sherpa_provider.resolve_model_paths(tmp_path, "fp32")) == (
+        "vocals.onnx",
+        "accompaniment.onnx",
+    )
+
+
+def test_sherpa_separation_ignores_cuda_when_whisperx_not_requested(monkeypatch):
+    monkeypatch.setattr(demucs_app, "_cuda_available", lambda: False)
+    monkeypatch.setattr(
+        demucs_app,
+        "_provider_for",
+        lambda backend: SimpleNamespace(
+            readiness=lambda model: {"ready": True, "checks": {}}
+        ),
+    )
+
+    config = demucs_app._validated_config(
+        "htdemucs",
+        "cuda",
+        "wav",
+        None,
+        separation_backend="sherpa_spleeter",
+        sherpa_spleeter_model="fp16",
+    )
+
+    assert config.device == "cuda"
+    assert config.separation_backend == "sherpa_spleeter"
+
+
+def test_sherpa_with_whisperx_still_validates_requested_cuda(monkeypatch):
+    monkeypatch.setattr(demucs_app, "_cuda_available", lambda: False)
+    monkeypatch.setattr(
+        demucs_app,
+        "_provider_for",
+        lambda backend: SimpleNamespace(
+            readiness=lambda model: {"ready": True, "checks": {}}
+        ),
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        demucs_app._validated_config(
+            "htdemucs",
+            "cuda",
+            "wav",
+            None,
+            lyrics_text="hello",
+            separation_backend="sherpa_spleeter",
+        )
+    assert getattr(exc_info.value, "status_code", None) == 503
+    assert "WhisperX" in str(getattr(exc_info.value, "detail", ""))
+
+
+def test_health_reports_selected_sherpa_backend(monkeypatch):
+    def fake_provider(backend):
+        return SimpleNamespace(
+            readiness=lambda model: {
+                "ready": backend == "sherpa_spleeter",
+                "model": model,
+                "checks": {f"{backend}_ready": backend == "sherpa_spleeter"},
+            }
+        )
+
+    monkeypatch.setattr(demucs_app, "_provider_for", fake_provider)
+    snapshot = demucs_app._health_snapshot("sherpa_spleeter", "int8")
+
+    assert snapshot["status"] == "ok"
+    assert snapshot["selected_backend"] == "sherpa_spleeter"
+    assert snapshot["model"] == "int8"
+    assert snapshot["supported_backends"] == ["demucs", "sherpa_spleeter"]
 
 
 def test_demucs_settings_uses_default_io_root():
@@ -715,17 +799,22 @@ def test_run_job_caps_demucs_subprocess_progress_at_90(tmp_path, monkeypatch):
     updates = []
     original_update = demucs_app.job_store.update
 
-    class FakeProcess:
-        stdout = iter([" 100%|##########| 1/1 [00:01<00:00]\n"])
-
     def record_update(target_job_id, **changes):
         updates.append(changes)
         return original_update(target_job_id, **changes)
 
-    monkeypatch.setattr(demucs_app.subprocess, "Popen", lambda *args, **kwargs: FakeProcess())
-    monkeypatch.setattr(demucs_app, "_build_command", lambda *args, **kwargs: ["demucs"])
-    monkeypatch.setattr(demucs_app, "_wait_for_process", lambda process: 0)
-    monkeypatch.setattr(demucs_app, "build_expected_output_paths", lambda *args: (no_vocals_path, vocals_path))
+    class FakeProvider:
+        def separate(self, request, runtime):
+            runtime.emit_progress(90, "100% complete", "demucs", "determinate")
+            return SimpleNamespace(
+                no_vocals_path=no_vocals_path,
+                vocals_path=vocals_path,
+                separation_backend="demucs",
+                separation_model=config.model,
+                effective_device=config.device,
+            )
+
+    monkeypatch.setattr(demucs_app, "_provider_for", lambda backend: FakeProvider())
     monkeypatch.setattr(demucs_app, "_run_garbage_collection", lambda **kwargs: None)
     monkeypatch.setattr(demucs_app, "_cleanup_expired_jobs", lambda: None)
     monkeypatch.setattr(demucs_app.job_store, "update", record_update)

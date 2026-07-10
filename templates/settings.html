@@ -58,8 +58,16 @@
                         <input id="demucs_api_key" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm font-medium text-primary focus:ring-2 focus:ring-primary/50 focus:outline-none" type="password" autocomplete="off" spellcheck="false" />
                         <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.demucs_api_key_detail') }}</span>
                     </label>
+                    <label class="flex flex-col gap-1.5">
+                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.separation_backend') }}</span>
+                        <select id="separation_backend" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
+                            <option value="demucs">Demucs</option>
+                            <option value="sherpa_spleeter">Sherpa+Spleeter</option>
+                        </select>
+                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.separation_backend_detail') }}</span>
+                    </label>
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <label class="flex flex-col gap-1.5">
+                        <label id="demucs-model-group" class="flex flex-col gap-1.5">
                             <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_model') }}</span>
                             <select id="demucs_model" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
                                 <option value="htdemucs">htdemucs (default)</option>
@@ -72,12 +80,21 @@
                                 <option value="mdx_extra_q">mdx_extra_q</option>
                             </select>
                         </label>
+                        <label id="sherpa-spleeter-model-group" class="hidden flex-col gap-1.5">
+                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.sherpa_spleeter_model') }}</span>
+                            <select id="sherpa_spleeter_model" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
+                                <option value="fp16">fp16</option>
+                                <option value="int8">int8</option>
+                                <option value="fp32">fp32</option>
+                            </select>
+                        </label>
                         <label class="flex flex-col gap-1.5">
-                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_device') }}</span>
+                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.device') }}</span>
                             <select id="demucs_device" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
                                 <option value="cuda">cuda</option>
                                 <option value="cpu">cpu</option>
                             </select>
+                            <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.device_detail') }}</span>
                         </label>
                     </div>
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">

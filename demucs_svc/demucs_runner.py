@@ -1,16 +1,26 @@
 import subprocess
-import sys
 import time
 from pathlib import Path
-import re
 from uuid import uuid4
 
 try:
     from .models import SeparateConfig
     from .settings import INCOMING_ROOT, OUTPUT_ROOT
+    from .separation.base import SeparationRequest
+    from .separation.demucs import (
+        build_command as _provider_build_command,
+        expected_output_paths,
+        parse_progress_line,
+    )
 except ImportError:
     from models import SeparateConfig
     from settings import INCOMING_ROOT, OUTPUT_ROOT
+    from separation.base import SeparationRequest
+    from separation.demucs import (
+        build_command as _provider_build_command,
+        expected_output_paths,
+        parse_progress_line,
+    )
 
 
 class DemucsRunResult:
@@ -35,38 +45,18 @@ class DemucsRunResult:
         self.mp3_bitrate = mp3_bitrate
 
 
-_PERCENT_RE = re.compile(r"(?P<percent>\d{1,3})(?:\.\d+)?%")
-
-
-def parse_progress_line(line: str) -> tuple[int | None, str | None]:
-    cleaned = " ".join(line.replace("\r", "\n").split()).strip()
-    if not cleaned:
-        return None, None
-
-    percent_match = _PERCENT_RE.search(cleaned)
-    percent = None
-    if percent_match:
-        percent = max(0, min(99, int(float(percent_match.group("percent")))))
-    return percent, cleaned
-
-
 def _build_command(input_path: Path, output_dir: Path, config: SeparateConfig) -> list[str]:
-    cmd = [
-        sys.executable,
-        "-m",
-        "demucs.separate",
-        "-n",
-        config.model,
-        "--two-stems=vocals",
-        "-d",
-        config.device,
-        "-o",
-        str(output_dir),
-    ]
-    if config.output_format == "mp3":
-        cmd.extend(["--mp3", "--mp3-bitrate", str(config.mp3_bitrate)])
-    cmd.append(str(input_path))
-    return cmd
+    return _provider_build_command(
+        SeparationRequest(
+            job_id="",
+            input_path=input_path,
+            output_dir=output_dir,
+            model=config.model,
+            requested_device=config.device,
+            output_format=config.output_format,
+            mp3_bitrate=config.mp3_bitrate,
+        )
+    )
 
 
 def prepare_job_input(
@@ -92,11 +82,16 @@ def build_expected_output_paths(
     input_path: Path,
     config: SeparateConfig,
 ) -> tuple[Path, Path]:
-    stem_folder = OUTPUT_ROOT / job_id / config.model / input_path.stem
-    extension = "mp3" if config.output_format == "mp3" else "wav"
-    return (
-        stem_folder / f"no_vocals.{extension}",
-        stem_folder / f"vocals.{extension}",
+    return expected_output_paths(
+        SeparationRequest(
+            job_id=job_id,
+            input_path=input_path,
+            output_dir=OUTPUT_ROOT / job_id,
+            model=config.model,
+            requested_device=config.device,
+            output_format=config.output_format,
+            mp3_bitrate=config.mp3_bitrate,
+        )
     )
 
 

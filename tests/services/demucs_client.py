@@ -74,6 +74,54 @@ class _FakeAsyncClient:
         return _FakeAsyncResponse({"status": "canceled"})
 
 
+def test_request_data_includes_selected_separation_backend(monkeypatch):
+    monkeypatch.setattr(settings, "separation_backend", "sherpa_spleeter")
+    monkeypatch.setattr(settings, "sherpa_spleeter_model", "int8")
+
+    data = DemucsClient(api_url="http://separation.test")._build_request_data()
+
+    assert data["separation_backend"] == "sherpa_spleeter"
+    assert data["sherpa_spleeter_model"] == "int8"
+
+
+def test_health_check_requests_selected_sherpa_capability(monkeypatch):
+    seen = {}
+
+    def fake_get(url, **kwargs):
+        seen.update(kwargs)
+        return _FakeAsyncResponse(
+            {
+                "status": "ok",
+                "selected_backend": "sherpa_spleeter",
+                "supported_backends": ["demucs", "sherpa_spleeter"],
+            }
+        )
+
+    monkeypatch.setattr("services.demucs_client.httpx.get", fake_get)
+    result = DemucsClient(api_url="http://separation.test").health_check(
+        separation_backend="sherpa_spleeter",
+        sherpa_spleeter_model="fp16",
+    )
+
+    assert result.healthy is True
+    assert result.selected_backend == "sherpa_spleeter"
+    assert seen["params"]["sherpa_spleeter_model"] == "fp16"
+
+
+async def test_sherpa_capability_guard_rejects_legacy_service(monkeypatch):
+    monkeypatch.setattr(settings, "separation_backend", "sherpa_spleeter")
+    monkeypatch.setattr(settings, "sherpa_spleeter_model", "fp16")
+
+    class LegacyClient:
+        async def get(self, *args, **kwargs):
+            return _FakeAsyncResponse({"status": "ok"})
+
+    with pytest.raises(RuntimeError, match="does not advertise"):
+        await DemucsClient(api_url="http://legacy.test")._ensure_backend_capability(
+            LegacyClient()
+        )
+
+
 def test_demucs_client_includes_api_key_on_sync_requests(monkeypatch):
     seen = {}
 

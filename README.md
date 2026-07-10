@@ -22,7 +22,7 @@ Lightweight AI-powered karaoke application for home use.
 - `yt-dlp` for YouTube downloads
 - Optional: Deno for yt-dlp external JavaScript execution on videos that require it
 - `ffmpeg` for video processing
-- Demucs service for vocal separation (separate machine)
+- Separation service with Demucs or CPU-only Sherpa+Spleeter (separate machine or CPU host)
 
 ## Setup
 
@@ -481,8 +481,10 @@ ffmpeg -version
 ```
 `ffmpeg` is still required for karaoke media extraction/remux operations.
 
-### Demucs service not available
-Karaoke mode requires Demucs service running. Configure `DEMUCS_API_URL` for the main app.
+### Separation service not available
+Karaoke mode requires `demucs_svc` running. Configure `DEMUCS_API_URL` for the main app and select
+Demucs or Sherpa+Spleeter from `/settings`. See [Separation Backends](docs/separation-backends.md)
+for CPU-only setup and model installation.
 If you expose `demucs_svc` outside a trusted LAN, set the same optional `DEMUCS_API_KEY` on both
 the main app and the Demucs service so requests carry `X-API-Key`.
 
@@ -497,8 +499,15 @@ Use your Windows project venv/service path:
 
 ```powershell
 cd C:\Users\hubcc\Documents\Projects\karaoke\demucs_svc
+C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe -m pip install -r requirements.txt
+C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe .\download_sherpa_models.py --variant fp16
 C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 8001
 ```
+
+The worker has its own `requirements.txt` and can run independently of the main app's
+environment. When launching from the repository root instead, use
+`python -m demucs_svc.download_sherpa_models`; when the current directory is already
+`demucs_svc`, use `python .\download_sherpa_models.py` as shown above.
 
 Then verify from Linux host:
 

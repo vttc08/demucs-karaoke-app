@@ -121,7 +121,7 @@ value so automatic reconnects do not append the same buffered log lines twice.
 
 When mocks or legacy callers are used in tests, the orchestration falls back to the non-streaming youtube service methods.
 
-## Remote Demucs Progress
+## Remote Separation Progress
 
 Remote Demucs execution now uses an async job contract on `demucs_svc`:
 
@@ -144,6 +144,11 @@ If the stream is unavailable, the client falls back to status polling using the 
 long-running jobs responsive without flooding the Demucs host with status checks.
 
 Demucs separation progress is mapped to the first 90% of the local Demucs stage. The remaining tail is reserved for subprocess exit/output validation so the UI does not sit at 99% while Demucs is no longer reporting useful work.
+
+The same job contract supports `separation_backend=sherpa_spleeter`. Sherpa runs in a cancellable
+child process and reports `progress_stage="separation"` with `progress_mode="indeterminate"` because
+the sherpa-onnx API does not expose progress callbacks. Both providers return the same stem ZIP and
+continue into the same optional WhisperX stage.
 
 When WhisperX lyrics alignment is requested, the remote job emits optional `progress_stage` and
 `progress_mode` metadata. The main app surfaces model/audio/language checkpoints as local

@@ -28,6 +28,9 @@ class StageLyricsController {
     "ZCOOL QingKe HuangYou",
   ]);
 
+  static GOOGLE_FONT_WEIGHTS = [400, 700, 900];
+  static CUSTOM_FONT_PREVIEW_SAMPLE = "Aa 你 Karaoke";
+
   static FONT_PRESETS = {
     karaoke_cjk: {
       labelKey: "stage.lyrics_font_karaoke",
@@ -105,6 +108,7 @@ class StageLyricsController {
     this.importExport = options.importExport || null;
     this.fileInput = options.fileInput || null;
     this.status = options.status || null;
+    this.customFontPreview = options.customFontPreview || null;
     this.backgroundLayer = options.backgroundLayer || null;
     this.backgroundImage = options.backgroundImage || null;
     this.backgroundVideo = options.backgroundVideo || null;
@@ -847,7 +851,28 @@ class StageLyricsController {
     this.overlay.dataset.animation = this.reducedMotion ? "none" : this.settings.animation;
     this.applyBackgroundSettings();
     void this.ensureFontStackLoaded(fontFamily);
+    this.updateCustomFontPreview(fontFamily);
     this.renderWindow();
+  }
+
+  updateCustomFontPreview(fontFamily) {
+    if (!this.customFontPreview) {
+      return;
+    }
+
+    const isCustomPreset = this.settings.fontPreset === "custom";
+    const currentCustomFontFamily = String(this.settings.customFontFamily || this.appliedCustomFontFamily || "").trim();
+    const hasCustomFamily = Boolean(currentCustomFontFamily);
+    const previewFontFamily = isCustomPreset && hasCustomFamily
+      ? this.normalizeCustomFontStack(currentCustomFontFamily)
+      : fontFamily;
+
+    this.customFontPreview.textContent = isCustomPreset && hasCustomFamily
+      ? StageLyricsController.CUSTOM_FONT_PREVIEW_SAMPLE
+      : this.t("stage.lyrics_custom_font_preview_empty");
+    this.customFontPreview.classList.toggle("is-empty", !(isCustomPreset && hasCustomFamily));
+    this.customFontPreview.style.fontFamily = previewFontFamily || "";
+    this.customFontPreview.style.fontWeight = "900";
   }
 
   applyBackgroundSettings() {
@@ -980,7 +1005,7 @@ class StageLyricsController {
     if (!primaryFamily || this.isGenericFontFamily(primaryFamily) || this.isLocalFontFamily(primaryFamily)) {
       return;
     }
-    await this.loadGoogleFont(primaryFamily);
+    await this.loadGoogleFont(primaryFamily, StageLyricsController.GOOGLE_FONT_WEIGHTS);
   }
 
   getPrimaryFontFamily(fontStack) {
@@ -992,36 +1017,54 @@ class StageLyricsController {
     return StageLyricsController.LOCAL_FONT_FAMILIES.has(String(fontFamily || "").trim());
   }
 
-  async loadGoogleFont(fontFamily) {
+  buildGoogleFontCss2Url(fontFamily, weights = []) {
     const normalized = String(fontFamily || "").trim();
+    const sortedWeights = Array.isArray(weights)
+      ? [...new Set(weights.map((weight) => Math.trunc(Number(weight))).filter((weight) => Number.isFinite(weight) && weight > 0))].sort((a, b) => a - b)
+      : [];
+    if (!normalized) {
+      return "";
+    }
+    const family = encodeURIComponent(normalized)
+      .replace(/%20/g, "+")
+      .replace(/%3A/g, ":")
+      .replace(/%40/g, "@")
+      .replace(/%3B/g, ";");
+    const weightSuffix = sortedWeights.length ? `:wght@${sortedWeights.join(";")}` : "";
+    return `https://fonts.googleapis.com/css2?family=${family}${weightSuffix}&display=swap`;
+  }
+
+  async loadGoogleFont(fontFamily, weights = []) {
+    const normalized = String(fontFamily || "").trim();
+    const cacheKey = `${normalized}|${Array.isArray(weights) ? weights.join(",") : ""}`;
     if (
       !normalized
-      || this.loadedFontFamilies.has(normalized)
-      || this.failedFontFamilies.has(normalized)
-      || this.pendingFontLoads.has(normalized)
+      || this.loadedFontFamilies.has(cacheKey)
+      || this.failedFontFamilies.has(cacheKey)
+      || this.pendingFontLoads.has(cacheKey)
     ) {
-      return this.pendingFontLoads.get(normalized) || null;
+      return this.pendingFontLoads.get(cacheKey) || null;
     }
 
     const promise = new Promise((resolve) => {
       const link = document.createElement("link");
       link.rel = "stylesheet";
-      link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(normalized).replace(/%20/g, "+")}&display=swap`;
+      link.href = this.buildGoogleFontCss2Url(normalized, weights);
       link.crossOrigin = "anonymous";
       link.onload = () => {
-        this.loadedFontFamilies.add(normalized);
-        this.pendingFontLoads.delete(normalized);
+        this.loadedFontFamilies.add(cacheKey);
+        this.pendingFontLoads.delete(cacheKey);
         resolve();
       };
       link.onerror = () => {
-        this.failedFontFamilies.add(normalized);
-        this.pendingFontLoads.delete(normalized);
+        this.failedFontFamilies.add(cacheKey);
+        this.pendingFontLoads.delete(cacheKey);
         resolve();
       };
       document.head.appendChild(link);
     });
 
-    this.pendingFontLoads.set(normalized, promise);
+    this.pendingFontLoads.set(cacheKey, promise);
     return promise;
   }
 
@@ -1210,6 +1253,7 @@ class StageLyricsController {
     if (this.inputs.backgroundMediaOpacityPctValue) {
       this.inputs.backgroundMediaOpacityPctValue.textContent = `${this.settings.backgroundMediaOpacityPct}%`;
     }
+    this.updateCustomFontPreview(this.settings.fontPreset === "custom" ? this.settings.customFontFamily : "");
   }
 
   applySettingsFromTextarea() {

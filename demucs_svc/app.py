@@ -3,7 +3,6 @@ import gc
 import os
 import json
 import logging
-import math
 import multiprocessing
 import queue as queue_module
 import shutil
@@ -24,11 +23,7 @@ from pydantic import ValidationError
 
 try:
     from .demucs_runner import (
-        _build_command,
-        build_expected_output_paths,
-        parse_progress_line,
         prepare_job_input,
-        run_demucs_on_file,
     )
     from .jobs import DemucsJobState, DemucsJobStore, utc_now
     from .models import (
@@ -51,6 +46,8 @@ try:
         DEFAULT_DEMUCS_DEVICE,
         DEFAULT_DEMUCS_MODEL,
         DEFAULT_OUTPUT_FORMAT,
+        DEFAULT_SEPARATION_BACKEND,
+        DEFAULT_SHERPA_SPLEETER_MODEL,
         DEFAULT_WHISPERX_ALIGN_LANGUAGE,
         DEFAULT_WHISPERX_DETECT_LANGUAGE,
         DEFAULT_WHISPERX_PRELOAD_MODELS,
@@ -62,6 +59,12 @@ try:
         OUTPUT_ROOT,
         settings,
     )
+    from .separation import (
+        SeparationCanceled,
+        SeparationRequest,
+        SeparationRuntime,
+        create_provider,
+    )
     from .whisperx_pipeline import (
         align_lyrics,
         dump_aligned_lyrics_json,
@@ -71,11 +74,7 @@ try:
     )
 except ImportError:
     from demucs_runner import (
-        _build_command,
-        build_expected_output_paths,
-        parse_progress_line,
         prepare_job_input,
-        run_demucs_on_file,
     )
     from jobs import DemucsJobState, DemucsJobStore, utc_now
     from models import (
@@ -96,6 +95,8 @@ except ImportError:
         DEFAULT_DEMUCS_DEVICE,
         DEFAULT_DEMUCS_MODEL,
         DEFAULT_OUTPUT_FORMAT,
+        DEFAULT_SEPARATION_BACKEND,
+        DEFAULT_SHERPA_SPLEETER_MODEL,
         DEFAULT_WHISPERX_ALIGN_LANGUAGE,
         DEFAULT_WHISPERX_DETECT_LANGUAGE,
         DEFAULT_WHISPERX_PRELOAD_MODELS,
@@ -108,6 +109,12 @@ except ImportError:
         DEMUCS_GC_LOW_FREE_VRAM_BYTES,
         OUTPUT_ROOT,
         settings,
+    )
+    from separation import (
+        SeparationCanceled,
+        SeparationRequest,
+        SeparationRuntime,
+        create_provider,
     )
     from whisperx_pipeline import (
         align_lyrics,
@@ -300,28 +307,47 @@ async def _drain_upload_file(upload_file: UploadFile, *, chunk_size: int = 1024 
     return total_bytes
 
 
-def _health_snapshot() -> dict[str, object]:
+def _provider_for(backend: str):
+    return create_provider(
+        backend,
+        sherpa_model_root=settings.sherpa_spleeter_model_root,
+        sherpa_num_threads=settings.sherpa_spleeter_num_threads,
+        sherpa_ffmpeg_path=settings.sherpa_spleeter_ffmpeg_path,
+    )
+
+
+def _health_snapshot(
+    separation_backend: str | None = None,
+    sherpa_spleeter_model: str | None = None,
+) -> dict[str, object]:
+    selected_backend = separation_backend or DEFAULT_SEPARATION_BACKEND
+    selected_sherpa_model = sherpa_spleeter_model or DEFAULT_SHERPA_SPLEETER_MODEL
     checks = {
         "incoming_writable": INCOMING_ROOT.exists() and INCOMING_ROOT.is_dir(),
         "output_writable": OUTPUT_ROOT.exists() and OUTPUT_ROOT.is_dir(),
     }
-
-    try:
-        probe = subprocess.run(
-            [sys.executable, "-m", "demucs.separate", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        checks["demucs_cli_available"] = probe.returncode == 0
-    except Exception:
-        checks["demucs_cli_available"] = False
-
-    healthy = all(checks.values())
+    backends = {
+        "demucs": _provider_for("demucs").readiness(DEFAULT_DEMUCS_MODEL),
+        "sherpa_spleeter": _provider_for("sherpa_spleeter").readiness(
+            selected_sherpa_model
+        ),
+    }
+    selected = backends.get(selected_backend)
+    backend_ready = bool(selected and selected.get("ready"))
+    if selected:
+        checks.update(selected.get("checks") or {})
+    healthy = all(checks.values()) and backend_ready
     return {
         "status": "ok" if healthy else "degraded",
-        "service": "demucs",
-        "model": DEFAULT_DEMUCS_MODEL,
+        "service": "separation",
+        "supported_backends": ["demucs", "sherpa_spleeter"],
+        "selected_backend": selected_backend,
+        "backends": backends,
+        "model": (
+            DEFAULT_DEMUCS_MODEL
+            if selected_backend == "demucs"
+            else selected_sherpa_model
+        ),
         "device": DEFAULT_DEMUCS_DEVICE,
         "detail": "ready" if healthy else "One or more readiness checks failed",
         "checks": checks,
@@ -338,6 +364,9 @@ def _build_stems_zip(result) -> bytes:
         "device": result.device,
         "output_format": result.output_format,
         "mp3_bitrate": result.mp3_bitrate,
+        "separation_backend": getattr(result, "separation_backend", "demucs"),
+        "separation_model": getattr(result, "separation_model", result.model),
+        "effective_device": getattr(result, "effective_device", result.device),
         "duration_ms": result.duration_ms,
         "files": {
             "no_vocals": f"no_vocals.{stem_ext}",
@@ -403,6 +432,9 @@ def _job_to_metrics_response(job: DemucsJobState) -> DemucsMetricsJobResponse:
         started_at=data["started_at"],
         cancel_requested=data["cancel_requested"],
         stdout_tail=data["output_tail"],
+        separation_backend=data["separation_backend"],
+        separation_model=data["separation_model"],
+        effective_device=data["effective_device"],
     )
 
 
@@ -884,68 +916,53 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
         )
         _cleanup_job_files(job_id)
         return
-    cmd = _build_command(input_path, output_dir, config)
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
+    separation_model = (
+        config.model
+        if config.separation_backend == "demucs"
+        else config.sherpa_spleeter_model
     )
     job_store.update(
         job_id,
         status="running",
         started_at=utc_now(),
         progress_percent=0,
-        progress_message="Starting Demucs",
-        progress_stage="demucs",
-        progress_mode="determinate",
-        process=process,
+        progress_message="Starting separation",
+        progress_stage=("demucs" if config.separation_backend == "demucs" else "separation"),
+        progress_mode=("determinate" if config.separation_backend == "demucs" else "indeterminate"),
     )
 
     try:
-        assert process.stdout is not None
-        for raw_line in process.stdout:
-            line = raw_line.strip()
-            if not line:
-                continue
-            job_store.append_output(job_id, line)
-            percent, message = parse_progress_line(line)
-            mapped_percent = math.ceil(percent * 0.9) if percent is not None else None
-            _update_job_progress(
+        provider = _provider_for(config.separation_backend)
+        runtime = SeparationRuntime(
+            set_process=lambda process: job_store.update(job_id, process=process),
+            append_output=lambda line: job_store.append_output(job_id, line),
+            emit_progress=lambda percent, message, stage, mode: _update_job_progress(
                 job_id,
-                percent=mapped_percent,
+                percent=percent,
                 message=message,
-                stage="demucs",
-                mode="determinate",
-            )
-
-            job = job_store.require(job_id)
-            if job.cancel_requested:
-                _terminate_process(process)
-                break
-
-        return_code = _wait_for_process(process)
+                stage=stage,
+                mode=mode,
+            ),
+            is_canceled=lambda: job_store.require(job_id).cancel_requested,
+            terminate_process=_terminate_process,
+        )
+        separation_result = provider.separate(
+            SeparationRequest(
+                job_id=job_id,
+                input_path=input_path,
+                output_dir=output_dir,
+                model=separation_model,
+                requested_device=config.device,
+                output_format=config.output_format,
+                mp3_bitrate=config.mp3_bitrate,
+            ),
+            runtime,
+        )
         duration_ms = int((time.time() - start) * 1000)
         job = job_store.require(job_id)
-        no_vocals_path, vocals_path = build_expected_output_paths(job_id, input_path, config)
 
         if job.cancel_requested:
-            job_store.update(
-                job_id,
-                status="canceled",
-                finished_at=utc_now(),
-                duration_ms=duration_ms,
-                progress_message="Canceled",
-                process=None,
-            )
-            _cleanup_job_files(job_id)
-            return
-
-        if return_code != 0:
-            raise RuntimeError(f"Demucs exited with status {return_code}")
-        if not no_vocals_path.exists() or not vocals_path.exists():
-            raise RuntimeError("Demucs output files were not created")
+            raise SeparationCanceled()
 
         aligned_lyrics_path = None
         if config.lyrics_text:
@@ -959,7 +976,7 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
             aligned_lyrics_path = _align_lyrics_in_child_process(
                 job_id,
                 config=config,
-                vocals_path=vocals_path,
+                vocals_path=separation_result.vocals_path,
                 output_dir=output_dir,
             )
 
@@ -972,12 +989,15 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
             progress_message="Completed",
             progress_stage="completed",
             progress_mode="determinate",
-            no_vocals_path=str(no_vocals_path),
-            vocals_path=str(vocals_path),
+            no_vocals_path=str(separation_result.no_vocals_path),
+            vocals_path=str(separation_result.vocals_path),
             aligned_lyrics_path=str(aligned_lyrics_path) if aligned_lyrics_path else None,
+            separation_backend=separation_result.separation_backend,
+            separation_model=separation_result.separation_model,
+            effective_device=separation_result.effective_device,
             process=None,
         )
-    except _JobCanceled:
+    except (SeparationCanceled, _JobCanceled):
         duration_ms = int((time.time() - start) * 1000)
         job_store.update(
             job_id,
@@ -1021,13 +1041,20 @@ def _start_job(payload: bytes, original_filename: str, config: SeparateConfig) -
             mp3_bitrate=config.mp3_bitrate,
             original_filename=original_filename,
             job_kind="separation_with_lyrics" if config.lyrics_text else "separation",
+            separation_backend=config.separation_backend,
+            separation_model=(
+                config.model
+                if config.separation_backend == "demucs"
+                else config.sherpa_spleeter_model
+            ),
+            effective_device=("cpu" if config.separation_backend == "sherpa_spleeter" else config.device),
         )
     )
     worker = threading.Thread(
         target=_run_job,
         args=(job_id, input_path, config),
         daemon=True,
-        name=f"demucs-job-{job_id}",
+        name=f"separation-job-{job_id}",
     )
     worker.start()
     return job
@@ -1178,6 +1205,8 @@ def _validated_config(
     max_line_length: int = 36,
     max_line_length_cjk: int = 12,
     compute_type: str | None = None,
+    separation_backend: Literal["demucs", "sherpa_spleeter"] = DEFAULT_SEPARATION_BACKEND,
+    sherpa_spleeter_model: Literal["fp16", "int8", "fp32"] = DEFAULT_SHERPA_SPLEETER_MODEL,
 ) -> SeparateConfig:
     try:
         config = SeparateConfig(
@@ -1196,15 +1225,32 @@ def _validated_config(
             max_line_length=max_line_length,
             max_line_length_cjk=max_line_length_cjk,
             compute_type=compute_type,
+            separation_backend=separation_backend,
+            sherpa_spleeter_model=sherpa_spleeter_model,
         )
     except ValidationError as error:
         raise HTTPException(status_code=422, detail=error.errors()) from error
 
-    if config.device == "cuda" and not _cuda_available():
+    requires_cuda = config.separation_backend == "demucs" or bool(config.lyrics_text)
+    if config.device == "cuda" and requires_cuda and not _cuda_available():
         raise HTTPException(
             status_code=503,
-            detail="CUDA requested but unavailable on Demucs host",
+            detail=(
+                "CUDA requested but unavailable on Demucs host"
+                if config.separation_backend == "demucs"
+                else "CUDA requested for WhisperX but unavailable on separation host"
+            ),
         )
+    if config.separation_backend == "sherpa_spleeter":
+        readiness = _provider_for("sherpa_spleeter").readiness(
+            config.sherpa_spleeter_model
+        )
+        if not readiness["ready"]:
+            failed = [name for name, ok in readiness["checks"].items() if not ok]
+            raise HTTPException(
+                status_code=503,
+                detail="Sherpa+Spleeter is not ready: " + ", ".join(failed),
+            )
     return config
 
 
@@ -1219,8 +1265,11 @@ def _wait_for_terminal_job(job_id: str, *, timeout_seconds: float = 600.0) -> De
 
 
 @app.get("/health")
-def health():
-    return _health_snapshot()
+def health(
+    separation_backend: str | None = None,
+    sherpa_spleeter_model: str | None = None,
+):
+    return _health_snapshot(separation_backend, sherpa_spleeter_model)
 
 
 @app.get("/transfer", response_class=HTMLResponse)
@@ -1315,6 +1364,8 @@ async def create_job(
     max_line_length: int = Form(36),
     max_line_length_cjk: int = Form(12),
     compute_type: str | None = Form(None),
+    separation_backend: Literal["demucs", "sherpa_spleeter"] = Form(DEFAULT_SEPARATION_BACKEND),
+    sherpa_spleeter_model: Literal["fp16", "int8", "fp32"] = Form(DEFAULT_SHERPA_SPLEETER_MODEL),
 ):
     config = _validated_config(
         model,
@@ -1332,6 +1383,8 @@ async def create_job(
         max_line_length=max_line_length,
         max_line_length_cjk=max_line_length_cjk,
         compute_type=compute_type,
+        separation_backend=separation_backend,
+        sherpa_spleeter_model=sherpa_spleeter_model,
     )
     payload = await file.read()
     job = _start_job(payload, file.filename or "input.wav", config)
@@ -1511,6 +1564,9 @@ def get_job_result(job_id: str):
             "output_format": job.output_format,
             "mp3_bitrate": job.mp3_bitrate,
             "aligned_lyrics_path": Path(job.aligned_lyrics_path) if job.aligned_lyrics_path else None,
+            "separation_backend": job.separation_backend,
+            "separation_model": job.separation_model or job.model,
+            "effective_device": job.effective_device or job.device,
         },
     )()
     zip_payload = _build_stems_zip(result)
@@ -1522,6 +1578,9 @@ def get_job_result(job_id: str):
         "X-Duration-Ms": str(job.duration_ms or 0),
         "X-Vocals-Path": str(vocals_path),
         "X-Response-Format": "zip",
+        "X-Separation-Backend": job.separation_backend,
+        "X-Separation-Model": job.separation_model or job.model,
+        "X-Effective-Device": job.effective_device or job.device,
     }
     if job.mp3_bitrate is not None:
         headers["X-Mp3-Bitrate"] = str(job.mp3_bitrate)
@@ -1645,6 +1704,8 @@ async def separate(
     max_line_length: int = Form(36),
     max_line_length_cjk: int = Form(12),
     compute_type: str | None = Form(None),
+    separation_backend: Literal["demucs", "sherpa_spleeter"] = Form(DEFAULT_SEPARATION_BACKEND),
+    sherpa_spleeter_model: Literal["fp16", "int8", "fp32"] = Form(DEFAULT_SHERPA_SPLEETER_MODEL),
 ):
     config = _validated_config(
         model,
@@ -1662,14 +1723,16 @@ async def separate(
         max_line_length=max_line_length,
         max_line_length_cjk=max_line_length_cjk,
         compute_type=compute_type,
+        separation_backend=separation_backend,
+        sherpa_spleeter_model=sherpa_spleeter_model,
     )
     payload = await file.read()
     job = _start_job(payload, file.filename or "input.wav", config)
     terminal_job = _wait_for_terminal_job(job.job_id)
     if terminal_job.status == "failed":
-        raise HTTPException(status_code=500, detail=f"Demucs failed: {terminal_job.error_detail}")
+        raise HTTPException(status_code=500, detail=f"Separation failed: {terminal_job.error_detail}")
     if terminal_job.status == "canceled":
-        raise HTTPException(status_code=500, detail="Demucs job was canceled")
+        raise HTTPException(status_code=500, detail="Separation job was canceled")
     return get_job_result(job.job_id)
 
 
@@ -1691,6 +1754,8 @@ async def separate_meta(
     max_line_length: int = Form(36),
     max_line_length_cjk: int = Form(12),
     compute_type: str | None = Form(None),
+    separation_backend: Literal["demucs", "sherpa_spleeter"] = Form(DEFAULT_SEPARATION_BACKEND),
+    sherpa_spleeter_model: Literal["fp16", "int8", "fp32"] = Form(DEFAULT_SHERPA_SPLEETER_MODEL),
 ):
     config = _validated_config(
         model,
@@ -1708,23 +1773,18 @@ async def separate_meta(
         max_line_length=max_line_length,
         max_line_length_cjk=max_line_length_cjk,
         compute_type=compute_type,
+        separation_backend=separation_backend,
+        sherpa_spleeter_model=sherpa_spleeter_model,
     )
 
     try:
         payload = await file.read()
-        result = run_demucs_on_file(payload, file.filename or "input.wav", config)
-        aligned_lyrics_path = None
-        if config.lyrics_text:
-            aligned_lyrics_path = _align_lyrics(
-                config=config,
-                vocals_path=Path(result.vocals_path),
-                output_dir=Path(result.vocals_path).parent,
-            )
-    except subprocess.CalledProcessError as error:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Demucs failed: {error.stderr}",
-        ) from error
+        job = _start_job(payload, file.filename or "input.wav", config)
+        result = _wait_for_terminal_job(job.job_id)
+        if result.status == "failed":
+            raise RuntimeError(result.error_detail or "Separation failed")
+        if result.status == "canceled":
+            raise RuntimeError("Separation job was canceled")
     except RuntimeError as error:
         raise HTTPException(status_code=500, detail=str(error)) from error
     except Exception as error:
@@ -1740,7 +1800,10 @@ async def separate_meta(
         mp3_bitrate=result.mp3_bitrate,
         duration_ms=result.duration_ms,
         status="completed",
-        aligned_lyrics_path=str(aligned_lyrics_path) if aligned_lyrics_path else None,
+        aligned_lyrics_path=result.aligned_lyrics_path,
+        separation_backend=result.separation_backend,
+        separation_model=result.separation_model,
+        effective_device=result.effective_device,
     )
 
 @app.post("/gc", response_model=DemucsGarbageCollectionResponse)

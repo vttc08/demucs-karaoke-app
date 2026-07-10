@@ -1007,6 +1007,46 @@ def test_demucs_progress_callback_maps_whisperx_checkpoint_mode(monkeypatch):
     assert emitted[-1]["progress_mode"] == "indeterminate"
 
 
+def test_demucs_progress_callback_preserves_indeterminate_separation(monkeypatch):
+    emitted = []
+
+    async def noop():
+        return None
+
+    monkeypatch.setattr(
+        processing_task_service,
+        "emit_progress",
+        lambda *args, **kwargs: (emitted.append(kwargs), noop())[1],
+    )
+    monkeypatch.setattr(
+        KaraokeService,
+        "_dispatch_loop_coroutine",
+        staticmethod(lambda loop, coroutine: coroutine.close()),
+    )
+
+    callback = KaraokeService()._demucs_progress_callback(
+        SimpleNamespace(time=lambda: 1.0),
+        task_id=123,
+        step_index=2,
+        step_total=3,
+        status=ProcessingTaskStatus.PROCESSING.value,
+        stage="demucs",
+    )
+    callback(
+        0,
+        "Running Sherpa+Spleeter",
+        {
+            "job_id": "sherpa-job",
+            "progress_stage": "separation",
+            "progress_mode": "indeterminate",
+        },
+    )
+
+    assert emitted[-1]["stage"] == "separation"
+    assert emitted[-1]["progress_mode"] == "indeterminate"
+    assert emitted[-1]["progress_label_key"] == "task.separating_vocals"
+
+
 def test_karaoke_service_resolves_whisperx_alignment_settings_override():
     """Per-queue-item WhisperX overrides should bypass auto-detect."""
     service = KaraokeService()

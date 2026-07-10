@@ -382,7 +382,7 @@
         let fallbackKey = "vocalsync.preparing";
         if (stage === "download") {
             fallbackKey = "task.downloading_audio";
-        } else if (stage === "demucs") {
+        } else if (stage === "demucs" || stage === "separation") {
             fallbackKey = "task.separating_vocals";
         } else if (stage === "finalize") {
             fallbackKey = "task.finalizing_vocal_sync";

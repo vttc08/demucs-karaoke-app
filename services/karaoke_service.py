@@ -1069,7 +1069,7 @@ class KaraokeService:
 
             await processing_task_service.emit_log(
                 task_id,
-                message="Demucs failed on extracted audio; retrying with fresh yt-dlp audio",
+                message="Separation failed on extracted audio; retrying with fresh yt-dlp audio",
                 stream="remote",
                 status=ProcessingTaskStatus.PROCESSING.value,
                 stage="demucs",
@@ -1619,7 +1619,7 @@ class KaraokeService:
                         progress_label_key="task.separating_vocals",
                         progress_mode="determinate",
                         status=status,
-                        stage="demucs",
+                        stage=current_stage,
                         progress_step_index=step_index,
                         progress_step_total=step_total,
                     ),
@@ -1642,14 +1642,14 @@ class KaraokeService:
                         progress_label_key="task.separating_vocals",
                         progress_mode="determinate",
                         status=status,
-                        stage="demucs",
+                        stage=current_stage,
                         progress_step_index=step_index,
                         progress_step_total=step_total,
                     ),
                 )
                 current_stage = "whisperx"
                 mapped = 0
-            elif metadata_stage in {"demucs", "whisperx"}:
+            elif metadata_stage in {"demucs", "separation", "whisperx"}:
                 current_stage = metadata_stage
             elif whisperx_started and mapped < 100:
                 current_stage = "whisperx"
@@ -1663,7 +1663,8 @@ class KaraokeService:
                     mapped = 0
             else:
                 label_key = "task.separating_vocals"
-                progress_mode = "determinate"
+                if current_stage != "separation":
+                    progress_mode = "determinate"
 
             if whisperx_started and current_stage == "whisperx" and mapped < 100 and progress_mode != "indeterminate":
                 current_message = "Aligning lyrics"
@@ -1703,7 +1704,7 @@ class KaraokeService:
                 ),
             )
             job_id = metadata.get("job_id") if metadata else None
-            log_message = f"Demucs job {job_id}: {current_message}" if job_id else None
+            log_message = f"Separation job {job_id}: {current_message}" if job_id else None
             if log_message and log_message != last_logged_job_message:
                 last_logged_job_message = log_message
                 KaraokeService._dispatch_loop_coroutine(

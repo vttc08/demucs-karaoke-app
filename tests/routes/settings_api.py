@@ -14,6 +14,8 @@ def test_get_runtime_settings(client):
     assert "demucs_device" in data
     assert "demucs_output_format" in data
     assert "demucs_mp3_bitrate" in data
+    assert data["separation_backend"] in {"demucs", "sherpa_spleeter"}
+    assert data["sherpa_spleeter_model"] in {"fp16", "int8", "fp32"}
     assert "demucs_direct_media_max_mb" in data
     assert "demucs_poll_interval_seconds" in data
     assert "whisperx_transcription_model" in data
@@ -118,6 +120,8 @@ def test_update_runtime_settings(client):
             "demucs_device": "cpu",
             "demucs_output_format": "mp3",
             "demucs_mp3_bitrate": 256,
+            "separation_backend": "sherpa_spleeter",
+            "sherpa_spleeter_model": "int8",
             "demucs_direct_media_max_mb": 750,
             "demucs_poll_interval_seconds": 2.5,
             "whisperx_transcription_model": "base",
@@ -150,6 +154,8 @@ def test_update_runtime_settings(client):
     assert data["demucs_device"] == "cpu"
     assert data["demucs_output_format"] == "mp3"
     assert data["demucs_mp3_bitrate"] == 256
+    assert data["separation_backend"] == "sherpa_spleeter"
+    assert data["sherpa_spleeter_model"] == "int8"
     assert data["demucs_direct_media_max_mb"] == 750
     assert data["demucs_poll_interval_seconds"] == 2.5
     assert data["whisperx_transcription_model"] == "base"
@@ -172,6 +178,37 @@ def test_update_runtime_settings(client):
     assert data["stage_vocals_volume_default"] == 0.35
     assert "demucs_healthy" in data
     assert "demucs_health_detail" in data
+
+
+def test_update_runtime_settings_rejects_invalid_separation_backend(client):
+    authenticate_admin_client(client)
+    response = client.patch(
+        "/api/settings/",
+        json={"separation_backend": "unknown"},
+    )
+    assert response.status_code == 400
+    assert "separation_backend" in response.json()["detail"]
+
+
+def test_update_runtime_settings_persists_separation_backend(client):
+    authenticate_admin_client(client)
+    response = client.patch(
+        "/api/settings/",
+        json={
+            "separation_backend": "sherpa_spleeter",
+            "sherpa_spleeter_model": "fp32",
+        },
+    )
+    assert response.status_code == 200
+
+    db = TestingSessionLocal()
+    try:
+        backend = db.get(RuntimeSetting, "separation_backend")
+        model = db.get(RuntimeSetting, "sherpa_spleeter_model")
+        assert backend is not None and backend.value == "sherpa_spleeter"
+        assert model is not None and model.value == "fp32"
+    finally:
+        db.close()
 
 def test_update_runtime_settings_persists_to_database(client):
     """Runtime settings updates should be written to the database."""

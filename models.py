@@ -463,6 +463,8 @@ class RuntimeSettingsResponse(BaseModel):
     demucs_device: str
     demucs_output_format: str
     demucs_mp3_bitrate: int
+    separation_backend: str
+    sherpa_spleeter_model: str
     demucs_direct_media_max_mb: int
     demucs_poll_interval_seconds: float
     whisperx_transcription_model: str
@@ -496,6 +498,8 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     demucs_device: Optional[str] = None
     demucs_output_format: Optional[str] = None
     demucs_mp3_bitrate: Optional[int] = None
+    separation_backend: Optional[str] = None
+    sherpa_spleeter_model: Optional[str] = None
     demucs_direct_media_max_mb: Optional[int] = None
     demucs_poll_interval_seconds: Optional[float] = None
     whisperx_transcription_model: Optional[str] = None
@@ -698,3 +702,5 @@ class DemucsHealthResponse(BaseModel):
     api_url: str
     healthy: bool
     detail: str
+    supported_backends: list[str] = Field(default_factory=list)
+    selected_backend: Optional[str] = None
