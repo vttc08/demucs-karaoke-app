@@ -437,6 +437,7 @@ The stage page uses a websocket-first model:
   - `services/lyrics_inference.py`: metadata inference (`YouTubeTitleInferrer`) to normalize noisy YouTube titles into title/artist pairs
   - `services/lyrics_providers.py`: built-in provider implementations (`MusixmatchLyricsProvider`, `NeteaseLyricsProvider`, `LRCLibLyricsProvider`)
   - `services/lyrics_provider_loader.py`: importlib-based loader for user-defined provider modules configured through `LYRICS_PROVIDER_CUSTOM_PATHS`
+- `lyrics_service.py` is intentionally limited to orchestration and parsing. It re-exports the shared contracts and built-in provider classes for compatibility, but it does not define duplicate provider, inference, or payload implementations.
 - Provider order is Musixmatch first (when `MUSIXMATCH_TOKEN` is configured), then NetEase and LRCLib plus any loaded custom providers in the fallback pool.
 - Resolution behavior is Musixmatch-first, then concurrent fallback search across the remaining providers with score-based selection of the best payload.
 - Synced lyrics are persisted as `.lrc` sidecars for stage overlay cue parsing.
