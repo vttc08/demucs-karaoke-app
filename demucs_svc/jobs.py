@@ -38,6 +38,9 @@ class DemucsJobState:
     output_tail: deque[str] = field(default_factory=deque)
     cancel_requested: bool = False
     process: Any = None
+    separation_backend: str = "demucs"
+    separation_model: str | None = None
+    effective_device: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +68,9 @@ class DemucsJobState:
             "no_vocals_path": self.no_vocals_path,
             "vocals_path": self.vocals_path,
             "aligned_lyrics_path": self.aligned_lyrics_path,
+            "separation_backend": self.separation_backend,
+            "separation_model": self.separation_model,
+            "effective_device": self.effective_device,
         }
 
 

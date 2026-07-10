@@ -35,6 +35,8 @@ class RuntimeSettingsService:
     """Manage runtime-editable settings and apply them in-process."""
     ALLOWED_DEMUCS_DEVICES = {"cuda", "cpu"}
     ALLOWED_DEMUCS_OUTPUT_FORMATS = {"wav", "mp3"}
+    ALLOWED_SEPARATION_BACKENDS = {"demucs", "sherpa_spleeter"}
+    ALLOWED_SHERPA_SPLEETER_MODELS = {"fp16", "int8", "fp32"}
     ALLOWED_PROXY_SCHEMES = {"http", "https", "socks4", "socks4a", "socks5", "socks5h"}
     ALLOWED_YTDLP_VIDEO_RESOLUTIONS = {"default", "360", "480", "720", "1080", "2160"}
     ALLOWED_YTDLP_VIDEO_CODECS = {"", "avc"}
@@ -50,6 +52,8 @@ class RuntimeSettingsService:
         "demucs_device",
         "demucs_output_format",
         "demucs_mp3_bitrate",
+        "separation_backend",
+        "sherpa_spleeter_model",
         "demucs_direct_media_max_mb",
         "demucs_poll_interval_seconds",
         "whisperx_transcription_model",
@@ -77,7 +81,10 @@ class RuntimeSettingsService:
 
     def get_demucs_health(self) -> DemucsHealthResponse:
         """Return Demucs health for the current configured API URL."""
-        return DemucsClient(api_url=settings.demucs_api_url).health_check()
+        return DemucsClient(api_url=settings.demucs_api_url).health_check(
+            separation_backend=settings.separation_backend,
+            sherpa_spleeter_model=settings.sherpa_spleeter_model,
+        )
 
     def preload_whisperx_models(
         self,
@@ -222,6 +229,8 @@ class RuntimeSettingsService:
             demucs_device=settings.demucs_device,
             demucs_output_format=settings.demucs_output_format,
             demucs_mp3_bitrate=settings.demucs_mp3_bitrate,
+            separation_backend=settings.separation_backend,
+            sherpa_spleeter_model=settings.sherpa_spleeter_model,
             demucs_direct_media_max_mb=settings.demucs_direct_media_max_mb,
             demucs_poll_interval_seconds=settings.demucs_poll_interval_seconds,
             whisperx_transcription_model=settings.whisperx_transcription_model,
@@ -327,6 +336,28 @@ class RuntimeSettingsService:
             snapshot.setdefault("demucs_mp3_bitrate", settings.demucs_mp3_bitrate)
             settings.demucs_mp3_bitrate = bitrate
             updated_fields.append("demucs_mp3_bitrate")
+
+        if payload.separation_backend is not None:
+            backend = payload.separation_backend.strip().lower()
+            if backend not in self.ALLOWED_SEPARATION_BACKENDS:
+                raise ValueError(
+                    "separation_backend must be one of: "
+                    + ", ".join(sorted(self.ALLOWED_SEPARATION_BACKENDS))
+                )
+            snapshot.setdefault("separation_backend", settings.separation_backend)
+            settings.separation_backend = backend
+            updated_fields.append("separation_backend")
+
+        if payload.sherpa_spleeter_model is not None:
+            model = payload.sherpa_spleeter_model.strip().lower()
+            if model not in self.ALLOWED_SHERPA_SPLEETER_MODELS:
+                raise ValueError(
+                    "sherpa_spleeter_model must be one of: "
+                    + ", ".join(sorted(self.ALLOWED_SHERPA_SPLEETER_MODELS))
+                )
+            snapshot.setdefault("sherpa_spleeter_model", settings.sherpa_spleeter_model)
+            settings.sherpa_spleeter_model = model
+            updated_fields.append("sherpa_spleeter_model")
 
         if payload.demucs_direct_media_max_mb is not None:
             max_mb = payload.demucs_direct_media_max_mb
@@ -540,6 +571,16 @@ class RuntimeSettingsService:
             settings.demucs_output_format = output_format
         elif field_name == "demucs_mp3_bitrate":
             settings.demucs_mp3_bitrate = int(raw_value)
+        elif field_name == "separation_backend":
+            backend = raw_value.strip().lower()
+            if backend not in self.ALLOWED_SEPARATION_BACKENDS:
+                raise ValueError(f"Invalid persisted separation_backend: {raw_value}")
+            settings.separation_backend = backend
+        elif field_name == "sherpa_spleeter_model":
+            model = raw_value.strip().lower()
+            if model not in self.ALLOWED_SHERPA_SPLEETER_MODELS:
+                raise ValueError(f"Invalid persisted sherpa_spleeter_model: {raw_value}")
+            settings.sherpa_spleeter_model = model
         elif field_name == "demucs_direct_media_max_mb":
             max_mb = int(raw_value)
             if not self._is_valid_demucs_direct_media_max_mb(max_mb):

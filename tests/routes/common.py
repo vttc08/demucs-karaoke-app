@@ -68,6 +68,8 @@ def client():
     original_demucs_device = settings.demucs_device
     original_demucs_output_format = settings.demucs_output_format
     original_demucs_mp3_bitrate = settings.demucs_mp3_bitrate
+    original_separation_backend = settings.separation_backend
+    original_sherpa_spleeter_model = settings.sherpa_spleeter_model
     original_demucs_direct_media_max_mb = settings.demucs_direct_media_max_mb
     original_whisperx_transcription_model = settings.whisperx_transcription_model
     original_whisperx_align_language = settings.whisperx_align_language
@@ -111,6 +113,8 @@ def client():
     settings.demucs_device = original_demucs_device
     settings.demucs_output_format = original_demucs_output_format
     settings.demucs_mp3_bitrate = original_demucs_mp3_bitrate
+    settings.separation_backend = original_separation_backend
+    settings.sherpa_spleeter_model = original_sherpa_spleeter_model
     settings.demucs_direct_media_max_mb = original_demucs_direct_media_max_mb
     settings.whisperx_transcription_model = original_whisperx_transcription_model
     settings.whisperx_align_language = original_whisperx_align_language

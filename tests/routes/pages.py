@@ -2,6 +2,16 @@ from .common import *
 from routes.pages import build_docs_url
 
 
+def test_settings_page_renders_separation_backend_controls(client):
+    authenticate_admin_client(client)
+    response = client.get("/settings")
+
+    assert response.status_code == 200
+    assert 'id="separation_backend"' in response.text
+    assert 'id="sherpa_spleeter_model"' in response.text
+    assert 'value="sherpa_spleeter"' in response.text
+
+
 
 def test_get_empty_queue(client):
     """Test getting empty queue."""

@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 SERVICE_ROOT = Path(__file__).resolve().parent
 ENV_FILE = Path(os.getenv("DEMUCS_ENV_FILE", str(SERVICE_ROOT / ".env"))).expanduser()
 DEFAULT_IO_ROOT = SERVICE_ROOT / "io"
+DEFAULT_SHERPA_MODEL_ROOT = SERVICE_ROOT / "model_data" / "sherpa_spleeter"
 
 
 class DemucsSettings(BaseSettings):
@@ -26,6 +27,21 @@ class DemucsSettings(BaseSettings):
     demucs_device: str = "cuda"
     demucs_output_format: str = "wav"
     demucs_mp3_bitrate: int = 320
+    separation_backend: str = "demucs"
+    sherpa_spleeter_model: str = "fp16"
+    sherpa_spleeter_model_root: Path = Field(
+        default=DEFAULT_SHERPA_MODEL_ROOT,
+        validation_alias="SHERPA_SPLEETER_MODEL_ROOT",
+    )
+    sherpa_spleeter_num_threads: int = Field(
+        default=max(1, min(8, os.cpu_count() or 1)),
+        validation_alias="SHERPA_SPLEETER_NUM_THREADS",
+        ge=1,
+    )
+    sherpa_spleeter_ffmpeg_path: str = Field(
+        default="ffmpeg",
+        validation_alias="SHERPA_SPLEETER_FFMPEG_PATH",
+    )
     whisperx_transcription_model: str = "tiny"
     whisperx_align_language: str = "en"
     whisperx_detect_language: bool = False
@@ -37,9 +53,19 @@ class DemucsSettings(BaseSettings):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.io_root = self._resolve_io_root(self.io_root)
+        self.sherpa_spleeter_model_root = self._resolve_service_path(
+            self.sherpa_spleeter_model_root
+        )
 
     @staticmethod
     def _resolve_io_root(value: Path) -> Path:
+        resolved = Path(value).expanduser()
+        if not resolved.is_absolute():
+            resolved = SERVICE_ROOT / resolved
+        return resolved.resolve()
+
+    @staticmethod
+    def _resolve_service_path(value: Path) -> Path:
         resolved = Path(value).expanduser()
         if not resolved.is_absolute():
             resolved = SERVICE_ROOT / resolved
@@ -56,6 +82,8 @@ DEFAULT_DEMUCS_MODEL = settings.demucs_model
 DEFAULT_DEMUCS_DEVICE = settings.demucs_device
 DEFAULT_OUTPUT_FORMAT = settings.demucs_output_format
 DEFAULT_MP3_BITRATE = settings.demucs_mp3_bitrate
+DEFAULT_SEPARATION_BACKEND = settings.separation_backend
+DEFAULT_SHERPA_SPLEETER_MODEL = settings.sherpa_spleeter_model
 DEFAULT_WHISPERX_TRANSCRIPTION_MODEL = settings.whisperx_transcription_model
 DEFAULT_WHISPERX_ALIGN_LANGUAGE = settings.whisperx_align_language
 DEFAULT_WHISPERX_DETECT_LANGUAGE = settings.whisperx_detect_language

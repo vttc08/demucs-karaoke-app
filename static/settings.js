@@ -43,6 +43,8 @@ const lastSyncText = document.getElementById("last-sync-text");
 const demucsGcBtn = document.getElementById("demucs-gc-btn");
 const demucsGcStatus = document.getElementById("demucs-gc-status");
 const demucsMp3BitrateGroup = document.getElementById("demucs-mp3-bitrate-group");
+const demucsModelGroup = document.getElementById("demucs-model-group");
+const sherpaSpleeterModelGroup = document.getElementById("sherpa-spleeter-model-group");
 const ENGINE_STATUS_STORAGE_KEY = "karaoke.engineStatus";
 let saveFeedbackTimer = null;
 
@@ -50,6 +52,8 @@ const fields = {
     demucs_api_url: document.getElementById("demucs_api_url"),
     demucs_api_key: document.getElementById("demucs_api_key"),
     demucs_model: document.getElementById("demucs_model"),
+    separation_backend: document.getElementById("separation_backend"),
+    sherpa_spleeter_model: document.getElementById("sherpa_spleeter_model"),
     demucs_device: document.getElementById("demucs_device"),
     demucs_output_format: document.getElementById("demucs_output_format"),
     demucs_mp3_bitrate: document.getElementById("demucs_mp3_bitrate"),
@@ -562,6 +566,8 @@ function applySettingsToForm(data) {
     fields.demucs_api_url.value = data.demucs_api_url || "";
     fields.demucs_api_key.value = data.demucs_api_key || "";
     fields.demucs_model.value = data.demucs_model || "htdemucs";
+    fields.separation_backend.value = data.separation_backend || "demucs";
+    fields.sherpa_spleeter_model.value = data.sherpa_spleeter_model || "fp16";
     fields.demucs_device.value = data.demucs_device || "cuda";
     fields.demucs_output_format.value = data.demucs_output_format || "wav";
     fields.demucs_mp3_bitrate.value = String(data.demucs_mp3_bitrate ?? 320);
@@ -596,6 +602,7 @@ function applySettingsToForm(data) {
         fields.stage_vocals_volume_default.value = String(Math.round(normalizedVolume * 100));
     }
     updateWhisperxLanguageUi();
+    updateSeparationBackendUi();
     updateDemucsOutputUi();
     resetProxyInfoDisplay();
 }
@@ -607,6 +614,13 @@ function updateDemucsOutputUi() {
     }
     fields.demucs_mp3_bitrate.disabled = !isMp3;
     fields.demucs_mp3_bitrate.required = isMp3;
+}
+
+function updateSeparationBackendUi() {
+    const useSherpa = fields.separation_backend.value === "sherpa_spleeter";
+    demucsModelGroup.classList.toggle("hidden", useSherpa);
+    sherpaSpleeterModelGroup.classList.toggle("hidden", !useSherpa);
+    sherpaSpleeterModelGroup.classList.toggle("flex", useSherpa);
 }
 
 async function loadSettings() {
@@ -643,6 +657,8 @@ async function saveSettings() {
         demucs_api_url: fields.demucs_api_url.value.trim(),
         demucs_api_key: fields.demucs_api_key.value.trim(),
         demucs_model: fields.demucs_model.value,
+        separation_backend: fields.separation_backend.value,
+        sherpa_spleeter_model: fields.sherpa_spleeter_model.value,
         demucs_device: fields.demucs_device.value,
         demucs_output_format: fields.demucs_output_format.value,
         demucs_direct_media_max_mb: Number(fields.demucs_direct_media_max_mb.value),
@@ -741,6 +757,9 @@ if (reloadBtn) {
 }
 if (fields.demucs_output_format) {
     fields.demucs_output_format.addEventListener("change", updateDemucsOutputUi);
+}
+if (fields.separation_backend) {
+    fields.separation_backend.addEventListener("change", updateSeparationBackendUi);
 }
 if (fields.whisperx_detect_language) {
     fields.whisperx_detect_language.addEventListener("change", updateWhisperxLanguageUi);

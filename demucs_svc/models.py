@@ -6,6 +6,8 @@ try:
         DEFAULT_DEMUCS_MODEL,
         DEFAULT_MP3_BITRATE,
         DEFAULT_OUTPUT_FORMAT,
+        DEFAULT_SEPARATION_BACKEND,
+        DEFAULT_SHERPA_SPLEETER_MODEL,
         DEFAULT_WHISPERX_ALIGN_LANGUAGE,
         DEFAULT_WHISPERX_DETECT_LANGUAGE,
         DEFAULT_WHISPERX_PRELOAD_MODELS,
@@ -18,6 +20,8 @@ except ImportError:
         DEFAULT_DEMUCS_MODEL,
         DEFAULT_MP3_BITRATE,
         DEFAULT_OUTPUT_FORMAT,
+        DEFAULT_SEPARATION_BACKEND,
+        DEFAULT_SHERPA_SPLEETER_MODEL,
         DEFAULT_WHISPERX_ALIGN_LANGUAGE,
         DEFAULT_WHISPERX_DETECT_LANGUAGE,
         DEFAULT_WHISPERX_PRELOAD_MODELS,
@@ -27,6 +31,8 @@ except ImportError:
 
 
 class SeparateConfig(BaseModel):
+    separation_backend: Literal["demucs", "sherpa_spleeter"] = DEFAULT_SEPARATION_BACKEND
+    sherpa_spleeter_model: Literal["fp16", "int8", "fp32"] = DEFAULT_SHERPA_SPLEETER_MODEL
     model: str = DEFAULT_DEMUCS_MODEL
     device: Literal["cuda", "cpu"] = DEFAULT_DEMUCS_DEVICE
     output_format: Literal["wav", "mp3"] = DEFAULT_OUTPUT_FORMAT
@@ -79,6 +85,9 @@ class SeparateMetaResponse(BaseModel):
     duration_ms: int
     status: str
     aligned_lyrics_path: str | None = None
+    separation_backend: str = "demucs"
+    separation_model: str | None = None
+    effective_device: str | None = None
 
 
 class WhisperXPreloadResponse(BaseModel):
@@ -128,6 +137,9 @@ class DemucsJobStatusResponse(BaseModel):
     finished_at: str | None = None
     output_tail: list[str] = []
     aligned_lyrics_path: str | None = None
+    separation_backend: str = "demucs"
+    separation_model: str | None = None
+    effective_device: str | None = None
 
 
 class DemucsJobArtifactDeleteResponse(BaseModel):
@@ -179,6 +191,9 @@ class DemucsMetricsJobResponse(BaseModel):
     started_at: str | None = None
     cancel_requested: bool
     stdout_tail: list[str] = Field(default_factory=list)
+    separation_backend: str = "demucs"
+    separation_model: str | None = None
+    effective_device: str | None = None
 
 
 class DemucsMetricsResponse(BaseModel):

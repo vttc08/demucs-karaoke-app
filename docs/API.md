@@ -1063,6 +1063,8 @@ endpoint reflects the latest saved UI configuration after the app has booted.
   "demucs_device": "cuda",
   "demucs_output_format": "wav",
   "demucs_mp3_bitrate": 320,
+  "separation_backend": "demucs",
+  "sherpa_spleeter_model": "fp16",
   "demucs_direct_media_max_mb": 500,
   "demucs_poll_interval_seconds": 1.0,
   "whisperx_transcription_model": "tiny",
@@ -1163,6 +1165,8 @@ and restarts when no explicit `.env` override is present.
   "demucs_device": "cuda",
   "demucs_output_format": "wav",
   "demucs_mp3_bitrate": 320,
+  "separation_backend": "sherpa_spleeter",
+  "sherpa_spleeter_model": "int8",
   "demucs_direct_media_max_mb": 500,
   "demucs_poll_interval_seconds": 1.0,
   "whisperx_transcription_model": "tiny",
@@ -1192,6 +1196,8 @@ Validation:
 - `demucs_device` must be `cuda` or `cpu`
 - `demucs_output_format` must be `wav` or `mp3`
 - `demucs_mp3_bitrate` must be between `64` and `320`
+- `separation_backend` must be `demucs` or `sherpa_spleeter`
+- `sherpa_spleeter_model` must be `fp16`, `int8`, or `fp32`
 - `demucs_direct_media_max_mb` must be between `0` and `5000`
 - `demucs_poll_interval_seconds` must be between `0.25` and `10.0`
 - `whisperx_transcription_model` controls the model preloaded on Demucs startup and used for optional lyric alignment
@@ -1239,6 +1245,12 @@ The Demucs service response ZIP still contains the standard `no_vocals` and `voc
 
 `metadata.json` inside the ZIP records the same file list for downstream consumers.
 
+`POST /jobs`, `POST /separate`, and `POST /separate-meta` accept additive
+`separation_backend` and `sherpa_spleeter_model` multipart fields. Omitting them preserves Demucs.
+Job status, SSE events, metrics, response headers, and ZIP metadata expose `separation_backend`,
+`separation_model`, and `effective_device`. Sherpa reports CPU as its effective device even when the
+request's shared Device setting is CUDA.
+
 The preferred path is `GET /jobs/{job_id}/events`, which streams the same job state over SSE as a
 single long-lived connection. The main app uses that stream for live progress, then fetches
 `GET /jobs/{job_id}/result` after the terminal event and still calls `DELETE /jobs/{job_id}/artifacts`
@@ -1261,6 +1273,10 @@ The Demucs service reads its own configuration from environment variables and fr
 `output/`; it defaults to `demucs_svc/io`. Set `DEMUCS_ENV_FILE` if you want the service to read a
 different `.env` file without affecting the main app config. If `DEMUCS_API_KEY` is set, the
 service requires `X-API-Key` on all request paths except the plain `/transfer` HTML page.
+
+Sherpa model files and CPU tuning are worker-local. Configure `SHERPA_SPLEETER_MODEL_ROOT`,
+`SHERPA_SPLEETER_NUM_THREADS`, and `SHERPA_SPLEETER_FFMPEG_PATH`; install official bundles with
+`uv run python -m demucs_svc.download_sherpa_models`. See `docs/separation-backends.md`.
 
 For existing guide vocals, the main app can use the Demucs align-only job API:
 

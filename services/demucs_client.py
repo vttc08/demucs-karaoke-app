@@ -97,6 +97,8 @@ class DemucsClient:
             "model": settings.demucs_model,
             "device": settings.demucs_device,
             "output_format": settings.demucs_output_format,
+            "separation_backend": settings.separation_backend,
+            "sherpa_spleeter_model": settings.sherpa_spleeter_model,
             "transcription_model": transcription_model or settings.whisperx_transcription_model,
             "align_language": align_language if align_language is not None else settings.whisperx_align_language,
             "detect_language": str(
@@ -141,7 +143,32 @@ class DemucsClient:
             "error_detail": payload.get("error_detail"),
             "progress_stage": payload.get("progress_stage"),
             "progress_mode": payload.get("progress_mode"),
+            "separation_backend": payload.get("separation_backend"),
+            "effective_device": payload.get("effective_device"),
         }
+
+    async def _ensure_backend_capability(self, client: httpx.AsyncClient) -> None:
+        if settings.separation_backend == "demucs":
+            return
+        response = await client.get(
+            f"{self.api_url}/health",
+            params={
+                "separation_backend": settings.separation_backend,
+                "sherpa_spleeter_model": settings.sherpa_spleeter_model,
+            },
+            **self._request_headers_kwargs(),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        supported = payload.get("supported_backends") or []
+        if settings.separation_backend not in supported:
+            raise RuntimeError(
+                "Remote separation service does not advertise Sherpa+Spleeter support"
+            )
+        if str(payload.get("status", "")).lower() not in {"ok", "healthy"}:
+            raise RuntimeError(
+                str(payload.get("detail") or "Selected separation backend is not ready")
+            )
 
     @staticmethod
     def _emit_remote_log_lines(
@@ -494,6 +521,8 @@ class DemucsClient:
         seen_output_lines: set[str] = set()
 
         async with httpx.AsyncClient(timeout=self.REQUEST_TIMEOUT_SECONDS) as client:
+            if endpoint == f"{self.api_url}/jobs":
+                await self._ensure_backend_capability(client)
             with audio_path.open("rb") as fh:
                 create_response = await client.post(
                     endpoint,
@@ -523,7 +552,7 @@ class DemucsClient:
                 self._progress_metadata(job_id, payload),
             )
             if log_callback is not None:
-                log_callback("remote", f"Started remote Demucs job {job_id}")
+                log_callback("remote", f"Started remote separation job {job_id}")
 
             try:
                 result_fetch_url = result_url_builder(job_id)
@@ -606,7 +635,7 @@ class DemucsClient:
             cancel_event=cancel_event,
             progress_callback=progress_callback,
             log_callback=log_callback,
-            running_message="Running Demucs",
+            running_message="Separating vocals",
             final_completed_message="Completed",
             terminal_statuses={"completed", "failed", "canceled"},
         )
@@ -692,12 +721,25 @@ class DemucsClient:
         response.raise_for_status()
         return WhisperXPreloadResponse(**response.json())
 
-    def health_check(self) -> DemucsHealthResponse:
-        """Check if Demucs service is available and ready."""
+    def health_check(
+        self,
+        *,
+        separation_backend: str | None = None,
+        sherpa_spleeter_model: str | None = None,
+    ) -> DemucsHealthResponse:
+        """Check if the selected separation backend is available and ready."""
         try:
+            selected_backend = separation_backend or settings.separation_backend
+            selected_model = sherpa_spleeter_model or settings.sherpa_spleeter_model
+            request_kwargs = self._request_headers_kwargs()
+            if selected_backend != "demucs":
+                request_kwargs["params"] = {
+                    "separation_backend": selected_backend,
+                    "sherpa_spleeter_model": selected_model,
+                }
             response = httpx.get(
                 f"{self.api_url}/health",
-                **self._request_headers_kwargs(),
+                **request_kwargs,
                 timeout=self.HEALTH_TIMEOUT_SECONDS,
             )
             if response.status_code != 200:
@@ -709,11 +751,23 @@ class DemucsClient:
 
             payload = response.json()
             status = str(payload.get("status", "")).lower()
+            supported_backends = payload.get("supported_backends") or ["demucs"]
+            selected_backend_payload = payload.get("selected_backend") or selected_backend
+            if selected_backend not in supported_backends:
+                return DemucsHealthResponse(
+                    api_url=self.api_url,
+                    healthy=False,
+                    detail=f"Remote service does not support {selected_backend}",
+                    supported_backends=supported_backends,
+                    selected_backend=selected_backend_payload,
+                )
             if status in {"ok", "healthy"}:
                 return DemucsHealthResponse(
                     api_url=self.api_url,
                     healthy=True,
-                    detail="Demucs service is healthy",
+                    detail=f"{selected_backend} backend is healthy",
+                    supported_backends=supported_backends,
+                    selected_backend=selected_backend_payload,
                 )
 
             detail = payload.get("detail") or payload.get("reason") or "Demucs not ready"
@@ -721,6 +775,8 @@ class DemucsClient:
                 api_url=self.api_url,
                 healthy=False,
                 detail=str(detail),
+                supported_backends=supported_backends,
+                selected_backend=selected_backend_payload,
             )
         except httpx.TimeoutException:
             return DemucsHealthResponse(

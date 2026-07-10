@@ -15,12 +15,12 @@ This project currently uses two services:
 - searches YouTube
 - downloads video/audio
 - fetches lyrics
-- calls Demucs service
+- calls the remote separation service
 - generates output karaoke video
 
-2. Demucs service
+2. Separation service (`demucs_svc`)
 - receives audio processing request
-- runs demucs two-stem vocals separation
+- selects a Demucs or Sherpa+Spleeter provider behind a shared separation interface
 - optionally runs WhisperX forced alignment when lyrics are supplied and alignment is requested
 - returns a ZIP payload containing both `no_vocals` and `vocals` stems, plus `aligned_lyrics.json` when alignment was performed
 
