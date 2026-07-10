@@ -2,13 +2,23 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
 from urllib.request import urlopen
 
-from .separation.sherpa_spleeter import MODEL_DIRECTORIES, MODEL_FILES
-from .settings import settings
+# Support both package execution from the repository root and direct execution
+# from inside the standalone demucs_svc directory.
+if __package__:
+    from .separation.sherpa_spleeter import MODEL_DIRECTORIES, MODEL_FILES
+    from .settings import settings
+else:
+    service_parent = Path(__file__).resolve().parent.parent
+    if str(service_parent) not in sys.path:
+        sys.path.insert(0, str(service_parent))
+    from demucs_svc.separation.sherpa_spleeter import MODEL_DIRECTORIES, MODEL_FILES
+    from demucs_svc.settings import settings
 
 
 RELEASE_BASE_URL = (

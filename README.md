@@ -499,8 +499,15 @@ Use your Windows project venv/service path:
 
 ```powershell
 cd C:\Users\hubcc\Documents\Projects\karaoke\demucs_svc
+C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe -m pip install -r requirements.txt
+C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe .\download_sherpa_models.py --variant fp16
 C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 8001
 ```
+
+The worker has its own `requirements.txt` and can run independently of the main app's
+environment. When launching from the repository root instead, use
+`python -m demucs_svc.download_sherpa_models`; when the current directory is already
+`demucs_svc`, use `python .\download_sherpa_models.py` as shown above.
 
 Then verify from Linux host:
 

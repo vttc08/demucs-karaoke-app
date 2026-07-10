@@ -80,6 +80,8 @@ def reset_proxy_url_setting():
     original_proxy = settings.ytdlp_proxy_url
     original_deno_path = settings.ytdlp_deno_path
     original_demucs_api_key = settings.demucs_api_key
+    original_separation_backend = settings.separation_backend
+    original_sherpa_spleeter_model = settings.sherpa_spleeter_model
     settings.ytdlp_proxy_url = ""
     settings.ytdlp_deno_path = ""
     settings.demucs_api_key = ""
@@ -89,6 +91,8 @@ def reset_proxy_url_setting():
         settings.ytdlp_proxy_url = original_proxy
         settings.ytdlp_deno_path = original_deno_path
         settings.demucs_api_key = original_demucs_api_key
+        settings.separation_backend = original_separation_backend
+        settings.sherpa_spleeter_model = original_sherpa_spleeter_model
 
 
 @pytest.fixture

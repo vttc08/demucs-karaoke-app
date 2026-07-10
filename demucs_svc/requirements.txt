@@ -1,4 +1,13 @@
-# Service-only lyric parsing dependencies for the standalone Demucs host.
+# Runtime dependencies for the standalone demucs_svc host. This file is
+# intentionally independent from the main karaoke application's environment.
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+jinja2>=3.1.3
+python-multipart>=0.0.9
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+demucs>=4.0.1
 srt
 pylrc
 sherpa-onnx

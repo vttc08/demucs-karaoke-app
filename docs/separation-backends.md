@@ -11,19 +11,47 @@ WhisperX alignment stage.
 
 ## Install Sherpa+Spleeter
 
-Install the standalone worker dependencies in the worker environment:
+`demucs_svc` is a standalone service. Its dependencies do not come from the main
+karaoke app, so install them in the virtual environment that will run the worker.
+
+From the repository root:
 
 ```bash
 uv pip install -r demucs_svc/requirements.txt
 ```
 
+If you copied or checked out only the `demucs_svc` directory, run the equivalent
+command from that directory:
+
+```bash
+uv pip install -r requirements.txt
+```
+
 FFmpeg must also be installed and available through `SHERPA_SPLEETER_FFMPEG_PATH`.
 
-Download at least one official model bundle explicitly:
+Download at least one official model bundle explicitly. From the repository root:
 
 ```bash
 uv run python -m demucs_svc.download_sherpa_models --variant fp16
 ```
+
+When the shell's current directory is `demucs_svc`, use the local-module form
+instead. This is also the recommended PowerShell form on Windows:
+
+```powershell
+python .\download_sherpa_models.py --variant fp16
+```
+
+The same local command works on macOS and Linux:
+
+```bash
+python download_sherpa_models.py --variant fp16
+```
+
+The downloader supports both forms intentionally. Do not use
+`python -m demucs_svc.download_sherpa_models` while the current directory is
+already `demucs_svc`; in that directory the package parent is not on Python's
+module path.
 
 Available variants are `fp16`, `int8`, and `fp32`. Use `--variant all` to install all three. The
 command validates the expected vocals/accompaniment pair before installing the bundle under

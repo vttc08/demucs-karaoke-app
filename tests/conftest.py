@@ -17,6 +17,8 @@ def fast_websocket_heartbeat():
     original_interval = settings.ws_heartbeat_interval
     original_ytdlp_video_codec = settings.ytdlp_video_codec
     original_ffmpeg_audio_codec = settings.ffmpeg_audio_codec
+    original_separation_backend = settings.separation_backend
+    original_sherpa_spleeter_model = settings.sherpa_spleeter_model
     settings.ws_heartbeat_interval = 1
     settings.ytdlp_video_codec = ""
     settings.ffmpeg_audio_codec = ""
@@ -26,3 +28,5 @@ def fast_websocket_heartbeat():
         settings.ws_heartbeat_interval = original_interval
         settings.ytdlp_video_codec = original_ytdlp_video_codec
         settings.ffmpeg_audio_codec = original_ffmpeg_audio_codec
+        settings.separation_backend = original_separation_backend
+        settings.sherpa_spleeter_model = original_sherpa_spleeter_model
