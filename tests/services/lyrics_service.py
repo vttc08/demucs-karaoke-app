@@ -95,6 +95,44 @@ class LyricsProvider:
     assert payload.is_synced is False
 
 
+def test_plain_string_fallback_normalizes_to_shared_lyrics_payload(tmp_path):
+    """Fallback strings must use the public shared LyricsPayload contract."""
+    from services import lyrics_types
+
+    provider_file = tmp_path / "string_provider.py"
+    provider_file.write_text(
+        """
+class LyricsProvider:
+    name = "string-provider"
+
+    async def fetch(self, inferred_song, **kwargs):
+        return "[00:01.00]Shared payload regression"
+""",
+        encoding="utf-8",
+    )
+    original_token = settings.musixmatch_token
+    original_netease_enabled = settings.lyrics_provider_netease_enabled
+    original_lrclib_enabled = settings.lyrics_provider_lrclib_enabled
+    original = settings.lyrics_provider_custom_paths
+    try:
+        settings.musixmatch_token = ""
+        settings.lyrics_provider_netease_enabled = False
+        settings.lyrics_provider_lrclib_enabled = False
+        settings.lyrics_provider_custom_paths = str(provider_file)
+        payload = asyncio.run(
+            LyricsService().resolve_lyrics(title="Song Title", artist="Artist", infer=False)
+        )
+    finally:
+        settings.musixmatch_token = original_token
+        settings.lyrics_provider_netease_enabled = original_netease_enabled
+        settings.lyrics_provider_lrclib_enabled = original_lrclib_enabled
+        settings.lyrics_provider_custom_paths = original
+
+    assert isinstance(payload, lyrics_types.LyricsPayload)
+    assert payload.provider == "string-provider"
+    assert payload.is_synced is True
+
+
 def test_lyrics_service_skips_custom_loader_when_musixmatch_resolves(monkeypatch):
     """Musixmatch should still short-circuit before the custom provider loader runs."""
     from services import lyrics_types as shared_lyrics_types
