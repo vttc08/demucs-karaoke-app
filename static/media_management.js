@@ -56,6 +56,7 @@ function initializeMediaEditLyricsManager() {
         googleLink: '#media-edit-lyrics-google-btn',
         uploadBtn: '#media-edit-lyrics-upload-btn',
         downgradeBtn: '#media-edit-lyrics-downgrade-btn',
+        upgradeHint: '#media-edit-lyrics-upgrade-hint',
         fileInput: '#media-edit-lyrics-file',
         whisperxLanguageInput: '#media-edit-lyrics-whisperx-language-code',
         processLinesToggle: '#lyrics-process-lines-toggle',

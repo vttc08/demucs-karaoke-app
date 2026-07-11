@@ -19,7 +19,7 @@ chinese_lyrics_service = ChineseLyricsService()
 
 
 def _lyrics_response_variants(payload):
-    """Return the preferred editor value and all downgrade alternatives."""
+    """Return the safe base value and all optional representations."""
     base_format = "lrc" if payload.is_synced else "txt"
     variants = [
         {
@@ -39,13 +39,7 @@ def _lyrics_response_variants(payload):
         for alternative in payload.alternatives
         if alternative.lyrics.strip()
     )
-    preferred = next(
-        (alternative for alternative in payload.alternatives if alternative.format == "ttml"),
-        None,
-    )
-    if preferred is None:
-        return payload.lyrics, base_format, payload.is_synced, variants
-    return preferred.lyrics, preferred.format, preferred.is_synced, variants
+    return payload.lyrics, base_format, payload.is_synced, variants
 
 
 @router.post("/resolve", response_model=LyricsResolveResponse)

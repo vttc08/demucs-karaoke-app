@@ -583,6 +583,15 @@ function syncQueueConfigAlignControls() {
             modalAlignLyricsAutoEnabled = false;
             modalProcessLyricsLinesEnabled = false;
         }
+    } else if (
+        lyricsFormat === 'lrc' &&
+        lyricsManager?.state.alignLyricsRequested &&
+        !modalAlignLyricsAutoEnabled &&
+        !modalConfigInitializing
+    ) {
+        // Restoring Musixmatch LRC explicitly re-enables the default WhisperX path.
+        modalAlignLyricsEnabled = true;
+        modalAlignLyricsAutoEnabled = true;
     } else if (modalAlignLyricsAutoEnabled && lyricsEnabled) {
         modalAlignLyricsEnabled = true;
     }
@@ -668,6 +677,7 @@ function initializeLyricsManager() {
         searchBtn: '#queue-config-lyrics-search-btn',
         uploadBtn: '#queue-config-lyrics-upload-btn',
         downgradeBtn: '#queue-config-lyrics-downgrade-btn',
+        upgradeHint: '#queue-config-lyrics-upgrade-hint',
         fileInput: '#queue-config-lyrics-file',
         googleLink: '#queue-config-lyrics-google-link',
         panel: '#queue-config-lyrics-panel',
@@ -1458,6 +1468,7 @@ if (queueConfigAlignToggle) {
         if (!modalAlignLyricsEnabled) {
             modalProcessLyricsLinesEnabled = false;
         }
+        lyricsManager.setAlignLyricsRequested(modalAlignLyricsEnabled);
         syncQueueConfigModalUi();
     });
 }

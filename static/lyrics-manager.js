@@ -66,6 +66,10 @@ class LyricsManager {
    */
   setEnabled(enabled) {
     this.state.lyricsEnabled = enabled;
+    if (enabled) {
+      // Synced LRC is the safe default and can be sent through WhisperX.
+      this.state.alignLyricsRequested = true;
+    }
     if (!enabled) {
       this.reset();
     }
@@ -435,6 +439,9 @@ class LyricsManager {
     if (this.state.format === 'ttml') {
       this.state.alignLyricsRequested = false;
       this.state.processLyricsLines = false;
+    } else if (this.state.format === 'lrc' && this.state.isSynced) {
+      // Restoring the safe LRC representation should make WhisperX available again.
+      this.state.alignLyricsRequested = true;
     }
     this.notifyListeners();
     return true;

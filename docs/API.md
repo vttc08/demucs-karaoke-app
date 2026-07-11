@@ -339,10 +339,12 @@ Resolve provider lyrics for the add-to-queue modal.
 
 When no provider returns lyrics, the response still returns inferred metadata with `status: "not_found"` so the UI can fall back to manual lyrics entry.
 
-Musixmatch may return `lyrics_format: "ttml"` with the original LRC in
-`alternatives`. The TTML result is optional and failure to fetch it leaves the
-normal Musixmatch response intact. The lyrics editor uses the TTML result by
-default and can select the LRC alternative before WhisperX alignment.
+Musixmatch returns its safe synced LRC as the default `lyrics_format` and may
+include a validated TTML upgrade in `alternatives`. The TTML result is
+optional; failure to fetch it leaves the normal Musixmatch response intact.
+The lyrics editor exposes a compact upgrade/restore toggle when TTML is
+available. LRC remains selected by default and can be restored before
+WhisperX alignment when a video has an intro or timing gap.
 
 ---
 

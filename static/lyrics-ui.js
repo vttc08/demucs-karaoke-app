@@ -51,6 +51,7 @@ class LyricsUIAdapter {
       maxLineLengthCjkInput: 'maxLineLengthCjkInput',
       panel: 'panel',
       downgradeBtn: 'downgradeBtn',
+      upgradeHint: 'upgradeHint',
     };
 
     Object.entries(selectors).forEach(([configKey, elementKey]) => {
@@ -152,7 +153,8 @@ class LyricsUIAdapter {
     if (this.elements.downgradeBtn) {
       const handler = (e) => {
         e.preventDefault();
-        this.manager.selectAlternative('lrc');
+        const targetFormat = this.manager.getState().format === 'ttml' ? 'lrc' : 'ttml';
+        this.manager.selectAlternative(targetFormat);
       };
       this.elements.downgradeBtn.addEventListener('click', handler);
       this.eventListeners.push({ element: this.elements.downgradeBtn, event: 'click', handler });
@@ -232,7 +234,7 @@ class LyricsUIAdapter {
     this.updateTextareaState(state);
     this.updateInputDisabledState(state.lyricsEnabled);
     this.updateGoogleSearchLink();
-    this.updateDowngradeButton(state);
+    this.updateUpgradeButton(state);
   }
 
   /**
@@ -303,14 +305,25 @@ class LyricsUIAdapter {
     this.elements.uploadBtn.classList.toggle('cursor-not-allowed', !state.lyricsEnabled);
   }
 
-  updateDowngradeButton(state) {
+  updateUpgradeButton(state) {
     if (!this.elements.downgradeBtn) return;
-    const canDowngrade = Boolean(
-      state.lyricsEnabled && state.format === 'ttml' &&
-      state.alternatives?.some((alternative) => alternative?.format === 'lrc')
-    );
-    this.elements.downgradeBtn.classList.toggle('hidden', !canDowngrade);
-    this.elements.downgradeBtn.disabled = !canDowngrade;
+    const hasTtml = Boolean(state.alternatives?.some((alternative) => alternative?.format === 'ttml'));
+    const hasLrc = Boolean(state.alternatives?.some((alternative) => alternative?.format === 'lrc'));
+    const isTtml = state.format === 'ttml';
+    const canToggle = Boolean(state.lyricsEnabled && hasTtml && (isTtml ? hasLrc : state.format === 'lrc'));
+    this.elements.downgradeBtn.classList.toggle('hidden', !canToggle);
+    this.elements.downgradeBtn.disabled = !canToggle;
+    const label = this.elements.downgradeBtn.querySelector('[data-lyrics-toggle-label]');
+    if (label) {
+      label.textContent = this.t(isTtml ? 'lyrics.restore_lrc' : 'lyrics.upgrade_ttml');
+    }
+    const icon = this.elements.downgradeBtn.querySelector('[data-lyrics-toggle-icon]');
+    if (icon) {
+      icon.textContent = isTtml ? 'undo' : 'auto_awesome';
+    }
+    if (this.elements.upgradeHint) {
+      this.elements.upgradeHint.classList.toggle('hidden', !canToggle);
+    }
   }
 
   /**
