@@ -1483,6 +1483,8 @@ GET /queue/lyrics
 Dedicated current-song lyrics viewer page:
 - synced lyrics mode with active-line highlight + follow-live behavior
 - unsynced lyrics mode with standard free scrolling
+- session editor with shared lookup controls and an optional TTML upgrade/restore toggle when a
+  validated word-timed Musixmatch alternative is available; LRC remains selected by default
 - empty-state fallback when no lyrics sidecar is available
 
 ### Stage View Page (Presentation Output)

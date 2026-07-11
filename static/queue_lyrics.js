@@ -42,6 +42,8 @@ const lyricsUIAdapter = new LyricsUIAdapter(lyricsManager, {
     helpText: "#lyrics-help",
     searchBtn: "#lyrics-search-btn",
     uploadBtn: "#lyrics-upload-btn",
+    downgradeBtn: "#lyrics-downgrade-btn",
+    upgradeHint: "#lyrics-upgrade-hint",
     fileInput: "#lyrics-file",
     googleLink: "#lyrics-google-link",
     processLinesToggle: "#lyrics-process-lines-toggle",
