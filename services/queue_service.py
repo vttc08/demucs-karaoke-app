@@ -12,10 +12,11 @@ from config import settings
 from services.media_naming import build_media_stem
 from services.media_thumbnail_service import MediaThumbnailService
 from services.task_stream_service import task_stream_manager
+from services.ttml_parser import TTMLParseError, is_valid_xml, parse_ttml_to_whisperx_segments
 
 logger = logging.getLogger(__name__)
 _AUDIO_SUFFIXES = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm"}
-_LYRICS_SUFFIXES = {".json", ".lrc", ".srt", ".txt", ".cdg", ".ttml"}
+_LYRICS_SUFFIXES = {".json", ".lrc", ".srt", ".txt", ".cdg"}
 
 
 class QueueService:
@@ -497,6 +498,10 @@ class QueueService:
         if not lyrics_text:
             return
 
+        lyrics_text, lyrics_format = self._normalize_lyrics_for_storage(
+            lyrics_text,
+            lyrics_format,
+        )
         suffix = self._lyrics_suffix(lyrics_text, lyrics_format)
         if storage == "media":
             media_file = self._media_url_to_file(media_item.media_path)
@@ -530,12 +535,11 @@ class QueueService:
 
     @staticmethod
     def _lyrics_suffix(lyrics_text: str, requested_format: str | None) -> str:
+        requested_format = (requested_format or "").strip().lower() or None
         if requested_format == "json":
             return ".json"
         if requested_format == "lrc":
             return ".lrc"
-        if requested_format == "ttml":
-            return ".ttml"
         if requested_format == "txt":
             return ".txt"
         if re.search(r"^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]", lyrics_text, re.MULTILINE):
@@ -549,6 +553,33 @@ class QueueService:
             else:
                 return ".json"
         return ".txt"
+
+    @staticmethod
+    def _normalize_lyrics_for_storage(
+        lyrics_text: str,
+        requested_format: str | None,
+    ) -> tuple[str, str | None]:
+        """Convert TTML input into the canonical JSON sidecar representation.
+
+        TTML is an accepted input/transport format for the lyrics editor, but it
+        is not a durable sidecar format. Persisting the parsed segments as JSON
+        keeps media scans and all downstream timed-lyrics consumers on the same
+        canonical format, regardless of whether WhisperX produced the payload.
+        """
+        normalized_format = (requested_format or "").strip().lower() or None
+        if normalized_format not in {"ttml", "xml"} and not is_valid_xml(lyrics_text):
+            return lyrics_text, normalized_format
+
+        if not is_valid_xml(lyrics_text):
+            raise ValueError("TTML lyrics must be valid XML")
+        try:
+            segments = parse_ttml_to_whisperx_segments(lyrics_text)
+        except TTMLParseError as exc:
+            raise ValueError(str(exc)) from exc
+        if not segments:
+            raise ValueError("TTML lyrics did not contain any timed lyric cues")
+
+        return json.dumps({"segments": segments}, ensure_ascii=False, indent=2), "json"
 
     @staticmethod
     def _allocate_media_stem(

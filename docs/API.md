@@ -454,7 +454,7 @@ Uploads a local media file or ZIP bundle into the library. The request is multip
 }
 ```
 
-When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued. Upload and media-edit lyrics are saved beside the media file as `<filename>.lrc` or `<filename>.txt` so library scans can rediscover them.
+When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued. Plain/LRC and unsynced text remain `<filename>.lrc` or `<filename>.txt` inputs for library scans and optional WhisperX alignment. TTML input is parsed before persistence and saved beside the media file as the canonical `<filename>.json` timed-lyrics sidecar; TTML is never a durable sidecar format.
 When `align_lyrics` is true, the upload must include non-empty plain/LRC lyrics. Missing-vocals uploads run separation plus WhisperX alignment and later replace `lyrics_path` with the aligned JSON sidecar. When `process_lyrics_lines` is also true, the server applies the line-length rewrap before alignment and ignores any synced-LRC preservation for that submission.
 
 ZIP uploads are treated as import bundles. The archive must include exactly one main audio/video file and may also include matching same-stem `*.vocals.*`, `*.lrc` / `*.json`, and `*.png` / `*.jpg` / `*.jpeg` / `*.webp` sidecars. Unrelated files and folders inside the archive are ignored. Karaoke and lyric submission fields are ignored for ZIP imports because the archive is expected to already contain the desired tracks/metadata.

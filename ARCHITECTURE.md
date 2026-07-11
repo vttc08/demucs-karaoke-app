@@ -440,7 +440,9 @@ The stage page uses a websocket-first model:
 - `lyrics_service.py` is intentionally limited to orchestration and parsing. It re-exports the shared contracts and built-in provider classes for compatibility, but it does not define duplicate provider, inference, or payload implementations.
 - Provider order is Musixmatch first (when `MUSIXMATCH_TOKEN` is configured), then NetEase and LRCLib plus any loaded custom providers in the fallback pool.
 - Resolution behavior is Musixmatch-first, then concurrent fallback search across the remaining providers with score-based selection of the best payload.
-- Synced lyrics are persisted as `.lrc` sidecars for stage overlay cue parsing.
+- Plain/LRC lyrics remain `.lrc`/`.txt` inputs for optional WhisperX alignment;
+  completed timed lyrics (including TTML upgrades) are persisted as canonical
+  `.json` sidecars so media scans can rediscover them consistently.
 - Unsynced lyrics can still be persisted as sidecars for future/manual overlay handling.
 - Provider payloads may expose typed alternate representations. Musixmatch keeps its LRC as the base result and may add validated TTML using the track ISRC; the shared lyrics editor keeps LRC selected by default and exposes a compact TTML upgrade/restore toggle for WhisperX-sensitive workflows.
 
