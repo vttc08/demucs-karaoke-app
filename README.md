@@ -279,8 +279,9 @@ When karaoke mode is enabled:
 Lyrics lookup behavior:
 - Musixmatch is tried first when configured.
 - If Musixmatch misses, NetEase, LRCLib, and any custom providers from `LYRICS_PROVIDER_CUSTOM_PATHS` run concurrently and the highest-scoring result wins.
+- When Musixmatch returns synced LRC and a matching ISRC, the app optionally fetches a validated TTML upgrade from `LYRICS_TTML_STORAGE_URL`. The upgrade is bounded by a short timeout and never blocks the original LRC result; LRC remains the default and the lyrics editor shows a compact upgrade/restore toggle before WhisperX processing.
 - Debug output shows the selected provider score plus provider-specific diagnostics for troubleshooting.
-- The queue modal can pre-resolve lyrics, let users replace them with manual synced text, and persist those lyrics as sidecars when the item is queued.
+- The queue modal can pre-resolve lyrics, let users replace them with manual synced text, and persist those lyrics as sidecars when the item is queued. TTML upgrades are normalized to canonical JSON sidecars before persistence so rescans retain timed lyrics.
 - See [docs/custom_lyrics_providers.md](docs/custom_lyrics_providers.md) for the runtime custom-provider contract and a HelloWorld example.
 
 ## API Endpoints

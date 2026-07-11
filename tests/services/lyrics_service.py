@@ -1,4 +1,5 @@
 from .common import *
+from types import SimpleNamespace
 
 
 TTML_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -16,6 +17,31 @@ TTML_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
         <span begin="00:00:18.256" end="00:00:20.562">11</span>
       </p>
     </div>
+  </body>
+</tt>
+"""
+
+TTML_PARAGRAPH_ONLY = """<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml">
+  <body>
+    <p begin="00:00:01.000" end="00:00:03.000">Hello world</p>
+  </body>
+</tt>
+"""
+
+TTML_NESTED_BACKGROUND = """
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+  <body>
+    <p begin="1:38.823" end="1:40.821">
+      <span begin="1:38.823" end="1:38.972">And</span>
+      <span begin="1:38.972" end="1:39.198">we</span>
+      <span ttm:role="x-bg">
+        <span begin="1:39.198" end="1:39.418">(Could</span>
+        <span begin="1:39.418" end="1:39.608">we)</span>
+      </span>
+      <span begin="1:39.608" end="1:40.019">live</span>
+      <span begin="1:40.019" end="1:40.821">happily</span>
+    </p>
   </body>
 </tt>
 """
@@ -181,6 +207,144 @@ def test_lyrics_service_skips_custom_loader_when_musixmatch_resolves(monkeypatch
     assert payload is not None
     assert payload.provider == "musixmatch"
     assert payload.is_synced is True
+
+
+def test_musixmatch_extracts_nested_isrc_and_accepts_ttml_upgrade(monkeypatch):
+    from services import lyrics_providers as lp_module
+
+    macro_calls = {
+        "matcher.track.get": {
+            "message": {
+                "body": {
+                    "track": {
+                        "commontrack_isrcs": [["USUM72403305"]],
+                        "track_isrc": "",
+                    }
+                }
+            }
+        }
+    }
+    assert lp_module.MusixmatchLyricsProvider._extract_isrc(macro_calls) == "USUM72403305"
+
+    monkeypatch.setattr(settings, "lyrics_ttml_storage_url", "https://lyrics-storage.test")
+
+    class FakeResponse:
+        text = TTML_SAMPLE
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url):
+            assert url == "https://lyrics-storage.test/USUM72403305.ttml"
+            return FakeResponse()
+
+    monkeypatch.setattr(lp_module.ls_module.httpx, "AsyncClient", lambda **_kwargs: FakeClient())
+    provider = lp_module.MusixmatchLyricsProvider(token="token")
+    upgraded = asyncio.run(provider._fetch_ttml("USUM72403305"))
+    assert upgraded == TTML_SAMPLE.strip()
+
+
+def test_musixmatch_ttml_failure_is_non_blocking(monkeypatch):
+    from services import lyrics_providers as lp_module
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, _url):
+            raise lp_module.ls_module.httpx.ConnectError("offline")
+
+    monkeypatch.setattr(lp_module.ls_module.httpx, "AsyncClient", lambda **_kwargs: FakeClient())
+    provider = lp_module.MusixmatchLyricsProvider(token="token")
+    assert asyncio.run(provider._fetch_ttml("USUM72403305")) is None
+
+
+@pytest.mark.parametrize(
+    ("ttml_text", "has_upgrade"),
+    [(TTML_SAMPLE, True), (TTML_NESTED_BACKGROUND, True), (TTML_PARAGRAPH_ONLY, False)],
+)
+def test_musixmatch_fetch_returns_lrc_with_quality_checked_ttml_alternative(
+    monkeypatch, ttml_text, has_upgrade
+):
+    from services import lyrics_providers as lp_module
+
+    subtitle_body = json.dumps([{"time": {"minutes": 0, "seconds": 1, "hundredths": 0}, "text": "Hello"}])
+    musixmatch_payload = {
+        "message": {
+            "body": {
+                "macro_calls": {
+                    "matcher.track.get": {
+                        "message": {
+                            "header": {"status_code": 200},
+                            "body": {
+                                "track": {
+                                    "track_name": "Song",
+                                    "artist_name": "Artist",
+                                    "commontrack_isrcs": [["USUM72403305"]],
+                                }
+                            },
+                        }
+                    },
+                    "track.subtitles.get": {
+                        "message": {
+                            "body": {
+                                "subtitle_list": [{"subtitle": {"subtitle_body": subtitle_body}}]
+                            }
+                        }
+                    },
+                }
+            }
+        }
+    }
+
+    class FakeResponse:
+        def __init__(self, payload=None, text=""):
+            self._payload = payload
+            self.text = text
+
+        def json(self):
+            return self._payload
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url, **_kwargs):
+            if url.endswith(".ttml"):
+                return FakeResponse(text=ttml_text)
+            return FakeResponse(payload=musixmatch_payload)
+
+    monkeypatch.setattr(settings, "lyrics_ttml_storage_url", "https://lyrics-storage.test")
+    monkeypatch.setattr(lp_module.ls_module.httpx, "AsyncClient", FakeClient)
+    provider = lp_module.MusixmatchLyricsProvider(token="token", base_url="https://musixmatch.test")
+    payload = asyncio.run(
+        provider.fetch(lp_module.ls_module.InferredSong(title="Song", artist="Artist", source="input"))
+    )
+
+    assert payload is not None
+    assert payload.lyrics == "[00:01.00]Hello"
+    assert bool(payload.alternatives) is has_upgrade
+    if has_upgrade:
+        assert payload.alternatives[0].format == "ttml"
 
 def test_netease_provider_prefers_cjk_candidate_and_rejects_low_confidence():
     """Candidate selector should avoid unrelated songs and pick CJK-near matches."""

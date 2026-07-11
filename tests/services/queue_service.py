@@ -664,6 +664,41 @@ def test_queue_service_persists_json_lyrics_sidecar(db_session, tmp_path):
     finally:
         settings.cache_path = original_cache
 
+
+def test_queue_service_normalizes_ttml_to_json_sidecar(db_session, tmp_path):
+    """TTML input should be parsed once and persisted as canonical JSON."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media = MediaItem(
+            title="TTML Lyrics",
+            artist="Singer",
+            file_stem="ttml-lyrics",
+            media_path="/media/ttml-lyrics.mp4",
+            missing=False,
+        )
+        db_session.add(media)
+        db_session.flush()
+
+        service = QueueService()
+        service.store_lyrics_sidecar(
+            media,
+            '<tt><body><p begin="00:00:01.000" end="00:00:02.000">Hello</p></body></tt>',
+            lyrics_format="ttml",
+            storage="media",
+        )
+
+        assert media.lyrics_path == "/media/ttml-lyrics.json"
+        saved_payload = json.loads(
+            (settings.media_path / "ttml-lyrics.json").read_text(encoding="utf-8")
+        )
+        assert saved_payload["segments"][0]["text"] == "Hello"
+        assert not (settings.media_path / "ttml-lyrics.ttml").exists()
+    finally:
+        settings.media_path = original_media
+
 def test_queue_service_can_persist_media_adjacent_lyrics_sidecar(db_session, tmp_path):
     """Media-library lyrics should be saved next to the media file for scan discovery."""
     original_media = settings.media_path

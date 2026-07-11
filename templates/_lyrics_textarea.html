@@ -30,5 +30,8 @@
     placeholder="{{ t('lyrics.placeholder') }}"
     disabled
   ></textarea>
-  <p class="text-xs text-on-surface-variant">{{ t('lyrics.resolved_overwrite') }}</p>
+  <p id="lyrics-upgrade-hint" class="hidden text-[11px] leading-tight text-on-surface-variant sm:text-xs">
+    {{ t('lyrics.ttml_upgrade_hint') }}
+    <a href="{{ app_url('/help/') }}" target="_blank" rel="noopener noreferrer" class="text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/80">{{ t('lyrics.ttml_upgrade_docs') }}</a>
+  </p>
 </div>

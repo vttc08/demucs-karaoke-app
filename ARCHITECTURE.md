@@ -356,6 +356,8 @@ The stage page uses a websocket-first model:
 - Synced mode auto-follows playback time and highlights active lines; manual scroll pauses
   follow mode until the user re-enables it from the viewer UI.
 - Unsynced mode renders large freely scrollable text.
+- The session editor reuses the shared lyrics panel and adapter, including the optional TTML
+  upgrade/restore control and hint when a validated word-timed alternative is available.
 - The viewer can optionally request display-only Chinese normalization from
   `POST /api/lyrics/chinese-transform` so simplified Chinese and pinyin can be shown together
   without changing the stored lyrics payload.
@@ -440,8 +442,11 @@ The stage page uses a websocket-first model:
 - `lyrics_service.py` is intentionally limited to orchestration and parsing. It re-exports the shared contracts and built-in provider classes for compatibility, but it does not define duplicate provider, inference, or payload implementations.
 - Provider order is Musixmatch first (when `MUSIXMATCH_TOKEN` is configured), then NetEase and LRCLib plus any loaded custom providers in the fallback pool.
 - Resolution behavior is Musixmatch-first, then concurrent fallback search across the remaining providers with score-based selection of the best payload.
-- Synced lyrics are persisted as `.lrc` sidecars for stage overlay cue parsing.
+- Plain/LRC lyrics remain `.lrc`/`.txt` inputs for optional WhisperX alignment;
+  completed timed lyrics (including TTML upgrades) are persisted as canonical
+  `.json` sidecars so media scans can rediscover them consistently.
 - Unsynced lyrics can still be persisted as sidecars for future/manual overlay handling.
+- Provider payloads may expose typed alternate representations. Musixmatch keeps its LRC as the base result and may add validated TTML using the track ISRC; the shared lyrics editor keeps LRC selected by default and exposes a compact TTML upgrade/restore toggle for WhisperX-sensitive workflows.
 
 ## Software Stack
 

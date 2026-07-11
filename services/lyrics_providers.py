@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import asyncio
 import difflib
 import json
 import logging
@@ -19,6 +20,12 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from config import settings
 from services import lyrics_types as ls_module
+from services.ttml_parser import (
+    TTMLParseError,
+    has_word_level_timing,
+    is_valid_xml,
+    parse_ttml_to_whisperx_segments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +54,7 @@ _NETEASE_TIMESTAMP_RE = re.compile(r"\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]")
 _NETEASE_CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 _NETEASE_MAX_QUERIES = 6
 _NETEASE_EARLY_STOP_SCORE = 120.0
+_ISRC_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{3}\d{7}$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -212,12 +220,26 @@ class MusixmatchLyricsProvider:
         resolved_song = self._resolve_song(inferred_song, macro_calls)
         synced = self._extract_synced_lrc(macro_calls)
         if synced:
+            alternatives: tuple[ls_module.LyricsAlternative, ...] = ()
+            isrc = self._extract_isrc(macro_calls)
+            if isrc:
+                ttml = await self._fetch_ttml(isrc)
+                if ttml:
+                    alternatives = (
+                        ls_module.LyricsAlternative(
+                            lyrics=ttml,
+                            format="ttml",
+                            provider="lyrics-storage",
+                            is_synced=True,
+                        ),
+                    )
             return ls_module.LyricsPayload(
                 lyrics=synced,
                 is_synced=True,
                 provider=self.name,
                 inferred_song=resolved_song,
                 provider_score=120.0,
+                alternatives=alternatives,
             )
 
         plain = self._extract_plain_lyrics(macro_calls)
@@ -301,10 +323,8 @@ class MusixmatchLyricsProvider:
 
     @staticmethod
     def _extract_synced_lrc(macro_calls: dict) -> Optional[str]:
-        subtitle_body = (
-            macro_calls.get("track.subtitles.get", {})
-            .get("message", {})
-            .get("body", {})
+        subtitle_body = MusixmatchLyricsProvider._extract_macro_body(
+            macro_calls, "track.subtitles.get", "tracks.subtitles.get"
         )
         if not isinstance(subtitle_body, dict):
             return None
@@ -356,6 +376,90 @@ class MusixmatchLyricsProvider:
         if not lines:
             return None
         return "\n".join(lines)
+
+    @staticmethod
+    def _extract_macro_body(macro_calls: dict, *names: str) -> dict:
+        for name in names:
+            call = macro_calls.get(name)
+            if not isinstance(call, dict):
+                continue
+            message = call.get("message")
+            body = message.get("body") if isinstance(message, dict) else None
+            if isinstance(body, dict):
+                return body
+        return {}
+
+    @staticmethod
+    def _extract_isrc(macro_calls: dict) -> Optional[str]:
+        """Extract the first usable ISRC from the matcher macro response."""
+        body = MusixmatchLyricsProvider._extract_macro_body(macro_calls, "matcher.track.get")
+        track = body.get("track")
+        if not isinstance(track, dict):
+            return None
+
+        candidates: list[object] = []
+        commontrack_isrcs = track.get("commontrack_isrcs")
+        if isinstance(commontrack_isrcs, list):
+            candidates.extend(commontrack_isrcs)
+        candidates.append(track.get("track_isrc"))
+
+        def flatten(values: list[object]):
+            for value in values:
+                if isinstance(value, list):
+                    yield from flatten(value)
+                else:
+                    yield value
+
+        for candidate in flatten(candidates):
+            normalized = str(candidate or "").strip().upper()
+            if _ISRC_RE.fullmatch(normalized):
+                return normalized
+        return None
+
+    async def _fetch_ttml(self, isrc: str) -> Optional[str]:
+        base_url = settings.lyrics_ttml_storage_url.strip().rstrip("/")
+        if not base_url:
+            return None
+
+        try:
+            timeout_seconds = max(0.1, float(settings.lyrics_ttml_upgrade_timeout_seconds))
+        except (TypeError, ValueError):
+            timeout_seconds = 3.0
+
+        url = f"{base_url}/{isrc}.ttml"
+        timeout = ls_module.httpx.Timeout(
+            timeout_seconds,
+            connect=min(timeout_seconds, 1.5),
+            read=timeout_seconds,
+            write=min(timeout_seconds, 1.5),
+            pool=min(timeout_seconds, 1.5),
+        )
+        client_kwargs = ls_module.build_httpx_client_kwargs(timeout_seconds)
+        client_kwargs["timeout"] = timeout
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                async with ls_module.httpx.AsyncClient(**client_kwargs) as client:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                    content = response.text.strip()
+        except (asyncio.TimeoutError, ls_module.httpx.HTTPError) as exc:
+            logger.info("TTML upgrade unavailable isrc=%s error=%s", isrc, exc)
+            return None
+
+        if not is_valid_xml(content):
+            logger.info("TTML upgrade returned invalid XML isrc=%s", isrc)
+            return None
+        try:
+            if not parse_ttml_to_whisperx_segments(content):
+                logger.info("TTML upgrade returned no timed cues isrc=%s", isrc)
+                return None
+        except TTMLParseError as exc:
+            logger.info("TTML upgrade parse failed isrc=%s error=%s", isrc, exc)
+            return None
+        if not has_word_level_timing(content):
+            logger.info("TTML upgrade has no word-level timing isrc=%s", isrc)
+            return None
+        return content
 
     @staticmethod
     def _extract_plain_lyrics(macro_calls: dict) -> Optional[str]:
