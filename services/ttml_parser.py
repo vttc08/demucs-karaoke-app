@@ -29,6 +29,45 @@ def is_valid_xml(text: str) -> bool:
     return True
 
 
+def has_word_level_timing(ttml_text: str) -> bool:
+    """Return whether TTML contains enough explicit span timing for an upgrade.
+
+    Paragraph-only TTML is still accepted by the normal parser because it is a
+    useful line-timed import format. Automatic upgrades are stricter: every
+    lyric paragraph must contain explicitly timed spans, and the document must
+    contain more spans than paragraphs so a single span cannot merely mirror a
+    whole lyric line.
+    """
+    try:
+        root = _parse_root(ttml_text)
+    except TTMLParseError:
+        return False
+
+    if _local_name(root.tag) not in {"tt", "ttml"}:
+        return False
+
+    paragraph_count = 0
+    timed_span_count = 0
+    for paragraph in _iter_elements(root, "p"):
+        paragraph_text = _normalize_text("".join(paragraph.itertext()))
+        if not paragraph_text:
+            continue
+
+        paragraph_count += 1
+        spans = _word_spans(paragraph)
+        if not spans:
+            return False
+
+        for span in spans:
+            start = _parse_time(span.attrib.get("begin"))
+            end = _parse_time(span.attrib.get("end"))
+            if start is None or end is None or end <= start:
+                return False
+            timed_span_count += 1
+
+    return paragraph_count > 0 and timed_span_count > paragraph_count
+
+
 def parse_ttml_to_whisperx_segments(ttml_text: str) -> list[dict[str, Any]]:
     """Parse TTML into WhisperX-style segments."""
     root = _parse_root(ttml_text)
@@ -58,7 +97,10 @@ def _parse_root(ttml_text: str) -> ET.Element:
 def _parse_paragraph(paragraph: ET.Element) -> dict[str, Any] | None:
     paragraph_begin = _parse_time(paragraph.attrib.get("begin"))
     paragraph_end = _parse_time(paragraph.attrib.get("end"))
-    spans = [child for child in paragraph.iter() if child is not paragraph and _local_name(child.tag) == "span"]
+    # TTML may use an untimed span as a container for background vocals. Only
+    # leaf spans represent lyric words; including the container would duplicate
+    # its text as a synthetic, untimed word in the JSON sidecar.
+    spans = _word_spans(paragraph)
 
     words: list[dict[str, Any]] = []
     current_start = paragraph_begin
@@ -130,6 +172,29 @@ def _parse_paragraph(paragraph: ET.Element) -> dict[str, Any] | None:
 
 def _iter_elements(root: ET.Element, local_name: str) -> list[ET.Element]:
     return [element for element in root.iter() if _local_name(element.tag) == local_name]
+
+
+def _word_spans(paragraph: ET.Element) -> list[ET.Element]:
+    """Return non-empty leaf ``span`` elements in document order.
+
+    Some TTML producers wrap timed lyric spans in an untimed grouping span
+    (for example, ``ttm:role="x-bg"``). Treating that wrapper as a word causes
+    false quality failures and duplicate text during conversion, so only spans
+    without nested span descendants are considered word candidates.
+    """
+    spans: list[ET.Element] = []
+    for element in paragraph.iter():
+        if element is paragraph or _local_name(element.tag) != "span":
+            continue
+        if not _normalize_text("".join(element.itertext())):
+            continue
+        has_nested_span = any(
+            descendant is not element and _local_name(descendant.tag) == "span"
+            for descendant in element.iter()
+        )
+        if not has_nested_span:
+            spans.append(element)
+    return spans
 
 
 def _next_span_start(spans: list[ET.Element], index: int) -> float | None:

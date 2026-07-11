@@ -227,7 +227,7 @@ Queue payload can identify the target with either:
 - `queue_as_name` is optional and admin-only. When provided by an authenticated admin session, it overrides the displayed requester label for that queued item.
 
 If the `youtube_id` already exists in `media_items` with a usable local media file, the queue item is created against that existing media row and processing reuses the stored file instead of re-downloading the video again.
-When `lyrics_text` is supplied for karaoke items, the app persists it as a reusable lyrics sidecar under the cache directory so karaoke processing can skip a second lookup. `lyrics_format` is optional; if omitted, the app infers `.lrc` when timestamped lines are present, `.json` for WhisperX-style aligned payloads, and `.txt` otherwise.
+When `lyrics_text` is supplied for karaoke items, plain/LRC input is persisted as a reusable cache sidecar so karaoke processing can skip a second lookup. TTML/XML input is treated as already timed and is normalized to a canonical JSON sidecar beside the media file; `lyrics_format` is optional and is inferred when omitted. WhisperX-style JSON remains a media-sidecar format, while plain text remains an unsynced cache input until alignment completes.
 - `process_lyrics_lines` is an optional queue-only WhisperX override. When true, the server rewrites long plain/LRC lines before alignment using `max_line_length` (default `36`) and `max_line_length_cjk` (default `12`).
 - When line processing is enabled for synced LRC, the original line timestamps are intentionally ignored and WhisperX rebuilds timing from the rewrapped display lines.
 
@@ -330,12 +330,22 @@ Resolve provider lyrics for the add-to-queue modal.
   "source": "regex",
   "provider": "lrclib",
   "lyrics": "[00:01.00]Line 1",
+  "lyrics_format": "lrc",
   "is_synced": true,
+  "alternatives": [],
   "detail": null
 }
 ```
 
 When no provider returns lyrics, the response still returns inferred metadata with `status: "not_found"` so the UI can fall back to manual lyrics entry.
+
+Musixmatch returns its safe synced LRC as the default `lyrics_format` and may
+include a validated TTML upgrade in `alternatives`. The TTML result is
+optional; failure to fetch it, invalid XML, or XML without multiple explicitly
+timed spans leaves the normal Musixmatch response intact.
+The lyrics editor exposes a compact upgrade/restore toggle when TTML is
+available. LRC remains selected by default and can be restored before
+WhisperX alignment when a video has an intro or timing gap.
 
 ---
 
@@ -445,7 +455,7 @@ Uploads a local media file or ZIP bundle into the library. The request is multip
 }
 ```
 
-When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued. Upload and media-edit lyrics are saved beside the media file as `<filename>.lrc` or `<filename>.txt` so library scans can rediscover them.
+When `lyrics_text` is supplied, the uploaded media row stores `lyrics_path` immediately, even when the item is not queued. Plain/LRC and unsynced text remain `<filename>.lrc` or `<filename>.txt` inputs for library scans and optional WhisperX alignment. TTML input is parsed before persistence and saved beside the media file as the canonical `<filename>.json` timed-lyrics sidecar; TTML is never a durable sidecar format.
 When `align_lyrics` is true, the upload must include non-empty plain/LRC lyrics. Missing-vocals uploads run separation plus WhisperX alignment and later replace `lyrics_path` with the aligned JSON sidecar. When `process_lyrics_lines` is also true, the server applies the line-length rewrap before alignment and ignores any synced-LRC preservation for that submission.
 
 ZIP uploads are treated as import bundles. The archive must include exactly one main audio/video file and may also include matching same-stem `*.vocals.*`, `*.lrc` / `*.json`, and `*.png` / `*.jpg` / `*.jpeg` / `*.webp` sidecars. Unrelated files and folders inside the archive are ignored. Karaoke and lyric submission fields are ignored for ZIP imports because the archive is expected to already contain the desired tracks/metadata.
@@ -1208,6 +1218,8 @@ Validation:
 - `concurrent_ytdlp_search_enabled` toggles optional parallel search mode
 - `lyrics_provider_netease_enabled` toggles NetEase in concurrent lyrics fallback
 - `lyrics_provider_lrclib_enabled` toggles LRCLib in concurrent lyrics fallback
+- `lyrics_ttml_storage_url` configures the optional Musixmatch ISRC-to-TTML storage service
+- `lyrics_ttml_upgrade_timeout_seconds` bounds each optional TTML upgrade request
 - `ytdlp_deno_path` is optional; blank keeps yt-dlp default behavior, while a value adds `--js-runtimes deno:<path>` to yt-dlp commands
 - `ytdlp_proxy_url` must be empty or use one of: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`
 - `ytdlp_video_resolution` must be `default` or one of: `360`, `480`, `720`, `1080`, `2160`
@@ -1471,6 +1483,8 @@ GET /queue/lyrics
 Dedicated current-song lyrics viewer page:
 - synced lyrics mode with active-line highlight + follow-live behavior
 - unsynced lyrics mode with standard free scrolling
+- session editor with shared lookup controls and an optional TTML upgrade/restore toggle when a
+  validated word-timed Musixmatch alternative is available; LRC remains selected by default
 - empty-state fallback when no lyrics sidecar is available
 
 ### Stage View Page (Presentation Output)

@@ -131,6 +131,8 @@ def test_queue_lyrics_page_loads(client):
     assert 'id="queue-lyrics-pinyin-toggle"' in response.text
     assert "/static/queue_lyrics.js" in response.text
     assert 'href="/queue"' in response.text
+    assert 'id="lyrics-downgrade-btn"' in response.text
+    assert 'id="lyrics-upgrade-hint"' in response.text
 
 def test_queue_page_admin_shows_queue_as_controls(client):
     """Admin queue page should expose queue-as device controls and modal."""

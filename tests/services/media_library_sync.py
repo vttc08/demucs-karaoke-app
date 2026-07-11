@@ -182,6 +182,44 @@ def test_media_library_sync_service_detects_json_lyrics_sidecar(db_session, tmp_
     finally:
         settings.media_path = original_media
 
+
+def test_media_library_sync_service_ignores_ttml_sidecar(db_session, tmp_path, monkeypatch):
+    """Library scans should not rediscover deprecated TTML sidecars."""
+    original_media = settings.media_path
+    try:
+        settings.media_path = tmp_path / "media"
+        settings.media_path.mkdir(parents=True, exist_ok=True)
+
+        media_file = settings.media_path / "ttml-sidecar.mp4"
+        lyrics_file = settings.media_path / "ttml-sidecar.ttml"
+        media_file.write_text("video", encoding="utf-8")
+        lyrics_file.write_text("<tt />", encoding="utf-8")
+
+        media = MediaItem(
+            title="TTML Sidecar",
+            media_path="/media/ttml-sidecar.mp4",
+            lyrics_path="/media/old-value.lrc",
+            missing=True,
+        )
+        db_session.add(media)
+        db_session.commit()
+
+        service = MediaLibrarySyncService()
+        monkeypatch.setattr(
+            service.thumbnail_service,
+            "ensure_thumbnail_for_media_file",
+            lambda path: False,
+        )
+
+        summary = service.scan_media_item(db_session, media.id)
+
+        assert summary["scanned_files"] == 1
+        stored = db_session.query(MediaItem).filter(MediaItem.id == media.id).first()
+        assert stored is not None
+        assert stored.lyrics_path is None
+    finally:
+        settings.media_path = original_media
+
 def test_media_library_sync_service_preserves_adjacent_thumbnail_sidecar(
     db_session, tmp_path
 ):

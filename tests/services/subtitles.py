@@ -6,7 +6,12 @@ from starlette.datastructures import UploadFile
 
 from services.subtitle_workflow_service import SubtitleWorkflowConflictError, SubtitleWorkflowService
 from services.subtitle_editor_service import subtitle_editor_service
-from services.ttml_parser import TTMLParseError, is_valid_xml, parse_ttml_to_whisperx_segments
+from services.ttml_parser import (
+    TTMLParseError,
+    has_word_level_timing,
+    is_valid_xml,
+    parse_ttml_to_whisperx_segments,
+)
 
 
 def _make_json_payload():
@@ -76,6 +81,57 @@ def test_ttml_parser_converts_sample_into_whisperx_segments():
     assert segments[0]["end"] == 20.562
     assert segments[0]["words"][0] == {"word": "I", "start": 15.053, "end": 15.522}
     assert segments[1]["words"][-1] == {"word": "beer", "start": 25.884, "end": 27.959}
+
+
+def test_ttml_word_timing_predicate_rejects_line_only_inputs():
+    assert has_word_level_timing(TTML_SAMPLE)
+
+    paragraph_only = """
+    <tt><body><p begin="00:00:01.000" end="00:00:03.000">Hello world</p></body></tt>
+    """
+    assert not has_word_level_timing(paragraph_only)
+
+    one_span_per_line = """
+    <tt><body>
+      <p begin="00:00:01.000" end="00:00:03.000">
+        <span begin="00:00:01.000" end="00:00:03.000">Hello world</span>
+      </p>
+      <p begin="00:00:04.000" end="00:00:06.000">
+        <span begin="00:00:04.000" end="00:00:06.000">Again</span>
+      </p>
+    </body></tt>
+    """
+    assert not has_word_level_timing(one_span_per_line)
+
+
+def test_ttml_word_timing_accepts_nested_untimed_span_containers():
+    nested_background = """
+    <tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+      <body>
+        <p begin="1:38.823" end="1:40.821">
+          <span begin="1:38.823" end="1:38.972">And</span>
+          <span begin="1:38.972" end="1:39.198">we</span>
+          <span ttm:role="x-bg">
+            <span begin="1:39.198" end="1:39.418">(Could</span>
+            <span begin="1:39.418" end="1:39.608">we)</span>
+          </span>
+          <span begin="1:39.608" end="1:40.019">live</span>
+          <span begin="1:40.019" end="1:40.821">happily</span>
+        </p>
+      </body>
+    </tt>
+    """
+
+    assert has_word_level_timing(nested_background)
+    segments = parse_ttml_to_whisperx_segments(nested_background)
+    assert [word["word"] for word in segments[0]["words"]] == [
+        "And",
+        "we",
+        "(Could",
+        "we)",
+        "live",
+        "happily",
+    ]
 
 
 def test_ttml_parser_rejects_invalid_xml():

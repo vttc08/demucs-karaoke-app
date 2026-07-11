@@ -18,6 +18,30 @@ lyrics_service = LyricsService()
 chinese_lyrics_service = ChineseLyricsService()
 
 
+def _lyrics_response_variants(payload):
+    """Return the safe base value and all optional representations."""
+    base_format = "lrc" if payload.is_synced else "txt"
+    variants = [
+        {
+            "lyrics": payload.lyrics,
+            "format": base_format,
+            "provider": payload.provider,
+            "is_synced": payload.is_synced,
+        }
+    ]
+    variants.extend(
+        {
+            "lyrics": alternative.lyrics,
+            "format": alternative.format,
+            "provider": alternative.provider,
+            "is_synced": alternative.is_synced,
+        }
+        for alternative in payload.alternatives
+        if alternative.lyrics.strip()
+    )
+    return payload.lyrics, base_format, payload.is_synced, variants
+
+
 @router.post("/resolve", response_model=LyricsResolveResponse)
 async def resolve_lyrics(request: LyricsResolveRequest):
     """Resolve lyrics for the queue modal."""
@@ -51,14 +75,17 @@ async def resolve_lyrics(request: LyricsResolveRequest):
             detail="Lyrics not found",
         )
 
+    selected_lyrics, selected_format, selected_is_synced, alternatives = _lyrics_response_variants(payload)
     return LyricsResolveResponse(
         status="resolved",
         title=payload.inferred_song.title,
         artist=payload.inferred_song.artist,
         source=payload.inferred_song.source,
         provider=payload.provider,
-        lyrics=payload.lyrics,
-        is_synced=payload.is_synced,
+        lyrics=selected_lyrics,
+        lyrics_format=selected_format,
+        is_synced=selected_is_synced,
+        alternatives=alternatives,
     )
 
 

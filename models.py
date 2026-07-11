@@ -298,6 +298,15 @@ class LyricsResolveRequest(BaseModel):
     infer: Optional[bool] = True
 
 
+class LyricsAlternativeResponse(BaseModel):
+    """An alternate lyrics representation available to the editor."""
+
+    lyrics: str
+    format: Literal["lrc", "txt", "json", "ttml"]
+    provider: str
+    is_synced: bool = False
+
+
 class LyricsResolveResponse(BaseModel):
     """Lyrics resolution result for the queue UI."""
 
@@ -307,7 +316,9 @@ class LyricsResolveResponse(BaseModel):
     source: str
     provider: Optional[str] = None
     lyrics: Optional[str] = None
+    lyrics_format: Optional[Literal["lrc", "txt", "json", "ttml"]] = None
     is_synced: bool = False
+    alternatives: list[LyricsAlternativeResponse] = Field(default_factory=list)
     detail: Optional[str] = None
 
 

@@ -146,8 +146,17 @@
                                 <span class="material-symbols-outlined text-sm">upload_file</span>
                                 {{ t('common.upload') }}
                             </button>
+                            <button type="button" id="upload-lyrics-downgrade-btn" class="hidden inline-flex items-center gap-1 rounded-full bg-tertiary/20 px-2 py-1 text-[10px] font-bold text-tertiary transition-all hover:bg-tertiary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                                <span data-lyrics-toggle-icon class="material-symbols-outlined text-sm">auto_awesome</span>
+                                <span data-lyrics-toggle-label>{{ t('lyrics.upgrade_ttml') }}</span>
+                            </button>
                             <input type="file" id="upload-lyrics-file" class="hidden" accept=".lrc,.txt,.json,.ttml" />
                         </div>
+
+                        <p id="upload-lyrics-upgrade-hint" class="hidden text-[11px] leading-tight text-on-surface-variant sm:text-xs">
+                            {{ t('lyrics.ttml_upgrade_hint') }}
+                            <a href="{{ app_url('/help/') }}" target="_blank" rel="noopener noreferrer" class="text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/80">{{ t('lyrics.ttml_upgrade_docs') }}</a>
+                        </p>
 
                         <div class="rounded-xl border border-primary/20 bg-primary/5 p-3 ring-1 ring-white/5">
                             <div class="flex items-center justify-between gap-3">

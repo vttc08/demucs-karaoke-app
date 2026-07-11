@@ -20,6 +20,9 @@ The subtitle editor is an admin-only workflow for round-tripping synced JSON lyr
 
 - TTML uploads on `/media-subtitles/{item_id}` are parsed directly into the app's canonical WhisperX JSON sidecar.
 - The parser uses Python's built-in XML support and follows the notebook-proven TTML notebook in `docs/ttml.ipynb`.
+- Musixmatch TTML can wrap timed word spans in untimed grouping spans (including background-vocal
+  containers); those wrappers are ignored so automatic upgrade validation sees the actual timed words
+  and JSON conversion does not duplicate the wrapper text.
 - XML validation is kept separate so future upload flows can detect TTML or other XML inputs before deciding whether WhisperX alignment is needed.
 
 ## Split/Merge editor

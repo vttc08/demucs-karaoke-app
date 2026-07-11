@@ -7,6 +7,8 @@
    - #lyrics-panel: main container (hidden/shown based on lyrics enabled)
    - #lyrics-state: status badge (idle, loading, resolved, error, manual)
    - #lyrics-help: help text that changes based on state
+   - #lyrics-downgrade-btn: optional TTML upgrade/restore toggle
+   - #lyrics-upgrade-hint: optional TTML upgrade guidance
    - #lyrics-autopilot-btn: optional page-specific automation button
    - #lyrics-whisperx-language-code: optional per-submission WhisperX language override
    
@@ -46,6 +48,6 @@
   <!-- Status and help text -->
   <p id="lyrics-help" class="text-xs text-on-surface-variant">{{ t('lyrics.help_default') }}</p>
 
-  <!-- Textarea editor -->
+  <!-- Textarea editor and optional TTML upgrade guidance -->
   {% include '_lyrics_textarea.html' with context %}
 </div>

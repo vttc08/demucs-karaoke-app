@@ -72,6 +72,42 @@ It contains:
 - `provider_score`: confidence score used internally when the app compares multiple fallback matches
     - range between 0 to 250, where higher is better
 - `provider_details`: optional extra metadata for debugging or future use
+- `alternatives`: optional tuple of `LyricsAlternative` values when the provider
+  can offer another representation of the same result. The first/base lyrics
+  remain the safe default for processing; the UI may choose a TTML alternative
+  and retain the base LRC for downgrade.
+
+Example provider with an optional TTML upgrade:
+
+```python
+from services.lyrics_types import InferredSong, LyricsAlternative, LyricsPayload
+
+
+class LyricsProvider:
+    name = "example"
+
+    async def fetch(self, inferred_song: InferredSong, **kwargs):
+        lrc = "[00:01.00]Original synced lyrics"
+        ttml = "<tt>...valid timed TTML...</tt>"
+        return LyricsPayload(
+            lyrics=lrc,
+            is_synced=True,
+            provider=self.name,
+            inferred_song=inferred_song,
+            alternatives=(
+                LyricsAlternative(
+                    lyrics=ttml,
+                    format="ttml",
+                    provider=self.name,
+                    is_synced=True,
+                ),
+            ),
+        )
+```
+
+The built-in Musixmatch provider uses this contract for its optional TTML
+upgrade. Upgrade failures are treated as a missing alternative, so the base
+lyrics result remains usable.
 
 ## Implementation Notes
 
