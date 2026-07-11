@@ -29,6 +29,23 @@ TTML_PARAGRAPH_ONLY = """<?xml version="1.0" encoding="UTF-8"?>
 </tt>
 """
 
+TTML_NESTED_BACKGROUND = """
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+  <body>
+    <p begin="1:38.823" end="1:40.821">
+      <span begin="1:38.823" end="1:38.972">And</span>
+      <span begin="1:38.972" end="1:39.198">we</span>
+      <span ttm:role="x-bg">
+        <span begin="1:39.198" end="1:39.418">(Could</span>
+        <span begin="1:39.418" end="1:39.608">we)</span>
+      </span>
+      <span begin="1:39.608" end="1:40.019">live</span>
+      <span begin="1:40.019" end="1:40.821">happily</span>
+    </p>
+  </body>
+</tt>
+"""
+
 
 def test_lyrics_service_default_provider_order_includes_netease_between_musixmatch_and_lrclib():
     """Default provider chain should keep NetEase between Musixmatch and LRCLib."""
@@ -254,7 +271,7 @@ def test_musixmatch_ttml_failure_is_non_blocking(monkeypatch):
 
 @pytest.mark.parametrize(
     ("ttml_text", "has_upgrade"),
-    [(TTML_SAMPLE, True), (TTML_PARAGRAPH_ONLY, False)],
+    [(TTML_SAMPLE, True), (TTML_NESTED_BACKGROUND, True), (TTML_PARAGRAPH_ONLY, False)],
 )
 def test_musixmatch_fetch_returns_lrc_with_quality_checked_ttml_alternative(
     monkeypatch, ttml_text, has_upgrade
