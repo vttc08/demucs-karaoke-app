@@ -99,7 +99,6 @@
   "lyrics.synced": "synced",
   "lyrics.plain": "plain",
   "lyrics.resolved": "Resolved",
-  "lyrics.resolved_overwrite": "Resolved lyrics will overwrite this box. You can edit it before adding to the queue.",
   "lyrics.search": "Search",
   "lyrics.search_again": "Cancel the current lookup and search again",
   "lyrics.search_current": "Search with the current title and artist",

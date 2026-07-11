@@ -99,7 +99,6 @@
   "lyrics.synced": "同步",
   "lyrics.plain": "纯文本",
   "lyrics.resolved": "已找到",
-  "lyrics.resolved_overwrite": "找到的歌词会覆盖此文本框。加入队列前仍可编辑。",
   "lyrics.search": "搜索",
   "lyrics.search_again": "取消当前查找并重新搜索",
   "lyrics.search_current": "使用当前标题和艺人搜索",
