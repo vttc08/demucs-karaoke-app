@@ -6,7 +6,12 @@ from starlette.datastructures import UploadFile
 
 from services.subtitle_workflow_service import SubtitleWorkflowConflictError, SubtitleWorkflowService
 from services.subtitle_editor_service import subtitle_editor_service
-from services.ttml_parser import TTMLParseError, is_valid_xml, parse_ttml_to_whisperx_segments
+from services.ttml_parser import (
+    TTMLParseError,
+    has_word_level_timing,
+    is_valid_xml,
+    parse_ttml_to_whisperx_segments,
+)
 
 
 def _make_json_payload():
@@ -76,6 +81,27 @@ def test_ttml_parser_converts_sample_into_whisperx_segments():
     assert segments[0]["end"] == 20.562
     assert segments[0]["words"][0] == {"word": "I", "start": 15.053, "end": 15.522}
     assert segments[1]["words"][-1] == {"word": "beer", "start": 25.884, "end": 27.959}
+
+
+def test_ttml_word_timing_predicate_rejects_line_only_inputs():
+    assert has_word_level_timing(TTML_SAMPLE)
+
+    paragraph_only = """
+    <tt><body><p begin="00:00:01.000" end="00:00:03.000">Hello world</p></body></tt>
+    """
+    assert not has_word_level_timing(paragraph_only)
+
+    one_span_per_line = """
+    <tt><body>
+      <p begin="00:00:01.000" end="00:00:03.000">
+        <span begin="00:00:01.000" end="00:00:03.000">Hello world</span>
+      </p>
+      <p begin="00:00:04.000" end="00:00:06.000">
+        <span begin="00:00:04.000" end="00:00:06.000">Again</span>
+      </p>
+    </body></tt>
+    """
+    assert not has_word_level_timing(one_span_per_line)
 
 
 def test_ttml_parser_rejects_invalid_xml():

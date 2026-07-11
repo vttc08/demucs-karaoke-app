@@ -20,7 +20,12 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from config import settings
 from services import lyrics_types as ls_module
-from services.ttml_parser import TTMLParseError, is_valid_xml, parse_ttml_to_whisperx_segments
+from services.ttml_parser import (
+    TTMLParseError,
+    has_word_level_timing,
+    is_valid_xml,
+    parse_ttml_to_whisperx_segments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -450,6 +455,9 @@ class MusixmatchLyricsProvider:
                 return None
         except TTMLParseError as exc:
             logger.info("TTML upgrade parse failed isrc=%s error=%s", isrc, exc)
+            return None
+        if not has_word_level_timing(content):
+            logger.info("TTML upgrade has no word-level timing isrc=%s", isrc)
             return None
         return content
 

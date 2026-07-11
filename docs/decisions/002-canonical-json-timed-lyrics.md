@@ -28,3 +28,7 @@ in durable sidecar discovery or sidecar classification.
   sidecar is left behind.
 - Existing legacy `.ttml` files are no longer considered canonical scan
   sidecars and should be re-imported or converted to JSON.
+- Automatic provider TTML upgrades are exposed only when the XML contains
+  multiple explicitly timed spans across its lyric paragraphs. Paragraph-only
+  or line-level TTML remains available for explicit manual imports, but does
+  not bypass WhisperX through the upgrade UI.

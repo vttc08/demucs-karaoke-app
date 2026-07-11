@@ -21,6 +21,14 @@ TTML_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
 </tt>
 """
 
+TTML_PARAGRAPH_ONLY = """<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml">
+  <body>
+    <p begin="00:00:01.000" end="00:00:03.000">Hello world</p>
+  </body>
+</tt>
+"""
+
 
 def test_lyrics_service_default_provider_order_includes_netease_between_musixmatch_and_lrclib():
     """Default provider chain should keep NetEase between Musixmatch and LRCLib."""
@@ -244,7 +252,13 @@ def test_musixmatch_ttml_failure_is_non_blocking(monkeypatch):
     assert asyncio.run(provider._fetch_ttml("USUM72403305")) is None
 
 
-def test_musixmatch_fetch_returns_lrc_with_ttml_alternative(monkeypatch):
+@pytest.mark.parametrize(
+    ("ttml_text", "has_upgrade"),
+    [(TTML_SAMPLE, True), (TTML_PARAGRAPH_ONLY, False)],
+)
+def test_musixmatch_fetch_returns_lrc_with_quality_checked_ttml_alternative(
+    monkeypatch, ttml_text, has_upgrade
+):
     from services import lyrics_providers as lp_module
 
     subtitle_body = json.dumps([{"time": {"minutes": 0, "seconds": 1, "hundredths": 0}, "text": "Hello"}])
@@ -299,7 +313,7 @@ def test_musixmatch_fetch_returns_lrc_with_ttml_alternative(monkeypatch):
 
         async def get(self, url, **_kwargs):
             if url.endswith(".ttml"):
-                return FakeResponse(text=TTML_SAMPLE)
+                return FakeResponse(text=ttml_text)
             return FakeResponse(payload=musixmatch_payload)
 
     monkeypatch.setattr(settings, "lyrics_ttml_storage_url", "https://lyrics-storage.test")
@@ -311,7 +325,9 @@ def test_musixmatch_fetch_returns_lrc_with_ttml_alternative(monkeypatch):
 
     assert payload is not None
     assert payload.lyrics == "[00:01.00]Hello"
-    assert payload.alternatives[0].format == "ttml"
+    assert bool(payload.alternatives) is has_upgrade
+    if has_upgrade:
+        assert payload.alternatives[0].format == "ttml"
 
 def test_netease_provider_prefers_cjk_candidate_and_rejects_low_confidence():
     """Candidate selector should avoid unrelated songs and pick CJK-near matches."""

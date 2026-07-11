@@ -1229,13 +1229,13 @@ def test_add_to_queue_persists_ttml_lyrics_as_json_sidecar(client):
     assert response.status_code == 200
     data = response.json()
     expected_stem = build_media_stem("Queue TTML", "Singer", fallback="queue-ttml-1")
-    assert data["lyrics_path"] == f"/cache/lyrics/{expected_stem}.json"
+    assert data["lyrics_path"] == f"/media/{expected_stem}.json"
     with TestingSessionLocal() as db:
         media_item = db.query(MediaItem).filter(MediaItem.id == data["media_id"]).first()
         assert media_item is not None
-        assert media_item.lyrics_path == f"/cache/lyrics/{expected_stem}.json"
+        assert media_item.lyrics_path == f"/media/{expected_stem}.json"
     saved_payload = json.loads(
-        (settings.cache_path / "lyrics" / f"{expected_stem}.json").read_text(encoding="utf-8")
+        (settings.media_path / f"{expected_stem}.json").read_text(encoding="utf-8")
     )
     assert saved_payload["segments"][0]["text"] == "I know that the bar closes at 11"
 

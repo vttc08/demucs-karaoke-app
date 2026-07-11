@@ -114,10 +114,15 @@ class QueueService:
                 media_item.id,
             )
         if (item.is_karaoke or item.align_lyrics) and item.lyrics_text:
+            lyrics_format = (item.lyrics_format or "").strip().lower()
             self.store_lyrics_sidecar(
                 media_item,
                 item.lyrics_text,
                 lyrics_format=item.lyrics_format,
+                # TTML upgrades are already timed and must be durable beside
+                # the media, just like WhisperX's final JSON sidecar. LRC/TXT
+                # remain cache inputs until alignment produces its media JSON.
+                storage="media" if lyrics_format in {"ttml", "xml"} else "cache",
             )
 
         normalized_requester_id = self._normalize_optional_metadata(requester_id)

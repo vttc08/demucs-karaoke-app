@@ -227,7 +227,7 @@ Queue payload can identify the target with either:
 - `queue_as_name` is optional and admin-only. When provided by an authenticated admin session, it overrides the displayed requester label for that queued item.
 
 If the `youtube_id` already exists in `media_items` with a usable local media file, the queue item is created against that existing media row and processing reuses the stored file instead of re-downloading the video again.
-When `lyrics_text` is supplied for karaoke items, the app persists it as a reusable lyrics sidecar under the cache directory so karaoke processing can skip a second lookup. `lyrics_format` is optional; if omitted, the app infers `.lrc` when timestamped lines are present, `.json` for WhisperX-style aligned payloads, and `.txt` otherwise.
+When `lyrics_text` is supplied for karaoke items, plain/LRC input is persisted as a reusable cache sidecar so karaoke processing can skip a second lookup. TTML/XML input is treated as already timed and is normalized to a canonical JSON sidecar beside the media file; `lyrics_format` is optional and is inferred when omitted. WhisperX-style JSON remains a media-sidecar format, while plain text remains an unsynced cache input until alignment completes.
 - `process_lyrics_lines` is an optional queue-only WhisperX override. When true, the server rewrites long plain/LRC lines before alignment using `max_line_length` (default `36`) and `max_line_length_cjk` (default `12`).
 - When line processing is enabled for synced LRC, the original line timestamps are intentionally ignored and WhisperX rebuilds timing from the rewrapped display lines.
 
@@ -341,7 +341,8 @@ When no provider returns lyrics, the response still returns inferred metadata wi
 
 Musixmatch returns its safe synced LRC as the default `lyrics_format` and may
 include a validated TTML upgrade in `alternatives`. The TTML result is
-optional; failure to fetch it leaves the normal Musixmatch response intact.
+optional; failure to fetch it, invalid XML, or XML without multiple explicitly
+timed spans leaves the normal Musixmatch response intact.
 The lyrics editor exposes a compact upgrade/restore toggle when TTML is
 available. LRC remains selected by default and can be restored before
 WhisperX alignment when a video has an intro or timing gap.
