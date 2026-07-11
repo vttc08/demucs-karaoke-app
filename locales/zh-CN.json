@@ -106,6 +106,7 @@
   "lyrics.search_failed": "歌词搜索失败",
   "lyrics.search_failed_detail": "歌词搜索失败。请使用下方编辑器或上传 LRC 文件。",
   "lyrics.searching": "搜索中",
+  "lyrics.use_lrc": "使用LRC",
   "lyrics.searching_providers": "正在搜索歌词来源...",
   "lyrics.status_error": "错误",
   "lyrics.timed": "带时间轴",

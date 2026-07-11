@@ -330,12 +330,19 @@ Resolve provider lyrics for the add-to-queue modal.
   "source": "regex",
   "provider": "lrclib",
   "lyrics": "[00:01.00]Line 1",
+  "lyrics_format": "lrc",
   "is_synced": true,
+  "alternatives": [],
   "detail": null
 }
 ```
 
 When no provider returns lyrics, the response still returns inferred metadata with `status: "not_found"` so the UI can fall back to manual lyrics entry.
+
+Musixmatch may return `lyrics_format: "ttml"` with the original LRC in
+`alternatives`. The TTML result is optional and failure to fetch it leaves the
+normal Musixmatch response intact. The lyrics editor uses the TTML result by
+default and can select the LRC alternative before WhisperX alignment.
 
 ---
 
@@ -1208,6 +1215,8 @@ Validation:
 - `concurrent_ytdlp_search_enabled` toggles optional parallel search mode
 - `lyrics_provider_netease_enabled` toggles NetEase in concurrent lyrics fallback
 - `lyrics_provider_lrclib_enabled` toggles LRCLib in concurrent lyrics fallback
+- `lyrics_ttml_storage_url` configures the optional Musixmatch ISRC-to-TTML storage service
+- `lyrics_ttml_upgrade_timeout_seconds` bounds each optional TTML upgrade request
 - `ytdlp_deno_path` is optional; blank keeps yt-dlp default behavior, while a value adds `--js-runtimes deno:<path>` to yt-dlp commands
 - `ytdlp_proxy_url` must be empty or use one of: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`
 - `ytdlp_video_resolution` must be `default` or one of: `360`, `480`, `720`, `1080`, `2160`

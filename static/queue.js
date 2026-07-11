@@ -667,6 +667,7 @@ function initializeLyricsManager() {
         helpText: '#queue-config-lyrics-help',
         searchBtn: '#queue-config-lyrics-search-btn',
         uploadBtn: '#queue-config-lyrics-upload-btn',
+        downgradeBtn: '#queue-config-lyrics-downgrade-btn',
         fileInput: '#queue-config-lyrics-file',
         googleLink: '#queue-config-lyrics-google-link',
         panel: '#queue-config-lyrics-panel',

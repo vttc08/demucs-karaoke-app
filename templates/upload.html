@@ -146,6 +146,10 @@
                                 <span class="material-symbols-outlined text-sm">upload_file</span>
                                 {{ t('common.upload') }}
                             </button>
+                            <button type="button" id="upload-lyrics-downgrade-btn" class="hidden inline-flex items-center gap-1 rounded-full bg-tertiary/20 px-3 py-1.5 text-[10px] font-bold text-tertiary transition-all hover:bg-tertiary/30 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+                                <span class="material-symbols-outlined text-sm">undo</span>
+                                {{ t('lyrics.use_lrc') }}
+                            </button>
                             <input type="file" id="upload-lyrics-file" class="hidden" accept=".lrc,.txt,.json,.ttml" />
                         </div>
 

@@ -106,6 +106,7 @@
   "lyrics.search_failed": "Lyrics search failed",
   "lyrics.search_failed_detail": "Lyrics search failed. Use the editor below or upload an LRC file.",
   "lyrics.searching": "Searching",
+  "lyrics.use_lrc": "Restore LRC",
   "lyrics.searching_providers": "Searching lyrics providers...",
   "lyrics.status_error": "Error",
   "lyrics.timed": "timed",

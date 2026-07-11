@@ -23,6 +23,7 @@ class LyricsManager {
       isSynced: false,
       format: 'txt',
       text: '',
+      alternatives: [],
       title: '',
       artist: '',
       youtubeTitle: '',
@@ -81,6 +82,7 @@ class LyricsManager {
     this.state.isSynced = false;
     this.state.format = 'txt';
     this.state.text = '';
+    this.state.alternatives = [];
     this.state.title = '';
     this.state.artist = '';
     this.state.youtubeTitle = '';
@@ -197,6 +199,7 @@ class LyricsManager {
     const trimmedText = (text || '').trim();
     const format = options.format || LyricsManager.inferFormat(trimmedText);
     this.state.text = trimmedText;
+    this.state.alternatives = Array.isArray(options.alternatives) ? options.alternatives : [];
     this.state.format = format;
     this.state.provider = providerInfo;
     this.state.isSynced = typeof options.isSynced === 'boolean' ? options.isSynced : format !== 'txt';
@@ -298,6 +301,7 @@ class LyricsManager {
     this.state.lyricsState = 'loading';
     this.state.provider = '';
     this.state.isSynced = false;
+    this.state.alternatives = [];
     this.notifyListeners();
 
     const payload = { title };
@@ -332,7 +336,8 @@ class LyricsManager {
       this.state.lyricsState = result.status;
       this.state.provider = result.provider || '';
       this.state.isSynced = Boolean(result.is_synced);
-      this.state.format = this.state.isSynced ? 'lrc' : 'txt';
+      this.state.format = result.lyrics_format || (this.state.isSynced ? 'lrc' : 'txt');
+      this.state.alternatives = Array.isArray(result.alternatives) ? result.alternatives : [];
 
       if (result.title) {
         this.state.title = result.title;
@@ -371,6 +376,7 @@ class LyricsManager {
     this.cancelInFlight();
     const trimmedText = (newText || '').trim();
     this.state.text = trimmedText;
+    this.state.alternatives = [];
 
     if (trimmedText) {
       this.state.lyricsState = 'manual';
@@ -400,6 +406,7 @@ class LyricsManager {
     try {
       const text = await file.text();
       this.state.text = text.trim();
+      this.state.alternatives = [];
       this.state.format = LyricsManager.inferFormatFromFilename(file.name);
       this.state.isSynced = this.state.format !== 'txt';
       this.state.provider = `upload:${file.name}`;
@@ -413,6 +420,24 @@ class LyricsManager {
       console.error('Failed to read lyrics file:', error);
       throw error;
     }
+  }
+
+  /** Select an alternate representation returned by a provider. */
+  selectAlternative(format) {
+    const alternative = this.state.alternatives.find((item) => item?.format === format);
+    if (!alternative || !alternative.lyrics) return false;
+    this.cancelInFlight();
+    this.state.text = String(alternative.lyrics).trim();
+    this.state.format = alternative.format;
+    this.state.isSynced = Boolean(alternative.is_synced);
+    this.state.provider = alternative.provider || this.state.provider;
+    this.state.lyricsState = 'resolved';
+    if (this.state.format === 'ttml') {
+      this.state.alignLyricsRequested = false;
+      this.state.processLyricsLines = false;
+    }
+    this.notifyListeners();
+    return true;
   }
 
   /**

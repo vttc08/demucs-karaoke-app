@@ -122,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
             searchBtn: '#upload-lyrics-search-btn',
             googleLink: '#upload-lyrics-google-btn',
             uploadBtn: '#upload-lyrics-upload-btn',
+            downgradeBtn: '#upload-lyrics-downgrade-btn',
             fileInput: '#upload-lyrics-file',
             whisperxLanguageInput: '#upload-lyrics-whisperx-language-code',
             processLinesToggle: '#lyrics-process-lines-toggle',

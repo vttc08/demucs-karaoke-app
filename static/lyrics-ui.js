@@ -50,6 +50,7 @@ class LyricsUIAdapter {
       maxLineLengthInput: 'maxLineLengthInput',
       maxLineLengthCjkInput: 'maxLineLengthCjkInput',
       panel: 'panel',
+      downgradeBtn: 'downgradeBtn',
     };
 
     Object.entries(selectors).forEach(([configKey, elementKey]) => {
@@ -148,6 +149,15 @@ class LyricsUIAdapter {
       this.eventListeners.push({ element: this.elements.fileInput, event: 'change', handler });
     }
 
+    if (this.elements.downgradeBtn) {
+      const handler = (e) => {
+        e.preventDefault();
+        this.manager.selectAlternative('lrc');
+      };
+      this.elements.downgradeBtn.addEventListener('click', handler);
+      this.eventListeners.push({ element: this.elements.downgradeBtn, event: 'click', handler });
+    }
+
     if (this.elements.whisperxLanguageInput) {
       const handler = (e) => this.manager.setWhisperxAlignLanguageOverride(e.target.value);
       this.elements.whisperxLanguageInput.addEventListener('input', handler);
@@ -222,6 +232,7 @@ class LyricsUIAdapter {
     this.updateTextareaState(state);
     this.updateInputDisabledState(state.lyricsEnabled);
     this.updateGoogleSearchLink();
+    this.updateDowngradeButton(state);
   }
 
   /**
@@ -290,6 +301,16 @@ class LyricsUIAdapter {
     this.elements.uploadBtn.disabled = !state.lyricsEnabled;
     this.elements.uploadBtn.classList.toggle('opacity-60', !state.lyricsEnabled);
     this.elements.uploadBtn.classList.toggle('cursor-not-allowed', !state.lyricsEnabled);
+  }
+
+  updateDowngradeButton(state) {
+    if (!this.elements.downgradeBtn) return;
+    const canDowngrade = Boolean(
+      state.lyricsEnabled && state.format === 'ttml' &&
+      state.alternatives?.some((alternative) => alternative?.format === 'lrc')
+    );
+    this.elements.downgradeBtn.classList.toggle('hidden', !canDowngrade);
+    this.elements.downgradeBtn.disabled = !canDowngrade;
   }
 
   /**

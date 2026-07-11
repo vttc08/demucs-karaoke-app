@@ -442,6 +442,7 @@ The stage page uses a websocket-first model:
 - Resolution behavior is Musixmatch-first, then concurrent fallback search across the remaining providers with score-based selection of the best payload.
 - Synced lyrics are persisted as `.lrc` sidecars for stage overlay cue parsing.
 - Unsynced lyrics can still be persisted as sidecars for future/manual overlay handling.
+- Provider payloads may expose typed alternate representations. Musixmatch keeps its LRC as the base result and may add validated TTML using the track ISRC; the shared lyrics editor selects TTML by default while retaining an LRC downgrade for WhisperX.
 
 ## Software Stack
 

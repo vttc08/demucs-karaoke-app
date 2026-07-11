@@ -83,6 +83,8 @@ class Settings(BaseSettings):
     whisperx_preload_models: str = "transcription=tiny,align=en"
     lrclib_api_url: str = "https://lrclib.net"
     musixmatch_token: str = ""
+    lyrics_ttml_storage_url: str = "https://lyrics-storage.binimum.org"
+    lyrics_ttml_upgrade_timeout_seconds: float = 3.0
     lastfm_api_key: str = ""
 
     # Database

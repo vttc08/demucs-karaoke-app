@@ -19,6 +19,16 @@ class InferredSong:
 
 
 @dataclass(frozen=True)
+class LyricsAlternative:
+    """Optional representation of the same lookup result in another format."""
+
+    lyrics: str
+    format: str
+    provider: str
+    is_synced: bool
+
+
+@dataclass(frozen=True)
 class LyricsPayload:
     """Lyrics text plus source metadata."""
 
@@ -28,6 +38,7 @@ class LyricsPayload:
     inferred_song: InferredSong
     provider_score: float | None = None
     provider_details: dict[str, Any] | None = None
+    alternatives: tuple[LyricsAlternative, ...] = ()
 
 
 LyricsResult: TypeAlias = LyricsPayload | str | None
@@ -60,4 +71,3 @@ def build_httpx_client_kwargs(timeout: float) -> dict[str, Any]:
     if proxy_url:
         kwargs["proxy"] = proxy_url
     return kwargs
-
