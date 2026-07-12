@@ -29,8 +29,10 @@ class LyricsPresetService:
     DEFAULT_SETTINGS = {
         "fontPreset": "readable_cjk",
         "customFontFamily": "",
+        "customFontWeight": 700,
         "sizeVw": 4.5,
         "lineWidthPct": 85,
+        "lineGapVw": 0.8,
         "neighborLineScalePct": 60,
         "neighborLineOpacityPct": 60,
         "textColor": "#fff8df",
@@ -45,6 +47,7 @@ class LyricsPresetService:
         "backgroundMediaOpacityPct": 100,
     }
     FONT_PRESETS = {"karaoke_cjk", "readable_cjk", "system_cjk", "serif_cjk", "custom"}
+    CUSTOM_FONT_WEIGHTS = {300, 400, 500, 700}
     ANIMATIONS = {"slide", "crop", "fade", "none"}
     BACKGROUND_MEDIA_EXTENSIONS = {
         ".avi",
@@ -151,8 +154,10 @@ class LyricsPresetService:
         return {
             "fontPreset": self._normalize_font_preset(raw_settings.get("fontPreset")),
             "customFontFamily": self._trim_text(raw_settings.get("customFontFamily"), 220),
+            "customFontWeight": self._normalize_custom_font_weight(raw_settings.get("customFontWeight")),
             "sizeVw": self._clamp_number(raw_settings.get("sizeVw"), 3.2, 8.8, self.DEFAULT_SETTINGS["sizeVw"]),
             "lineWidthPct": self._round_number(raw_settings.get("lineWidthPct"), 60, 100, self.DEFAULT_SETTINGS["lineWidthPct"]),
+            "lineGapVw": self._clamp_number(raw_settings.get("lineGapVw"), 0.2, 2, self.DEFAULT_SETTINGS["lineGapVw"]),
             "neighborLineScalePct": self._round_number(raw_settings.get("neighborLineScalePct"), 30, 100, self.DEFAULT_SETTINGS["neighborLineScalePct"]),
             "neighborLineOpacityPct": self._round_number(raw_settings.get("neighborLineOpacityPct"), 10, 100, self.DEFAULT_SETTINGS["neighborLineOpacityPct"]),
             "textColor": self._normalize_color(raw_settings.get("textColor"), self.DEFAULT_SETTINGS["textColor"]),
@@ -194,6 +199,13 @@ class LyricsPresetService:
     def _normalize_font_preset(self, value: Any) -> str:
         value = value if isinstance(value, str) else ""
         return value if value in self.FONT_PRESETS else self.DEFAULT_SETTINGS["fontPreset"]
+
+    def _normalize_custom_font_weight(self, value: Any) -> int:
+        try:
+            weight = int(value)
+        except (TypeError, ValueError):
+            return self.DEFAULT_SETTINGS["customFontWeight"]
+        return weight if weight in self.CUSTOM_FONT_WEIGHTS else self.DEFAULT_SETTINGS["customFontWeight"]
 
     def _normalize_animation(self, value: Any) -> str:
         value = value if isinstance(value, str) else ""

@@ -30,15 +30,17 @@ This document captures extension points for future lyric-style customization on 
   derives a label from platform, screen size, and id suffix for `/queue` targeting.
 - Shared lyric presets are now stored server-side and managed from `/stage` through `/api/lyrics-presets`;
   the stored preset payload should stay aligned with the same normalized stage settings object.
-- The default stage baseline is the sans-serif CJK stack with 4.5vw text, 85% max width, 5px outline,
-  one previous line, two next lines, 60% surrounding line size/opacity, and fade animation.
+- The default stage baseline is the sans-serif CJK stack with 4.5vw text, 85% max width, 0.8vw cue-row
+  spacing, 5px outline, one previous line, two next lines, 60% surrounding line size/opacity, and fade animation.
 - The karaoke preset uses the local `ZCOOL QingKe HuangYou` face instead of the decorative script fallback.
 - Custom font stacks are applied as CSS `font-family` values and only take effect when the user clicks
   the explicit Apply or Save actions. At that point the page requests the first non-generic,
-  non-local font family from Google Fonts once, including bold weights for karaoke styling when the
-  family supports them; typing in the textbox does not trigger network requests.
-- The custom-font panel shows a live preview with a bold-first sample so operators can tell whether
-  a Google Font is legible before saving it for stage use.
+  non-local font family from Google Fonts once in light (300), regular (400), medium (500), and bold
+  (700) weights when available; typing in the textbox does not trigger network requests.
+- The custom-font panel offers those four weights for Custom typefaces only and shows a live preview
+  at the selected weight. Built-in CJK presets retain their intentional karaoke weight.
+- Cue-row spacing is separately configurable from wrapped-text line-height, so operators can make
+  the visible lyric window denser or airier without changing the internal leading of a wrapped cue.
 - Outline rendering is stroke-first on supporting browsers, with a shadow fallback for older engines.
 
 ## Recommended future customization surfaces

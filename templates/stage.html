@@ -677,6 +677,8 @@
         --stage-lyrics-active-color: #ffd84f;
         --stage-lyrics-outline-color: #050505;
         --stage-lyrics-outline-width: 7px;
+        --stage-lyrics-font-weight: 900;
+        --stage-lyrics-line-gap: clamp(0.2rem, 0.8vw, 2rem);
     }
 
     .stage-lyrics-overlay--cdg {
@@ -811,7 +813,7 @@
         width: min(var(--stage-lyrics-lines-width, 100vw), calc(100vw - (clamp(1rem, 4vw, 5rem) * 2)));
         max-width: none;
         display: grid;
-        gap: clamp(0.2rem, 0.8vw, 0.75rem);
+        gap: var(--stage-lyrics-line-gap);
         text-align: center;
         position: relative;
         transform: translateZ(0);
@@ -824,7 +826,7 @@
         z-index: 0;
         font-family: var(--stage-lyrics-font-family);
         font-size: calc(var(--stage-lyrics-size) * var(--stage-lyrics-line-scale, 0.46));
-        font-weight: 900;
+        font-weight: var(--stage-lyrics-font-weight, 900);
         line-height: 1.32;
         letter-spacing: 0.02em;
         color: var(--stage-lyrics-text-color);
@@ -1427,6 +1429,15 @@
                                         <span class="text-[11px] leading-tight text-on-surface-variant">{{ t('stage.lyrics_custom_font_detail') }}</span>
                                         <p id="stage-lyrics-custom-font-preview" class="stage-lyrics-custom-font-preview" aria-live="polite" aria-atomic="true">{{ t('stage.lyrics_custom_font_preview_empty') }}</p>
                                     </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--half">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_custom_font_weight') }}</span>
+                                        <select id="stage-lyrics-custom-font-weight" class="stage-lyrics-settings-select">
+                                            <option value="300">{{ t('stage.lyrics_font_weight_light') }}</option>
+                                            <option value="400">{{ t('stage.lyrics_font_weight_regular') }}</option>
+                                            <option value="500">{{ t('stage.lyrics_font_weight_medium') }}</option>
+                                            <option value="700">{{ t('stage.lyrics_font_weight_bold') }}</option>
+                                        </select>
+                                    </label>
                                 </div>
                                 <div class="stage-lyrics-settings-grid">
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
@@ -1442,6 +1453,13 @@
                                             <span id="stage-lyrics-line-width-pct-value"></span>
                                         </span>
                                         <input id="stage-lyrics-line-width-pct" class="stage-lyrics-settings-input" type="range" min="60" max="100" step="1" />
+                                    </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">
+                                            {{ t('stage.lyrics_line_spacing') }}
+                                            <span id="stage-lyrics-line-gap-vw-value"></span>
+                                        </span>
+                                        <input id="stage-lyrics-line-gap-vw" class="stage-lyrics-settings-input" type="range" min="0.2" max="2" step="0.1" />
                                     </label>
                                     <label class="stage-lyrics-settings-field">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_text_color') }}</span>
@@ -1767,11 +1785,14 @@ const stageLyrics = new window.StageLyricsController({
     inputs: {
         fontPreset: document.getElementById("stage-lyrics-font-preset"),
         customFontFamily: document.getElementById("stage-lyrics-custom-font"),
+        customFontWeight: document.getElementById("stage-lyrics-custom-font-weight"),
         customFontPreview: document.getElementById("stage-lyrics-custom-font-preview"),
         sizeVw: document.getElementById("stage-lyrics-size"),
         sizeVwValue: document.getElementById("stage-lyrics-size-value"),
         lineWidthPct: document.getElementById("stage-lyrics-line-width-pct"),
         lineWidthPctValue: document.getElementById("stage-lyrics-line-width-pct-value"),
+        lineGapVw: document.getElementById("stage-lyrics-line-gap-vw"),
+        lineGapVwValue: document.getElementById("stage-lyrics-line-gap-vw-value"),
         textColor: document.getElementById("stage-lyrics-text-color"),
         activeColor: document.getElementById("stage-lyrics-active-color"),
         outlineColor: document.getElementById("stage-lyrics-outline-color"),
