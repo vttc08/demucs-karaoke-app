@@ -207,6 +207,23 @@
         cursor: default;
     }
 
+    .stage-media.is-fullscreen.is-zen {
+        cursor: none;
+    }
+
+    .stage-media.is-fullscreen.is-zen .stage-controls-shell,
+    .stage-media.is-fullscreen.is-zen .stage-topbar,
+    .stage-media.is-fullscreen.is-zen .stage-qr-overlay,
+    .stage-media.is-fullscreen.is-zen .stage-ios-vocals-warning {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+    }
+
+    .stage-media.is-fullscreen.is-zen .stage-controls-shell {
+        transform: translateY(12px);
+    }
+
     .stage-media.is-fullscreen .stage-topbar {
         opacity: 0;
         transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -2135,6 +2152,7 @@ const normalizedStageVocalsVolumeDefault = Number.isFinite(Number(STAGE_VOCALS_V
     ? Math.max(0, Math.min(1, Number(STAGE_VOCALS_VOLUME_DEFAULT)))
     : 1.0;
 let controlsHideTimer = null;
+let zenModeEnabled = false;
 let isQrVisible = false;
 let shortcutsPanelVisible = false;
 let qrDragState = null;
@@ -3523,8 +3541,42 @@ function isFullscreenActive() {
     return !!document.fullscreenElement;
 }
 
+function setZenModeEnabled(enabled) {
+    zenModeEnabled = Boolean(enabled) && isFullscreenActive();
+
+    if (!stageMedia) {
+        return;
+    }
+
+    stageMedia.classList.toggle("is-zen", zenModeEnabled);
+
+    if (zenModeEnabled) {
+        stageControls?.classList.add("hidden");
+        stageMedia.classList.remove("is-controls-visible");
+        if (controlsHideTimer) {
+            window.clearTimeout(controlsHideTimer);
+            controlsHideTimer = null;
+        }
+        return;
+    }
+
+    stageControls?.classList.remove("hidden");
+    if (isFullscreenActive()) {
+        showStageControls();
+    }
+}
+
 function showStageControls() {
     if (!stageMedia) return;
+
+    if (zenModeEnabled) {
+        stageMedia.classList.remove("is-controls-visible");
+        if (controlsHideTimer) {
+            window.clearTimeout(controlsHideTimer);
+            controlsHideTimer = null;
+        }
+        return;
+    }
 
     stageMedia.classList.add("is-controls-visible");
 
@@ -3545,7 +3597,7 @@ function showStageControls() {
 }
 
 function scheduleHideStageControls() {
-    if (!stageMedia || !isFullscreenActive() || isPrimaryPaused()) {
+    if (!stageMedia || zenModeEnabled || !isFullscreenActive() || isPrimaryPaused()) {
         return;
     }
 
@@ -3560,8 +3612,13 @@ function syncFullscreenState() {
 
     if (active) {
         stageLyrics.applyBackgroundSettings();
-        showStageControls();
+        if (zenModeEnabled) {
+            setZenModeEnabled(true);
+        } else {
+            showStageControls();
+        }
     } else {
+        setZenModeEnabled(false);
         if (controlsHideTimer) {
             window.clearTimeout(controlsHideTimer);
             controlsHideTimer = null;
@@ -4146,12 +4203,7 @@ if (qrOverlay) {
 if (zenToggleBtn) {
     zenToggleBtn.addEventListener("click", () => {
         if (!stageControls || !isFullscreenActive()) return;
-        const isControlsVisible = !stageControls.classList.contains("hidden");
-        if (isControlsVisible) {
-            stageControls.classList.add("hidden");
-        } else {
-            stageControls.classList.remove("hidden");
-        }
+        setZenModeEnabled(!zenModeEnabled);
     });
 }
 
@@ -4338,14 +4390,8 @@ window.addEventListener("keydown", async (event) => {
 
     if (event.key.toLowerCase() === "z") {
         event.preventDefault();
-        // Zen mode toggle: hide/show stage controls
-        if (stageControls) {
-            const isControlsVisible = !stageControls.classList.contains("hidden");
-            if (isControlsVisible) {
-                stageControls.classList.add("hidden");
-            } else {
-                stageControls.classList.remove("hidden");
-            }
+        if (isFullscreenActive()) {
+            setZenModeEnabled(!zenModeEnabled);
         }
     }
 });

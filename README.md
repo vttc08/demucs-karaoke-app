@@ -141,6 +141,7 @@ and `/static/...`.
 3. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
      - Requires an admin session created by the server-managed admin login flow
      - Presentation-first stage output with fullscreen-optimized player
+     - Fullscreen zen mode keeps the playbar, song metadata, overlays, and cursor hidden across manual skips and automatic song changes; press `Z` to toggle it
      - Always-on playback shell: queue items switch in-place without full page reload, so fullscreen is preserved during track transitions
      - Audio-only items such as MP3s use embedded album art as the stage background when available, with a branded fallback background otherwise
      - When the queue is empty, stage loops lobby media; when a song becomes playable, stage switches to it automatically and returns to lobby when queue drains

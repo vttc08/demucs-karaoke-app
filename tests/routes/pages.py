@@ -318,6 +318,9 @@ def test_stage_page_loads_for_admin(client):
     assert b"stage-lyric-word--highlighted" in response.content
     assert b"/static/stage-lyrics.js" in response.content
     assert b"let currentItem = INITIAL_CURRENT_ITEM;" in response.content
+    assert b"let zenModeEnabled = false;" in response.content
+    assert b".stage-media.is-fullscreen.is-zen" in response.content
+    assert b"setZenModeEnabled(!zenModeEnabled)" in response.content
     assert b'aria-label="Fullscreen"' in response.content
 
 
