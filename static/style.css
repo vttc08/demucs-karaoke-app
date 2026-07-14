@@ -179,6 +179,26 @@ html.dark {
 .queue-move-button:disabled { cursor: not-allowed; opacity: 0.35; }
 .queue-row-action { width: 2.25rem; height: 2.25rem; border-radius: 999px; background: rgba(37, 34, 62, 0.82); transition: color 160ms ease, background 160ms ease; }
 
+/* Settings form primitives */
+.settings-section-summary { transition: background-color 160ms ease; }
+.settings-section-summary:hover { background: rgba(255, 255, 255, 0.025); }
+.settings-section-chevron { transition: transform 160ms ease; }
+.settings-section[open] .settings-section-chevron { transform: rotate(180deg); }
+.settings-label { color: rgb(201 197 208 / 0.9); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.12em; line-height: 1.25; text-transform: uppercase; }
+.settings-help { color: rgb(201 197 208 / 0.7); font-size: 0.6875rem; line-height: 1.35; }
+input.settings-input, select.settings-select { background: rgb(37 34 62 / 0.55); border: 0; border-radius: 0.5rem; color: #00f2ff; font-size: 0.875rem; font-weight: 500; height: 3rem; outline: none; padding: 0 1rem; width: 100%; }
+.settings-select { color: #e7e1ec; }
+.settings-input:focus, .settings-select:focus { box-shadow: 0 0 0 2px rgb(0 242 255 / 0.35); }
+.settings-toggle { align-items: center; background: rgb(37 34 62 / 0.4); border-radius: 0.5rem; display: flex; gap: 0.75rem; justify-content: space-between; padding: 0.75rem 1rem; }
+.settings-action-primary, .settings-action-secondary, .settings-action-danger { align-items: center; border-radius: 999px; display: inline-flex; font-size: 0.625rem; font-weight: 900; gap: 0.375rem; letter-spacing: 0.12em; padding: 0.5rem 0.75rem; text-transform: uppercase; transition: background-color 160ms ease, opacity 160ms ease; }
+.settings-action-primary { background: #00f2ff; border: 1px solid rgb(0 242 255 / 0.3); color: #001f24; }
+.settings-action-primary:hover { background: rgb(0 242 255 / 0.9); }
+.settings-action-secondary { border: 1px solid rgb(0 242 255 / 0.3); color: #00f2ff; }
+.settings-action-secondary:hover { background: rgb(0 242 255 / 0.1); }
+.settings-action-danger { background: rgb(255 82 120 / 0.1); border: 1px solid rgb(255 82 120 / 0.3); color: #ff5278; }
+.settings-action-danger:hover { background: rgb(255 82 120 / 0.2); }
+.settings-action-primary:disabled, .settings-action-secondary:disabled, .settings-action-danger:disabled { cursor: not-allowed; opacity: 0.6; }
+
 @keyframes queue-equalizer {
     from { transform: scaleY(0.42); }
     to { transform: scaleY(1); }

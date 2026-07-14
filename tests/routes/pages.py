@@ -417,6 +417,17 @@ def test_settings_page_loads_for_admin(client):
     assert b">Refresh<" in response.content
     assert 'href="/help/"' in response.text
     assert 'aria-label="Open documentation"' in response.text
+    assert response.text.count('data-settings-section=') == 6
+    assert response.text.count('data-settings-docs-link') == 6
+    assert response.text.count('target="_blank"') == 6
+    assert 'data-settings-section="processing"' in response.text
+    assert 'data-settings-section="whisperx"' in response.text
+    assert 'data-settings-section="paths"' in response.text
+    assert 'data-settings-section="downloads"' in response.text
+    assert 'data-settings-section="stage"' in response.text
+    assert 'data-settings-section="tools"' in response.text
+    assert 'id="ffmpeg_path"' in response.text
+    assert 'id="check-proxy-info-btn"' in response.text
     assert 'id="ytdlp_video_codec"' in response.text
     assert 'id="ffmpeg_audio_codec"' in response.text
     assert b"Admin Access" not in response.content

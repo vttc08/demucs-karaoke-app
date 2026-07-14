@@ -749,6 +749,48 @@ async function reloadEngineStatus() {
     setStatus(t("settings.status_refreshed"));
 }
 
+const SETTINGS_SECTIONS_STORAGE_KEY = "karaoke.settings.sections";
+
+function initializeSettingsSections() {
+    const sections = Array.from(document.querySelectorAll("[data-settings-section]"));
+    if (!sections.length) {
+        return;
+    }
+
+    let storedState = {};
+    try {
+        const raw = localStorage.getItem(SETTINGS_SECTIONS_STORAGE_KEY);
+        storedState = raw ? JSON.parse(raw) : {};
+    } catch (_) {
+        storedState = {};
+    }
+
+    sections.forEach((section) => {
+        const key = section.dataset.settingsSection;
+        if (Object.prototype.hasOwnProperty.call(storedState, key)) {
+            section.open = Boolean(storedState[key]);
+        } else {
+            section.open = key === "processing";
+        }
+
+        section.addEventListener("toggle", () => {
+            const nextState = sections.reduce((state, item) => {
+                state[item.dataset.settingsSection] = item.open;
+                return state;
+            }, {});
+            try {
+                localStorage.setItem(SETTINGS_SECTIONS_STORAGE_KEY, JSON.stringify(nextState));
+            } catch (_) {
+                // The form remains usable when localStorage is unavailable.
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-settings-docs-link]").forEach((link) => {
+        link.addEventListener("click", (event) => event.stopPropagation());
+    });
+}
+
 if (saveBtn) {
     saveBtn.addEventListener("click", saveSettings);
 }
@@ -785,6 +827,8 @@ if (storageCleanupBtn) {
 if (demucsGcBtn) {
     demucsGcBtn.addEventListener("click", triggerDemucsGarbageCollection);
 }
+
+initializeSettingsSections();
 
 const persistedState = readPersistedEngineStatus();
 if (persistedState?.state && persistedState?.detail) {
