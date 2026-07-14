@@ -48,33 +48,35 @@
                         <span class="material-symbols-outlined text-base">search</span>
                     </button>
                 </div>
-                <div id="queue-library-shortcuts" class="grid grid-cols-2 gap-2">
+                <div id="queue-library-shortcuts" class="grid grid-cols-3 gap-2">
                     <a
                         href="{{ app_url('/media') }}"
-                        class="group inline-flex min-h-10 items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+                        class="group inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-2 py-2 text-center transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99] sm:flex-row sm:gap-2 sm:px-3 sm:text-left"
                     >
                         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                             <span class="material-symbols-outlined text-[18px] leading-none">folder_open</span>
                         </span>
-                        <span class="min-w-0 truncate text-sm font-bold leading-none text-on-surface">{{ t('media.library') }}</span>
+                        <span class="min-w-0 truncate text-xs font-bold leading-none text-on-surface sm:text-sm">{{ t('media.library') }}</span>
                     </a>
                     <a
                         href="{{ app_url('/upload') }}"
-                        class="group inline-flex min-h-10 items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-left transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
+                        class="group inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-2 py-2 text-center transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99] sm:flex-row sm:gap-2 sm:px-3 sm:text-left"
                     >
                         <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/10 text-secondary">
                             <span class="material-symbols-outlined text-[18px] leading-none">cloud_upload</span>
                         </span>
-                        <span class="min-w-0 truncate text-sm font-bold leading-none text-on-surface">{{ t('common.upload_media') }}</span>
+                        <span class="min-w-0 truncate text-xs font-bold leading-none text-on-surface sm:text-sm">{{ t('common.upload_media') }}</span>
+                    </a>
+                    <a
+                        href="{{ app_url('/queue/lyrics') }}"
+                        class="group inline-flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-2 py-2 text-center transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99] sm:flex-row sm:gap-2 sm:px-3 sm:text-left"
+                    >
+                        <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <span class="material-symbols-outlined text-[18px] leading-none">lyrics</span>
+                        </span>
+                        <span class="min-w-0 truncate text-xs font-bold leading-none text-on-surface sm:text-sm">{{ t('common.lyrics') }}</span>
                     </a>
                 </div>
-                <a
-                    href="{{ app_url('/queue/lyrics') }}"
-                    class="group inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/70 px-3 py-2 text-sm font-bold text-on-surface transition-all hover:border-primary/30 hover:bg-surface-container-high active:scale-[0.99]"
-                >
-                    <span class="material-symbols-outlined text-[18px] leading-none text-primary">lyrics</span>
-                    <span>{{ t('queue.open_lyrics_viewer') }}</span>
-                </a>
                 {% if is_admin %}
                 <div id="queue-as-settings-panel" class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-1.5">
                     <label class="flex items-center justify-between gap-3">
@@ -267,144 +269,82 @@
 
         <!-- Queue Section -->
         <section class="queue-stage-rail flex min-w-0 flex-col lg:self-start">
-            <div class="queue-stage-panel flex min-h-0 flex-col gap-6 rounded-[1.75rem] border border-outline-variant/20 bg-surface-container-low px-4 py-5 sm:px-5 lg:px-6">
-        <div class="flex items-end justify-between gap-3 px-2">
-            <div>
-                <h3 class="font-headline font-black text-3xl tracking-tight text-on-surface">{{ t('queue.stage') }}</h3>
-            </div>
-            <div class="flex items-center gap-2">
-                <span
-                    id="ws-status"
-                    class="hidden items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider"
-                    aria-live="polite"
-                ></span>
-                {% if is_admin %}
-                <button
-                    id="clear-all-btn"
-                    class="text-secondary font-bold text-sm px-4 py-2 hover:bg-secondary/10 rounded-full transition-colors"
-                >
-                    {{ t('queue.clear_all') }}
-                </button>
-                {% endif %}
-            </div>
-        </div>
-
-        <div id="queue-list" class="flex flex-col gap-4">
-            {% if queue %}
-                {% for item in queue %}
-                <div class="queue-item {% if item.status.value == 'playing' %}glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]{% else %}bg-surface-container-low hover:bg-surface-container{% endif %} p-4 rounded-lg flex items-center gap-4 transition-all {% if (item.status.value in ('downloading', 'processing') and item.task_id) or (item.status.value in ('ready', 'completed') and item.media_id) %}cursor-pointer hover:border-primary/30{% endif %}" data-id="{{ item.id }}" data-media-id="{{ item.media_id }}" data-task-id="{{ item.task_id or '' }}" data-status="{{ item.status.value }}" data-processing-progress="{{ item.processing_progress if item.processing_progress is not none else '' }}" data-processing-label="{{ item.processing_label or '' }}">
-                    {% if is_admin %}
-                    <div class="flex shrink-0 flex-col items-center gap-1">
-                        {% if item.status.value == 'playing' %}
-                        <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="{{ t('queue.playing') }}">
-                            <span class="material-symbols-outlined">equalizer</span>
+            <div class="queue-stage-panel flex min-h-0 flex-col gap-4 rounded-2xl border border-outline-variant/20 bg-surface-container-low px-3 py-4 sm:px-4 lg:px-5">
+                <div class="flex items-end justify-between gap-3 px-1">
+                    <h3 class="font-headline text-2xl font-black tracking-tight text-on-surface">{{ t('queue.stage_queue') }}</h3>
+                    <div class="flex items-center gap-2">
+                        <span id="ws-status" class="hidden items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider" aria-live="polite"></span>
+                        {% if is_admin %}
+                        <button id="clear-all-btn" class="rounded-full px-3 py-2 text-sm font-bold text-secondary transition-colors hover:bg-secondary/10">
+                            {{ t('queue.clear_all') }}
                         </button>
-                        {% else %}
-                        {% set movable_index = movable_index_by_id.get(item.id, 0) %}
-                        <button
-                            id="queue-move-up-{{ item.id }}"
-                            class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                            onclick="moveSong('{{ item.id }}', 'up')"
-                            {% if movable_index == 0 %}disabled{% endif %}
-                            title="{{ t('queue.move_up') }}"
-                            aria-label="{{ t('queue.move_up') }}"
-                        >
-                            <span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span>
-                        </button>
-                        <button
-                            id="queue-move-down-{{ item.id }}"
-                            class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                            onclick="moveSong('{{ item.id }}', 'down')"
-                            {% if movable_index >= movable_count - 1 %}disabled{% endif %}
-                            title="{{ t('queue.move_down') }}"
-                            aria-label="{{ t('queue.move_down') }}"
-                        >
-                            <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
-                        </button>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                    <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 {% if item.status.value != 'playing' %}grayscale-[50%]{% endif %}">
-                        {% if item.thumbnail %}
-                        <img src="{{ item.thumbnail|public_url }}" alt="{{ item.title }} {{ t('media.cover') }}" class="h-full w-full object-cover" loading="lazy" decoding="async" />
-                        {% else %}
-                        <div class="w-full h-full bg-surface-container-highest flex items-center justify-center">
-                            <span class="material-symbols-outlined text-2xl text-on-surface-variant">music_note</span>
-                        </div>
-                        {% endif %}
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <h3 class="font-bold {% if item.status.value == 'playing' %}text-on-surface{% else %}text-on-surface/80{% endif %} truncate">{{ item.title }}</h3>
-                        {% if item.artist %}
-                        <p class="text-xs text-on-surface-variant truncate">{{ item.artist }}</p>
-                        {% endif %}
-                        {% if item.requested_by_name %}
-                        <p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">{{ t('queue.requested_by', name=item.requested_by_name) }}</p>
-                        {% endif %}
-                        {% if item.status.value in ('downloading', 'processing') %}
-                        {% set step_label = item.processing_label or item.processing_stage or t('queue.processing_ai') %}
-                        {% set step_percent = item.processing_progress if item.processing_progress is not none else 0 %}
-                        {% set step_mode = item.processing_mode or '' %}
-                        <div class="mt-2 max-w-xs" data-task-progress-key="queue-{{ item.id }}" data-task-progress-status="{{ item.status.value }}" data-task-progress-stage="{{ item.processing_stage or '' }}" data-task-progress-mode="{{ step_mode }}" data-task-progress-reported-percent="{{ step_percent }}" data-task-progress-label="{{ step_label }}">
-                            <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ step_percent }}">
-                                <div class="h-full rounded-full bg-tertiary transition-all duration-300 ease-out" data-task-progress-fill style="width: {{ step_percent }}%"></div>
-                            </div>
-                            <p class="mt-1 text-[10px] text-on-surface-variant">
-                                {% if item.processing_step_index and item.processing_step_total %}
-                                {{ t('task.progress_step', label=step_label, current=item.processing_step_index, total=item.processing_step_total) }}
-                                {% else %}
-                                {{ step_label }}
-                                {% endif %}
-                                {% if step_mode != 'indeterminate' %}
-                                • <span data-task-progress-percent-text>{{ step_percent }}%</span>
-                                {% else %}
-                                <span data-task-progress-percent-text class="hidden"></span>
-                                {% endif %}
-                            </p>
-                        </div>
-                        {% else %}
-                        <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full 
-                            {% if item.status.value == 'playing' %}bg-primary/10 border border-primary/20{% elif item.status.value == 'failed' %}bg-error/10 border border-error/20{% elif item.status.value == 'ready' %}bg-secondary/10 border border-secondary/20{% else %}bg-on-surface/5 border border-on-surface/10{% endif %}">
-                            {% if item.status.value == 'playing' %}
-                                <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-primary">{{ t('queue.playing') }}</span>
-                            {% elif item.status.value == 'failed' %}
-                                <span class="material-symbols-outlined text-[12px] text-error">error</span>
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-error">{{ t('common.failed') }}</span>
-                            {% elif item.status.value == 'ready' %}
-                                <span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-secondary">{{ t('common.ready') }}</span>
-                            {% else %}
-                                <span class="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant">{{ t('queue.in_queue') }}</span>
-                            {% endif %}
-                        </div>
-                        {% endif %}
-                    {% if item.is_karaoke %}
-                        <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
-                            <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>
-                            <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">{{ t('app.karaoke') }}</span>
-                        </div>
-                        {% endif %}
-                    </div>
-                    <div class="flex shrink-0 items-center">
-                        {% if item.can_cancel_task %}
-                        <button class="w-10 h-10 rounded-full bg-error/10 text-error flex items-center justify-center hover:bg-error/15 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                                onclick="cancelTask('{{ item.task_id }}', this)"
-                                title="{{ t('queue.cancel_task') }}"
-                                aria-label="{{ t('queue.cancel_task') }}">
-                            <span class="material-symbols-outlined">close</span>
-                        </button>
-                        {% elif item.can_remove %}
-                        <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors"
-                                onclick="removeSong('{{ item.id }}')">
-                            <span class="material-symbols-outlined">remove</span>
-                        </button>
-                        {% else %}
-                        <span class="w-10 h-10" aria-hidden="true"></span>
                         {% endif %}
                     </div>
                 </div>
-                {% endfor %}
+
+                <div id="queue-list" class="flex flex-col gap-2" aria-live="polite">
+                    <p id="queue-reorder-hint" class="sr-only">{{ t('queue.reorder_instructions') }}</p>
+                    {% if queue %}
+                    {% set upcoming = namespace(shown=false) %}
+                    {% for item in queue %}
+                    {% if item.status.value != 'playing' and not upcoming.shown %}
+                    <p class="queue-section-label">{{ t('queue.up_next') }}</p>
+                    {% set upcoming.shown = true %}
+                    {% endif %}
+                    {% set is_playing = item.status.value == 'playing' %}
+                    <article class="queue-item queue-stage-item {% if is_playing %}queue-stage-item-playing{% endif %} {% if (item.status.value in ('downloading', 'processing') and item.task_id) or (item.status.value in ('ready', 'completed') and item.media_id) %}cursor-pointer{% endif %}" data-id="{{ item.id }}" data-media-id="{{ item.media_id }}" data-task-id="{{ item.task_id or '' }}" data-status="{{ item.status.value }}" data-processing-progress="{{ item.processing_progress if item.processing_progress is not none else '' }}" data-processing-label="{{ item.processing_label or '' }}">
+                        {% if is_admin and not is_playing %}
+                        {% set movable_index = movable_index_by_id.get(item.id, 0) %}
+                        <div class="queue-reorder-controls">
+                            <button type="button" class="queue-drag-handle" data-queue-drag-handle aria-label="{{ t('queue.reorder') }}" aria-describedby="queue-reorder-hint" aria-pressed="false">
+                                <span class="material-symbols-outlined text-[18px]">drag_indicator</span>
+                            </button>
+                            <div class="queue-reorder-fallback">
+                                <button id="queue-move-up-{{ item.id }}" class="queue-move-button" onclick="moveSong('{{ item.id }}', 'up')" {% if movable_index == 0 %}disabled{% endif %} title="{{ t('queue.move_up') }}" aria-label="{{ t('queue.move_up') }}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_up</span></button>
+                                <button id="queue-move-down-{{ item.id }}" class="queue-move-button" onclick="moveSong('{{ item.id }}', 'down')" {% if movable_index >= movable_count - 1 %}disabled{% endif %} title="{{ t('queue.move_down') }}" aria-label="{{ t('queue.move_down') }}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_down</span></button>
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="queue-cover {% if is_playing %}queue-cover-playing{% endif %}">
+                            {% if item.thumbnail %}
+                            <img src="{{ item.thumbnail|public_url }}" alt="{{ item.title }} {{ t('media.cover') }}" class="h-full w-full object-cover" loading="lazy" decoding="async" />
+                            {% else %}
+                            <span class="material-symbols-outlined text-2xl text-on-surface-variant">music_note</span>
+                            {% endif %}
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex min-w-0 items-center gap-2">
+                                {% if is_playing %}
+                                <span class="queue-playing-equalizer" aria-label="{{ t('queue.playing') }}"><span></span><span></span><span></span></span>
+                                {% endif %}
+                                <h4 class="truncate font-headline text-base font-bold text-on-surface sm:text-lg">{{ item.title }}</h4>
+                                {% if is_playing %}<span class="queue-status-chip queue-status-playing">{{ t('queue.playing') }}</span>{% endif %}
+                            </div>
+                            {% if item.artist %}<p class="mt-0.5 truncate text-sm text-on-surface-variant">{{ item.artist }}</p>{% endif %}
+                            {% if item.requested_by_name %}<p class="mt-1 truncate text-[11px] font-medium text-on-surface-variant">{{ t('queue.requested_by', name=item.requested_by_name) }}</p>{% endif %}
+                            {% if item.status.value in ('downloading', 'processing') %}
+                            {% set step_label = item.processing_label or item.processing_stage or t('queue.processing_ai') %}
+                            {% set step_percent = item.processing_progress if item.processing_progress is not none else 0 %}
+                            {% set step_mode = item.processing_mode or '' %}
+                            <div class="mt-2 max-w-xs" data-task-progress-key="queue-{{ item.id }}" data-task-progress-status="{{ item.status.value }}" data-task-progress-stage="{{ item.processing_stage or '' }}" data-task-progress-mode="{{ step_mode }}" data-task-progress-reported-percent="{{ step_percent }}" data-task-progress-label="{{ step_label }}">
+                                <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ step_percent }}"><div class="h-full rounded-full bg-tertiary transition-all duration-300 ease-out" data-task-progress-fill style="width: {{ step_percent }}%"></div></div>
+                                <p class="mt-1 text-[10px] text-on-surface-variant">{{ step_label }}{% if step_mode != 'indeterminate' %} • <span data-task-progress-percent-text>{{ step_percent }}%</span>{% else %}<span data-task-progress-percent-text class="hidden"></span>{% endif %}</p>
+                            </div>
+                            {% elif not is_playing %}
+                            <span class="queue-status-chip {% if item.status.value == 'failed' %}queue-status-failed{% elif item.status.value == 'ready' %}queue-status-ready{% else %}queue-status-waiting{% endif %}">
+                                {% if item.status.value == 'failed' %}<span class="material-symbols-outlined text-[13px]">error</span>{{ t('common.failed') }}{% elif item.status.value == 'ready' %}<span class="h-1.5 w-1.5 rounded-full bg-secondary"></span>{{ t('common.ready') }}{% else %}{{ t('queue.in_queue') }}{% endif %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <div class="flex shrink-0 items-center">
+                            {% if item.can_cancel_task %}
+                            <button class="queue-row-action text-error hover:bg-error/15" onclick="cancelTask('{{ item.task_id }}', this)" title="{{ t('queue.cancel_task') }}" aria-label="{{ t('queue.cancel_task') }}"><span class="material-symbols-outlined text-[19px]">close</span></button>
+                            {% elif item.can_remove %}
+                            <button class="queue-row-action hover:text-error" onclick="removeSong('{{ item.id }}')" title="{{ t('queue.remove') }}" aria-label="{{ t('queue.remove') }}"><span class="material-symbols-outlined text-[19px]">remove</span></button>
+                            {% endif %}
+                        </div>
+                    </article>
+                    {% endfor %}
             {% else %}
                 <div class="text-center py-12">
                     <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-surface-container flex items-center justify-center">

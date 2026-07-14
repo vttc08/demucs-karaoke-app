@@ -58,6 +58,152 @@ html.dark {
     scrollbar-width: none;
 }
 
+/* Compact queue rows shared by the server-rendered and live-updated queue. */
+.queue-section-label {
+    margin: 0.65rem 0 0.15rem;
+    color: #c9c5d0;
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.queue-stage-item {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid rgba(72, 69, 91, 0.18);
+    border-radius: 0.875rem;
+    background: rgba(25, 23, 46, 0.52);
+    padding: 0.75rem;
+    transition: border-color 160ms ease, background 160ms ease, opacity 160ms ease, transform 160ms ease;
+}
+
+.queue-stage-item:not(.queue-stage-item-playing):hover {
+    border-color: rgba(0, 242, 255, 0.28);
+    background: rgba(31, 28, 54, 0.72);
+}
+
+.queue-stage-item-playing {
+    border-color: rgba(0, 242, 255, 0.24);
+    background: linear-gradient(115deg, rgba(0, 242, 255, 0.08), rgba(25, 23, 46, 0.78) 48%);
+}
+
+.queue-stage-item > .queue-cover {
+    display: flex;
+    width: 4rem !important;
+    height: 4rem !important;
+    flex: 0 0 4rem !important;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 0.625rem;
+    background: #25223e;
+}
+
+.queue-stage-item > .queue-cover-playing {
+    width: 5rem !important;
+    height: 5rem !important;
+    flex-basis: 5rem !important;
+    border-radius: 0.75rem;
+    box-shadow: 0 0 0 1px rgba(0, 242, 255, 0.16);
+}
+
+.queue-status-chip {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.55rem;
+    border-radius: 999px;
+    padding: 0.22rem 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 800;
+    letter-spacing: 0.045em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.queue-status-playing {
+    flex: 0 0 auto;
+    margin-top: 0;
+    background: rgba(0, 242, 255, 0.1);
+    color: #00f2ff;
+}
+
+.queue-status-ready { background: rgba(60, 227, 106, 0.1); color: #3ce36a; }
+.queue-status-failed { background: rgba(255, 110, 132, 0.1); color: #ff6e84; }
+.queue-status-waiting { background: rgba(231, 226, 254, 0.06); color: #c9c5d0; }
+
+.queue-playing-equalizer {
+    display: inline-flex;
+    width: 0.95rem;
+    height: 1rem;
+    flex: 0 0 auto;
+    align-items: end;
+    justify-content: space-between;
+}
+
+.queue-playing-equalizer span {
+    width: 0.18rem;
+    height: 42%;
+    border-radius: 999px;
+    background: #00f2ff;
+    animation: queue-equalizer 700ms ease-in-out infinite alternate;
+}
+
+.queue-playing-equalizer span:nth-child(2) { height: 90%; animation-delay: -260ms; }
+.queue-playing-equalizer span:nth-child(3) { height: 62%; animation-delay: -440ms; }
+
+.queue-reorder-controls {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.18rem;
+}
+
+.queue-drag-handle,
+.queue-move-button,
+.queue-row-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    color: #c9c5d0;
+    cursor: pointer;
+}
+
+.queue-drag-handle {
+    width: 1.9rem;
+    height: 2rem;
+    border-radius: 0.5rem;
+    background: rgba(37, 34, 62, 0.82);
+    touch-action: none;
+}
+
+.queue-drag-handle:hover,
+.queue-drag-handle[aria-pressed="true"] { color: #00f2ff; background: rgba(0, 242, 255, 0.1); }
+
+.queue-reorder-fallback { display: flex; flex-direction: column; gap: 0.1rem; }
+.queue-move-button { width: 1.9rem; height: 1.2rem; border-radius: 0.4rem; background: transparent; }
+.queue-move-button:hover { color: #00f2ff; background: rgba(0, 242, 255, 0.08); }
+.queue-move-button:disabled { cursor: not-allowed; opacity: 0.35; }
+.queue-row-action { width: 2.25rem; height: 2.25rem; border-radius: 999px; background: rgba(37, 34, 62, 0.82); transition: color 160ms ease, background 160ms ease; }
+
+.queue-stage-item.is-dragging { opacity: 0.58; transform: scale(0.985); }
+.queue-stage-item.is-drop-target { border-color: rgba(0, 242, 255, 0.8); box-shadow: inset 0 2px 0 #00f2ff; }
+
+@keyframes queue-equalizer {
+    from { transform: scaleY(0.42); }
+    to { transform: scaleY(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .queue-playing-equalizer span { animation: none; }
+}
+
 /* Loading animations */
 @keyframes spin {
     from { transform: rotate(0deg); }

@@ -289,6 +289,12 @@ class QueueItemMoveRequest(BaseModel):
     direction: Literal["up", "down"]
 
 
+class QueueItemReorderRequest(BaseModel):
+    """Request to place an item before another movable queue item."""
+
+    before_item_id: Optional[int] = Field(default=None, gt=0)
+
+
 class LyricsResolveRequest(BaseModel):
     """Request to resolve lyrics for queue configuration."""
 

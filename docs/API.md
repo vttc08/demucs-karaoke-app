@@ -303,6 +303,22 @@ Allowed `direction` values:
 
 The endpoint updates the stored sparse `position`, reuses existing gaps when possible, and renumbers the queue only if spacing has collapsed. Successful moves broadcast `queue_item_updated` so queue and stage clients refresh their ordering.
 
+### Drag Reorder Queue Item
+```
+POST /api/queue/{item_id}/reorder
+```
+
+Admin-only endpoint used by the queue drag interaction. `item_id` and an optional `before_item_id` must refer to non-playing active queue items. A `null` `before_item_id` moves the item to the end of the movable queue.
+
+**Request Body:**
+```json
+{
+  "before_item_id": 42
+}
+```
+
+Successful requests persist the sparse queue position and broadcast `queue_item_updated`.
+
 ---
 
 ### Resolve Lyrics

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSo
 from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
-from models import ProcessingTaskResponse, QueueItem, QueueItemCreate, QueueItemMoveRequest, QueueItemResponse, QueueStatus
+from models import ProcessingTaskResponse, QueueItem, QueueItemCreate, QueueItemMoveRequest, QueueItemReorderRequest, QueueItemResponse, QueueStatus
 from routes.auth import auth_service, get_admin_user, require_admin_user
 from services.lyrics_service import LyricsService
 from services.lyrics_preset_service import (
@@ -341,6 +341,27 @@ async def move_item(
     """Move an active queue item up or down within the queue order."""
     try:
         response = queue_service.move_queue_item(db, item_id, payload.direction)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await manager.broadcast_queue_item_updated(response.model_dump(mode="json"))
+    return response
+
+
+@router.post("/{item_id}/reorder", response_model=QueueItemResponse)
+async def reorder_item(
+    item_id: int,
+    payload: QueueItemReorderRequest,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin_user),
+):
+    """Place a non-playing item before another movable item or at queue end."""
+    try:
+        response = queue_service.reorder_queue_item(
+            db,
+            item_id,
+            payload.before_item_id,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

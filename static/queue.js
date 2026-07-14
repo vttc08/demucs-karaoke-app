@@ -1619,7 +1619,6 @@ async function refreshQueue(force = false) {
 function updateQueueDisplay(queue) {
     const queueList = document.getElementById('queue-list');
     if (!queueList) return;
-    
     if (queue.length === 0) {
         queueList.innerHTML = `
             <div class="text-center py-12">
@@ -1628,99 +1627,170 @@ function updateQueueDisplay(queue) {
                 </div>
                 <p class="text-on-surface-variant text-lg font-medium">${t('queue.empty')}</p>
                 <p class="text-on-surface-variant/60 text-sm">${t('queue.add_started')}</p>
-            </div>
-        `;
+            </div>`;
         return;
     }
 
     const movableItems = queue.filter((item) => item.status !== 'playing');
     const movableIndexById = new Map(movableItems.map((item, index) => [String(item.id), index]));
-    const movableCount = movableItems.length;
-
-    queueList.innerHTML = queue.map(item => {
-        const statusInfo = getStatusInfo(item.status);
-        const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/placeholder.png'));
-        const canOpenTaskDetails = ['downloading', 'processing'].includes(item.status) && Number.isFinite(Number(item.task_id));
-        const canOpenMediaDetails = ['ready', 'completed'].includes(item.status) && Number.isFinite(Number(item.media_id));
-        const leftActionHtml = item.status === 'playing' ? `
-                    <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="${t('queue.playing')}">
-                        <span class="material-symbols-outlined">equalizer</span>
-                    </button>
-                    ` : isAdminUser ? `
-                    <div class="flex flex-col items-center gap-1">
-                        <button
-                            id="queue-move-up-${item.id}"
-                            class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                            onclick="moveSong('${item.id}', 'up')"
-                            ${movableIndexById.get(String(item.id)) === 0 ? 'disabled' : ''}
-                            title="${escapeHtml(t('queue.move_up'))}"
-                            aria-label="${escapeHtml(t('queue.move_up'))}"
-                        >
-                            <span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span>
-                        </button>
-                        <button
-                            id="queue-move-down-${item.id}"
-                            class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                            onclick="moveSong('${item.id}', 'down')"
-                            ${movableIndexById.get(String(item.id)) === movableCount - 1 ? 'disabled' : ''}
-                            title="${escapeHtml(t('queue.move_down'))}"
-                            aria-label="${escapeHtml(t('queue.move_down'))}"
-                        >
-                            <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
-                        </button>
-                    </div>
-                    ` : '<span class="w-10 h-10" aria-hidden="true"></span>';
-    const rightActionHtml = item.can_cancel_task ? `
-                    <button class="w-10 h-10 rounded-full bg-error/10 text-error flex items-center justify-center hover:bg-error/15 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                            onclick="cancelTask('${item.task_id}', this)"
-                            title="${escapeHtml(t('queue.cancel_task'))}"
-                            aria-label="${escapeHtml(t('queue.cancel_task'))}">
-                        <span class="material-symbols-outlined">close</span>
-                    </button>
-                    ` : item.can_remove ? `
-                    <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors"
-                            onclick="removeSong('${item.id}')">
-                        <span class="material-symbols-outlined">remove</span>
-                    </button>
-                    ` : '<span class="w-10 h-10" aria-hidden="true"></span>';
-        const leftColumnHtml = isAdminUser ? `
-                <div class="flex shrink-0 flex-col items-center gap-1">
-                    ${leftActionHtml}
-                </div>
-                ` : '';
-        const progressHtml = renderQueueProgressBlock(item);
-        const statusBadgeHtml = progressHtml ? '' : `
-                    <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${statusInfo.bgClass}">
-                        ${statusInfo.icon}
-                        <span class="text-[10px] font-black uppercase tracking-tighter ${statusInfo.textClass}">${statusInfo.label}</span>
-                    </div>
-                    `;
-        return `
-            <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} ${canOpenTaskDetails || canOpenMediaDetails ? 'cursor-pointer hover:border-primary/30' : ''} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-media-id="${item.media_id ?? ''}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
-                ${leftColumnHtml}
-                <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 ${item.status !== 'playing' ? 'grayscale-[50%]' : ''}">
-                    <img src="${thumbnail}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'">
-                </div>
-                <div class="flex-1 min-w-0">
-                    <h3 class="font-bold ${item.status === 'playing' ? 'text-on-surface' : 'text-on-surface/80'} truncate">${escapeHtml(item.title)}</h3>
-                    ${item.artist ? `<p class="text-xs text-on-surface-variant truncate">${escapeHtml(item.artist)}</p>` : ''}
-                    ${item.requested_by_name ? `<p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">${escapeHtml(t('queue.requested_by', { name: item.requested_by_name }))}</p>` : ''}
-                    ${statusBadgeHtml}
-                    ${progressHtml}
-                    ${item.is_karaoke ? `
-                    <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
-                        <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>
-                        <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">${t('app.karaoke')}</span>
-                    </div>
-                    ` : ''}
-                </div>
-                <div class="flex shrink-0 items-center">
-                    ${rightActionHtml}
-                </div>
-            </div>
-        `;
-    }).join('');
+    const playingItems = queue.filter((item) => item.status === 'playing');
+    const upcomingItems = queue.filter((item) => item.status !== 'playing');
+    queueList.innerHTML = `
+        <p id="queue-reorder-hint" class="sr-only">${escapeHtml(t('queue.reorder_instructions'))}</p>
+        ${playingItems.map((item) => renderQueueStageItem(item, movableIndexById, movableItems.length)).join('')}
+        ${upcomingItems.length ? `<p class="queue-section-label">${escapeHtml(t('queue.up_next'))}</p>${upcomingItems.map((item) => renderQueueStageItem(item, movableIndexById, movableItems.length)).join('')}` : ''}`;
+    bindQueueReorderInteractions();
     window.KaraokeTaskProgress?.sync(queueList);
+}
+
+function renderQueueStageItem(item, movableIndexById, movableCount) {
+    const isPlaying = item.status === 'playing';
+    const isProcessing = ['downloading', 'processing'].includes(item.status);
+    const canOpenTaskDetails = isProcessing && Number.isFinite(Number(item.task_id));
+    const canOpenMediaDetails = ['ready', 'completed'].includes(item.status) && Number.isFinite(Number(item.media_id));
+    const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/placeholder.png'));
+    const movableIndex = movableIndexById.get(String(item.id));
+    const reorderControls = isAdminUser && !isPlaying ? `
+        <div class="queue-reorder-controls">
+            <button type="button" class="queue-drag-handle" data-queue-drag-handle aria-label="${escapeHtml(t('queue.reorder'))}" aria-describedby="queue-reorder-hint" aria-pressed="false"><span class="material-symbols-outlined text-[18px]">drag_indicator</span></button>
+            <div class="queue-reorder-fallback">
+                <button id="queue-move-up-${item.id}" class="queue-move-button" onclick="moveSong('${item.id}', 'up')" ${movableIndex === 0 ? 'disabled' : ''} title="${escapeHtml(t('queue.move_up'))}" aria-label="${escapeHtml(t('queue.move_up'))}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_up</span></button>
+                <button id="queue-move-down-${item.id}" class="queue-move-button" onclick="moveSong('${item.id}', 'down')" ${movableIndex === movableCount - 1 ? 'disabled' : ''} title="${escapeHtml(t('queue.move_down'))}" aria-label="${escapeHtml(t('queue.move_down'))}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_down</span></button>
+            </div>
+        </div>` : '';
+    const status = getStatusInfo(item.status);
+    const statusHtml = isProcessing ? renderQueueProgressBlock(item) : !isPlaying ? `
+        <span class="queue-status-chip ${item.status === 'failed' ? 'queue-status-failed' : item.status === 'ready' ? 'queue-status-ready' : 'queue-status-waiting'}">${status.icon}${escapeHtml(status.label)}</span>` : '';
+    const actionHtml = item.can_cancel_task ? `
+        <button class="queue-row-action text-error hover:bg-error/15" onclick="cancelTask('${item.task_id}', this)" title="${escapeHtml(t('queue.cancel_task'))}" aria-label="${escapeHtml(t('queue.cancel_task'))}"><span class="material-symbols-outlined text-[19px]">close</span></button>` : item.can_remove ? `
+        <button class="queue-row-action hover:text-error" onclick="removeSong('${item.id}')" title="${escapeHtml(t('queue.remove'))}" aria-label="${escapeHtml(t('queue.remove'))}"><span class="material-symbols-outlined text-[19px]">remove</span></button>` : '';
+    return `
+        <article class="queue-item queue-stage-item ${isPlaying ? 'queue-stage-item-playing' : ''} ${canOpenTaskDetails || canOpenMediaDetails ? 'cursor-pointer' : ''}" data-id="${item.id}" data-media-id="${item.media_id ?? ''}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
+            ${reorderControls}
+            <div class="queue-cover ${isPlaying ? 'queue-cover-playing' : ''}"><img src="${thumbnail}" alt="${escapeHtml(item.title)}" class="h-full w-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'material-symbols-outlined text-2xl text-on-surface-variant\\'>music_note</span>'"></div>
+            <div class="min-w-0 flex-1">
+                <div class="flex min-w-0 items-center gap-2">
+                    ${isPlaying ? '<span class="queue-playing-equalizer" aria-label="' + escapeHtml(t('queue.playing')) + '"><span></span><span></span><span></span></span>' : ''}
+                    <h4 class="truncate font-headline text-base font-bold text-on-surface sm:text-lg">${escapeHtml(item.title)}</h4>
+                    ${isPlaying ? `<span class="queue-status-chip queue-status-playing">${escapeHtml(t('queue.playing'))}</span>` : ''}
+                </div>
+                ${item.artist ? `<p class="mt-0.5 truncate text-sm text-on-surface-variant">${escapeHtml(item.artist)}</p>` : ''}
+                ${item.requested_by_name ? `<p class="mt-1 truncate text-[11px] font-medium text-on-surface-variant">${escapeHtml(t('queue.requested_by', { name: item.requested_by_name }))}</p>` : ''}
+                ${statusHtml}
+            </div>
+            <div class="flex shrink-0 items-center">${actionHtml}</div>
+        </article>`;
+}
+
+function bindQueueReorderInteractions() {
+    if (!queueList || !isAdminUser) {
+        return;
+    }
+
+    queueList.querySelectorAll('[data-queue-drag-handle]').forEach((handle) => {
+        let drag = null;
+
+        const clearDropTarget = () => {
+            queueList.querySelectorAll('.is-drop-target').forEach((element) => {
+                element.classList.remove('is-drop-target');
+            });
+        };
+
+        const getDropBeforeItemId = (draggedRow, clientX, clientY) => {
+            const element = document.elementFromPoint(clientX, clientY);
+            const targetRow = element?.closest('.queue-item[data-status]');
+            if (!targetRow || !queueList.contains(targetRow) || targetRow === draggedRow || targetRow.dataset.status === 'playing') {
+                return undefined;
+            }
+            const targetId = Number(targetRow.dataset.id);
+            if (!Number.isFinite(targetId)) {
+                return undefined;
+            }
+            const targetBounds = targetRow.getBoundingClientRect();
+            if (clientY <= targetBounds.top + targetBounds.height / 2) {
+                return targetId;
+            }
+            const movableRows = Array.from(queueList.querySelectorAll('.queue-item[data-status]'))
+                .filter((row) => row.dataset.status !== 'playing' && row !== draggedRow);
+            const targetIndex = movableRows.indexOf(targetRow);
+            const nextRow = movableRows[targetIndex + 1];
+            return nextRow ? Number(nextRow.dataset.id) : null;
+        };
+
+        const finishPointerDrag = async (event) => {
+            if (!drag || event.pointerId !== drag.pointerId) {
+                return;
+            }
+            const activeDrag = drag;
+            drag = null;
+            activeDrag.row.classList.remove('is-dragging');
+            clearDropTarget();
+            if (handle.hasPointerCapture?.(event.pointerId)) {
+                handle.releasePointerCapture(event.pointerId);
+            }
+            const beforeItemId = getDropBeforeItemId(activeDrag.row, event.clientX, event.clientY);
+            if (beforeItemId !== undefined && beforeItemId !== activeDrag.itemId) {
+                await reorderSong(activeDrag.itemId, beforeItemId);
+            }
+        };
+
+        handle.addEventListener('pointerdown', (event) => {
+            if (event.button !== 0 && event.pointerType !== 'touch') {
+                return;
+            }
+            const row = handle.closest('.queue-item[data-id]');
+            const itemId = Number(row?.dataset.id);
+            if (!row || !Number.isFinite(itemId)) {
+                return;
+            }
+            event.preventDefault();
+            drag = { pointerId: event.pointerId, row, itemId };
+            row.classList.add('is-dragging');
+            handle.setPointerCapture?.(event.pointerId);
+        });
+
+        handle.addEventListener('pointermove', (event) => {
+            if (!drag || event.pointerId !== drag.pointerId) {
+                return;
+            }
+            const beforeItemId = getDropBeforeItemId(drag.row, event.clientX, event.clientY);
+            clearDropTarget();
+            if (beforeItemId === undefined) {
+                return;
+            }
+            const targetRow = beforeItemId === null
+                ? Array.from(queueList.querySelectorAll('.queue-item[data-status]')).filter((row) => row.dataset.status !== 'playing' && row !== drag.row).at(-1)
+                : queueList.querySelector(`.queue-item[data-id="${beforeItemId}"]`);
+            targetRow?.classList.add('is-drop-target');
+        });
+
+        handle.addEventListener('pointerup', finishPointerDrag);
+        handle.addEventListener('pointercancel', finishPointerDrag);
+        handle.addEventListener('keydown', async (event) => {
+            const row = handle.closest('.queue-item[data-id]');
+            const itemId = Number(row?.dataset.id);
+            if (!row || !Number.isFinite(itemId)) {
+                return;
+            }
+            if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault();
+                const grabbed = handle.getAttribute('aria-pressed') === 'true';
+                handle.setAttribute('aria-pressed', String(!grabbed));
+                row.classList.toggle('is-dragging', !grabbed);
+                return;
+            }
+            if (event.key === 'Escape') {
+                handle.setAttribute('aria-pressed', 'false');
+                row.classList.remove('is-dragging');
+                return;
+            }
+            if (handle.getAttribute('aria-pressed') !== 'true' || !['ArrowUp', 'ArrowDown'].includes(event.key)) {
+                return;
+            }
+            event.preventDefault();
+            await moveSong(itemId, event.key === 'ArrowUp' ? 'up' : 'down');
+        });
+    });
 }
 
 function openQueueTaskInMedia(taskId) {
@@ -1985,6 +2055,8 @@ async function moveSong(songId, direction) {
         });
 
         if (response.ok) {
+            const item = await response.json();
+            upsertQueueItemState(item);
             return;
         }
 
@@ -2000,6 +2072,26 @@ async function moveSong(songId, direction) {
         alert(detail);
     } catch (error) {
         console.error('Error moving queue item:', error);
+        alert(t('queue.move_failed'));
+    }
+}
+
+async function reorderSong(songId, beforeItemId) {
+    try {
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/queue/${songId}/reorder`), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ before_item_id: beforeItemId }),
+        });
+        if (response.ok) {
+            const item = await response.json();
+            upsertQueueItemState(item);
+            return;
+        }
+        const payload = await response.json().catch(() => null);
+        alert(payload?.detail || t('queue.move_failed'));
+    } catch (error) {
+        console.error('Error reordering queue item:', error);
         alert(t('queue.move_failed'));
     }
 }
