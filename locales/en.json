@@ -522,8 +522,6 @@
   "queue.no_results": "No results found",
   "queue.no_vocals_track": "Current song has no vocals sidecar track",
   "queue.open_lyrics_viewer": "Open Lyrics Viewer",
-  "queue.reorder": "Reorder song",
-  "queue.reorder_instructions": "Drag to reorder. With the reorder button focused, press Space or Enter, then use the up and down arrow keys. Press Escape to cancel.",
   "queue.remove": "Remove song",
   "queue.open_youtube": "Open in YouTube",
   "queue.people_here_count": "{count} here",

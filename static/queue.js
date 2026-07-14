@@ -1636,10 +1636,8 @@ function updateQueueDisplay(queue) {
     const playingItems = queue.filter((item) => item.status === 'playing');
     const upcomingItems = queue.filter((item) => item.status !== 'playing');
     queueList.innerHTML = `
-        <p id="queue-reorder-hint" class="sr-only">${escapeHtml(t('queue.reorder_instructions'))}</p>
         ${playingItems.map((item) => renderQueueStageItem(item, movableIndexById, movableItems.length)).join('')}
         ${upcomingItems.length ? `<p class="queue-section-label">${escapeHtml(t('queue.up_next'))}</p>${upcomingItems.map((item) => renderQueueStageItem(item, movableIndexById, movableItems.length)).join('')}` : ''}`;
-    bindQueueReorderInteractions();
     window.KaraokeTaskProgress?.sync(queueList);
 }
 
@@ -1650,13 +1648,10 @@ function renderQueueStageItem(item, movableIndexById, movableCount) {
     const canOpenMediaDetails = ['ready', 'completed'].includes(item.status) && Number.isFinite(Number(item.media_id));
     const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/placeholder.png'));
     const movableIndex = movableIndexById.get(String(item.id));
-    const reorderControls = isAdminUser && !isPlaying ? `
-        <div class="queue-reorder-controls">
-            <button type="button" class="queue-drag-handle" data-queue-drag-handle aria-label="${escapeHtml(t('queue.reorder'))}" aria-describedby="queue-reorder-hint" aria-pressed="false"><span class="material-symbols-outlined text-[18px]">drag_indicator</span></button>
-            <div class="queue-reorder-fallback">
-                <button id="queue-move-up-${item.id}" class="queue-move-button" onclick="moveSong('${item.id}', 'up')" ${movableIndex === 0 ? 'disabled' : ''} title="${escapeHtml(t('queue.move_up'))}" aria-label="${escapeHtml(t('queue.move_up'))}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_up</span></button>
-                <button id="queue-move-down-${item.id}" class="queue-move-button" onclick="moveSong('${item.id}', 'down')" ${movableIndex === movableCount - 1 ? 'disabled' : ''} title="${escapeHtml(t('queue.move_down'))}" aria-label="${escapeHtml(t('queue.move_down'))}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_down</span></button>
-            </div>
+    const moveControls = isAdminUser && !isPlaying ? `
+        <div class="queue-move-controls">
+            <button id="queue-move-up-${item.id}" class="queue-move-button" onclick="moveSong('${item.id}', 'up')" ${movableIndex === 0 ? 'disabled' : ''} title="${escapeHtml(t('queue.move_up'))}" aria-label="${escapeHtml(t('queue.move_up'))}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_up</span></button>
+            <button id="queue-move-down-${item.id}" class="queue-move-button" onclick="moveSong('${item.id}', 'down')" ${movableIndex === movableCount - 1 ? 'disabled' : ''} title="${escapeHtml(t('queue.move_down'))}" aria-label="${escapeHtml(t('queue.move_down'))}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_down</span></button>
         </div>` : '';
     const status = getStatusInfo(item.status);
     const statusHtml = isProcessing ? renderQueueProgressBlock(item) : !isPlaying ? `
@@ -1665,8 +1660,8 @@ function renderQueueStageItem(item, movableIndexById, movableCount) {
         <button class="queue-row-action text-error hover:bg-error/15" onclick="cancelTask('${item.task_id}', this)" title="${escapeHtml(t('queue.cancel_task'))}" aria-label="${escapeHtml(t('queue.cancel_task'))}"><span class="material-symbols-outlined text-[19px]">close</span></button>` : item.can_remove ? `
         <button class="queue-row-action hover:text-error" onclick="removeSong('${item.id}')" title="${escapeHtml(t('queue.remove'))}" aria-label="${escapeHtml(t('queue.remove'))}"><span class="material-symbols-outlined text-[19px]">remove</span></button>` : '';
     return `
-        <article class="queue-item queue-stage-item ${isPlaying ? 'queue-stage-item-playing' : ''} ${canOpenTaskDetails || canOpenMediaDetails ? 'cursor-pointer' : ''}" data-id="${item.id}" data-media-id="${item.media_id ?? ''}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
-            ${reorderControls}
+        <article class="queue-item queue-stage-item ${isPlaying ? 'queue-stage-item-playing' : ''} ${canOpenTaskDetails || canOpenMediaDetails ? 'cursor-pointer hover:border-primary/30' : ''}" data-id="${item.id}" data-media-id="${item.media_id ?? ''}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
+            ${moveControls}
             <div class="queue-cover ${isPlaying ? 'queue-cover-playing' : ''}"><img src="${thumbnail}" alt="${escapeHtml(item.title)}" class="h-full w-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'material-symbols-outlined text-2xl text-on-surface-variant\\'>music_note</span>'"></div>
             <div class="min-w-0 flex-1">
                 <div class="flex min-w-0 items-center gap-2">
@@ -1680,117 +1675,6 @@ function renderQueueStageItem(item, movableIndexById, movableCount) {
             </div>
             <div class="flex shrink-0 items-center">${actionHtml}</div>
         </article>`;
-}
-
-function bindQueueReorderInteractions() {
-    if (!queueList || !isAdminUser) {
-        return;
-    }
-
-    queueList.querySelectorAll('[data-queue-drag-handle]').forEach((handle) => {
-        let drag = null;
-
-        const clearDropTarget = () => {
-            queueList.querySelectorAll('.is-drop-target').forEach((element) => {
-                element.classList.remove('is-drop-target');
-            });
-        };
-
-        const getDropBeforeItemId = (draggedRow, clientX, clientY) => {
-            const element = document.elementFromPoint(clientX, clientY);
-            const targetRow = element?.closest('.queue-item[data-status]');
-            if (!targetRow || !queueList.contains(targetRow) || targetRow === draggedRow || targetRow.dataset.status === 'playing') {
-                return undefined;
-            }
-            const targetId = Number(targetRow.dataset.id);
-            if (!Number.isFinite(targetId)) {
-                return undefined;
-            }
-            const targetBounds = targetRow.getBoundingClientRect();
-            if (clientY <= targetBounds.top + targetBounds.height / 2) {
-                return targetId;
-            }
-            const movableRows = Array.from(queueList.querySelectorAll('.queue-item[data-status]'))
-                .filter((row) => row.dataset.status !== 'playing' && row !== draggedRow);
-            const targetIndex = movableRows.indexOf(targetRow);
-            const nextRow = movableRows[targetIndex + 1];
-            return nextRow ? Number(nextRow.dataset.id) : null;
-        };
-
-        const finishPointerDrag = async (event) => {
-            if (!drag || event.pointerId !== drag.pointerId) {
-                return;
-            }
-            const activeDrag = drag;
-            drag = null;
-            activeDrag.row.classList.remove('is-dragging');
-            clearDropTarget();
-            if (handle.hasPointerCapture?.(event.pointerId)) {
-                handle.releasePointerCapture(event.pointerId);
-            }
-            const beforeItemId = getDropBeforeItemId(activeDrag.row, event.clientX, event.clientY);
-            if (beforeItemId !== undefined && beforeItemId !== activeDrag.itemId) {
-                await reorderSong(activeDrag.itemId, beforeItemId);
-            }
-        };
-
-        handle.addEventListener('pointerdown', (event) => {
-            if (event.button !== 0 && event.pointerType !== 'touch') {
-                return;
-            }
-            const row = handle.closest('.queue-item[data-id]');
-            const itemId = Number(row?.dataset.id);
-            if (!row || !Number.isFinite(itemId)) {
-                return;
-            }
-            event.preventDefault();
-            drag = { pointerId: event.pointerId, row, itemId };
-            row.classList.add('is-dragging');
-            handle.setPointerCapture?.(event.pointerId);
-        });
-
-        handle.addEventListener('pointermove', (event) => {
-            if (!drag || event.pointerId !== drag.pointerId) {
-                return;
-            }
-            const beforeItemId = getDropBeforeItemId(drag.row, event.clientX, event.clientY);
-            clearDropTarget();
-            if (beforeItemId === undefined) {
-                return;
-            }
-            const targetRow = beforeItemId === null
-                ? Array.from(queueList.querySelectorAll('.queue-item[data-status]')).filter((row) => row.dataset.status !== 'playing' && row !== drag.row).at(-1)
-                : queueList.querySelector(`.queue-item[data-id="${beforeItemId}"]`);
-            targetRow?.classList.add('is-drop-target');
-        });
-
-        handle.addEventListener('pointerup', finishPointerDrag);
-        handle.addEventListener('pointercancel', finishPointerDrag);
-        handle.addEventListener('keydown', async (event) => {
-            const row = handle.closest('.queue-item[data-id]');
-            const itemId = Number(row?.dataset.id);
-            if (!row || !Number.isFinite(itemId)) {
-                return;
-            }
-            if (event.key === ' ' || event.key === 'Enter') {
-                event.preventDefault();
-                const grabbed = handle.getAttribute('aria-pressed') === 'true';
-                handle.setAttribute('aria-pressed', String(!grabbed));
-                row.classList.toggle('is-dragging', !grabbed);
-                return;
-            }
-            if (event.key === 'Escape') {
-                handle.setAttribute('aria-pressed', 'false');
-                row.classList.remove('is-dragging');
-                return;
-            }
-            if (handle.getAttribute('aria-pressed') !== 'true' || !['ArrowUp', 'ArrowDown'].includes(event.key)) {
-                return;
-            }
-            event.preventDefault();
-            await moveSong(itemId, event.key === 'ArrowUp' ? 'up' : 'down');
-        });
-    });
 }
 
 function openQueueTaskInMedia(taskId) {
@@ -2072,26 +1956,6 @@ async function moveSong(songId, direction) {
         alert(detail);
     } catch (error) {
         console.error('Error moving queue item:', error);
-        alert(t('queue.move_failed'));
-    }
-}
-
-async function reorderSong(songId, beforeItemId) {
-    try {
-        const response = await fetch(window.KaraokeURLs.appUrl(`/api/queue/${songId}/reorder`), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ before_item_id: beforeItemId }),
-        });
-        if (response.ok) {
-            const item = await response.json();
-            upsertQueueItemState(item);
-            return;
-        }
-        const payload = await response.json().catch(() => null);
-        alert(payload?.detail || t('queue.move_failed'));
-    } catch (error) {
-        console.error('Error reordering queue item:', error);
         alert(t('queue.move_failed'));
     }
 }

@@ -237,85 +237,20 @@ def test_move_queue_item_reorders_queue_for_admin(client):
     assert [item["title"] for item in response.json()] == ["Admin First", "Admin Third", "Admin Second"]
 
 
-def test_reorder_queue_item_places_item_before_target_and_at_end(client):
-    """Admin drag reordering should place movable items at a requested position."""
-    authenticate_admin_client(client)
-    first = client.post(
+def test_drag_reorder_route_is_not_available(client):
+    """Queue reordering is intentionally limited to the move-arrow endpoint."""
+    created = client.post(
         "/api/queue/",
-        json={"youtube_id": "drag-first", "title": "Drag First", "is_karaoke": False},
+        json={"youtube_id": "no-drag", "title": "No Drag", "is_karaoke": False},
     ).json()
-    second = client.post(
-        "/api/queue/",
-        json={"youtube_id": "drag-second", "title": "Drag Second", "is_karaoke": False},
-    ).json()
-    third = client.post(
-        "/api/queue/",
-        json={"youtube_id": "drag-third", "title": "Drag Third", "is_karaoke": False},
-    ).json()
-
-    with TestingSessionLocal() as db:
-        db.query(QueueItem).filter(QueueItem.id == first["id"]).first().status = QueueStatus.PLAYING
-        db.commit()
 
     response = client.post(
-        f"/api/queue/{third['id']}/reorder",
-        json={"before_item_id": second["id"]},
-    )
-    assert response.status_code == 200
-    assert response.json()["id"] == third["id"]
-    assert [item["title"] for item in client.get("/api/queue/").json()] == [
-        "Drag First",
-        "Drag Third",
-        "Drag Second",
-    ]
-
-    response = client.post(
-        f"/api/queue/{third['id']}/reorder",
+        f"/api/queue/{created['id']}/reorder",
         json={"before_item_id": None},
     )
-    assert response.status_code == 200
-    assert [item["title"] for item in client.get("/api/queue/").json()] == [
-        "Drag First",
-        "Drag Second",
-        "Drag Third",
-    ]
 
+    assert response.status_code == 404
 
-def test_reorder_queue_item_requires_admin_and_rejects_playing_targets(client):
-    """Only admins may drag non-playing rows relative to other movable rows."""
-    playing = client.post(
-        "/api/queue/",
-        json={"youtube_id": "drag-playing", "title": "Drag Playing", "is_karaoke": False},
-    ).json()
-    ready = client.post(
-        "/api/queue/",
-        json={"youtube_id": "drag-ready", "title": "Drag Ready", "is_karaoke": False},
-    ).json()
-
-    response = client.post(
-        f"/api/queue/{ready['id']}/reorder",
-        json={"before_item_id": None},
-    )
-    assert response.status_code == 403
-
-    authenticate_admin_client(client)
-    with TestingSessionLocal() as db:
-        db.query(QueueItem).filter(QueueItem.id == playing["id"]).first().status = QueueStatus.PLAYING
-        db.commit()
-
-    response = client.post(
-        f"/api/queue/{ready['id']}/reorder",
-        json={"before_item_id": playing["id"]},
-    )
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Reorder target must be a non-playing queue item"
-
-    response = client.post(
-        f"/api/queue/{playing['id']}/reorder",
-        json={"before_item_id": None},
-    )
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Cannot reorder currently playing item"
 
 def test_queue_clear_route_requires_admin(client):
     """Guest users should not be able to clear queue items."""

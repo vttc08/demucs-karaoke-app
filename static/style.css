@@ -156,7 +156,7 @@ html.dark {
 .queue-playing-equalizer span:nth-child(2) { height: 90%; animation-delay: -260ms; }
 .queue-playing-equalizer span:nth-child(3) { height: 62%; animation-delay: -440ms; }
 
-.queue-reorder-controls {
+.queue-move-controls {
     display: flex;
     flex: 0 0 auto;
     flex-direction: column;
@@ -164,7 +164,6 @@ html.dark {
     gap: 0.18rem;
 }
 
-.queue-drag-handle,
 .queue-move-button,
 .queue-row-action {
     display: inline-flex;
@@ -175,25 +174,10 @@ html.dark {
     cursor: pointer;
 }
 
-.queue-drag-handle {
-    width: 1.9rem;
-    height: 2rem;
-    border-radius: 0.5rem;
-    background: rgba(37, 34, 62, 0.82);
-    touch-action: none;
-}
-
-.queue-drag-handle:hover,
-.queue-drag-handle[aria-pressed="true"] { color: #00f2ff; background: rgba(0, 242, 255, 0.1); }
-
-.queue-reorder-fallback { display: flex; flex-direction: column; gap: 0.1rem; }
-.queue-move-button { width: 1.9rem; height: 1.2rem; border-radius: 0.4rem; background: transparent; }
+.queue-move-button { width: 2rem; height: 1.45rem; border-radius: 0.4rem; background: transparent; }
 .queue-move-button:hover { color: #00f2ff; background: rgba(0, 242, 255, 0.08); }
 .queue-move-button:disabled { cursor: not-allowed; opacity: 0.35; }
 .queue-row-action { width: 2.25rem; height: 2.25rem; border-radius: 999px; background: rgba(37, 34, 62, 0.82); transition: color 160ms ease, background 160ms ease; }
-
-.queue-stage-item.is-dragging { opacity: 0.58; transform: scale(0.985); }
-.queue-stage-item.is-drop-target { border-color: rgba(0, 242, 255, 0.8); box-shadow: inset 0 2px 0 #00f2ff; }
 
 @keyframes queue-equalizer {
     from { transform: scaleY(0.42); }

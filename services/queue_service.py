@@ -339,69 +339,6 @@ class QueueService:
 
         raise ValueError("Unable to move queue item")
 
-    def reorder_queue_item(
-        self,
-        db: Session,
-        item_id: int,
-        before_item_id: int | None,
-    ) -> QueueItemResponse:
-        """Place a non-playing queue item before another movable item or at queue end."""
-        for _attempt in range(2):
-            items = self._get_active_queue_items(db)
-            item = next((candidate for candidate in items if candidate.id == item_id), None)
-            if item is None:
-                raise ValueError(f"Queue item not found: {item_id}")
-            if item.status == QueueStatus.PLAYING:
-                raise ValueError("Cannot reorder currently playing item")
-
-            movable_items = [
-                candidate for candidate in items if candidate.status != QueueStatus.PLAYING
-            ]
-            if before_item_id == item.id:
-                raise ValueError("Cannot reorder an item before itself")
-
-            target = None
-            if before_item_id is not None:
-                target = next(
-                    (candidate for candidate in movable_items if candidate.id == before_item_id),
-                    None,
-                )
-                if target is None:
-                    raise ValueError("Reorder target must be a non-playing queue item")
-
-            remaining_items = [candidate for candidate in items if candidate.id != item.id]
-            try:
-                if target is None:
-                    item.position = self.append_to_end(db)
-                else:
-                    target_index = next(
-                        index
-                        for index, candidate in enumerate(remaining_items)
-                        if candidate.id == target.id
-                    )
-                    previous_item = (
-                        remaining_items[target_index - 1] if target_index > 0 else None
-                    )
-                    if previous_item is None:
-                        item.position = self.add_to_front(db)
-                    else:
-                        item.position = self.insert_between(
-                            db,
-                            previous_item.position,
-                            target.position,
-                        )
-            except ValueError as exc:
-                if "No insert gap available" in str(exc) and _attempt == 0:
-                    self.renumber_queue_if_needed(db, force=True)
-                    continue
-                raise
-
-            db.commit()
-            db.refresh(item)
-            return self._to_response(item)
-
-        raise ValueError("Unable to reorder queue item")
-
     def complete_current_item(self, db: Session) -> Optional[QueueItemResponse]:
         """
         Mark currently playing item as COMPLETED and promote next READY item.

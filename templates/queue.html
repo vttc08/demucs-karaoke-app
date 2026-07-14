@@ -283,7 +283,6 @@
                 </div>
 
                 <div id="queue-list" class="flex flex-col gap-2" aria-live="polite">
-                    <p id="queue-reorder-hint" class="sr-only">{{ t('queue.reorder_instructions') }}</p>
                     {% if queue %}
                     {% set upcoming = namespace(shown=false) %}
                     {% for item in queue %}
@@ -292,17 +291,12 @@
                     {% set upcoming.shown = true %}
                     {% endif %}
                     {% set is_playing = item.status.value == 'playing' %}
-                    <article class="queue-item queue-stage-item {% if is_playing %}queue-stage-item-playing{% endif %} {% if (item.status.value in ('downloading', 'processing') and item.task_id) or (item.status.value in ('ready', 'completed') and item.media_id) %}cursor-pointer{% endif %}" data-id="{{ item.id }}" data-media-id="{{ item.media_id }}" data-task-id="{{ item.task_id or '' }}" data-status="{{ item.status.value }}" data-processing-progress="{{ item.processing_progress if item.processing_progress is not none else '' }}" data-processing-label="{{ item.processing_label or '' }}">
+                    <article class="queue-item queue-stage-item {% if is_playing %}queue-stage-item-playing{% endif %} {% if (item.status.value in ('downloading', 'processing') and item.task_id) or (item.status.value in ('ready', 'completed') and item.media_id) %}cursor-pointer hover:border-primary/30{% endif %}" data-id="{{ item.id }}" data-media-id="{{ item.media_id }}" data-task-id="{{ item.task_id or '' }}" data-status="{{ item.status.value }}" data-processing-progress="{{ item.processing_progress if item.processing_progress is not none else '' }}" data-processing-label="{{ item.processing_label or '' }}">
                         {% if is_admin and not is_playing %}
                         {% set movable_index = movable_index_by_id.get(item.id, 0) %}
-                        <div class="queue-reorder-controls">
-                            <button type="button" class="queue-drag-handle" data-queue-drag-handle aria-label="{{ t('queue.reorder') }}" aria-describedby="queue-reorder-hint" aria-pressed="false">
-                                <span class="material-symbols-outlined text-[18px]">drag_indicator</span>
-                            </button>
-                            <div class="queue-reorder-fallback">
-                                <button id="queue-move-up-{{ item.id }}" class="queue-move-button" onclick="moveSong('{{ item.id }}', 'up')" {% if movable_index == 0 %}disabled{% endif %} title="{{ t('queue.move_up') }}" aria-label="{{ t('queue.move_up') }}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_up</span></button>
-                                <button id="queue-move-down-{{ item.id }}" class="queue-move-button" onclick="moveSong('{{ item.id }}', 'down')" {% if movable_index >= movable_count - 1 %}disabled{% endif %} title="{{ t('queue.move_down') }}" aria-label="{{ t('queue.move_down') }}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_down</span></button>
-                            </div>
+                        <div class="queue-move-controls">
+                            <button id="queue-move-up-{{ item.id }}" class="queue-move-button" onclick="moveSong('{{ item.id }}', 'up')" {% if movable_index == 0 %}disabled{% endif %} title="{{ t('queue.move_up') }}" aria-label="{{ t('queue.move_up') }}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_up</span></button>
+                            <button id="queue-move-down-{{ item.id }}" class="queue-move-button" onclick="moveSong('{{ item.id }}', 'down')" {% if movable_index >= movable_count - 1 %}disabled{% endif %} title="{{ t('queue.move_down') }}" aria-label="{{ t('queue.move_down') }}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_down</span></button>
                         </div>
                         {% endif %}
                         <div class="queue-cover {% if is_playing %}queue-cover-playing{% endif %}">
