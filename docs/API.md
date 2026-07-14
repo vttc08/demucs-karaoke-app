@@ -1257,7 +1257,7 @@ The Demucs service response ZIP still contains the standard `no_vocals` and `voc
 
 `metadata.json` inside the ZIP records the same file list for downstream consumers.
 
-`POST /jobs`, `POST /separate`, and `POST /separate-meta` accept additive
+`POST /jobs` and `POST /separate` accept additive
 `separation_backend` and `sherpa_spleeter_model` multipart fields. Omitting them preserves Demucs.
 Job status, SSE events, metrics, response headers, and ZIP metadata expose `separation_backend`,
 `separation_model`, and `effective_device`. Sherpa reports CPU as its effective device even when the

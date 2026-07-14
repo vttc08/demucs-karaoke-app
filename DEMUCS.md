@@ -180,9 +180,6 @@ Returns the same ZIP payload as `/separate` after the job completes.
 ### `DELETE /jobs/{job_id}`
 Requests remote cancellation. The service terminates the active Demucs subprocess when it is still running and cleans up temp directories.
 
-### `POST /separate-meta` (optional debug)
-Runs the same process but returns JSON metadata with Windows output paths plus effective runtime config (`model`, `device`, `output_format`, `mp3_bitrate`).
-
 #### Example (default WAV stems ZIP)
 ```bash
 curl -X POST http://<demucs-host>:8001/separate \

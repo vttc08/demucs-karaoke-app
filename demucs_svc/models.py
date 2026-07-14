@@ -74,22 +74,6 @@ class SeparateConfig(BaseModel):
         return self
 
 
-class SeparateMetaResponse(BaseModel):
-    job_id: str
-    no_vocals_path: str
-    vocals_path: str
-    model: str
-    device: str
-    output_format: str
-    mp3_bitrate: int | None = None
-    duration_ms: int
-    status: str
-    aligned_lyrics_path: str | None = None
-    separation_backend: str = "demucs"
-    separation_model: str | None = None
-    effective_device: str | None = None
-
-
 class WhisperXPreloadResponse(BaseModel):
     requested_models: str | None = None
     device: str
