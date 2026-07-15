@@ -215,12 +215,7 @@ def test_update_runtime_settings_persists_to_database(client):
     authenticate_admin_client(client)
     with patch(
         "routes.settings.runtime_settings_service.get_demucs_health",
-        return_value=DemucsHealthResponse(
-            api_url="http://127.0.0.1:9001",
-            healthy=True,
-            detail="Demucs service is healthy",
-        ),
-    ):
+    ) as mock_health:
         response = client.patch(
             "/api/settings/",
             json={
@@ -243,6 +238,7 @@ def test_update_runtime_settings_persists_to_database(client):
             },
         )
     assert response.status_code == 200
+    mock_health.assert_not_called()
 
     db = TestingSessionLocal()
     try:
@@ -360,6 +356,34 @@ def test_get_demucs_health(client):
         assert "api_url" in data
         assert "healthy" in data
         assert "detail" in data
+
+
+def test_get_demucs_health_accepts_currently_edited_settings(client):
+    """Health checks should be able to validate settings before the next save."""
+    health = {
+        "api_url": "http://separation.test",
+        "healthy": True,
+        "detail": "OK",
+    }
+    with patch(
+        "routes.settings.runtime_settings_service.get_demucs_health",
+        return_value=health,
+    ) as mock_health:
+        response = client.get(
+            "/api/settings/demucs-health",
+            params={
+                "demucs_api_url": "http://separation.test",
+                "separation_backend": "sherpa_spleeter",
+                "sherpa_spleeter_model": "int8",
+            },
+        )
+
+    assert response.status_code == 200
+    mock_health.assert_called_once_with(
+        demucs_api_url="http://separation.test",
+        separation_backend="sherpa_spleeter",
+        sherpa_spleeter_model="int8",
+    )
 
 def test_get_proxy_info(client):
     """Proxy info endpoint should return proxy egress details."""

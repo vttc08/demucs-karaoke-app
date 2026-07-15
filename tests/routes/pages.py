@@ -422,7 +422,7 @@ def test_settings_page_loads_for_admin(client):
     assert b"Admin session" in response.content
     assert b"Log out" in response.content
     assert b">Save<" in response.content
-    assert b">Refresh<" in response.content
+    assert b">Check Demucs<" in response.content
     assert 'href="/help/"' in response.text
     assert 'aria-label="Open documentation"' in response.text
     assert response.text.count('data-settings-section=') == 6
