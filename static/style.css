@@ -186,7 +186,8 @@ html.dark {
 .settings-section[open] .settings-section-chevron { transform: rotate(180deg); }
 .settings-label { color: rgb(201 197 208 / 0.9); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.12em; line-height: 1.25; text-transform: uppercase; }
 .settings-help { color: rgb(201 197 208 / 0.7); font-size: 0.6875rem; line-height: 1.35; }
-input.settings-input, select.settings-select { background: rgb(37 34 62 / 0.55); border: 0; border-radius: 0.5rem; color: #00f2ff; font-size: 0.875rem; font-weight: 500; height: 3rem; outline: none; padding: 0 1rem; width: 100%; }
+input.settings-input, select.settings-select { background: rgb(37 34 62 / 0.55); border: 0; border-radius: 0.5rem; color: #e7e1ec; font-size: 0.875rem; font-weight: 500; height: 3rem; outline: none; padding: 0 1rem; width: 100%; }
+input.settings-input-accent { color: #00f2ff; }
 .settings-select { color: #e7e1ec; }
 .settings-input:focus, .settings-select:focus { box-shadow: 0 0 0 2px rgb(0 242 255 / 0.35); }
 .settings-toggle { align-items: center; background: rgb(37 34 62 / 0.4); border-radius: 0.5rem; display: flex; gap: 0.75rem; justify-content: space-between; padding: 0.75rem 1rem; }
