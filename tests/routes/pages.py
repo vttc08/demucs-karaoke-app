@@ -304,7 +304,10 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-shortcuts-panel"' in response.content
     assert b'id="stage-lyrics-settings-btn"' in response.content
     assert b'id="stage-lyrics-settings-panel"' in response.content
+    assert b'aria-label="Open lyrics style documentation"' in response.content
+    assert b'href="/help/"' in response.content
     assert b'id="stage-display-name"' in response.content
+    assert b'id="stage-lyrics-custom-font-preview"' not in response.content
     assert b'id="stage-lyrics-preset-select"' in response.content
     assert b'id="stage-lyrics-preset-name"' in response.content
     assert b'id="stage-lyrics-preset-apply"' in response.content
