@@ -470,7 +470,7 @@
   "settings.proxy_info_loaded": "代理信息已加载",
   "settings.proxy_ip": "IP",
   "settings.proxy_org": "组织",
-  "settings.proxy_location": "城市 / 国家",
+  "settings.proxy_location": "位置",
   "settings.trigger_demucs_gc": "运行 Demucs GC",
   "settings.demucs_gc_idle": "尚未请求 GC。",
   "settings.demucs_gc_running": "正在运行远端 Demucs 垃圾回收...",

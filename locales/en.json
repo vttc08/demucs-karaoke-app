@@ -470,7 +470,7 @@
   "settings.proxy_info_loaded": "Proxy info loaded",
   "settings.proxy_ip": "IP",
   "settings.proxy_org": "Org",
-  "settings.proxy_location": "City / Country",
+  "settings.proxy_location": "Location",
   "settings.trigger_demucs_gc": "Run Demucs GC",
   "settings.demucs_gc_idle": "No GC requested yet.",
   "settings.demucs_gc_running": "Running remote Demucs garbage collection...",
