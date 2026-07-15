@@ -129,6 +129,7 @@ let modalKaraokeEnabled = false;
 let modalAlignLyricsEnabled = false;
 let modalAlignLyricsAutoEnabled = false;
 let modalProcessLyricsLinesEnabled = false;
+let modalProcessLyricsLinesAutoEnabled = false;
 let modalConfigInitializing = false;
 let queueToastTimer = null;
 let queuePresenceUsers = [];
@@ -615,7 +616,7 @@ function syncQueueConfigAlignControls() {
         } else if (!lyricsText) {
             queueConfigAlignDetail.textContent = t('lyrics.align_requires_text');
         } else {
-            queueConfigAlignDetail.textContent = t('queue.whisperx_align_detail');
+            queueConfigAlignDetail.textContent = t('queue.whisperx_align_short');
         }
     }
 
@@ -627,6 +628,8 @@ function syncQueueConfigAlignControls() {
     const canProcessLines = Boolean(canAlign && modalAlignLyricsEnabled);
     if (!canProcessLines && !modalConfigInitializing) {
         modalProcessLyricsLinesEnabled = false;
+    } else if (canProcessLines && modalProcessLyricsLinesAutoEnabled) {
+        modalProcessLyricsLinesEnabled = true;
     }
 
     if (queueConfigLineProcessingToggle) {
@@ -648,7 +651,7 @@ function syncQueueConfigAlignControls() {
         } else if (!lyricsText) {
             queueConfigLineProcessingDetail.textContent = t('lyrics.align_requires_text');
         } else {
-            queueConfigLineProcessingDetail.textContent = t('queue.process_lyrics_lines_detail');
+            queueConfigLineProcessingDetail.textContent = t('queue.rewrap_detail_short');
         }
     }
 
@@ -1053,7 +1056,8 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     modalKaraokeEnabled = defaults.karaokeEnabled;
     modalAlignLyricsAutoEnabled = Boolean(defaults.karaokeEnabled && defaults.lyricsEnabled);
     modalAlignLyricsEnabled = modalAlignLyricsAutoEnabled;
-    modalProcessLyricsLinesEnabled = false;
+    modalProcessLyricsLinesAutoEnabled = modalAlignLyricsAutoEnabled;
+    modalProcessLyricsLinesEnabled = modalProcessLyricsLinesAutoEnabled;
     modalConfigInitializing = true;
     lyricsManager.reset();
     lyricsManager.setMetadata(modalSelection.title || '', modalSelection.channel || '', modalSelection.title || '');
@@ -1143,6 +1147,7 @@ function closeQueueConfigModal() {
     modalAlignLyricsEnabled = false;
     modalAlignLyricsAutoEnabled = false;
     modalProcessLyricsLinesEnabled = false;
+    modalProcessLyricsLinesAutoEnabled = false;
     modalConfigInitializing = false;
 }
 
@@ -1267,9 +1272,9 @@ function syncQueueConfigModalUi() {
         if (!karaokeAvailable) {
             queueConfigKaraokeDetail.textContent = t('queue.demucs_offline', { detail: demucsHealth.detail });
         } else if (titleHints.karaokeLike) {
-            queueConfigKaraokeDetail.textContent = t('queue.karaoke_already_detail');
+            queueConfigKaraokeDetail.textContent = t('queue.karaoke_already_short');
         } else {
-            queueConfigKaraokeDetail.textContent = t('queue.remove_vocals_ai');
+            queueConfigKaraokeDetail.textContent = t('queue.karaoke_detail_short');
         }
     }
 
@@ -1292,9 +1297,9 @@ function syncQueueConfigModalUi() {
 
     if (queueConfigLyricsDetail) {
         if (titleHints.lyricsLike) {
-            queueConfigLyricsDetail.textContent = t('queue.lyrics_already_detail');
+            queueConfigLyricsDetail.textContent = t('queue.lyrics_already_short');
         } else {
-            queueConfigLyricsDetail.textContent = t('queue.lyrics_detail');
+            queueConfigLyricsDetail.textContent = t('queue.lyrics_detail_short');
         }
     }
     syncQueueConfigAlignControls();
@@ -1477,6 +1482,7 @@ if (queueConfigLineProcessingToggle) {
     queueConfigLineProcessingToggle.addEventListener('click', () => {
         if (queueConfigLineProcessingToggle.disabled || !lyricsManager) return;
         modalProcessLyricsLinesEnabled = !modalProcessLyricsLinesEnabled;
+        modalProcessLyricsLinesAutoEnabled = false;
         syncQueueConfigModalUi();
     });
 }
@@ -1491,7 +1497,8 @@ if (queueConfigLyricsToggle) {
         lyricsManager.setEnabled(newEnabled);
         modalAlignLyricsEnabled = Boolean(newEnabled);
         modalAlignLyricsAutoEnabled = Boolean(newEnabled);
-        modalProcessLyricsLinesEnabled = false;
+        modalProcessLyricsLinesAutoEnabled = Boolean(newEnabled);
+        modalProcessLyricsLinesEnabled = modalProcessLyricsLinesAutoEnabled;
 
         if (newEnabled) {
             if (getModalTitleHints().lyricsLike) {

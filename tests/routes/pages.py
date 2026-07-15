@@ -94,6 +94,11 @@ def test_queue_page_loads(client):
     assert b"Configure Queue" in response.content
     assert b"queue-toast" in response.content
     assert b"queue-config-lyrics-detail" in response.content
+    assert 'aria-label="Open queue lyrics help"' in response.text
+    assert 'href="/help/"' in response.text
+    assert 'id="queue-config-rewrap-options"' in response.text
+    assert 'id="queue-config-language-options"' in response.text
+    assert 'class="grid grid-cols-3 gap-2"' in response.text
     assert b"flex-none shrink-0" in response.content
     assert 'id="stage-remote-vocals-toggle-btn"' in response.text
     assert 'id="stage-remote-vocals-volume-slider"' in response.text
