@@ -285,6 +285,7 @@ Lyrics lookup behavior:
 - Debug output shows the selected provider score plus provider-specific diagnostics for troubleshooting.
 - The queue modal can pre-resolve lyrics, let users replace them with manual synced text, and persist those lyrics as sidecars when the item is queued. TTML upgrades are normalized to canonical JSON sidecars before persistence so rescans retain timed lyrics.
 - See [docs/custom_lyrics_providers.md](docs/custom_lyrics_providers.md) for the runtime custom-provider contract and a HelloWorld example.
+- See [custom_presets.md](custom_presets.md) for ready-to-use stage lyric presets, JSON settings, and an AI design prompt.
 
 ## API Endpoints
 
