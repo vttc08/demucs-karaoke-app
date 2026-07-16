@@ -141,6 +141,7 @@ and `/static/...`.
 3. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
      - Requires an admin session created by the server-managed admin login flow
      - Presentation-first stage output with fullscreen-optimized player
+     - Fullscreen zen mode keeps the playbar, song metadata, overlays, and cursor hidden across manual skips and automatic song changes; press `Z` to toggle it
      - Always-on playback shell: queue items switch in-place without full page reload, so fullscreen is preserved during track transitions
      - Audio-only items such as MP3s use embedded album art as the stage background when available, with a branded fallback background otherwise
      - When the queue is empty, stage loops lobby media; when a song becomes playable, stage switches to it automatically and returns to lobby when queue drains
@@ -156,6 +157,7 @@ and `/static/...`.
 
 4. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
        - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
+       - Settings are organized into collapsible **Karaoke Processing**, **WhisperX Lyrics**, **Application Paths**, **Downloads**, **Stage**, and **Tools** sections; each section links to the documentation homepage
        - View current runtime settings
        - Log out of the active admin session from the settings page
        - Update Demucs URL, direct-media cutoff, Demucs fallback poll interval, media/cache paths, tool paths, outbound proxy URL, and WhisperX alignment defaults
@@ -283,6 +285,7 @@ Lyrics lookup behavior:
 - Debug output shows the selected provider score plus provider-specific diagnostics for troubleshooting.
 - The queue modal can pre-resolve lyrics, let users replace them with manual synced text, and persist those lyrics as sidecars when the item is queued. TTML upgrades are normalized to canonical JSON sidecars before persistence so rescans retain timed lyrics.
 - See [docs/custom_lyrics_providers.md](docs/custom_lyrics_providers.md) for the runtime custom-provider contract and a HelloWorld example.
+- See [custom_presets.md](custom_presets.md) for ready-to-use stage lyric presets, JSON settings, and an AI design prompt.
 
 ## API Endpoints
 

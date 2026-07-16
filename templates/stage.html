@@ -207,6 +207,23 @@
         cursor: default;
     }
 
+    .stage-media.is-fullscreen.is-zen {
+        cursor: none;
+    }
+
+    .stage-media.is-fullscreen.is-zen .stage-controls-shell,
+    .stage-media.is-fullscreen.is-zen .stage-topbar,
+    .stage-media.is-fullscreen.is-zen .stage-qr-overlay,
+    .stage-media.is-fullscreen.is-zen .stage-ios-vocals-warning {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+    }
+
+    .stage-media.is-fullscreen.is-zen .stage-controls-shell {
+        transform: translateY(12px);
+    }
+
     .stage-media.is-fullscreen .stage-topbar {
         opacity: 0;
         transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -287,10 +304,11 @@
     }
 
     .stage-lyrics-settings-panel {
-        width: min(28rem, 92vw);
+        width: min(31rem, 92vw);
         max-height: min(70vh, 44rem);
         overflow: auto;
         color-scheme: dark;
+        scrollbar-gutter: stable;
     }
 
     .stage-shortcuts-panel-title,
@@ -300,6 +318,28 @@
         justify-content: space-between;
         gap: 0.75rem;
         margin-bottom: 0.75rem;
+    }
+
+    .stage-lyrics-settings-title-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .stage-lyrics-settings-help {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.8rem;
+        height: 1.8rem;
+        border-radius: 999px;
+        color: rgba(255, 255, 255, 0.68);
+        transition: color 160ms ease, background 160ms ease;
+    }
+
+    .stage-lyrics-settings-help:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.96);
     }
 
     .stage-shortcuts-panel-list {
@@ -440,6 +480,33 @@
         gap: 0.75rem;
     }
 
+    .stage-lyrics-settings-section {
+        display: grid;
+        gap: 0.75rem;
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .stage-lyrics-settings-section--compact {
+        gap: 0.7rem;
+    }
+
+    .stage-lyrics-settings-section-title {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+    }
+
+    .stage-lyrics-settings-section-detail {
+        margin: -0.42rem 0 0;
+        color: rgba(255, 255, 255, 0.58);
+        font-size: 0.72rem;
+        line-height: 1.35;
+    }
+
     .stage-lyrics-settings-row {
         display: grid;
         gap: 0.75rem;
@@ -452,9 +519,9 @@
     .stage-lyrics-presets {
         display: grid;
         gap: 0.7rem;
-        margin-top: 0.8rem;
-        padding-top: 0.8rem;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        margin-top: 0;
+        padding-top: 0;
+        border-top: 0;
     }
 
     .stage-lyrics-presets-head {
@@ -493,33 +560,20 @@
         min-width: 0;
     }
 
-    .stage-lyrics-custom-font-preview {
-        display: flex;
-        align-items: center;
-        min-height: 2.5rem;
-        padding: 0.65rem 0.8rem;
-        border-radius: 0.95rem;
-        border: 1px dashed rgba(255, 255, 255, 0.15);
-        background: rgba(255, 255, 255, 0.04);
-        font-size: 0.92rem;
-        line-height: 1.15;
-        color: rgba(255, 255, 255, 0.86);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .stage-lyrics-custom-font-preview.is-empty {
-        color: rgba(255, 255, 255, 0.62);
-        font-style: italic;
-    }
-
     .stage-lyrics-settings-field--wide {
         grid-column: 1 / -1;
     }
 
     .stage-lyrics-settings-field--half {
         grid-column: auto;
+    }
+
+    .stage-lyrics-custom-font-field.is-hidden {
+        display: none;
+    }
+
+    .stage-lyrics-settings-row:not(:has(#stage-lyrics-font-preset option[value="custom"]:checked)) .stage-lyrics-custom-font-field {
+        display: none;
     }
 
     .stage-lyrics-settings-label {
@@ -633,7 +687,7 @@
         bottom: 0;
         margin-top: 0.75rem;
         padding-top: 0.75rem;
-        background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 72%, rgba(0, 0, 0, 0));
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.94) 72%, rgba(0, 0, 0, 0));
     }
 
     .stage-lyrics-settings-save {
@@ -677,6 +731,8 @@
         --stage-lyrics-active-color: #ffd84f;
         --stage-lyrics-outline-color: #050505;
         --stage-lyrics-outline-width: 7px;
+        --stage-lyrics-font-weight: 900;
+        --stage-lyrics-line-gap: clamp(0.2rem, 0.8vw, 2rem);
     }
 
     .stage-lyrics-overlay--cdg {
@@ -811,7 +867,7 @@
         width: min(var(--stage-lyrics-lines-width, 100vw), calc(100vw - (clamp(1rem, 4vw, 5rem) * 2)));
         max-width: none;
         display: grid;
-        gap: clamp(0.2rem, 0.8vw, 0.75rem);
+        gap: var(--stage-lyrics-line-gap);
         text-align: center;
         position: relative;
         transform: translateZ(0);
@@ -824,8 +880,8 @@
         z-index: 0;
         font-family: var(--stage-lyrics-font-family);
         font-size: calc(var(--stage-lyrics-size) * var(--stage-lyrics-line-scale, 0.46));
-        font-weight: 900;
-        line-height: 1.12;
+        font-weight: var(--stage-lyrics-font-weight, 900);
+        line-height: 1.32;
         letter-spacing: 0.02em;
         color: var(--stage-lyrics-text-color);
         opacity: var(--stage-lyrics-line-opacity, 0.52);
@@ -1363,14 +1419,26 @@
                             <div id="stage-lyrics-settings-panel" class="stage-lyrics-settings-panel hidden" role="dialog" aria-label="{{ t('stage.lyrics_settings_title') }}">
                                 <div class="stage-lyrics-settings-title">
                                     <h3 class="text-sm font-semibold text-on-surface">{{ t('stage.lyrics_settings_title') }}</h3>
-                                    <button
-                                        id="stage-lyrics-settings-close"
-                                        type="button"
-                                        class="rounded-full p-1 text-on-surface-variant transition hover:bg-white/10 hover:text-on-surface"
-                                        aria-label="{{ t('common.close') }}"
-                                    >
-                                        <span class="material-symbols-outlined text-base">close</span>
-                                    </button>
+                                    <div class="stage-lyrics-settings-title-actions">
+                                        <a
+                                            class="stage-lyrics-settings-help"
+                                            href="{{ docs_url() }}"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            aria-label="{{ t('stage.lyrics_settings_help') }}"
+                                            title="{{ t('stage.lyrics_settings_help') }}"
+                                        >
+                                            <span class="material-symbols-outlined text-base">help</span>
+                                        </a>
+                                        <button
+                                            id="stage-lyrics-settings-close"
+                                            type="button"
+                                            class="rounded-full p-1 text-on-surface-variant transition hover:bg-white/10 hover:text-on-surface"
+                                            aria-label="{{ t('common.close') }}"
+                                        >
+                                            <span class="material-symbols-outlined text-base">close</span>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="stage-lyrics-presets">
                                     <div class="stage-lyrics-presets-head">
@@ -1406,11 +1474,16 @@
                                         </button>
                                     </div>
                                 </div>
-                                <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
-                                    <span class="stage-lyrics-settings-label">{{ t('stage.display_name') }}</span>
-                                    <input id="stage-display-name" class="stage-lyrics-settings-input" type="text" maxlength="80" placeholder="{{ t('stage.display_name_placeholder') }}" />
-                                </label>
-                                <div class="stage-lyrics-settings-row stage-lyrics-settings-row--two-up">
+                                <section class="stage-lyrics-settings-section stage-lyrics-settings-section--compact" aria-labelledby="stage-lyrics-display-heading">
+                                    <h4 id="stage-lyrics-display-heading" class="stage-lyrics-settings-section-title">{{ t('stage.lyrics_section_display') }}</h4>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.display_name') }}</span>
+                                        <input id="stage-display-name" class="stage-lyrics-settings-input" type="text" maxlength="80" placeholder="{{ t('stage.display_name_placeholder') }}" />
+                                    </label>
+                                </section>
+                                <section class="stage-lyrics-settings-section" aria-labelledby="stage-lyrics-type-heading">
+                                    <h4 id="stage-lyrics-type-heading" class="stage-lyrics-settings-section-title">{{ t('stage.lyrics_section_typography') }}</h4>
+                                    <div class="stage-lyrics-settings-row stage-lyrics-settings-row--two-up">
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--half">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_font') }}</span>
                                         <select id="stage-lyrics-font-preset" class="stage-lyrics-settings-select">
@@ -1421,21 +1494,33 @@
                                             <option value="custom">{{ t('stage.lyrics_font_custom') }}</option>
                                         </select>
                                     </label>
-                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--half">
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--half stage-lyrics-custom-font-field">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_custom_font') }}</span>
                                         <input id="stage-lyrics-custom-font" class="stage-lyrics-settings-input" type="text" placeholder='"Noto Sans SC", sans-serif' />
-                                        <span class="text-[11px] leading-tight text-on-surface-variant">{{ t('stage.lyrics_custom_font_detail') }}</span>
-                                        <p id="stage-lyrics-custom-font-preview" class="stage-lyrics-custom-font-preview" aria-live="polite" aria-atomic="true">{{ t('stage.lyrics_custom_font_preview_empty') }}</p>
                                     </label>
-                                </div>
-                                <div class="stage-lyrics-settings-grid">
-                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
-                                        <span class="stage-lyrics-settings-label">
-                                            {{ t('stage.lyrics_text_size') }}
-                                            <span id="stage-lyrics-size-value"></span>
-                                        </span>
-                                        <input id="stage-lyrics-size" class="stage-lyrics-settings-input" type="range" min="3.2" max="8.8" step="0.1" />
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--half stage-lyrics-custom-font-field">
+                                        <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_custom_font_weight') }}</span>
+                                        <select id="stage-lyrics-custom-font-weight" class="stage-lyrics-settings-select">
+                                            <option value="300">{{ t('stage.lyrics_font_weight_light') }}</option>
+                                            <option value="400">{{ t('stage.lyrics_font_weight_regular') }}</option>
+                                            <option value="500">{{ t('stage.lyrics_font_weight_medium') }}</option>
+                                            <option value="700">{{ t('stage.lyrics_font_weight_bold') }}</option>
+                                        </select>
                                     </label>
+                                    </div>
+                                    <div class="stage-lyrics-settings-grid">
+                                        <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                            <span class="stage-lyrics-settings-label">
+                                                {{ t('stage.lyrics_text_size') }}
+                                                <span id="stage-lyrics-size-value"></span>
+                                            </span>
+                                            <input id="stage-lyrics-size" class="stage-lyrics-settings-input" type="range" min="3.2" max="8.8" step="0.1" />
+                                        </label>
+                                    </div>
+                                </section>
+                                <section class="stage-lyrics-settings-section" aria-labelledby="stage-lyrics-layout-heading">
+                                    <h4 id="stage-lyrics-layout-heading" class="stage-lyrics-settings-section-title">{{ t('stage.lyrics_section_layout') }}</h4>
+                                    <div class="stage-lyrics-settings-grid">
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">
                                             {{ t('stage.lyrics_max_width') }}
@@ -1443,6 +1528,18 @@
                                         </span>
                                         <input id="stage-lyrics-line-width-pct" class="stage-lyrics-settings-input" type="range" min="60" max="100" step="1" />
                                     </label>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                        <span class="stage-lyrics-settings-label">
+                                            {{ t('stage.lyrics_line_spacing') }}
+                                            <span id="stage-lyrics-line-gap-vw-value"></span>
+                                        </span>
+                                        <input id="stage-lyrics-line-gap-vw" class="stage-lyrics-settings-input" type="range" min="0.2" max="2" step="0.1" />
+                                    </label>
+                                    </div>
+                                </section>
+                                <section class="stage-lyrics-settings-section" aria-labelledby="stage-lyrics-colors-heading">
+                                    <h4 id="stage-lyrics-colors-heading" class="stage-lyrics-settings-section-title">{{ t('stage.lyrics_section_color') }}</h4>
+                                <div class="stage-lyrics-settings-grid">
                                     <label class="stage-lyrics-settings-field">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_text_color') }}</span>
                                         <input id="stage-lyrics-text-color" class="stage-lyrics-settings-input" type="color" />
@@ -1462,6 +1559,12 @@
                                         </span>
                                         <input id="stage-lyrics-outline-width" class="stage-lyrics-settings-input" type="range" min="2" max="14" step="1" />
                                     </label>
+                                </div>
+                                </section>
+                                <section class="stage-lyrics-settings-section" aria-labelledby="stage-lyrics-window-heading">
+                                    <h4 id="stage-lyrics-window-heading" class="stage-lyrics-settings-section-title">{{ t('stage.lyrics_section_window') }}</h4>
+                                    <p class="stage-lyrics-settings-section-detail">{{ t('stage.lyrics_section_window_detail') }}</p>
+                                <div class="stage-lyrics-settings-grid">
                                     <label class="stage-lyrics-settings-field">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_previous_lines') }}</span>
                                         <input id="stage-lyrics-previous-lines" class="stage-lyrics-settings-input" type="number" min="0" max="3" step="1" />
@@ -1492,6 +1595,11 @@
                                         </span>
                                         <input id="stage-lyrics-neighbor-line-opacity-pct" class="stage-lyrics-settings-input" type="range" min="10" max="100" step="1" />
                                     </label>
+                                </div>
+                                </section>
+                                <section class="stage-lyrics-settings-section" aria-labelledby="stage-lyrics-motion-heading">
+                                    <h4 id="stage-lyrics-motion-heading" class="stage-lyrics-settings-section-title">{{ t('stage.lyrics_section_motion') }}</h4>
+                                <div class="stage-lyrics-settings-grid">
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_animation') }}</span>
                                         <select id="stage-lyrics-animation" class="stage-lyrics-settings-select">
@@ -1501,6 +1609,12 @@
                                             <option value="none">{{ t('stage.lyrics_animation_none') }}</option>
                                         </select>
                                     </label>
+                                </div>
+                                </section>
+                                <section class="stage-lyrics-settings-section" aria-labelledby="stage-lyrics-background-heading">
+                                    <h4 id="stage-lyrics-background-heading" class="stage-lyrics-settings-section-title">{{ t('stage.lyrics_section_background') }}</h4>
+                                    <p class="stage-lyrics-settings-section-detail">{{ t('stage.lyrics_section_background_detail') }}</p>
+                                <div class="stage-lyrics-settings-grid">
                                     <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_background_media') }}</span>
                                         <input id="stage-lyrics-background-media" class="stage-lyrics-settings-input" type="text" placeholder="/media/brand-loop.mp4" />
@@ -1518,7 +1632,11 @@
                                         <input id="stage-lyrics-background-opacity-pct" class="stage-lyrics-settings-input" type="range" min="10" max="100" step="1" />
                                     </label>
                                 </div>
-                                <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
+                                </section>
+                                <section class="stage-lyrics-settings-section" aria-labelledby="stage-lyrics-transfer-heading">
+                                    <h4 id="stage-lyrics-transfer-heading" class="stage-lyrics-settings-section-title">{{ t('stage.lyrics_section_advanced') }}</h4>
+                                    <p class="stage-lyrics-settings-section-detail">{{ t('stage.lyrics_section_advanced_detail') }}</p>
+                                    <label class="stage-lyrics-settings-field stage-lyrics-settings-field--wide">
                                         <span class="stage-lyrics-settings-label">{{ t('stage.lyrics_settings_json') }}</span>
                                         <textarea id="stage-lyrics-settings-json" class="stage-lyrics-settings-textarea" spellcheck="false"></textarea>
                                     </label>
@@ -1538,6 +1656,7 @@
                                     <button id="stage-lyrics-reset-btn" type="button" class="stage-lyrics-settings-action">{{ t('stage.lyrics_reset') }}</button>
                                 </div>
                                 <input id="stage-lyrics-settings-file" type="file" class="hidden" accept=".json,application/json" />
+                                </section>
                                 <p id="stage-lyrics-settings-status" class="stage-lyrics-settings-status" aria-live="polite"></p>
                                 <div class="stage-lyrics-settings-footer">
                                     <button id="stage-lyrics-settings-save" type="button" class="stage-lyrics-settings-action stage-lyrics-settings-save">{{ t('common.save') }}</button>
@@ -1767,11 +1886,13 @@ const stageLyrics = new window.StageLyricsController({
     inputs: {
         fontPreset: document.getElementById("stage-lyrics-font-preset"),
         customFontFamily: document.getElementById("stage-lyrics-custom-font"),
-        customFontPreview: document.getElementById("stage-lyrics-custom-font-preview"),
+        customFontWeight: document.getElementById("stage-lyrics-custom-font-weight"),
         sizeVw: document.getElementById("stage-lyrics-size"),
         sizeVwValue: document.getElementById("stage-lyrics-size-value"),
         lineWidthPct: document.getElementById("stage-lyrics-line-width-pct"),
         lineWidthPctValue: document.getElementById("stage-lyrics-line-width-pct-value"),
+        lineGapVw: document.getElementById("stage-lyrics-line-gap-vw"),
+        lineGapVwValue: document.getElementById("stage-lyrics-line-gap-vw-value"),
         textColor: document.getElementById("stage-lyrics-text-color"),
         activeColor: document.getElementById("stage-lyrics-active-color"),
         outlineColor: document.getElementById("stage-lyrics-outline-color"),
@@ -1790,6 +1911,7 @@ const stageLyrics = new window.StageLyricsController({
         backgroundMediaOpacityPct: document.getElementById("stage-lyrics-background-opacity-pct"),
         backgroundMediaOpacityPctValue: document.getElementById("stage-lyrics-background-opacity-pct-value"),
     },
+    customFontFields: Array.from(document.querySelectorAll(".stage-lyrics-custom-font-field")),
 });
 const stageCdg = new window.StageCdgRenderer(cdgCanvas);
 
@@ -2114,6 +2236,7 @@ const normalizedStageVocalsVolumeDefault = Number.isFinite(Number(STAGE_VOCALS_V
     ? Math.max(0, Math.min(1, Number(STAGE_VOCALS_VOLUME_DEFAULT)))
     : 1.0;
 let controlsHideTimer = null;
+let zenModeEnabled = false;
 let isQrVisible = false;
 let shortcutsPanelVisible = false;
 let qrDragState = null;
@@ -3502,8 +3625,42 @@ function isFullscreenActive() {
     return !!document.fullscreenElement;
 }
 
+function setZenModeEnabled(enabled) {
+    zenModeEnabled = Boolean(enabled) && isFullscreenActive();
+
+    if (!stageMedia) {
+        return;
+    }
+
+    stageMedia.classList.toggle("is-zen", zenModeEnabled);
+
+    if (zenModeEnabled) {
+        stageControls?.classList.add("hidden");
+        stageMedia.classList.remove("is-controls-visible");
+        if (controlsHideTimer) {
+            window.clearTimeout(controlsHideTimer);
+            controlsHideTimer = null;
+        }
+        return;
+    }
+
+    stageControls?.classList.remove("hidden");
+    if (isFullscreenActive()) {
+        showStageControls();
+    }
+}
+
 function showStageControls() {
     if (!stageMedia) return;
+
+    if (zenModeEnabled) {
+        stageMedia.classList.remove("is-controls-visible");
+        if (controlsHideTimer) {
+            window.clearTimeout(controlsHideTimer);
+            controlsHideTimer = null;
+        }
+        return;
+    }
 
     stageMedia.classList.add("is-controls-visible");
 
@@ -3524,7 +3681,7 @@ function showStageControls() {
 }
 
 function scheduleHideStageControls() {
-    if (!stageMedia || !isFullscreenActive() || isPrimaryPaused()) {
+    if (!stageMedia || zenModeEnabled || !isFullscreenActive() || isPrimaryPaused()) {
         return;
     }
 
@@ -3539,8 +3696,13 @@ function syncFullscreenState() {
 
     if (active) {
         stageLyrics.applyBackgroundSettings();
-        showStageControls();
+        if (zenModeEnabled) {
+            setZenModeEnabled(true);
+        } else {
+            showStageControls();
+        }
     } else {
+        setZenModeEnabled(false);
         if (controlsHideTimer) {
             window.clearTimeout(controlsHideTimer);
             controlsHideTimer = null;
@@ -4125,12 +4287,7 @@ if (qrOverlay) {
 if (zenToggleBtn) {
     zenToggleBtn.addEventListener("click", () => {
         if (!stageControls || !isFullscreenActive()) return;
-        const isControlsVisible = !stageControls.classList.contains("hidden");
-        if (isControlsVisible) {
-            stageControls.classList.add("hidden");
-        } else {
-            stageControls.classList.remove("hidden");
-        }
+        setZenModeEnabled(!zenModeEnabled);
     });
 }
 
@@ -4317,14 +4474,8 @@ window.addEventListener("keydown", async (event) => {
 
     if (event.key.toLowerCase() === "z") {
         event.preventDefault();
-        // Zen mode toggle: hide/show stage controls
-        if (stageControls) {
-            const isControlsVisible = !stageControls.classList.contains("hidden");
-            if (isControlsVisible) {
-                stageControls.classList.add("hidden");
-            } else {
-                stageControls.classList.remove("hidden");
-            }
+        if (isFullscreenActive()) {
+            setZenModeEnabled(!zenModeEnabled);
         }
     }
 });

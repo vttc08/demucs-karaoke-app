@@ -79,11 +79,17 @@ class RuntimeSettingsService:
     )
     YTDLP_COMMAND_TIMEOUT_SECONDS = 60
 
-    def get_demucs_health(self) -> DemucsHealthResponse:
-        """Return Demucs health for the current configured API URL."""
-        return DemucsClient(api_url=settings.demucs_api_url).health_check(
-            separation_backend=settings.separation_backend,
-            sherpa_spleeter_model=settings.sherpa_spleeter_model,
+    def get_demucs_health(
+        self,
+        *,
+        demucs_api_url: str | None = None,
+        separation_backend: str | None = None,
+        sherpa_spleeter_model: str | None = None,
+    ) -> DemucsHealthResponse:
+        """Return Demucs health for the selected runtime configuration."""
+        return DemucsClient(api_url=demucs_api_url or settings.demucs_api_url).health_check(
+            separation_backend=separation_backend or settings.separation_backend,
+            sherpa_spleeter_model=sherpa_spleeter_model or settings.sherpa_spleeter_model,
         )
 
     def preload_whisperx_models(
@@ -548,8 +554,9 @@ class RuntimeSettingsService:
             settings.ensure_paths()
             raise
 
-        demucs_health = self.get_demucs_health()
-        return self._build_settings_response(demucs_health=demucs_health)
+        # Saving settings is intentionally independent from remote service health. The
+        # dedicated health endpoint is used when an admin explicitly asks for a check.
+        return self._build_settings_response(demucs_health=None)
 
     def _apply_persisted_setting(self, field_name: str, raw_value: str) -> None:
         """Apply a single persisted setting value to the in-memory settings object."""

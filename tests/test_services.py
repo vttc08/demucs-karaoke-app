@@ -9,6 +9,7 @@ from tests.services.lyrics_service import *  # noqa: F401,F403
 from tests.services.runtime_settings import *  # noqa: F401,F403
 from tests.services.demucs_client import *  # noqa: F401,F403
 from tests.services.lyrics_presets import *  # noqa: F401,F403
+from tests.services.default_presets import *  # noqa: F401,F403
 from tests.services.stage_lobby import *  # noqa: F401,F403
 from tests.services.media_trim import *  # noqa: F401,F403
 from tests.services.vocal_sync import *  # noqa: F401,F403

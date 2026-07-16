@@ -236,6 +236,22 @@ def test_move_queue_item_reorders_queue_for_admin(client):
     response = client.get("/api/queue/")
     assert [item["title"] for item in response.json()] == ["Admin First", "Admin Third", "Admin Second"]
 
+
+def test_drag_reorder_route_is_not_available(client):
+    """Queue reordering is intentionally limited to the move-arrow endpoint."""
+    created = client.post(
+        "/api/queue/",
+        json={"youtube_id": "no-drag", "title": "No Drag", "is_karaoke": False},
+    ).json()
+
+    response = client.post(
+        f"/api/queue/{created['id']}/reorder",
+        json={"before_item_id": None},
+    )
+
+    assert response.status_code == 404
+
+
 def test_queue_clear_route_requires_admin(client):
     """Guest users should not be able to clear queue items."""
     created = client.post(

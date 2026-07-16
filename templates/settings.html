@@ -6,11 +6,11 @@
 {% block header_title %}{{ t('settings.admin_settings') }}{% endblock %}
 
 {% block content %}
-<main class="relative mx-auto max-w-6xl overflow-x-clip px-4 pb-10 pt-28 sm:px-6 lg:px-8">
+<main class="settings-page-shell relative w-full overflow-x-clip px-4 pb-32 pt-28 sm:px-6 sm:pb-36 lg:px-8">
     <div class="pointer-events-none absolute -right-16 top-20 h-72 w-72 rounded-full bg-primary/10 blur-3xl"></div>
     <div class="pointer-events-none absolute -left-16 bottom-4 h-72 w-72 rounded-full bg-secondary/10 blur-3xl"></div>
 
-    <section class="relative z-10 min-w-0">
+    <section class="relative z-10 mx-auto min-w-0 max-w-6xl">
         <header class="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
                 <div class="flex items-center gap-2">
@@ -23,9 +23,7 @@
                         classes="h-8 w-8 shrink-0 border border-white/10 bg-surface-container-high/70 text-on-surface-variant hover:border-primary/30 hover:bg-primary/10 hover:text-primary"
                     ) }}
                 </div>
-                <p class="mt-2 max-w-2xl text-sm text-on-surface-variant">
-                    {{ t('settings.description') }}
-                </p>
+                <p class="mt-2 max-w-2xl text-sm text-on-surface-variant">{{ t('settings.description') }}</p>
             </div>
             <div class="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-surface-container px-3 py-2 md:w-auto">
                 <div class="flex min-w-0 items-center gap-2">
@@ -42,353 +40,99 @@
             </div>
         </header>
 
-        <form id="settings-form" class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <section class="glass-card min-w-0 rounded-xl border border-white/10 p-6 shadow-xl">
-                <div class="mb-5 flex items-center gap-2">
-                    <span class="material-symbols-outlined text-primary">terminal</span>
-                    <h3 class="font-headline text-xl font-bold text-on-surface">{{ t('settings.karaoke_processing') }}</h3>
-                </div>
-                <div class="space-y-4">
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_api_url') }}</span>
-                        <input id="demucs_api_url" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm font-medium text-primary focus:ring-2 focus:ring-primary/50 focus:outline-none" type="url" required />
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_api_key') }}</span>
-                        <input id="demucs_api_key" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm font-medium text-primary focus:ring-2 focus:ring-primary/50 focus:outline-none" type="password" autocomplete="off" spellcheck="false" />
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.demucs_api_key_detail') }}</span>
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.separation_backend') }}</span>
-                        <select id="separation_backend" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
-                            <option value="demucs">Demucs</option>
-                            <option value="sherpa_spleeter">Sherpa+Spleeter</option>
-                        </select>
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.separation_backend_detail') }}</span>
-                    </label>
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <label id="demucs-model-group" class="flex flex-col gap-1.5">
-                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_model') }}</span>
-                            <select id="demucs_model" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
-                                <option value="htdemucs">htdemucs (default)</option>
-                                <option value="htdemucs_ft">htdemucs_ft</option>
-                                <option value="htdemucs_6s">htdemucs_6s</option>
-                                <option value="hdemucs_mmi">hdemucs_mmi</option>
-                                <option value="mdx">mdx</option>
-                                <option value="mdx_extra">mdx_extra</option>
-                                <option value="mdx_q">mdx_q</option>
-                                <option value="mdx_extra_q">mdx_extra_q</option>
-                            </select>
-                        </label>
-                        <label id="sherpa-spleeter-model-group" class="hidden flex-col gap-1.5">
-                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.sherpa_spleeter_model') }}</span>
-                            <select id="sherpa_spleeter_model" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
-                                <option value="fp16">fp16</option>
-                                <option value="int8">int8</option>
-                                <option value="fp32">fp32</option>
-                            </select>
-                        </label>
-                        <label class="flex flex-col gap-1.5">
-                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.device') }}</span>
-                            <select id="demucs_device" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
-                                <option value="cuda">cuda</option>
-                                <option value="cpu">cpu</option>
-                            </select>
-                            <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.device_detail') }}</span>
-                        </label>
+        <form id="settings-form" class="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+            <details class="settings-section glass-card min-w-0 rounded-xl border border-white/10 shadow-xl" data-settings-section="processing" open>
+                <summary class="settings-section-summary flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <span class="material-symbols-outlined text-primary">terminal</span>
+                        <div class="min-w-0"><h3 class="font-headline text-lg font-bold text-on-surface">{{ t('settings.karaoke_processing') }}</h3><p class="mt-0.5 text-xs text-on-surface-variant">{{ t('settings.karaoke_processing_detail') }}</p></div>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2"><a href="{{ docs_url() }}" target="_blank" rel="noopener noreferrer" data-settings-docs-link class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary" aria-label="{{ t('settings.section_docs') }}" title="{{ t('settings.section_docs') }}"><span class="material-symbols-outlined text-sm">open_in_new</span></a><span class="material-symbols-outlined settings-section-chevron text-on-surface-variant">expand_more</span></div>
+                </summary>
+                <div class="space-y-4 border-t border-white/10 p-5">
+                    <label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.demucs_api_url') }}</span><input id="demucs_api_url" class="settings-input settings-input-accent" type="url" required /></label>
+                    <label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.demucs_api_key') }}</span><input id="demucs_api_key" class="settings-input settings-input-accent" type="password" autocomplete="off" spellcheck="false" /><span class="settings-help">{{ t('settings.demucs_api_key_detail') }}</span></label>
+                    <label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.separation_backend') }}</span><select id="separation_backend" class="settings-select"><option value="demucs">{{ t('settings.backend_demucs') }}</option><option value="sherpa_spleeter">{{ t('settings.backend_sherpa_spleeter') }}</option></select><span class="settings-help">{{ t('settings.separation_backend_detail') }}</span></label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <label id="demucs-model-group" class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.demucs_model') }}</span><select id="demucs_model" class="settings-select"><option value="htdemucs">htdemucs (default)</option><option value="htdemucs_ft">htdemucs_ft</option><option value="htdemucs_6s">htdemucs_6s</option><option value="hdemucs_mmi">hdemucs_mmi</option><option value="mdx">mdx</option><option value="mdx_extra">mdx_extra</option><option value="mdx_q">mdx_q</option><option value="mdx_extra_q">mdx_extra_q</option></select></label>
+                        <label id="sherpa-spleeter-model-group" class="hidden flex-col gap-1.5"><span class="settings-label">{{ t('settings.sherpa_spleeter_model') }}</span><select id="sherpa_spleeter_model" class="settings-select"><option value="fp16">fp16</option><option value="int8">int8</option><option value="fp32">fp32</option></select></label>
+                        <label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.device') }}</span><select id="demucs_device" class="settings-select"><option value="cuda">cuda</option><option value="cpu">cpu</option></select></label>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.stem_format') }}</span><select id="demucs_output_format" class="settings-select"><option value="wav">WAV</option><option value="mp3">MP3</option></select></label>
+                        <label id="demucs-mp3-bitrate-group" class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.mp3_bitrate') }}</span><input id="demucs_mp3_bitrate" class="settings-input" type="number" min="64" max="320" step="1" value="320" /></label>
                     </div>
                     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <label class="flex flex-col gap-1.5">
-                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.stem_format') }}</span>
-                            <select id="demucs_output_format" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
-                                <option value="wav">wav</option>
-                                <option value="mp3">mp3</option>
-                            </select>
-                        </label>
-                        <label id="demucs-mp3-bitrate-group" class="flex flex-col gap-1.5">
-                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.mp3_bitrate') }}</span>
-                            <input id="demucs_mp3_bitrate" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="number" min="64" max="320" step="1" value="320" />
-                        </label>
-                    </div>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ffmpeg_audio_codec') }}</span>
-                        <input id="ffmpeg_audio_codec" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" inputmode="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="aac" />
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.ffmpeg_audio_codec_detail') }}</span>
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_direct_media_cutoff') }}</span>
-                        <input id="demucs_direct_media_max_mb" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="number" min="0" max="5000" step="1" required />
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.demucs_poll_interval') }}</span>
-                        <input id="demucs_poll_interval_seconds" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="number" min="0.25" max="10" step="0.25" required />
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.demucs_poll_interval_detail') }}</span>
-                    </label>
-                    <div class="rounded-xl border border-white/10 bg-surface-container-highest/20 p-4">
-                        <div class="mb-4 flex items-center gap-2">
-                            <span class="material-symbols-outlined text-primary">subtitles</span>
-                            <h4 class="font-headline text-base font-bold text-on-surface">{{ t('settings.whisperx') }}</h4>
-                        </div>
-                        <div class="space-y-4">
-                            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <label class="flex flex-col gap-1.5">
-                                    <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_transcription_model') }}</span>
-                                    <input id="whisperx_transcription_model" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
-                                </label>
-                                <label id="whisperx-align-language-group" class="flex flex-col gap-1.5">
-                                    <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_align_language') }}</span>
-                                    <input id="whisperx_align_language" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50" type="text" placeholder="en" />
-                                </label>
-                            </div>
-                            <label class="flex items-center justify-between gap-3 rounded-lg bg-surface-container-highest/40 px-4 py-3">
-                                <div>
-                                    <span class="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_detect_language') }}</span>
-                                    <span class="text-xs text-on-surface-variant/80">{{ t('settings.whisperx_detect_language_detail') }}</span>
-                                </div>
-                                <input id="whisperx_detect_language" type="checkbox" class="h-5 w-5 accent-primary" />
-                            </label>
-                            <label class="flex items-center justify-between gap-3 rounded-lg bg-surface-container-highest/40 px-4 py-3">
-                                <div>
-                                    <span class="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_use_synced_lyrics') }}</span>
-                                    <span class="text-xs text-on-surface-variant/80">{{ t('settings.whisperx_use_synced_lyrics_detail') }}</span>
-                                </div>
-                                <input id="whisperx_use_synced_lyrics" type="checkbox" class="h-5 w-5 accent-primary" />
-                            </label>
-                            <label class="flex flex-col gap-1.5">
-                                <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.whisperx_preload_models') }}</span>
-                                <input id="whisperx_preload_models" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" placeholder="transcription=tiny,align=en" />
-                                <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.whisperx_preload_models_detail') }}</span>
-                            </label>
-                            <div class="flex flex-wrap items-center gap-3">
-                                <button id="preload-whisperx-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary px-3 py-2 text-[10px] font-black uppercase tracking-widest text-on-primary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
-                                    <span class="material-symbols-outlined text-sm">download</span>
-                                    {{ t('settings.preload_whisperx_models') }}
-                                </button>
-                                <p id="whisperx-preload-status" class="text-xs text-on-surface-variant">
-                                    {{ t('settings.preload_whisperx_models_detail_short') }}
-                                </p>
-                            </div>
-                        </div>
+                        <label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.ffmpeg_audio_codec') }}</span><input id="ffmpeg_audio_codec" class="settings-input" type="text" inputmode="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="aac" /><span class="settings-help">{{ t('settings.ffmpeg_audio_codec_detail') }}</span></label>
+                        <label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.demucs_direct_media_cutoff') }}</span><input id="demucs_direct_media_max_mb" class="settings-input" type="number" min="0" max="5000" step="1" required /></label>
+                        <label class="flex flex-col gap-1.5 sm:col-span-2"><span class="settings-label">{{ t('settings.demucs_poll_interval') }}</span><input id="demucs_poll_interval_seconds" class="settings-input" type="number" min="0.25" max="10" step="0.25" required /><span class="settings-help">{{ t('settings.demucs_poll_interval_detail') }}</span></label>
                     </div>
                 </div>
-            </section>
+            </details>
 
-            <section class="glass-card min-w-0 rounded-xl border border-white/10 p-6 shadow-xl">
-                <div class="mb-5 flex items-center gap-2">
-                    <span class="material-symbols-outlined text-primary">folder_open</span>
-                    <h3 class="font-headline text-xl font-bold text-on-surface">{{ t('settings.storage_tools_search') }}</h3>
+            <details class="settings-section glass-card min-w-0 rounded-xl border border-white/10 shadow-xl" data-settings-section="whisperx">
+                <summary class="settings-section-summary flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden">
+                    <div class="flex min-w-0 items-center gap-3"><span class="material-symbols-outlined text-primary">subtitles</span><div class="min-w-0"><h3 class="font-headline text-lg font-bold text-on-surface">{{ t('settings.whisperx_section') }}</h3><p class="mt-0.5 text-xs text-on-surface-variant">{{ t('settings.whisperx_section_detail') }}</p></div></div>
+                    <div class="flex shrink-0 items-center gap-2"><a href="{{ docs_url() }}" target="_blank" rel="noopener noreferrer" data-settings-docs-link class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary" aria-label="{{ t('settings.section_docs') }}" title="{{ t('settings.section_docs') }}"><span class="material-symbols-outlined text-sm">open_in_new</span></a><span class="material-symbols-outlined settings-section-chevron text-on-surface-variant">expand_more</span></div>
+                </summary>
+                <div class="space-y-4 border-t border-white/10 p-5">
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2"><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.whisperx_transcription_model') }}</span><input id="whisperx_transcription_model" class="settings-input" type="text" required /></label><label id="whisperx-align-language-group" class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.whisperx_align_language') }}</span><input id="whisperx_align_language" class="settings-input disabled:cursor-not-allowed disabled:opacity-50" type="text" placeholder="en" /></label></div>
+                    <label class="settings-toggle"><span class="min-w-0"><span class="settings-label block">{{ t('settings.whisperx_detect_language') }}</span><span class="settings-help">{{ t('settings.whisperx_detect_language_detail') }}</span></span><input id="whisperx_detect_language" type="checkbox" class="h-5 w-5 accent-primary" /></label>
+                    <label class="settings-toggle"><span class="min-w-0"><span class="settings-label block">{{ t('settings.whisperx_use_synced_lyrics') }}</span><span class="settings-help">{{ t('settings.whisperx_use_synced_lyrics_detail') }}</span></span><input id="whisperx_use_synced_lyrics" type="checkbox" class="h-5 w-5 accent-primary" /></label>
+                    <label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.whisperx_preload_models') }}</span><input id="whisperx_preload_models" class="settings-input" type="text" placeholder="transcription=tiny,align=en" /><span class="settings-help">{{ t('settings.whisperx_preload_models_detail') }}</span></label>
+                    <div class="flex flex-wrap items-center gap-3"><button id="preload-whisperx-btn" type="button" class="settings-action-primary"><span class="material-symbols-outlined text-sm">download</span>{{ t('settings.preload_whisperx_models') }}</button><p id="whisperx-preload-status" class="text-xs text-on-surface-variant">{{ t('settings.preload_whisperx_models_detail_short') }}</p></div>
                 </div>
-                <div class="space-y-4">
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.media_path') }}</span>
-                        <input id="media_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.cache_path') }}</span>
-                        <input id="cache_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ytdlp_path') }}</span>
-                        <input id="ytdlp_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ytdlp_deno_path') }}</span>
-                        <input id="ytdlp_deno_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" placeholder="/usr/local/bin/deno" />
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.ytdlp_deno_path_detail') }}</span>
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ytdlp_video_resolution') }}</span>
-                        <select id="ytdlp_video_resolution" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none">
-                            <option value="default">{{ t('settings.ytdlp_resolution_default') }}</option>
-                            <option value="360">{{ t('settings.ytdlp_resolution_360') }}</option>
-                            <option value="480">{{ t('settings.ytdlp_resolution_480') }}</option>
-                            <option value="720">{{ t('settings.ytdlp_resolution_720') }}</option>
-                            <option value="1080">{{ t('settings.ytdlp_resolution_1080') }}</option>
-                            <option value="2160">{{ t('settings.ytdlp_resolution_2160') }}</option>
-                        </select>
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.ytdlp_video_resolution_detail') }}</span>
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ytdlp_video_codec') }}</span>
-                        <input id="ytdlp_video_codec" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" inputmode="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="avc" />
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.ytdlp_video_codec_detail') }}</span>
-                    </label>
-                    <div class="rounded-xl border border-white/10 bg-surface-container-highest/20 p-3">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">yt-dlp Version</p>
-                                <p id="ytdlp-version-text" class="truncate text-sm font-semibold text-on-surface">{{ t('settings.version_unknown') }}</p>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button id="refresh-ytdlp-version-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-primary/30 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60">
-                                    <span class="material-symbols-outlined text-sm">refresh</span>
-                                    {{ t('settings.check_version') }}
-                                </button>
-                                <button id="update-ytdlp-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-on-primary transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
-                                    <span class="material-symbols-outlined text-sm">system_update</span>
-                                    {{ t('settings.update_ytdlp') }}
-                                </button>
-                            </div>
-                        </div>
-                        <p id="ytdlp-update-status" class="mt-2 text-xs text-on-surface-variant">{{ t('settings.ytdlp_status_initial') }}</p>
-                    </div>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ytdlp_proxy') }}</span>
-                        <input id="ytdlp_proxy_url" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" placeholder="http://user:pass@proxy:8080 or socks5://proxy:1080" />
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.direct_connection') }}</span>
-                    </label>
-                    <div class="rounded-xl border border-white/10 bg-surface-container-highest/20 p-3">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.proxy_info_title') }}</p>
-                                <p class="text-xs text-on-surface-variant/80">{{ t('settings.proxy_info_detail') }}</p>
-                            </div>
-                            <button id="check-proxy-info-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-primary/30 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60">
-                                <span class="material-symbols-outlined text-sm">travel_explore</span>
-                                {{ t('settings.check_proxy_info') }}
-                            </button>
-                        </div>
-                        <dl class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                            <div class="rounded-lg bg-surface-container px-3 py-2">
-                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.proxy_ip') }}</dt>
-                                <dd id="proxy-info-ip-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
-                            </div>
-                            <div class="rounded-lg bg-surface-container px-3 py-2">
-                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.proxy_org') }}</dt>
-                                <dd id="proxy-info-org-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
-                            </div>
-                            <div class="rounded-lg bg-surface-container px-3 py-2">
-                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.proxy_location') }}</dt>
-                                <dd id="proxy-info-location-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
-                            </div>
-                        </dl>
-                        <p id="proxy-info-status" class="mt-2 text-xs text-on-surface-variant">{{ t('settings.proxy_info_idle') }}</p>
-                    </div>
-                    <label class="flex items-center justify-between gap-3 rounded-lg bg-surface-container-highest/40 px-4 py-3">
-                        <div>
-                            <span class="block text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.parallel_search') }}</span>
-                            <span class="text-xs text-on-surface-variant/80">{{ t('settings.parallel_search_detail') }}</span>
-                        </div>
-                        <input id="concurrent_ytdlp_search_enabled" type="checkbox" class="h-5 w-5 accent-primary" />
-                    </label>
-                    <div class="space-y-2 rounded-lg bg-surface-container-highest/40 px-4 py-3">
-                        <p class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.lyrics_providers') }}</p>
-                        <label class="flex items-center justify-between gap-3">
-                            <span class="text-xs text-on-surface-variant/90">NetEase lyrics</span>
-                            <input id="lyrics_provider_netease_enabled" type="checkbox" class="h-5 w-5 accent-primary" />
-                        </label>
-                        <label class="flex items-center justify-between gap-3">
-                            <span class="text-xs text-on-surface-variant/90">LRCLib lyrics</span>
-                            <input id="lyrics_provider_lrclib_enabled" type="checkbox" class="h-5 w-5 accent-primary" />
-                        </label>
-                    </div>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.ffmpeg_path') }}</span>
-                        <input id="ffmpeg_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" required />
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.qr_url') }}</span>
-                        <input id="stage_qr_url" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="url" placeholder="https://your-server/queue" />
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.qr_url_detail') }}</span>
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.lobby_media_path') }}</span>
-                        <input id="stage_lobby_media_path" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="text" placeholder="/media/stage-lobby.mp4" />
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.lobby_media_path_detail') }}</span>
-                    </label>
-                    <label class="flex flex-col gap-1.5">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.vocals_volume_default') }}</span>
-                        <input id="stage_vocals_volume_default" class="h-12 rounded-lg border-none bg-surface-container-highest/50 px-4 text-sm text-on-surface focus:ring-2 focus:ring-primary/50 focus:outline-none" type="number" min="0" max="100" step="1" required />
-                        <span class="text-[11px] text-on-surface-variant/80">{{ t('settings.vocals_volume_default_detail') }}</span>
-                    </label>
-                    <div class="rounded-xl border border-white/10 bg-surface-container-highest/20 p-4">
-                        <div class="flex flex-wrap items-center justify-between gap-3">
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.storage_usage_title') }}</p>
-                                <p id="storage-usage-status" class="text-xs text-on-surface-variant">{{ t('settings.storage_usage_idle') }}</p>
-                            </div>
-                            <button id="check-storage-usage-btn" type="button" class="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/30 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60">
-                                <span class="material-symbols-outlined text-sm">storage</span>
-                                {{ t('settings.check_storage_usage') }}
-                            </button>
-                        </div>
-                        <dl class="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <div class="rounded-lg bg-surface-container px-3 py-2">
-                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.storage_usage_media') }}</dt>
-                                <dd id="storage-usage-media-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
-                            </div>
-                            <div class="rounded-lg bg-surface-container px-3 py-2">
-                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.storage_usage_cache') }}</dt>
-                                <dd id="storage-usage-cache-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
-                            </div>
-                            <div class="rounded-lg bg-surface-container px-3 py-2">
-                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.storage_usage_database') }}</dt>
-                                <dd id="storage-usage-database-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
-                                <p id="storage-usage-database-note" class="mt-1 text-[11px] text-on-surface-variant hidden">{{ t('settings.storage_usage_database_note') }}</p>
-                            </div>
-                            <div class="rounded-lg bg-surface-container px-3 py-2">
-                                <dt class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('settings.storage_usage_total') }}</dt>
-                                <dd id="storage-usage-total-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd>
-                            </div>
-                        </dl>
-                        <div class="mt-4 flex flex-wrap items-center gap-3">
-                            <button id="cleanup-storage-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-error/30 bg-error/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-error transition hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-60">
-                                <span class="material-symbols-outlined text-sm">delete_sweep</span>
-                                {{ t('settings.cleanup_storage') }}
-                            </button>
-                            <p id="storage-cleanup-status" class="text-xs text-on-surface-variant">
-                                {{ t('settings.storage_cleanup_idle') }}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            </details>
 
+            <details class="settings-section glass-card min-w-0 rounded-xl border border-white/10 shadow-xl" data-settings-section="paths">
+                <summary class="settings-section-summary flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden"><div class="flex min-w-0 items-center gap-3"><span class="material-symbols-outlined text-primary">folder_open</span><div class="min-w-0"><h3 class="font-headline text-lg font-bold text-on-surface">{{ t('settings.application_paths') }}</h3><p class="mt-0.5 text-xs text-on-surface-variant">{{ t('settings.application_paths_detail') }}</p></div></div><div class="flex shrink-0 items-center gap-2"><a href="{{ docs_url() }}" target="_blank" rel="noopener noreferrer" data-settings-docs-link class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary" aria-label="{{ t('settings.section_docs') }}" title="{{ t('settings.section_docs') }}"><span class="material-symbols-outlined text-sm">open_in_new</span></a><span class="material-symbols-outlined settings-section-chevron text-on-surface-variant">expand_more</span></div></summary>
+                <div class="space-y-4 border-t border-white/10 p-5"><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.media_path') }}</span><input id="media_path" class="settings-input" type="text" required /></label><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.cache_path') }}</span><input id="cache_path" class="settings-input" type="text" required /></label><div class="grid grid-cols-1 gap-4 sm:grid-cols-2"><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.ytdlp_path') }}</span><input id="ytdlp_path" class="settings-input" type="text" required /></label><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.ytdlp_deno_path') }}</span><input id="ytdlp_deno_path" class="settings-input" type="text" placeholder="/usr/local/bin/deno" /><span class="settings-help">{{ t('settings.ytdlp_deno_path_detail') }}</span></label></div><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.ffmpeg_path') }}</span><input id="ffmpeg_path" class="settings-input" type="text" required /></label></div>
+            </details>
+
+            <details class="settings-section glass-card min-w-0 rounded-xl border border-white/10 shadow-xl" data-settings-section="downloads">
+                <summary class="settings-section-summary flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden"><div class="flex min-w-0 items-center gap-3"><span class="material-symbols-outlined text-primary">download</span><div class="min-w-0"><h3 class="font-headline text-lg font-bold text-on-surface">{{ t('settings.downloads') }}</h3><p class="mt-0.5 text-xs text-on-surface-variant">{{ t('settings.downloads_detail') }}</p></div></div><div class="flex shrink-0 items-center gap-2"><a href="{{ docs_url() }}" target="_blank" rel="noopener noreferrer" data-settings-docs-link class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary" aria-label="{{ t('settings.section_docs') }}" title="{{ t('settings.section_docs') }}"><span class="material-symbols-outlined text-sm">open_in_new</span></a><span class="material-symbols-outlined settings-section-chevron text-on-surface-variant">expand_more</span></div></summary>
+                <div class="space-y-4 border-t border-white/10 p-5"><div class="grid grid-cols-1 gap-4 sm:grid-cols-2"><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.ytdlp_video_codec') }}</span><input id="ytdlp_video_codec" class="settings-input" type="text" inputmode="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="avc" /><span class="settings-help">{{ t('settings.ytdlp_video_codec_detail') }}</span></label><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.ytdlp_video_resolution') }}</span><select id="ytdlp_video_resolution" class="settings-select"><option value="default">{{ t('settings.ytdlp_resolution_default') }}</option><option value="360">{{ t('settings.ytdlp_resolution_360') }}</option><option value="480">{{ t('settings.ytdlp_resolution_480') }}</option><option value="720">{{ t('settings.ytdlp_resolution_720') }}</option><option value="1080">{{ t('settings.ytdlp_resolution_1080') }}</option><option value="2160">{{ t('settings.ytdlp_resolution_2160') }}</option></select><span class="settings-help">{{ t('settings.ytdlp_video_resolution_detail') }}</span></label></div><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.ytdlp_proxy') }}</span><input id="ytdlp_proxy_url" class="settings-input" type="text" placeholder="http://user:pass@proxy:8080 or socks5://proxy:1080" /><span class="settings-help">{{ t('settings.direct_connection') }}</span></label><div class="rounded-lg border border-white/10 bg-surface-container-highest/20 p-3"><div class="flex flex-wrap items-center justify-between gap-2"><div class="min-w-0"><p class="settings-label">{{ t('settings.ytdlp_version') }}</p><p id="ytdlp-version-text" class="truncate text-sm font-semibold text-on-surface">{{ t('settings.version_unknown') }}</p></div><div class="flex items-center gap-2"><button id="refresh-ytdlp-version-btn" type="button" class="settings-action-secondary"><span class="material-symbols-outlined text-sm">refresh</span>{{ t('settings.check_version') }}</button><button id="update-ytdlp-btn" type="button" class="settings-action-primary"><span class="material-symbols-outlined text-sm">system_update</span>{{ t('settings.update_ytdlp') }}</button></div></div><p id="ytdlp-update-status" class="mt-2 text-xs text-on-surface-variant">{{ t('settings.ytdlp_status_initial') }}</p></div><label class="settings-toggle"><span><span class="settings-label block">{{ t('settings.parallel_search') }}</span><span class="settings-help">{{ t('settings.parallel_search_detail') }}</span></span><input id="concurrent_ytdlp_search_enabled" type="checkbox" class="h-5 w-5 accent-primary" /></label><div class="space-y-2 rounded-lg bg-surface-container-highest/40 px-4 py-3"><p class="settings-label">{{ t('settings.lyrics_providers') }}</p><label class="settings-toggle"><span class="text-xs text-on-surface-variant/90">{{ t('settings.lyrics_provider_netease') }}</span><input id="lyrics_provider_netease_enabled" type="checkbox" class="h-5 w-5 accent-primary" /></label><label class="settings-toggle"><span class="text-xs text-on-surface-variant/90">{{ t('settings.lyrics_provider_lrclib') }}</span><input id="lyrics_provider_lrclib_enabled" type="checkbox" class="h-5 w-5 accent-primary" /></label></div></div>
+            </details>
+
+            <details class="settings-section glass-card min-w-0 rounded-xl border border-white/10 shadow-xl" data-settings-section="stage">
+                <summary class="settings-section-summary flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden"><div class="flex min-w-0 items-center gap-3"><span class="material-symbols-outlined text-primary">stadium</span><div class="min-w-0"><h3 class="font-headline text-lg font-bold text-on-surface">{{ t('settings.stage') }}</h3><p class="mt-0.5 text-xs text-on-surface-variant">{{ t('settings.stage_detail') }}</p></div></div><div class="flex shrink-0 items-center gap-2"><a href="{{ docs_url() }}" target="_blank" rel="noopener noreferrer" data-settings-docs-link class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary" aria-label="{{ t('settings.section_docs') }}" title="{{ t('settings.section_docs') }}"><span class="material-symbols-outlined text-sm">open_in_new</span></a><span class="material-symbols-outlined settings-section-chevron text-on-surface-variant">expand_more</span></div></summary>
+                <div class="space-y-4 border-t border-white/10 p-5"><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.qr_url') }}</span><input id="stage_qr_url" class="settings-input" type="url" placeholder="https://your-server/queue" /><span class="settings-help">{{ t('settings.qr_url_detail') }}</span></label><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.lobby_media_path') }}</span><input id="stage_lobby_media_path" class="settings-input" type="text" placeholder="/media/stage-lobby.mp4" /><span class="settings-help">{{ t('settings.lobby_media_path_detail') }}</span></label><label class="flex flex-col gap-1.5"><span class="settings-label">{{ t('settings.vocals_volume_default') }}</span><input id="stage_vocals_volume_default" class="settings-input" type="number" min="0" max="100" step="1" required /><span class="settings-help">{{ t('settings.vocals_volume_default_detail') }}</span></label></div>
+            </details>
+
+            <details class="settings-section glass-card min-w-0 rounded-xl border border-white/10 shadow-xl" data-settings-section="tools">
+                <summary class="settings-section-summary flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden"><div class="flex min-w-0 items-center gap-3"><span class="material-symbols-outlined text-primary">build</span><div class="min-w-0"><h3 class="font-headline text-lg font-bold text-on-surface">{{ t('settings.tools') }}</h3><p class="mt-0.5 text-xs text-on-surface-variant">{{ t('settings.tools_detail') }}</p></div></div><div class="flex shrink-0 items-center gap-2"><a href="{{ docs_url() }}" target="_blank" rel="noopener noreferrer" data-settings-docs-link class="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition hover:border-primary/30 hover:bg-primary/10 hover:text-primary" aria-label="{{ t('settings.section_docs') }}" title="{{ t('settings.section_docs') }}"><span class="material-symbols-outlined text-sm">open_in_new</span></a><span class="material-symbols-outlined settings-section-chevron text-on-surface-variant">expand_more</span></div></summary>
+                <div class="space-y-4 border-t border-white/10 p-5"><div class="rounded-lg border border-white/10 bg-surface-container-highest/20 p-3"><div class="flex flex-wrap items-center justify-between gap-2"><div class="min-w-0"><p class="settings-label">{{ t('settings.proxy_info_title') }}</p><p class="text-xs text-on-surface-variant/80">{{ t('settings.proxy_info_detail') }}</p></div><button id="check-proxy-info-btn" type="button" class="settings-action-secondary"><span class="material-symbols-outlined text-sm">travel_explore</span>{{ t('settings.check_proxy_info') }}</button></div><dl class="mt-3 grid grid-cols-2 gap-2"><div class="rounded-lg bg-surface-container px-3 py-2"><dt class="settings-label">{{ t('settings.proxy_ip') }}</dt><dd id="proxy-info-ip-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd></div><div class="rounded-lg bg-surface-container px-3 py-2"><dt class="settings-label">{{ t('settings.proxy_location') }}</dt><dd id="proxy-info-location-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd></div><div class="col-span-2 rounded-lg bg-surface-container px-3 py-2"><dt class="settings-label">{{ t('settings.proxy_org') }}</dt><dd id="proxy-info-org-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd></div></dl><p id="proxy-info-status" class="mt-2 text-xs text-on-surface-variant">{{ t('settings.proxy_info_idle') }}</p></div><div class="rounded-lg border border-white/10 bg-surface-container-highest/20 p-3"><div class="flex flex-wrap items-center justify-between gap-2"><div><p class="settings-label">{{ t('settings.storage_usage_title') }}</p><p id="storage-usage-status" class="text-xs text-on-surface-variant">{{ t('settings.storage_usage_idle') }}</p></div><button id="check-storage-usage-btn" type="button" class="settings-action-secondary"><span class="material-symbols-outlined text-sm">storage</span>{{ t('settings.check_storage_usage') }}</button></div><dl class="mt-3 grid grid-cols-2 gap-2"><div class="rounded-lg bg-surface-container px-3 py-2"><dt class="settings-label">{{ t('settings.storage_usage_media') }}</dt><dd id="storage-usage-media-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd></div><div class="rounded-lg bg-surface-container px-3 py-2"><dt class="settings-label">{{ t('settings.storage_usage_cache') }}</dt><dd id="storage-usage-cache-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd></div><div class="rounded-lg bg-surface-container px-3 py-2"><dt class="settings-label">{{ t('settings.storage_usage_database') }}</dt><dd id="storage-usage-database-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd><p id="storage-usage-database-note" class="mt-1 hidden text-[11px] text-on-surface-variant">{{ t('settings.storage_usage_database_note') }}</p></div><div class="rounded-lg bg-surface-container px-3 py-2"><dt class="settings-label">{{ t('settings.storage_usage_total') }}</dt><dd id="storage-usage-total-text" class="mt-1 truncate text-sm font-semibold text-on-surface">{{ t('common.unknown') }}</dd></div></dl><div class="mt-3 flex flex-wrap items-center gap-3"><button id="cleanup-storage-btn" type="button" class="settings-action-danger"><span class="material-symbols-outlined text-sm">delete_sweep</span>{{ t('settings.cleanup_storage') }}</button><p id="storage-cleanup-status" class="text-xs text-on-surface-variant">{{ t('settings.storage_cleanup_idle') }}</p></div></div></div>
+            </details>
         </form>
 
-        <div class="mt-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
-            <div class="grid w-full grid-cols-2 gap-3 md:flex md:w-auto md:items-center">
-                <button id="save-settings-btn" class="inline-flex min-w-0 items-center justify-center gap-2 rounded-lg border border-primary/30 bg-primary px-3 py-3 text-xs font-black uppercase tracking-widest text-on-primary transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 sm:px-6">
-                    <span class="material-symbols-outlined text-base">save</span>
-                    <span class="truncate">{{ t('common.save') }}</span>
-                </button>
-                <button id="reload-settings-btn" class="inline-flex min-w-0 items-center justify-center gap-2 rounded-full border-2 border-primary/30 bg-transparent px-3 py-3 text-xs font-black uppercase tracking-widest text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60 sm:px-6">
-                    <span class="material-symbols-outlined text-base">refresh</span>
-                    <span class="truncate">{{ t('common.refresh') }}</span>
-                </button>
-            </div>
-
-            <div class="flex w-full flex-wrap items-center gap-3 rounded-full border border-white/10 bg-surface-container px-4 py-2 text-xs md:w-auto">
-                <div class="flex items-center gap-2">
-                    <span id="engine-status-dot" class="h-2 w-2 rounded-full bg-outline shadow-[0_0_10px_rgba(193,255,254,0.9)]"></span>
-                    <span id="engine-status-text" class="font-bold uppercase tracking-widest text-on-surface">{{ t('settings.engine_unknown') }}</span>
-                </div>
-                <span class="hidden h-4 w-px bg-white/10 sm:block"></span>
-                <div class="flex items-center gap-1.5 text-on-surface-variant">
-                    <span class="material-symbols-outlined text-xs">history</span>
-                    <span id="last-sync-text" class="font-medium">{{ t('settings.last_sync_never') }}</span>
-                </div>
-                <span class="hidden h-4 w-px bg-white/10 lg:block"></span>
-                <div class="flex flex-wrap items-center gap-2">
-                    <button id="demucs-gc-btn" type="button" class="inline-flex items-center gap-1.5 rounded-full border border-warning/30 bg-warning/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-warning transition hover:bg-warning/20 disabled:cursor-not-allowed disabled:opacity-60">
-                        <span class="material-symbols-outlined text-sm">delete_sweep</span>
-                        {{ t('settings.trigger_demucs_gc') }}
-                    </button>
-                    <p id="demucs-gc-status" class="max-w-[18rem] text-[11px] text-on-surface-variant">
-                        {{ t('settings.demucs_gc_idle') }}
-                    </p>
+        <div class="mt-8 grid gap-4 md:grid-cols-[minmax(10rem,auto)_minmax(0,1fr)] md:items-start">
+            <button id="check-demucs-btn" type="button" class="settings-action-secondary w-fit justify-center whitespace-nowrap md:min-w-[10rem]"><span class="material-symbols-outlined text-sm">health_and_safety</span>{{ t('settings.check_demucs') }}</button>
+            <div class="settings-engine-panel min-w-0 rounded-xl border border-white/10 bg-surface-container-highest/25 p-4">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-3 text-xs">
+                    <div class="flex items-center gap-2">
+                        <span id="engine-status-dot" class="h-2 w-2 shrink-0 rounded-full bg-outline shadow-[0_0_10px_rgba(193,255,254,0.9)]"></span>
+                        <span id="engine-status-text" class="font-bold uppercase tracking-widest text-on-surface">{{ t('settings.engine_unknown') }}</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 text-on-surface-variant">
+                        <span class="material-symbols-outlined text-xs">history</span>
+                        <span id="last-sync-text" class="font-medium">{{ t('settings.last_sync_never') }}</span>
+                    </div>
+                    <div class="flex min-w-0 flex-1 basis-full flex-wrap items-center gap-2 border-t border-white/10 pt-3 sm:basis-auto sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0">
+                        <button id="demucs-gc-btn" type="button" class="settings-action-danger"><span class="material-symbols-outlined text-sm">delete_sweep</span>{{ t('settings.trigger_demucs_gc') }}</button>
+                        <p id="demucs-gc-status" class="min-w-0 max-w-[18rem] text-[11px] text-on-surface-variant">{{ t('settings.demucs_gc_idle') }}</p>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
 </main>
 
-<div id="save-feedback" class="pointer-events-none fixed inset-x-4 bottom-4 z-[60] flex translate-y-3 items-center gap-2 rounded-lg border border-primary/30 bg-surface-container px-4 py-3 text-sm text-on-surface opacity-0 shadow-xl transition duration-200 md:inset-x-auto md:right-6 md:bottom-6 md:max-w-md" role="status" aria-live="polite">
-    <span id="save-feedback-icon" class="material-symbols-outlined text-base text-primary">check_circle</span>
-    <span id="save-feedback-text" class="font-medium">{{ t('settings.saved') }}</span>
-</div>
+<button id="save-settings-btn" type="button" hidden aria-label="{{ t('settings.save_changes') }}" title="{{ t('settings.save_changes') }}" class="settings-floating-save fixed z-50 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary px-4 py-2.5 text-xs font-black uppercase tracking-widest text-on-primary shadow-2xl shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60">
+    <span class="material-symbols-outlined text-base">save</span>
+    <span>{{ t('common.save') }}</span>
+</button>
+
+<div id="save-feedback" class="settings-save-feedback pointer-events-none fixed inset-x-4 z-[60] flex -translate-y-3 items-center gap-2 rounded-lg border border-primary/30 bg-surface-container px-4 py-3 text-sm text-on-surface opacity-0 shadow-xl transition duration-200 md:inset-x-auto md:right-6 md:max-w-md" role="status" aria-live="polite"><span id="save-feedback-icon" class="material-symbols-outlined text-base text-primary">check_circle</span><span id="save-feedback-text" class="font-medium">{{ t('settings.saved') }}</span></div>
 {% endblock %}
 
-{% block scripts %}
-<script src="{{ app_url('/static/settings.js') }}"></script>
-{% endblock %}
+{% block scripts %}<script src="{{ app_url('/static/settings.js') }}"></script>{% endblock %}

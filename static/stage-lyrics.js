@@ -28,8 +28,8 @@ class StageLyricsController {
     "ZCOOL QingKe HuangYou",
   ]);
 
-  static GOOGLE_FONT_WEIGHTS = [400, 700, 900];
-  static CUSTOM_FONT_PREVIEW_SAMPLE = "Aa 你 Karaoke";
+  static GOOGLE_FONT_WEIGHTS = [300, 400, 500, 700];
+  static CUSTOM_FONT_WEIGHTS = new Set([300, 400, 500, 700]);
 
   static FONT_PRESETS = {
     karaoke_cjk: {
@@ -57,8 +57,10 @@ class StageLyricsController {
   static DEFAULT_SETTINGS = {
     fontPreset: "readable_cjk",
     customFontFamily: "",
+    customFontWeight: 700,
     sizeVw: 4.5,
     lineWidthPct: 85,
+    lineGapVw: 0.8,
     neighborLineScalePct: 60,
     neighborLineOpacityPct: 60,
     textColor: "#fff8df",
@@ -108,7 +110,7 @@ class StageLyricsController {
     this.importExport = options.importExport || null;
     this.fileInput = options.fileInput || null;
     this.status = options.status || null;
-    this.customFontPreview = options.customFontPreview || null;
+    this.customFontFields = Array.isArray(options.customFontFields) ? options.customFontFields : [];
     this.backgroundLayer = options.backgroundLayer || null;
     this.backgroundImage = options.backgroundImage || null;
     this.backgroundVideo = options.backgroundVideo || null;
@@ -732,8 +734,12 @@ class StageLyricsController {
     return {
       fontPreset,
       customFontFamily: String(settings.customFontFamily || "").slice(0, 220),
+      customFontWeight: StageLyricsController.CUSTOM_FONT_WEIGHTS.has(Number(settings.customFontWeight))
+        ? Number(settings.customFontWeight)
+        : StageLyricsController.DEFAULT_SETTINGS.customFontWeight,
       sizeVw: this.clampNumber(settings.sizeVw, 3.2, 8.8, StageLyricsController.DEFAULT_SETTINGS.sizeVw),
       lineWidthPct: Math.round(this.clampNumber(settings.lineWidthPct, 60, 100, StageLyricsController.DEFAULT_SETTINGS.lineWidthPct)),
+      lineGapVw: this.clampNumber(settings.lineGapVw, 0.2, 2, StageLyricsController.DEFAULT_SETTINGS.lineGapVw),
       neighborLineScalePct: Math.round(this.clampNumber(settings.neighborLineScalePct, 30, 100, StageLyricsController.DEFAULT_SETTINGS.neighborLineScalePct)),
       neighborLineOpacityPct: Math.round(this.clampNumber(settings.neighborLineOpacityPct, 10, 100, StageLyricsController.DEFAULT_SETTINGS.neighborLineOpacityPct)),
       textColor: this.normalizeColor(settings.textColor, StageLyricsController.DEFAULT_SETTINGS.textColor),
@@ -835,13 +841,18 @@ class StageLyricsController {
     }
     const preset = StageLyricsController.FONT_PRESETS[this.settings.fontPreset] || StageLyricsController.FONT_PRESETS.karaoke_cjk;
     const customFontFamily = this.settings.fontPreset === "custom" ? this.appliedCustomFontFamily : "";
+    const fontWeight = this.settings.fontPreset === "custom"
+      ? this.settings.customFontWeight
+      : 900;
     const fontFamily = customFontFamily
       ? this.normalizeCustomFontStack(customFontFamily)
       : (preset.value || StageLyricsController.FONT_PRESETS.readable_cjk.value);
 
     this.overlay.style.setProperty("--stage-lyrics-font-family", fontFamily);
+    this.overlay.style.setProperty("--stage-lyrics-font-weight", String(fontWeight));
     this.overlay.style.setProperty("--stage-lyrics-size", `clamp(2.4rem, ${this.settings.sizeVw}vw, 6.8rem)`);
     this.overlay.style.setProperty("--stage-lyrics-lines-width", `${this.settings.lineWidthPct}vw`);
+    this.overlay.style.setProperty("--stage-lyrics-line-gap", `clamp(0.2rem, ${this.settings.lineGapVw}vw, 2rem)`);
     this.overlay.style.setProperty("--stage-lyrics-line-scale", `${this.settings.neighborLineScalePct / 100}`);
     this.overlay.style.setProperty("--stage-lyrics-line-opacity", `${this.settings.neighborLineOpacityPct / 100}`);
     this.overlay.style.setProperty("--stage-lyrics-text-color", this.settings.textColor);
@@ -851,28 +862,7 @@ class StageLyricsController {
     this.overlay.dataset.animation = this.reducedMotion ? "none" : this.settings.animation;
     this.applyBackgroundSettings();
     void this.ensureFontStackLoaded(fontFamily);
-    this.updateCustomFontPreview(fontFamily);
     this.renderWindow();
-  }
-
-  updateCustomFontPreview(fontFamily) {
-    if (!this.customFontPreview) {
-      return;
-    }
-
-    const isCustomPreset = this.settings.fontPreset === "custom";
-    const currentCustomFontFamily = String(this.settings.customFontFamily || this.appliedCustomFontFamily || "").trim();
-    const hasCustomFamily = Boolean(currentCustomFontFamily);
-    const previewFontFamily = isCustomPreset && hasCustomFamily
-      ? this.normalizeCustomFontStack(currentCustomFontFamily)
-      : fontFamily;
-
-    this.customFontPreview.textContent = isCustomPreset && hasCustomFamily
-      ? StageLyricsController.CUSTOM_FONT_PREVIEW_SAMPLE
-      : this.t("stage.lyrics_custom_font_preview_empty");
-    this.customFontPreview.classList.toggle("is-empty", !(isCustomPreset && hasCustomFamily));
-    this.customFontPreview.style.fontFamily = previewFontFamily || "";
-    this.customFontPreview.style.fontWeight = "900";
   }
 
   applyBackgroundSettings() {
@@ -1235,11 +1225,20 @@ class StageLyricsController {
     if (this.inputs.customFontFamily) {
       this.inputs.customFontFamily.disabled = this.settings.fontPreset !== "custom";
     }
+    if (this.inputs.customFontWeight) {
+      this.inputs.customFontWeight.disabled = this.settings.fontPreset !== "custom";
+    }
+    this.customFontFields.forEach((field) => {
+      field?.classList.toggle("is-hidden", this.settings.fontPreset !== "custom");
+    });
     if (this.inputs.sizeVwValue) {
       this.inputs.sizeVwValue.textContent = `${this.settings.sizeVw.toFixed(1)}vw`;
     }
     if (this.inputs.lineWidthPctValue) {
       this.inputs.lineWidthPctValue.textContent = `${this.settings.lineWidthPct}%`;
+    }
+    if (this.inputs.lineGapVwValue) {
+      this.inputs.lineGapVwValue.textContent = `${this.settings.lineGapVw.toFixed(1)}vw`;
     }
     if (this.inputs.neighborLineScalePctValue) {
       this.inputs.neighborLineScalePctValue.textContent = `${this.settings.neighborLineScalePct}%`;
@@ -1253,7 +1252,6 @@ class StageLyricsController {
     if (this.inputs.backgroundMediaOpacityPctValue) {
       this.inputs.backgroundMediaOpacityPctValue.textContent = `${this.settings.backgroundMediaOpacityPct}%`;
     }
-    this.updateCustomFontPreview(this.settings.fontPreset === "custom" ? this.settings.customFontFamily : "");
   }
 
   applySettingsFromTextarea() {

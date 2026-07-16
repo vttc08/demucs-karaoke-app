@@ -24,9 +24,9 @@ if str(REPO_ROOT) not in __import__("sys").path:
 
 demucs_app = importlib.import_module("demucs_svc.app")
 demucs_models = importlib.import_module("demucs_svc.models")
-demucs_runner = importlib.import_module("demucs_svc.demucs_runner")
 demucs_settings = importlib.import_module("demucs_svc.settings")
 sherpa_provider = importlib.import_module("demucs_svc.separation.sherpa_spleeter")
+demucs_provider = importlib.import_module("demucs_svc.separation.demucs")
 
 
 def _clear_job_store() -> None:
@@ -770,8 +770,17 @@ def test_separate_config_clears_mp3_bitrate_for_wav():
     assert config.mp3_bitrate is None
 
 
+def test_legacy_separate_meta_endpoint_is_removed():
+    client = TestClient(demucs_app.app)
+    response = client.post(
+        "/separate-meta",
+        files={"file": ("input.wav", b"audio", "audio/wav")},
+    )
+    assert response.status_code == 404
+
+
 def test_parse_progress_line_extracts_percent_and_message():
-    percent, message = demucs_runner.parse_progress_line(" 45%|#####     | 9/20 [00:01<00:01] ")
+    percent, message = demucs_provider.parse_progress_line(" 45%|#####     | 9/20 [00:01<00:01] ")
     assert percent == 45
     assert "45%" in message
 
@@ -871,57 +880,6 @@ def test_whisperx_alignment_emits_progress_checkpoints(monkeypatch, tmp_path):
         ("whisperx_loading_alignment_model", 30, "indeterminate"),
         ("whisperx_aligning_lyrics", 50, "indeterminate"),
     ]
-
-
-def test_run_demucs_on_file_mp3_builds_expected_command_and_paths(tmp_path, monkeypatch):
-    incoming = tmp_path / "incoming"
-    output = tmp_path / "output"
-    incoming.mkdir(parents=True, exist_ok=True)
-    output.mkdir(parents=True, exist_ok=True)
-
-    monkeypatch.setattr(demucs_runner, "INCOMING_ROOT", incoming)
-    monkeypatch.setattr(demucs_runner, "OUTPUT_ROOT", output)
-    monkeypatch.setattr(
-        demucs_runner,
-        "uuid4",
-        lambda: SimpleNamespace(hex="job123"),
-    )
-
-    seen_cmd = {}
-
-    def fake_run(cmd, check, capture_output, text):
-        seen_cmd["cmd"] = cmd
-        out_dir = Path(cmd[cmd.index("-o") + 1])
-        model = cmd[cmd.index("-n") + 1]
-        input_path = Path(cmd[-1])
-        stem = out_dir / model / input_path.stem
-        stem.mkdir(parents=True, exist_ok=True)
-        (stem / "no_vocals.mp3").write_bytes(b"no-vocals")
-        (stem / "vocals.mp3").write_bytes(b"vocals")
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr(demucs_runner.subprocess, "run", fake_run)
-
-    config = demucs_models.SeparateConfig(
-        model="htdemucs_ft",
-        device="cpu",
-        output_format="mp3",
-        mp3_bitrate=256,
-    )
-    result = demucs_runner.run_demucs_on_file(
-        b"audio-bytes",
-        "track.wav",
-        config,
-    )
-
-    cmd = seen_cmd["cmd"]
-    assert "-n" in cmd and "htdemucs_ft" in cmd
-    assert "-d" in cmd and "cpu" in cmd
-    assert "--mp3" in cmd
-    assert "--mp3-bitrate" in cmd and "256" in cmd
-    assert result.no_vocals_path.name.endswith(".mp3")
-    assert result.vocals_path.name.endswith(".mp3")
-    assert result.output_format == "mp3"
 
 
 def test_job_creation_passes_whisperx_request_fields(monkeypatch, tmp_path):
@@ -1141,8 +1099,6 @@ def test_create_job_and_fetch_result(monkeypatch, tmp_path):
     monkeypatch.setattr(demucs_app, "_cuda_available", lambda: True)
     monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
     monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
-    monkeypatch.setattr(demucs_runner, "INCOMING_ROOT", tmp_path / "incoming")
-    monkeypatch.setattr(demucs_runner, "OUTPUT_ROOT", tmp_path / "output")
     demucs_app.INCOMING_ROOT.mkdir(parents=True, exist_ok=True)
     demucs_app.OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -1154,7 +1110,10 @@ def test_create_job_and_fetch_result(monkeypatch, tmp_path):
             progress_message="Separating vocals",
             started_at=demucs_app.utc_now(),
         )
-        no_vocals_path, vocals_path = demucs_runner.build_expected_output_paths(job_id, input_path, config)
+        stem_dir = demucs_app.OUTPUT_ROOT / job_id / config.model / input_path.stem
+        extension = "mp3" if config.output_format == "mp3" else "wav"
+        no_vocals_path = stem_dir / f"no_vocals.{extension}"
+        vocals_path = stem_dir / f"vocals.{extension}"
         no_vocals_path.parent.mkdir(parents=True, exist_ok=True)
         no_vocals_path.write_bytes(b"no-vocals")
         vocals_path.write_bytes(b"vocals")
@@ -1207,8 +1166,8 @@ def test_cancel_job_marks_terminal(monkeypatch, tmp_path):
     monkeypatch.setattr(demucs_app, "_cuda_available", lambda: True)
     monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
     monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
-    monkeypatch.setattr(demucs_runner, "INCOMING_ROOT", tmp_path / "incoming")
-    monkeypatch.setattr(demucs_runner, "OUTPUT_ROOT", tmp_path / "output")
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
     demucs_app.INCOMING_ROOT.mkdir(parents=True, exist_ok=True)
     demucs_app.OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -1234,7 +1193,7 @@ def test_cancel_job_marks_terminal(monkeypatch, tmp_path):
     process = FakeProcess()
 
     def fake_start_job(payload, original_filename, config):
-        job_id, _incoming_dir, _output_dir, _input_path = demucs_runner.prepare_job_input(payload, original_filename)
+        job_id, _incoming_dir, _output_dir, _input_path = demucs_app.prepare_job_input(payload, original_filename)
         return demucs_app.job_store.create(
             demucs_app.DemucsJobState(
                 job_id=job_id,
@@ -1271,8 +1230,6 @@ def test_cancel_alignment_job_terminates_process_and_cleans_io(monkeypatch, tmp_
     monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
     demucs_app.INCOMING_ROOT.mkdir(parents=True, exist_ok=True)
     demucs_app.OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(demucs_runner, "INCOMING_ROOT", tmp_path / "incoming")
-    monkeypatch.setattr(demucs_runner, "OUTPUT_ROOT", tmp_path / "output")
     monkeypatch.setattr(demucs_app, "_run_garbage_collection", lambda **_: None)
 
     class FakeProcess:
@@ -1291,7 +1248,7 @@ def test_cancel_alignment_job_terminates_process_and_cleans_io(monkeypatch, tmp_
     process = FakeProcess()
 
     def fake_start_alignment_job(payload, original_filename, config):
-        job_id, incoming_dir, output_dir, _input_path = demucs_runner.prepare_job_input(payload, original_filename)
+        job_id, incoming_dir, output_dir, _input_path = demucs_app.prepare_job_input(payload, original_filename)
         (incoming_dir / "input.wav").write_bytes(b"audio")
         (output_dir / "partial.tmp").write_bytes(b"partial")
         return demucs_app.job_store.create(

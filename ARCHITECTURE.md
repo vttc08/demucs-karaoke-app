@@ -538,6 +538,8 @@ This is applied at command build time, so new operations use updated proxy setti
 - The application loads those persisted values during startup after database initialization.
 - Explicit `.env` / environment values remain authoritative and are not overwritten by database values.
 - The settings update route writes validated UI changes back to the database and the in-memory `settings` object in the same request.
+- Settings saves do not call the remote Demucs health endpoint, so database persistence and in-memory application are not delayed by a slow or unavailable separation service.
+- The settings page's separate **Check Demucs** action calls the health endpoint on demand using the currently entered service URL and backend selection.
 - The persisted settings currently include:
   - `demucs_api_url`
   - `demucs_model`

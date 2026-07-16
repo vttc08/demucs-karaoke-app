@@ -16,15 +16,13 @@ from io import BytesIO
 from pathlib import Path
 from typing import Literal
 from html import escape
+from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import ValidationError
 
 try:
-    from .demucs_runner import (
-        prepare_job_input,
-    )
     from .jobs import DemucsJobState, DemucsJobStore, utc_now
     from .models import (
         DemucsJobArtifactDeleteResponse,
@@ -36,7 +34,6 @@ try:
         DemucsMetricsResponse,
         DemucsJobStatusResponse,
         SeparateConfig,
-        SeparateMetaResponse,
         TransferUploadResponse,
         WhisperXPreloadResponse,
     )
@@ -73,9 +70,6 @@ try:
         whisperx_available,
     )
 except ImportError:
-    from demucs_runner import (
-        prepare_job_input,
-    )
     from jobs import DemucsJobState, DemucsJobStore, utc_now
     from models import (
         DemucsJobArtifactDeleteResponse,
@@ -87,7 +81,6 @@ except ImportError:
         DemucsMetricsResponse,
         DemucsJobStatusResponse,
         SeparateConfig,
-        SeparateMetaResponse,
         TransferUploadResponse,
         WhisperXPreloadResponse,
     )
@@ -1029,6 +1022,25 @@ def _run_job(job_id: str, input_path: Path, config: SeparateConfig) -> None:
         _cleanup_expired_jobs()
 
 
+def prepare_job_input(
+    input_bytes: bytes,
+    original_filename: str,
+    *,
+    job_id: str | None = None,
+) -> tuple[str, Path, Path, Path]:
+    """Write an uploaded input into the service's per-job scratch directories."""
+    resolved_job_id = job_id or uuid4().hex
+    incoming_dir = INCOMING_ROOT / resolved_job_id
+    output_dir = OUTPUT_ROOT / resolved_job_id
+    incoming_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    input_suffix = Path(original_filename).suffix or ".wav"
+    input_path = incoming_dir / f"input{input_suffix}"
+    input_path.write_bytes(input_bytes)
+    return resolved_job_id, incoming_dir, output_dir, input_path
+
+
 def _start_job(payload: bytes, original_filename: str, config: SeparateConfig) -> DemucsJobState:
     _cleanup_expired_jobs()
     job_id, _incoming_dir, _output_dir, input_path = prepare_job_input(payload, original_filename)
@@ -1735,76 +1747,6 @@ async def separate(
         raise HTTPException(status_code=500, detail="Separation job was canceled")
     return get_job_result(job.job_id)
 
-
-@app.post("/separate-meta", response_model=SeparateMetaResponse)
-async def separate_meta(
-    file: UploadFile = File(...),
-    model: str = Form(DEFAULT_DEMUCS_MODEL),
-    device: Literal["cuda", "cpu"] = Form(DEFAULT_DEMUCS_DEVICE),
-    output_format: Literal["wav", "mp3"] = Form(DEFAULT_OUTPUT_FORMAT),
-    mp3_bitrate: int | None = Form(None),
-    lyrics_text: str | None = Form(None),
-    lyrics_format: str | None = Form(None),
-    transcription_model: str = Form(DEFAULT_WHISPERX_TRANSCRIPTION_MODEL),
-    align_language: str | None = Form(DEFAULT_WHISPERX_ALIGN_LANGUAGE),
-    detect_language: bool = Form(DEFAULT_WHISPERX_DETECT_LANGUAGE),
-    use_synced_lyrics: bool = Form(DEFAULT_WHISPERX_USE_SYNCED_LYRICS),
-    whisperx_preload_models: str | None = Form(DEFAULT_WHISPERX_PRELOAD_MODELS),
-    process_lyrics_lines: bool = Form(False),
-    max_line_length: int = Form(36),
-    max_line_length_cjk: int = Form(12),
-    compute_type: str | None = Form(None),
-    separation_backend: Literal["demucs", "sherpa_spleeter"] = Form(DEFAULT_SEPARATION_BACKEND),
-    sherpa_spleeter_model: Literal["fp16", "int8", "fp32"] = Form(DEFAULT_SHERPA_SPLEETER_MODEL),
-):
-    config = _validated_config(
-        model,
-        device,
-        output_format,
-        mp3_bitrate,
-        lyrics_text=lyrics_text,
-        lyrics_format=lyrics_format,
-        transcription_model=transcription_model,
-        align_language=align_language,
-        detect_language=detect_language,
-        use_synced_lyrics=use_synced_lyrics,
-        whisperx_preload_models=whisperx_preload_models,
-        process_lyrics_lines=process_lyrics_lines,
-        max_line_length=max_line_length,
-        max_line_length_cjk=max_line_length_cjk,
-        compute_type=compute_type,
-        separation_backend=separation_backend,
-        sherpa_spleeter_model=sherpa_spleeter_model,
-    )
-
-    try:
-        payload = await file.read()
-        job = _start_job(payload, file.filename or "input.wav", config)
-        result = _wait_for_terminal_job(job.job_id)
-        if result.status == "failed":
-            raise RuntimeError(result.error_detail or "Separation failed")
-        if result.status == "canceled":
-            raise RuntimeError("Separation job was canceled")
-    except RuntimeError as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
-
-    return SeparateMetaResponse(
-        job_id=result.job_id,
-        no_vocals_path=str(result.no_vocals_path),
-        vocals_path=str(result.vocals_path),
-        model=result.model,
-        device=result.device,
-        output_format=result.output_format,
-        mp3_bitrate=result.mp3_bitrate,
-        duration_ms=result.duration_ms,
-        status="completed",
-        aligned_lyrics_path=result.aligned_lyrics_path,
-        separation_backend=result.separation_backend,
-        separation_model=result.separation_model,
-        effective_device=result.effective_device,
-    )
 
 @app.post("/gc", response_model=DemucsGarbageCollectionResponse)
 def trigger_garbage_collection(

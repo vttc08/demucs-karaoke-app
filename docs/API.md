@@ -303,8 +303,6 @@ Allowed `direction` values:
 
 The endpoint updates the stored sparse `position`, reuses existing gaps when possible, and renumbers the queue only if spacing has collapsed. Successful moves broadcast `queue_item_updated` so queue and stage clients refresh their ordering.
 
----
-
 ### Resolve Lyrics
 ```
 POST /api/lyrics/resolve
@@ -1166,6 +1164,8 @@ PATCH /api/settings/
 Updates runtime settings immediately for new requests while the app is running.
 The validated values are also persisted to the `runtime_settings` table so they survive reloads
 and restarts when no explicit `.env` override is present.
+This endpoint does not perform a live Demucs health probe; use `GET /api/settings/demucs-health`
+when an explicit availability check is needed.
 
 **Request Body (partial update supported):**
 ```json
@@ -1257,7 +1257,7 @@ The Demucs service response ZIP still contains the standard `no_vocals` and `voc
 
 `metadata.json` inside the ZIP records the same file list for downstream consumers.
 
-`POST /jobs`, `POST /separate`, and `POST /separate-meta` accept additive
+`POST /jobs` and `POST /separate` accept additive
 `separation_backend` and `sherpa_spleeter_model` multipart fields. Omitting them preserves Demucs.
 Job status, SSE events, metrics, response headers, and ZIP metadata expose `separation_backend`,
 `separation_model`, and `effective_device`. Sherpa reports CPU as its effective device even when the
@@ -1360,7 +1360,10 @@ The admin settings page proxies a manual Demucs GC action through `/api/settings
 GET /api/settings/demucs-health
 ```
 
-Returns current Demucs health for configured API URL.
+Returns current Demucs health for the configured API URL. The settings UI may provide
+`demucs_api_url`, `separation_backend`, and `sherpa_spleeter_model` query parameters to validate
+values currently being edited before or after saving; omitted parameters use the active runtime
+settings.
 
 **Response:**
 ```json

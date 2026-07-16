@@ -11,7 +11,7 @@ const YTDLP_UPDATE_API = appUrl("/api/settings/ytdlp/update");
 const WHISPERX_PRELOAD_API = appUrl("/api/settings/whisperx/preload");
 const form = document.getElementById("settings-form");
 const saveBtn = document.getElementById("save-settings-btn");
-const reloadBtn = document.getElementById("reload-settings-btn");
+const checkDemucsBtn = document.getElementById("check-demucs-btn");
 const statusEl = document.getElementById("settings-status");
 const saveFeedback = document.getElementById("save-feedback");
 const saveFeedbackIcon = document.getElementById("save-feedback-icon");
@@ -47,6 +47,8 @@ const demucsModelGroup = document.getElementById("demucs-model-group");
 const sherpaSpleeterModelGroup = document.getElementById("sherpa-spleeter-model-group");
 const ENGINE_STATUS_STORAGE_KEY = "karaoke.engineStatus";
 let saveFeedbackTimer = null;
+let savedFormSnapshot = null;
+let formBusy = false;
 
 const fields = {
     demucs_api_url: document.getElementById("demucs_api_url"),
@@ -89,6 +91,27 @@ function setStatus(message, isError = false) {
     }
 }
 
+function setDirtyState(isDirty) {
+    if (!saveBtn) {
+        return;
+    }
+
+    saveBtn.hidden = !isDirty;
+    saveBtn.setAttribute("aria-hidden", isDirty ? "false" : "true");
+    saveBtn.disabled = formBusy || !isDirty;
+    if (isDirty && !formBusy) {
+        setStatus(t("settings.unsaved_changes"));
+    }
+}
+
+function syncDirtyState() {
+    if (savedFormSnapshot === null) {
+        setDirtyState(false);
+        return;
+    }
+    setDirtyState(getFormSnapshot() !== savedFormSnapshot);
+}
+
 function showSaveFeedback(message, isError = false) {
     if (!saveFeedback || !saveFeedbackText || !saveFeedbackIcon) {
         return;
@@ -106,12 +129,12 @@ function showSaveFeedback(message, isError = false) {
     saveFeedback.classList.toggle("border-error/40", isError);
     saveFeedback.classList.toggle("border-primary/30", !isError);
 
-    saveFeedback.classList.remove("opacity-0", "translate-y-3");
+    saveFeedback.classList.remove("opacity-0", "-translate-y-3");
     saveFeedback.classList.add("opacity-100", "translate-y-0");
 
     saveFeedbackTimer = setTimeout(() => {
         saveFeedback.classList.remove("opacity-100", "translate-y-0");
-        saveFeedback.classList.add("opacity-0", "translate-y-3");
+        saveFeedback.classList.add("opacity-0", "-translate-y-3");
     }, 2800);
 }
 
@@ -188,7 +211,13 @@ function applyDemucsHealthToUI(health, persist = true) {
 }
 
 function setFormState(disabled) {
-    saveBtn.disabled = disabled;
+    formBusy = disabled;
+    if (saveBtn) {
+        saveBtn.disabled = disabled || savedFormSnapshot === null || getFormSnapshot() === savedFormSnapshot;
+    }
+    if (checkDemucsBtn) {
+        checkDemucsBtn.disabled = disabled;
+    }
     if (preloadWhisperxBtn) {
         preloadWhisperxBtn.disabled = disabled;
     }
@@ -320,6 +349,53 @@ function setStorageUsageValues(data) {
     if (storageUsageTotalText) {
         storageUsageTotalText.textContent = data?.total_display || t("common.unknown");
     }
+}
+
+function getFormPayload() {
+    const payload = {
+        demucs_api_url: fields.demucs_api_url.value.trim(),
+        demucs_api_key: fields.demucs_api_key.value.trim(),
+        demucs_model: fields.demucs_model.value,
+        separation_backend: fields.separation_backend.value,
+        sherpa_spleeter_model: fields.sherpa_spleeter_model.value,
+        demucs_device: fields.demucs_device.value,
+        demucs_output_format: fields.demucs_output_format.value,
+        demucs_mp3_bitrate: Number(fields.demucs_mp3_bitrate.value),
+        demucs_direct_media_max_mb: Number(fields.demucs_direct_media_max_mb.value),
+        demucs_poll_interval_seconds: Number(fields.demucs_poll_interval_seconds.value),
+        whisperx_transcription_model: fields.whisperx_transcription_model.value.trim(),
+        whisperx_align_language: fields.whisperx_align_language.value.trim(),
+        whisperx_detect_language: fields.whisperx_detect_language.checked,
+        whisperx_use_synced_lyrics: fields.whisperx_use_synced_lyrics.checked,
+        whisperx_preload_models: fields.whisperx_preload_models.value.trim(),
+        media_path: fields.media_path.value.trim(),
+        cache_path: fields.cache_path.value.trim(),
+        ytdlp_path: fields.ytdlp_path.value.trim(),
+        ytdlp_deno_path: fields.ytdlp_deno_path.value.trim(),
+        ytdlp_proxy_url: fields.ytdlp_proxy_url.value.trim(),
+        ytdlp_video_resolution: fields.ytdlp_video_resolution.value,
+        ytdlp_video_codec: fields.ytdlp_video_codec.value.trim(),
+        concurrent_ytdlp_search_enabled: fields.concurrent_ytdlp_search_enabled.checked,
+        lyrics_provider_netease_enabled: fields.lyrics_provider_netease_enabled.checked,
+        lyrics_provider_lrclib_enabled: fields.lyrics_provider_lrclib_enabled.checked,
+        ffmpeg_path: fields.ffmpeg_path.value.trim(),
+        ffmpeg_audio_codec: fields.ffmpeg_audio_codec.value.trim(),
+        stage_qr_url: fields.stage_qr_url ? fields.stage_qr_url.value.trim() : "",
+        stage_lobby_media_path: fields.stage_lobby_media_path ? fields.stage_lobby_media_path.value.trim() : "",
+        stage_vocals_volume_default: fields.stage_vocals_volume_default
+            ? Number(fields.stage_vocals_volume_default.value) / 100
+            : 1.0,
+    };
+    return payload;
+}
+
+function getFormSnapshot() {
+    return JSON.stringify(getFormPayload());
+}
+
+function saveCurrentFormSnapshot() {
+    savedFormSnapshot = getFormSnapshot();
+    setDirtyState(false);
 }
 
 function setWhisperxAlignLanguageState(disabled) {
@@ -633,6 +709,7 @@ async function loadSettings() {
         }
         const data = await response.json();
         applySettingsToForm(data);
+        saveCurrentFormSnapshot();
         setStatus(t("settings.loaded"));
         return true;
     } catch (error) {
@@ -651,44 +728,7 @@ async function saveSettings() {
     setFormState(true);
     setStatus(t("settings.saving"));
     showSaveFeedback(t("settings.saving"), false);
-    setEngineStatus("checking", t("settings.checking_demucs"), false);
-
-    const payload = {
-        demucs_api_url: fields.demucs_api_url.value.trim(),
-        demucs_api_key: fields.demucs_api_key.value.trim(),
-        demucs_model: fields.demucs_model.value,
-        separation_backend: fields.separation_backend.value,
-        sherpa_spleeter_model: fields.sherpa_spleeter_model.value,
-        demucs_device: fields.demucs_device.value,
-        demucs_output_format: fields.demucs_output_format.value,
-        demucs_direct_media_max_mb: Number(fields.demucs_direct_media_max_mb.value),
-        demucs_poll_interval_seconds: Number(fields.demucs_poll_interval_seconds.value),
-        whisperx_transcription_model: fields.whisperx_transcription_model.value.trim(),
-        whisperx_align_language: fields.whisperx_align_language.value.trim(),
-        whisperx_detect_language: fields.whisperx_detect_language.checked,
-        whisperx_use_synced_lyrics: fields.whisperx_use_synced_lyrics.checked,
-        whisperx_preload_models: fields.whisperx_preload_models.value.trim(),
-        media_path: fields.media_path.value.trim(),
-        cache_path: fields.cache_path.value.trim(),
-        ytdlp_path: fields.ytdlp_path.value.trim(),
-        ytdlp_deno_path: fields.ytdlp_deno_path.value.trim(),
-        ytdlp_proxy_url: fields.ytdlp_proxy_url.value.trim(),
-        ytdlp_video_resolution: fields.ytdlp_video_resolution.value,
-        ytdlp_video_codec: fields.ytdlp_video_codec.value.trim(),
-        concurrent_ytdlp_search_enabled: fields.concurrent_ytdlp_search_enabled.checked,
-        lyrics_provider_netease_enabled: fields.lyrics_provider_netease_enabled.checked,
-        lyrics_provider_lrclib_enabled: fields.lyrics_provider_lrclib_enabled.checked,
-        ffmpeg_path: fields.ffmpeg_path.value.trim(),
-        ffmpeg_audio_codec: fields.ffmpeg_audio_codec.value.trim(),
-        stage_qr_url: fields.stage_qr_url ? fields.stage_qr_url.value.trim() : "",
-        stage_lobby_media_path: fields.stage_lobby_media_path ? fields.stage_lobby_media_path.value.trim() : "",
-        stage_vocals_volume_default: fields.stage_vocals_volume_default
-            ? Number(fields.stage_vocals_volume_default.value) / 100
-            : 1.0,
-    };
-    if (fields.demucs_output_format.value === "mp3") {
-        payload.demucs_mp3_bitrate = Number(fields.demucs_mp3_bitrate.value);
-    }
+    const payload = getFormPayload();
 
     try {
         const response = await fetch(SETTINGS_API, {
@@ -702,58 +742,103 @@ async function saveSettings() {
         }
         const updated = await response.json();
         applySettingsToForm(updated);
-        applyDemucsHealthToUI({
-            healthy: Boolean(updated.demucs_healthy),
-            detail: updated.demucs_health_detail,
-        });
-        setStatus(updated.demucs_healthy ? t("settings.saved") : t("settings.saved_demucs_offline"), !updated.demucs_healthy);
-        showSaveFeedback(
-            updated.demucs_healthy
-                ? t("settings.saved_success")
-                : t("settings.saved_offline_detail"),
-            !updated.demucs_healthy,
-        );
+        saveCurrentFormSnapshot();
+        setEngineStatus("unknown", t("settings.check_demucs_hint"), false);
+        setStatus(t("settings.saved"));
+        showSaveFeedback(t("settings.saved_success"), false);
     } catch (error) {
         setStatus(error.message || t("settings.save_unable"), true);
         showSaveFeedback(String(error.message || t("settings.save_unable")), true);
-        setEngineStatus("offline", String(error.message || t("settings.save_failed_short")));
+        setEngineStatus("unknown", String(error.message || t("settings.save_failed_short")), false);
     } finally {
         setFormState(false);
     }
 }
 
-async function refreshDemucsHealth() {
+async function checkDemucsHealth() {
+    if (checkDemucsBtn) {
+        checkDemucsBtn.disabled = true;
+    }
     setEngineStatus("checking", t("settings.checking_demucs"), false);
+    setStatus(t("settings.checking_demucs"));
     try {
-        const response = await fetch(DEMUCS_HEALTH_API);
+        const query = new URLSearchParams({
+            demucs_api_url: fields.demucs_api_url.value.trim(),
+            separation_backend: fields.separation_backend.value,
+            sherpa_spleeter_model: fields.sherpa_spleeter_model.value,
+        });
+        const response = await fetch(`${DEMUCS_HEALTH_API}?${query.toString()}`);
         if (!response.ok) {
             throw new Error(t("settings.demucs_health_fetch_failed"));
         }
         const health = await response.json();
         applyDemucsHealthToUI(health);
+        setStatus(t("settings.demucs_checked"), !health.healthy);
     } catch (error) {
-        applyDemucsHealthToUI({
+        const health = {
             healthy: false,
             detail: String(error.message || t("settings.health_check_failed")),
-        });
+        };
+        applyDemucsHealthToUI(health);
+        setStatus(health.detail, true);
+    } finally {
+        if (checkDemucsBtn) {
+            checkDemucsBtn.disabled = formBusy;
+        }
     }
 }
 
-async function reloadEngineStatus() {
-    setStatus(t("settings.refreshing_status"));
-    const loaded = await loadSettings();
-    if (!loaded) {
+const SETTINGS_SECTIONS_STORAGE_KEY = "karaoke.settings.sections";
+
+function initializeSettingsSections() {
+    const sections = Array.from(document.querySelectorAll("[data-settings-section]"));
+    if (!sections.length) {
         return;
     }
-    await refreshDemucsHealth();
-    setStatus(t("settings.status_refreshed"));
+
+    let storedState = {};
+    try {
+        const raw = localStorage.getItem(SETTINGS_SECTIONS_STORAGE_KEY);
+        storedState = raw ? JSON.parse(raw) : {};
+    } catch (_) {
+        storedState = {};
+    }
+
+    sections.forEach((section) => {
+        const key = section.dataset.settingsSection;
+        if (Object.prototype.hasOwnProperty.call(storedState, key)) {
+            section.open = Boolean(storedState[key]);
+        } else {
+            section.open = key === "processing";
+        }
+
+        section.addEventListener("toggle", () => {
+            const nextState = sections.reduce((state, item) => {
+                state[item.dataset.settingsSection] = item.open;
+                return state;
+            }, {});
+            try {
+                localStorage.setItem(SETTINGS_SECTIONS_STORAGE_KEY, JSON.stringify(nextState));
+            } catch (_) {
+                // The form remains usable when localStorage is unavailable.
+            }
+        });
+    });
+
+    document.querySelectorAll("[data-settings-docs-link]").forEach((link) => {
+        link.addEventListener("click", (event) => event.stopPropagation());
+    });
 }
 
 if (saveBtn) {
     saveBtn.addEventListener("click", saveSettings);
 }
-if (reloadBtn) {
-    reloadBtn.addEventListener("click", reloadEngineStatus);
+if (checkDemucsBtn) {
+    checkDemucsBtn.addEventListener("click", checkDemucsHealth);
+}
+if (form) {
+    form.addEventListener("input", syncDirtyState);
+    form.addEventListener("change", syncDirtyState);
 }
 if (fields.demucs_output_format) {
     fields.demucs_output_format.addEventListener("change", updateDemucsOutputUi);
@@ -785,6 +870,8 @@ if (storageCleanupBtn) {
 if (demucsGcBtn) {
     demucsGcBtn.addEventListener("click", triggerDemucsGarbageCollection);
 }
+
+initializeSettingsSections();
 
 const persistedState = readPersistedEngineStatus();
 if (persistedState?.state && persistedState?.detail) {

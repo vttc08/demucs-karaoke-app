@@ -19,7 +19,10 @@ def test_lyrics_presets_api_crud(client):
             "settings": {
                 "fontPreset": "custom",
                 "customFontFamily": '"Noto Sans SC", sans-serif',
+                "customFontWeight": 300,
                 "sizeVw": 4.2,
+                "lineGapVw": 1.6,
+                "lineBehavior": "fixed_group",
                 "activeColor": "#ff00aa",
                 "backgroundMediaEnabled": False,
                 "backgroundMediaPath": "/media/brand-loop.mp4",
@@ -31,6 +34,9 @@ def test_lyrics_presets_api_crud(client):
     created = create_response.json()
     assert created["name"] == "Pink TV"
     assert created["settings"]["fontPreset"] == "custom"
+    assert created["settings"]["customFontWeight"] == 300
+    assert created["settings"]["lineGapVw"] == 1.6
+    assert created["settings"]["lineBehavior"] == "fixed_group"
     assert created["settings"]["activeColor"] == "#ff00aa"
     assert created["settings"]["backgroundMediaEnabled"] is False
     assert created["settings"]["backgroundMediaPath"] == "/media/brand-loop.mp4"
@@ -50,7 +56,10 @@ def test_lyrics_presets_api_crud(client):
             "name": "Bedroom TV",
             "settings": {
                 "fontPreset": "readable_cjk",
+                "customFontWeight": 900,
                 "sizeVw": 5.1,
+                "lineGapVw": 10,
+                "lineBehavior": "rolling_scroll",
                 "textColor": "#eeeeee",
                 "backgroundMediaEnabled": False,
                 "backgroundMediaPath": "https://example.com/brand.mp4",
@@ -62,6 +71,9 @@ def test_lyrics_presets_api_crud(client):
     updated = update_response.json()
     assert updated["name"] == "Bedroom TV"
     assert updated["settings"]["fontPreset"] == "readable_cjk"
+    assert updated["settings"]["customFontWeight"] == 700
+    assert updated["settings"]["lineGapVw"] == 2
+    assert updated["settings"]["lineBehavior"] == "rolling_scroll"
     assert updated["settings"]["sizeVw"] == 5.1
     assert updated["settings"]["textColor"] == "#eeeeee"
     assert updated["settings"]["backgroundMediaEnabled"] is False
