@@ -101,6 +101,21 @@
         #media-list-scroll::-webkit-scrollbar {
             display: none;
         }
+
+        .media-row-actions {
+            flex-wrap: nowrap !important;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .media-row-actions::-webkit-scrollbar {
+            display: none;
+        }
+
+        .media-row-actions > button {
+            flex-shrink: 0;
+        }
     }
 </style>
 {% endblock %}
@@ -411,8 +426,8 @@
                                     </div>
                                 </td>
                                 <td class="px-4 py-3">
-                                    <div class="flex flex-wrap gap-1.5">
-                                        <button type="button" data-action="add-to-queue" {% if item.status == "missing" %}disabled{% endif %} class="whitespace-nowrap rounded-full bg-primary px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-primary {% if item.status == 'missing' %}cursor-not-allowed opacity-60{% endif %}">{{ t('common.add_to_queue') }}</button>
+                                    <div class="media-row-actions flex flex-wrap gap-1.5">
+                                        <button type="button" data-action="add-to-queue" {% if item.status == "missing" %}disabled{% endif %} class="shrink-0 whitespace-nowrap rounded-full bg-primary px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-primary {% if item.status == 'missing' %}cursor-not-allowed opacity-60{% endif %}">{{ t('common.add_to_queue') }}</button>
                                         {% if is_admin and item.status != "missing" %}
                                         <button type="button" data-action="edit" class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-white/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-on-surface">
                                             <span class="material-symbols-outlined text-[14px]">edit</span>
@@ -420,7 +435,7 @@
                                         </button>
                                         {% endif %}
                                         {% if is_admin %}
-                                        <button type="button" data-action="delete" class="whitespace-nowrap rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-error">{{ t('common.delete') }}</button>
+                                        <button type="button" data-action="delete" class="shrink-0 whitespace-nowrap rounded-full border border-error/30 bg-error/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-error">{{ t('common.delete') }}</button>
                                         {% endif %}
                                     </div>
                                 </td>
