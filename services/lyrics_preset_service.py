@@ -41,6 +41,7 @@ class LyricsPresetService:
         "outlineWidth": 5,
         "previousLines": 1,
         "nextLines": 2,
+        "lineBehavior": "rolling",
         "animation": "fade",
         "backgroundMediaEnabled": True,
         "backgroundMediaPath": "",
@@ -48,6 +49,7 @@ class LyricsPresetService:
     }
     FONT_PRESETS = {"karaoke_cjk", "readable_cjk", "system_cjk", "serif_cjk", "custom"}
     CUSTOM_FONT_WEIGHTS = {300, 400, 500, 700}
+    LINE_BEHAVIORS = {"rolling", "rolling_scroll", "fixed_group"}
     ANIMATIONS = {"slide", "crop", "fade", "none"}
     BACKGROUND_MEDIA_EXTENSIONS = {
         ".avi",
@@ -166,6 +168,7 @@ class LyricsPresetService:
             "outlineWidth": self._round_number(raw_settings.get("outlineWidth"), 2, 14, self.DEFAULT_SETTINGS["outlineWidth"]),
             "previousLines": self._round_number(raw_settings.get("previousLines"), 0, 3, self.DEFAULT_SETTINGS["previousLines"]),
             "nextLines": self._round_number(raw_settings.get("nextLines"), 0, 3, self.DEFAULT_SETTINGS["nextLines"]),
+            "lineBehavior": self._normalize_line_behavior(raw_settings.get("lineBehavior")),
             "animation": self._normalize_animation(raw_settings.get("animation")),
             "backgroundMediaEnabled": raw_settings.get("backgroundMediaEnabled") is not False,
             "backgroundMediaPath": self._normalize_background_media_path(raw_settings.get("backgroundMediaPath")),
@@ -210,6 +213,10 @@ class LyricsPresetService:
     def _normalize_animation(self, value: Any) -> str:
         value = value if isinstance(value, str) else ""
         return value if value in self.ANIMATIONS else self.DEFAULT_SETTINGS["animation"]
+
+    def _normalize_line_behavior(self, value: Any) -> str:
+        value = value if isinstance(value, str) else ""
+        return value if value in self.LINE_BEHAVIORS else self.DEFAULT_SETTINGS["lineBehavior"]
 
     def _normalize_color(self, value: Any, fallback: str) -> str:
         color = value if isinstance(value, str) else ""
