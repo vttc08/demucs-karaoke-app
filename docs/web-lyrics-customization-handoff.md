@@ -29,7 +29,8 @@ This document captures extension points for future lyric-style customization on 
   `karaoke.stage.displayName` is only stored when the operator sets a custom name. Otherwise `/stage`
   derives a label from platform, screen size, and id suffix for `/queue` targeting.
 - Shared lyric presets are now stored server-side and managed from `/stage` through `/api/lyrics-presets`;
-  the stored preset payload should stay aligned with the same normalized stage settings object.
+  the stored preset payload stays aligned with the same normalized stage settings object, including
+  `lineBehavior` (`rolling`, `rolling_scroll`, or `fixed_group`).
 - The desktop-only Style panel groups controls into display identity, typography, line layout,
   color and contrast, lyrics window, motion, background media, and advanced transfer. Keep the
   existing `stage-lyrics-settings-*` element IDs stable when refining that presentation; the

@@ -27,6 +27,7 @@ def test_lyrics_preset_service_normalizes_settings_payload():
             "outlineWidth": 99,
                 "previousLines": -1,
                 "nextLines": 6,
+                "lineBehavior": "unsupported",
                 "animation": "spin",
                 "backgroundMediaEnabled": False,
                 "backgroundMediaPath": "/media/brand-loop.mp4",
@@ -49,6 +50,7 @@ def test_lyrics_preset_service_normalizes_settings_payload():
         "outlineWidth": 14,
         "previousLines": 0,
         "nextLines": 3,
+        "lineBehavior": "rolling",
         "animation": "fade",
         "backgroundMediaEnabled": False,
         "backgroundMediaPath": "/media/brand-loop.mp4",
@@ -70,6 +72,7 @@ def test_lyrics_preset_service_crud_round_trip(db_session):
                 "customFontWeight": 500,
                 "sizeVw": 4.1,
                 "lineGapVw": 1.4,
+                "lineBehavior": "fixed_group",
                 "animation": "slide",
                 "activeColor": "#ff00aa",
                 "backgroundMediaEnabled": False,
@@ -84,6 +87,7 @@ def test_lyrics_preset_service_crud_round_trip(db_session):
     assert created.settings["customFontFamily"] == '"Noto Sans SC", sans-serif'
     assert created.settings["customFontWeight"] == 500
     assert created.settings["lineGapVw"] == 1.4
+    assert created.settings["lineBehavior"] == "fixed_group"
     assert created.settings["activeColor"] == "#ff00aa"
     assert created.settings["backgroundMediaEnabled"] is False
     assert created.settings["backgroundMediaPath"] == "/media/brand-loop.webm"
@@ -104,6 +108,7 @@ def test_lyrics_preset_service_crud_round_trip(db_session):
             settings={
                 "fontPreset": "readable_cjk",
                 "sizeVw": 5.2,
+                "lineBehavior": "rolling_scroll",
                 "textColor": "#eeeeee",
             },
         ),
@@ -112,6 +117,7 @@ def test_lyrics_preset_service_crud_round_trip(db_session):
     assert updated.name == "Bedroom TV"
     assert updated.settings["fontPreset"] == "readable_cjk"
     assert updated.settings["sizeVw"] == 5.2
+    assert updated.settings["lineBehavior"] == "rolling_scroll"
     assert updated.settings["textColor"] == "#eeeeee"
 
     service.delete_preset(db_session, created.id)
