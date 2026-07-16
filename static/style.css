@@ -199,6 +199,17 @@ input.settings-input-accent { color: #00f2ff; }
 .settings-action-danger { background: rgb(255 82 120 / 0.1); border: 1px solid rgb(255 82 120 / 0.3); color: #ff5278; }
 .settings-action-danger:hover { background: rgb(255 82 120 / 0.2); }
 .settings-action-primary:disabled, .settings-action-secondary:disabled, .settings-action-danger:disabled { cursor: not-allowed; opacity: 0.6; }
+.settings-engine-panel { background: linear-gradient(135deg, rgba(31, 28, 54, 0.48), rgba(25, 23, 46, 0.36)); }
+.settings-floating-save { bottom: calc(2rem + env(safe-area-inset-bottom)); right: max(1.5rem, env(safe-area-inset-right)); }
+.settings-save-feedback { top: calc(5rem + env(safe-area-inset-top)); }
+
+@media (min-width: 640px) {
+    .settings-floating-save { right: max(2rem, env(safe-area-inset-right)); }
+}
+
+@media (min-width: 768px) {
+    .settings-save-feedback { top: calc(6rem + env(safe-area-inset-top)); }
+}
 
 @keyframes queue-equalizer {
     from { transform: scaleY(0.42); }

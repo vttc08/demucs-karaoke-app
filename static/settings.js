@@ -129,12 +129,12 @@ function showSaveFeedback(message, isError = false) {
     saveFeedback.classList.toggle("border-error/40", isError);
     saveFeedback.classList.toggle("border-primary/30", !isError);
 
-    saveFeedback.classList.remove("opacity-0", "translate-y-3");
+    saveFeedback.classList.remove("opacity-0", "-translate-y-3");
     saveFeedback.classList.add("opacity-100", "translate-y-0");
 
     saveFeedbackTimer = setTimeout(() => {
         saveFeedback.classList.remove("opacity-100", "translate-y-0");
-        saveFeedback.classList.add("opacity-0", "translate-y-3");
+        saveFeedback.classList.add("opacity-0", "-translate-y-3");
     }, 2800);
 }
 
