@@ -138,7 +138,7 @@ class YtDlpAdapter:
             raise RuntimeError(f"YouTube search failed: {e.stderr[:200]}")
         except FileNotFoundError:
             logger.error("yt-dlp not found path=%s", self.ytdlp_path)
-            raise RuntimeError(f"yt-dlp not found. Please install it: pip install yt-dlp")
+            raise RuntimeError("yt-dlp not found. Please install it: pip install yt-dlp")
         except Exception as e:
             logger.exception("Unexpected error during search query=%r error=%s", query, str(e))
             raise RuntimeError(f"Search failed: {str(e)}")
@@ -608,7 +608,7 @@ class YtDlpAdapter:
                         raise subprocess.TimeoutExpired(cmd, timeout_seconds, output="\n".join(stdout_lines))
                     try:
                         item = line_queue.get(timeout=min(0.1, max(remaining, 0.0)))
-                    except queue.Empty as exc:
+                    except queue.Empty:
                         continue
                     if item is _STREAM_DONE:
                         break

@@ -2,6 +2,18 @@
 
 Use `uv run` for all Python commands in this workspace. Bare `python` is not guaranteed to be on PATH.
 
+Core validation commands:
+
+```bash
+uv run pytest
+uv run ruff check adapters config.py database.py demucs_svc lyrics main.py models.py routes scripts services
+uv run python scripts/audit_i18n.py --check
+npm ci
+npm run build:css
+```
+
+Run `node --check` over changed static JavaScript files when editing browser controllers. The generated `static/tailwind.css` is tracked, so production deployments do not require Node.
+
 ## Shared Fixtures
 
 - `tests/conftest.py` holds cross-cutting pytest fixtures such as the fast WebSocket heartbeat.

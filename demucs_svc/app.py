@@ -13,6 +13,7 @@ import time
 import zipfile
 from collections import Counter
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
@@ -118,7 +119,17 @@ except ImportError:
         whisperx_available,
     )
 
-app = FastAPI(title="Demucs Service", version="0.2.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    _startup_preload_whisperx_models()
+    try:
+        yield
+    finally:
+        _shutdown_gc_scheduler()
+
+
+app = FastAPI(title="Demucs Service", version="0.2.0", lifespan=lifespan)
 job_store = DemucsJobStore(tail_limit=JOB_OUTPUT_TAIL_LINES)
 logger = logging.getLogger(__name__)
 API_KEY_HEADER_NAME = "X-API-Key"
@@ -1223,8 +1234,8 @@ def _start_alignment_job(payload: bytes | Path, original_filename: str, config: 
     return job
 
 
-@app.on_event("startup")
 def _startup_preload_whisperx_models() -> None:
+    _gc_scheduler_stop_event.clear()
     try:
         preload_models(DEFAULT_WHISPERX_PRELOAD_MODELS, device=DEFAULT_DEMUCS_DEVICE)
     except Exception:
@@ -1253,9 +1264,11 @@ def _startup_preload_whisperx_models() -> None:
     _ensure_gc_scheduler_started()
 
 
-@app.on_event("shutdown")
 def _shutdown_gc_scheduler() -> None:
     _gc_scheduler_stop_event.set()
+    scheduler_thread = _gc_scheduler_thread
+    if scheduler_thread is not None and scheduler_thread.is_alive():
+        scheduler_thread.join(timeout=2)
     _shutdown_job_executor()
 
 

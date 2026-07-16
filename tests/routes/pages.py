@@ -155,7 +155,8 @@ def test_queue_page_admin_shows_queue_as_controls(client):
 
 def test_queue_page_renders_simplified_chinese_locale(client):
     """Queue page should use the selected frontend locale cookie."""
-    response = client.get("/queue", cookies={LOCALE_COOKIE: "zh-CN"})
+    client.cookies.set(LOCALE_COOKIE, "zh-CN")
+    response = client.get("/queue")
 
     assert response.status_code == 200
     assert '<html class="dark" lang="zh-CN">' in response.text
@@ -447,7 +448,8 @@ def test_settings_page_uses_localized_docs_path_for_zh(client):
     """Settings docs button should follow the active locale."""
     authenticate_admin_client(client)
 
-    response = client.get("/settings", cookies={LOCALE_COOKIE: "zh-CN"})
+    client.cookies.set(LOCALE_COOKIE, "zh-CN")
+    response = client.get("/settings")
 
     assert response.status_code == 200
     assert 'href="/help/zh/"' in response.text
@@ -514,11 +516,8 @@ def test_logout_deletes_admin_session(client):
         )
         token, _ = service.create_admin_session(db, admin)
 
-    response = client.get(
-        "/logout",
-        cookies={ADMIN_SESSION_COOKIE: token},
-        follow_redirects=False,
-    )
+    client.cookies.set(ADMIN_SESSION_COOKIE, token)
+    response = client.get("/logout", follow_redirects=False)
 
     assert response.status_code == 302
     with TestingSessionLocal() as db:

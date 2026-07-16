@@ -42,10 +42,28 @@ YTDLP_DENO_PATH=/usr/local/bin/deno
 FFMPEG_PATH=ffmpeg
 DEMUCS_API_URL=http://demucs-host:8001
 DEMUCS_API_KEY=
+KARAOKE_PROCESSING_MAX_WORKERS=2
+KARAOKE_MAX_UPLOAD_BYTES=2147483648
+KARAOKE_UPLOAD_MIN_FREE_BYTES=1073741824
 ```
 
 If the Demucs host is protected, set the same key on both sides so the main app sends `X-API-Key`
 on every request. Leave the value blank when the service is intentionally open on a trusted LAN.
+
+Frontend CSS is generated and committed, so Node is not needed on the production host. After changing templates, JavaScript class strings, or `tailwind.config.js`, rebuild it in the development checkout:
+
+```bash
+npm ci
+npm run build:css
+```
+
+The Demucs host has separate worker-local resource controls:
+
+```dotenv
+DEMUCS_MAX_CONCURRENT_JOBS=1
+DEMUCS_MAX_UPLOAD_BYTES=2147483648
+DEMUCS_MIN_FREE_BYTES=1073741824
+```
 
 ### Bundle Deno In The Image
 

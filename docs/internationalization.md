@@ -29,4 +29,12 @@ and API payload content remain unchanged.
 uv run pytest
 ```
 
+Also run the catalog reachability audit:
+
+```bash
+uv run python scripts/audit_i18n.py --check
+```
+
+If production code intentionally constructs a key dynamically, list that exact key in `DYNAMIC_KEYS` in `scripts/audit_i18n.py` rather than retaining unrelated catalog entries.
+
 The route tests include a catalog key parity check so missing translations fail fast.

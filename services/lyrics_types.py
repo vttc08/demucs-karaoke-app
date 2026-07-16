@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional, Protocol, TypeAlias
 
-import httpx
+import httpx as httpx
 
 from config import settings
 

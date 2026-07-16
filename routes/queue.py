@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSo
 from sqlalchemy.orm import Session
 from config import settings
 from database import get_db
-from models import ProcessingTaskResponse, QueueItem, QueueItemCreate, QueueItemMoveRequest, QueueItemResponse, QueueStatus
+from models import QueueItem, QueueItemCreate, QueueItemMoveRequest, QueueItemResponse, QueueStatus
 from routes.auth import auth_service, get_admin_user, require_admin_user
 from services.lyrics_service import LyricsService
 from services.lyrics_preset_service import (

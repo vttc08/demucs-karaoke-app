@@ -423,6 +423,8 @@ POST /api/media/upload
 
 Uploads a local media file or ZIP bundle into the library. The request is multipart form data.
 
+This endpoint intentionally accepts guest requests. Uploaded media and selected ZIP expansion default to a 2 GiB limit, and the service reserves 1 GiB of free media storage. Unsafe ZIP compression ratios, blank or oversized metadata, and insufficient storage are rejected before atomic installation. Configure `KARAOKE_MAX_UPLOAD_BYTES` and `KARAOKE_UPLOAD_MIN_FREE_BYTES` to change these limits.
+
 **Form Fields:**
 - `file` (required): MP3, MP4, WebM, MKV, MOV, AVI, M4V, or ZIP file
 - `title` (required): media title
@@ -461,6 +463,8 @@ ZIP uploads are treated as import bundles. The archive must include exactly one 
 Queued uploads use a single queue preparation task. Non-queued AI karaoke uploads use a
 `media_karaoke` task. If Demucs is unavailable at submission time, the file and metadata remain
 saved, `karaoke_started` is false, and the response includes a warning.
+
+Limit failures return `413`, insufficient storage returns `507`, and invalid ZIP or metadata input returns `400`.
 
 ---
 
@@ -1285,6 +1289,8 @@ The Demucs service reads its own configuration from environment variables and fr
 `output/`; it defaults to `demucs_svc/io`. Set `DEMUCS_ENV_FILE` if you want the service to read a
 different `.env` file without affecting the main app config. If `DEMUCS_API_KEY` is set, the
 service requires `X-API-Key` on all request paths except the plain `/transfer` HTML page.
+
+Worker resource controls are local to the Demucs host: `DEMUCS_MAX_CONCURRENT_JOBS` defaults to `1`, `DEMUCS_MAX_UPLOAD_BYTES` defaults to 2 GiB, and `DEMUCS_MIN_FREE_BYTES` reserves 1 GiB of scratch space.
 
 Sherpa model files and CPU tuning are worker-local. Configure `SHERPA_SPLEETER_MODEL_ROOT`,
 `SHERPA_SPLEETER_NUM_THREADS`, and `SHERPA_SPLEETER_FFMPEG_PATH`; install official bundles with

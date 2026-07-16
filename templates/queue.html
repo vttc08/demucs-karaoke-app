@@ -770,11 +770,8 @@ function removeSong(songId) {
     fetch(window.KaraokeURLs.appUrl(`/api/queue/${songId}`), {
         method: 'DELETE'
     }).then(async (response) => {
-        if (response.ok) {
-            // WebSocket will handle the update, no need to reload
-            console.log('Removed song:', songId);
-        } else {
-            let detail = window.KaraokeI18n?.t('queue.remove_failed') || 'Failed to remove song';
+        if (!response.ok) {
+            let detail = window.KaraokeI18n.t('queue.remove_failed');
             try {
                 const payload = await response.json();
                 if (payload?.detail) detail = payload.detail;
@@ -785,7 +782,7 @@ function removeSong(songId) {
         }
     }).catch(error => {
         console.error('Error:', error);
-        alert(window.KaraokeI18n?.t('queue.remove_failed') || 'Failed to remove song');
+        alert(window.KaraokeI18n.t('queue.remove_failed'));
     });
 }
 
@@ -794,15 +791,12 @@ document.getElementById('clear-all-btn')?.addEventListener('click', function() {
         fetch(window.KaraokeURLs.appUrl('/api/queue/clear'), {
             method: 'POST'
         }).then(response => {
-            if (response.ok) {
-                // WebSocket will handle the update, no need to reload
-                console.log('Queue cleared');
-            } else {
-                alert(window.KaraokeI18n?.t('queue.clear_failed') || 'Failed to clear queue');
+            if (!response.ok) {
+                alert(window.KaraokeI18n.t('queue.clear_failed'));
             }
         }).catch(error => {
             console.error('Error:', error);
-            alert(window.KaraokeI18n?.t('queue.clear_failed') || 'Failed to clear queue');
+            alert(window.KaraokeI18n.t('queue.clear_failed'));
         });
     }
 });

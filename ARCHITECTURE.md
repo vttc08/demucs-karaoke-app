@@ -24,6 +24,14 @@ This project currently uses two services:
 - optionally runs WhisperX forced alignment when lyrics are supplied and alignment is requested
 - returns a ZIP payload containing both `no_vocals` and `vocals` stems, plus `aligned_lyrics.json` when alignment was performed
 
+## Resource boundaries
+
+- The main app runs at most two durable processing workers by default; additional work remains pending.
+- Task-stream state is thread-safe, and SSE/WebSocket delivery returns to the event loop that owns each browser connection.
+- The Demucs worker runs one queued separation/alignment job at a time by default to prevent GPU-memory contention.
+- Guest media uploads remain supported, with atomic installation and default 2 GiB media/ZIP expansion limits.
+- Tailwind is compiled to `static/tailwind.css`; production browsers do not run the CDN compiler.
+
 ## Test layout
 
 - Route/API tests live under `tests/routes/` and service tests live under `tests/services/`.

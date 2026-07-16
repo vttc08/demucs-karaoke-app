@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from config import settings
-from models import MediaItem
+from models import MediaItem, utc_now
 from services.queue_service import QueueService
 from services.media_thumbnail_service import MediaThumbnailService
 
@@ -40,7 +40,7 @@ class MediaLibrarySyncService:
 
     def scan_library(self, db: Session) -> dict[str, int]:
         """Reconcile database media rows with current filesystem state."""
-        scanned_at = datetime.utcnow()
+        scanned_at = utc_now()
         media_files = self._discover_primary_media_files(settings.media_path)
         files_by_url = {
             self.queue_service.build_media_url(path): path
@@ -128,7 +128,7 @@ class MediaLibrarySyncService:
         if media_item is None:
             raise ValueError(f"Media item not found: {media_item_id}")
 
-        scanned_at = datetime.utcnow()
+        scanned_at = utc_now()
         media_file = self.queue_service._media_url_to_file(media_item.media_path)
         if media_file is None:
             logger.info(

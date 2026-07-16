@@ -52,7 +52,18 @@ dev = [
     "mkdocs-material>=9.7.6",
     "mkdocs-minify-plugin>=0.8.0",
     "mkdocs-static-i18n>=1.3.1",
+    "ruff>=0.12,<1",
 ]
+
+[tool.ruff]
+target-version = "py311"
+exclude = ["docs", "static/docs", "node_modules"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*.py" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

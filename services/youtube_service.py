@@ -1,5 +1,4 @@
 """YouTube service for search and download."""
-import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import re
