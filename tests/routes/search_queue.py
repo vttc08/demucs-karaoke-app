@@ -249,6 +249,7 @@ def test_add_to_queue_rejects_invalid_line_processing_lengths(client):
 
 def test_process_queue_item_returns_task_id(client):
     """Queue processing trigger should create or reuse a durable task id."""
+    client.cookies.set("karaoke_guest_id", "task-owner")
     queue_response = client.post(
         "/api/queue/",
         json={
@@ -270,6 +271,7 @@ def test_process_queue_item_returns_task_id(client):
 
 def test_process_queue_item_restarts_existing_active_task(client):
     """Queue processing trigger should still hand active durable tasks to the coordinator."""
+    client.cookies.set("karaoke_guest_id", "active-task-owner")
     queue_response = client.post(
         "/api/queue/",
         json={
@@ -304,6 +306,19 @@ def test_process_queue_item_restarts_existing_active_task(client):
     assert payload["status"] == "processing"
     assert isinstance(payload["task_id"], int)
     mock_start.assert_called_once_with(payload["task_id"])
+
+
+def test_process_queue_item_rejects_a_different_guest(client):
+    client.cookies.set("karaoke_guest_id", "queue-owner")
+    item_id = client.post(
+        "/api/queue/",
+        json={"youtube_id": "owned-process", "title": "Owned Process"},
+    ).json()["id"]
+    client.cookies.set("karaoke_guest_id", "other-guest")
+
+    response = client.post(f"/api/queue/{item_id}/process")
+
+    assert response.status_code == 403
 
 def test_media_karaoke_route_creates_task(client, tmp_path):
     """Admin media karaoke trigger should create a durable media task."""

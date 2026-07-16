@@ -34,6 +34,47 @@ def _clear_job_store() -> None:
         demucs_app.job_store.delete(job.job_id)
 
 
+def test_demucs_job_executor_serializes_work(monkeypatch):
+    demucs_app._shutdown_job_executor()
+    monkeypatch.setattr(demucs_app.settings, "max_concurrent_jobs", 1)
+    release = threading.Event()
+    first_started = threading.Event()
+    second_started = threading.Event()
+
+    def worker(started):
+        started.set()
+        release.wait(timeout=2)
+
+    try:
+        demucs_app._submit_job("serialized-1", worker, first_started)
+        demucs_app._submit_job("serialized-2", worker, second_started)
+        assert first_started.wait(timeout=1)
+        assert second_started.is_set() is False
+        release.set()
+        assert second_started.wait(timeout=1)
+    finally:
+        release.set()
+        demucs_app._shutdown_job_executor()
+
+
+def test_demucs_job_upload_rejects_configured_size(monkeypatch, tmp_path):
+    monkeypatch.setattr(demucs_app, "INCOMING_ROOT", tmp_path / "incoming")
+    monkeypatch.setattr(demucs_app, "OUTPUT_ROOT", tmp_path / "output")
+    demucs_app.INCOMING_ROOT.mkdir(parents=True)
+    demucs_app.OUTPUT_ROOT.mkdir(parents=True)
+    monkeypatch.setattr(demucs_app.settings, "max_upload_bytes", 3)
+    monkeypatch.setattr(demucs_app.settings, "min_free_bytes", 0)
+
+    response = TestClient(demucs_app.app).post(
+        "/jobs",
+        data={"device": "cpu"},
+        files={"file": ("large.wav", b"four", "audio/wav")},
+    )
+
+    assert response.status_code == 413
+    assert list(demucs_app.INCOMING_ROOT.iterdir()) == []
+
+
 def test_separate_config_defaults_and_mp3_bitrate():
     config = demucs_models.SeparateConfig(output_format="mp3")
     assert config.model == "htdemucs"
@@ -1193,7 +1234,10 @@ def test_cancel_job_marks_terminal(monkeypatch, tmp_path):
     process = FakeProcess()
 
     def fake_start_job(payload, original_filename, config):
-        job_id, _incoming_dir, _output_dir, _input_path = demucs_app.prepare_job_input(payload, original_filename)
+        if isinstance(payload, Path):
+            job_id = payload.parent.name
+        else:
+            job_id, _incoming_dir, _output_dir, _input_path = demucs_app.prepare_job_input(payload, original_filename)
         return demucs_app.job_store.create(
             demucs_app.DemucsJobState(
                 job_id=job_id,
@@ -1248,7 +1292,12 @@ def test_cancel_alignment_job_terminates_process_and_cleans_io(monkeypatch, tmp_
     process = FakeProcess()
 
     def fake_start_alignment_job(payload, original_filename, config):
-        job_id, incoming_dir, output_dir, _input_path = demucs_app.prepare_job_input(payload, original_filename)
+        if isinstance(payload, Path):
+            job_id = payload.parent.name
+            incoming_dir = payload.parent
+            output_dir = demucs_app.OUTPUT_ROOT / job_id
+        else:
+            job_id, incoming_dir, output_dir, _input_path = demucs_app.prepare_job_input(payload, original_filename)
         (incoming_dir / "input.wav").write_bytes(b"audio")
         (output_dir / "partial.tmp").write_bytes(b"partial")
         return demucs_app.job_store.create(

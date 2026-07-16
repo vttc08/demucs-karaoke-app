@@ -398,12 +398,19 @@ async def clear_queue(
 @router.post("/{item_id}/process")
 def process_item(
     item_id: int,
+    request: Request,
     db: Session = Depends(get_db),
 ):
     """Trigger processing of a queue item without blocking the request."""
     item = db.query(QueueItem).filter(QueueItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Queue item not found")
+    if not queue_service.can_manage_queue_item(
+        item,
+        is_admin=get_admin_user(request, db) is not None,
+        requester_id=_current_guest_id(request),
+    ):
+        raise HTTPException(status_code=403, detail="Not allowed to process this queue item")
 
     task = processing_task_service.get_or_create_queue_task(db, item_id)
     task_execution_coordinator.start(task.id)

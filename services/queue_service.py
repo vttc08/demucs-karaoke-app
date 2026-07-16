@@ -695,14 +695,20 @@ class QueueService:
 
     @staticmethod
     def _normalize_required_metadata(value: str) -> str:
-        cleaned = value.strip()
-        return cleaned or value
+        cleaned = " ".join((value or "").split()).strip()
+        if not cleaned:
+            raise ValueError("title must not be blank")
+        if len(cleaned) > 200:
+            raise ValueError("title is too long")
+        return cleaned
 
     @staticmethod
     def _normalize_optional_metadata(value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
-        cleaned = value.strip()
+        cleaned = " ".join(value.split()).strip()
+        if len(cleaned) > 200:
+            raise ValueError("artist is too long")
         return cleaned or None
 
     def append_to_end(self, db: Session) -> int:

@@ -911,6 +911,72 @@ def test_task_execution_coordinator_cancel_sets_event_without_canceling_async_ta
     fake_loop.call_soon_threadsafe.assert_not_called()
 
 
+def test_task_execution_coordinator_bounds_parallel_workers(monkeypatch):
+    from services.processing_task_service import TaskExecutionCoordinator
+
+    coordinator = TaskExecutionCoordinator(max_workers=2)
+    release = threading.Event()
+    two_started = threading.Event()
+    started: list[int] = []
+    started_lock = threading.Lock()
+
+    def fake_run(task_id):
+        with started_lock:
+            started.append(task_id)
+            if len(started) == 2:
+                two_started.set()
+        release.wait(timeout=2)
+
+    monkeypatch.setattr(coordinator, "_run_task", fake_run)
+    try:
+        coordinator.start(1)
+        coordinator.start(2)
+        coordinator.start(3)
+        assert two_started.wait(timeout=1)
+        with started_lock:
+            assert len(started) == 2
+        release.set()
+    finally:
+        release.set()
+        coordinator.shutdown(wait=True)
+
+
+@pytest.mark.asyncio
+async def test_task_stream_cross_thread_delivery_is_bounded():
+    from services.task_stream_service import TaskStreamManager
+
+    stream = TaskStreamManager(subscriber_queue_size=2)
+    subscriber = await stream.register_summary_subscriber()
+
+    def publish_from_worker():
+        async def publish_all():
+            for percent in (10, 20, 30):
+                await stream.publish(
+                    99,
+                    event_type="progress",
+                    progress_percent=percent,
+                )
+
+        asyncio.run(publish_all())
+
+    await asyncio.to_thread(publish_from_worker)
+    await asyncio.sleep(0)
+    assert subscriber.qsize() == 2
+    assert (await subscriber.get())["progress_percent"] == 20
+    assert (await subscriber.get())["progress_percent"] == 30
+
+
+@pytest.mark.asyncio
+async def test_task_stream_summary_omits_log_only_events():
+    from services.task_stream_service import TaskStreamManager
+
+    stream = TaskStreamManager()
+    subscriber = await stream.register_summary_subscriber()
+    await stream.publish(5, event_type="log", message="verbose line")
+    await asyncio.sleep(0)
+    assert subscriber.empty()
+
+
 def test_karaoke_progress_callback_throttles_to_about_once_per_second():
     """yt-dlp progress callbacks should not emit queue updates every tick."""
     service = KaraokeService()

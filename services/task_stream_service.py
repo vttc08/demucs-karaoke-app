@@ -5,6 +5,7 @@ import asyncio
 from collections import deque
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from threading import RLock
 from typing import Any
 
 
@@ -24,19 +25,21 @@ class TaskStreamManager:
         per_task_buffer: int = 200,
         done_ttl_seconds: int = 60,
         failed_ttl_seconds: int = 900,
+        subscriber_queue_size: int = 256,
     ):
         self._per_task_buffer = per_task_buffer
         self._done_ttl = timedelta(seconds=done_ttl_seconds)
         self._failed_ttl = timedelta(seconds=failed_ttl_seconds)
+        self._subscriber_queue_size = max(1, int(subscriber_queue_size))
         self._state: dict[int, dict[str, Any]] = {}
         self._events: dict[int, deque[dict[str, Any]]] = {}
-        self._summary_subscribers: set[asyncio.Queue] = set()
-        self._task_subscribers: dict[int, set[asyncio.Queue]] = {}
-        self._lock = asyncio.Lock()
+        self._summary_subscribers: dict[asyncio.Queue, asyncio.AbstractEventLoop] = {}
+        self._task_subscribers: dict[int, dict[asyncio.Queue, asyncio.AbstractEventLoop]] = {}
+        self._lock = RLock()
 
     async def ensure_task(self, task_id: int, *, status: str | None = None, stage: str | None = None):
         """Ensure a task exists in in-memory state."""
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
             state = self._state.setdefault(
                 task_id,
@@ -68,75 +71,79 @@ class TaskStreamManager:
 
     async def clear_task(self, task_id: int):
         """Drop completed task live state from memory."""
-        async with self._lock:
+        with self._lock:
             self._state.pop(task_id, None)
             self._events.pop(task_id, None)
             self._task_subscribers.pop(task_id, None)
 
     async def snapshot(self, task_id: int) -> dict[str, Any] | None:
         """Return the latest live snapshot for one task."""
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
             state = self._state.get(task_id)
             return self._public_state_copy(state) if state else None
 
     def snapshot_now(self, task_id: int) -> dict[str, Any] | None:
         """Return the latest snapshot without awaiting, for sync response mappers."""
-        state = self._state.get(task_id)
-        if state is None or self._is_expired_state(state):
-            return None
-        return self._public_state_copy(state) if state else None
+        with self._lock:
+            state = self._state.get(task_id)
+            if state is None or self._is_expired_state(state):
+                return None
+            return self._public_state_copy(state)
 
     async def recent_events(self, task_id: int) -> list[dict[str, Any]]:
         """Return buffered events for one task."""
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
             events = self._events.get(task_id, deque())
             return [deepcopy(event) for event in events]
 
     async def active_summaries(self) -> list[dict[str, Any]]:
         """Return all active task snapshots."""
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
             return [self._public_state_copy(state) for state in self._state.values()]
 
     def active_summaries_now(self) -> list[dict[str, Any]]:
         """Return active summaries without awaiting, for sync callers."""
-        return [
-            self._public_state_copy(state)
-            for state in self._state.values()
-            if not self._is_expired_state(state)
-        ]
+        with self._lock:
+            return [
+                self._public_state_copy(state)
+                for state in self._state.values()
+                if not self._is_expired_state(state)
+            ]
 
     async def register_summary_subscriber(self) -> asyncio.Queue:
         """Register a queue for summary events."""
-        queue: asyncio.Queue = asyncio.Queue()
-        async with self._lock:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=self._subscriber_queue_size)
+        loop = asyncio.get_running_loop()
+        with self._lock:
             self._prune_expired_locked()
-            self._summary_subscribers.add(queue)
+            self._summary_subscribers[queue] = loop
         return queue
 
     async def unregister_summary_subscriber(self, queue: asyncio.Queue):
         """Remove a summary subscriber."""
-        async with self._lock:
-            self._summary_subscribers.discard(queue)
+        with self._lock:
+            self._summary_subscribers.pop(queue, None)
 
     async def register_task_subscriber(self, task_id: int) -> asyncio.Queue:
         """Register a queue for per-task events."""
-        queue: asyncio.Queue = asyncio.Queue()
-        async with self._lock:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=self._subscriber_queue_size)
+        loop = asyncio.get_running_loop()
+        with self._lock:
             self._prune_expired_locked()
-            subscribers = self._task_subscribers.setdefault(task_id, set())
-            subscribers.add(queue)
+            subscribers = self._task_subscribers.setdefault(task_id, {})
+            subscribers[queue] = loop
         return queue
 
     async def unregister_task_subscriber(self, task_id: int, queue: asyncio.Queue):
         """Remove a task subscriber."""
-        async with self._lock:
+        with self._lock:
             subscribers = self._task_subscribers.get(task_id)
             if not subscribers:
                 return
-            subscribers.discard(queue)
+            subscribers.pop(queue, None)
             if not subscribers:
                 self._task_subscribers.pop(task_id, None)
 
@@ -158,7 +165,7 @@ class TaskStreamManager:
         stream: str | None = None,
     ) -> dict[str, Any]:
         """Publish a live task event and update current snapshot."""
-        async with self._lock:
+        with self._lock:
             state = self._state.setdefault(
                 task_id,
                 {
@@ -225,18 +232,19 @@ class TaskStreamManager:
             events = self._events.setdefault(task_id, deque(maxlen=self._per_task_buffer))
             events.append(deepcopy(payload))
 
-            summary_subscribers = list(self._summary_subscribers)
-            task_subscribers = list(self._task_subscribers.get(task_id, set()))
+            summary_subscribers = list(self._summary_subscribers.items())
+            task_subscribers = list(self._task_subscribers.get(task_id, {}).items())
 
-        for queue in summary_subscribers:
-            await queue.put(deepcopy(payload))
-        for queue in task_subscribers:
-            await queue.put(deepcopy(payload))
+        if event_type != "log":
+            for queue, loop in summary_subscribers:
+                self._notify_subscriber(loop, queue, payload)
+        for queue, loop in task_subscribers:
+            self._notify_subscriber(loop, queue, payload)
         return payload
 
     async def mark_task_terminal(self, task_id: int, *, status: str):
         """Set an expiry time for terminal task live state."""
-        async with self._lock:
+        with self._lock:
             self._prune_expired_locked()
             state = self._state.get(task_id)
             if state is None:
@@ -272,6 +280,31 @@ class TaskStreamManager:
             self._state.pop(task_id, None)
             self._events.pop(task_id, None)
             self._task_subscribers.pop(task_id, None)
+
+    @staticmethod
+    def _enqueue_latest(queue: asyncio.Queue, payload: dict[str, Any]) -> None:
+        """Bound slow subscribers by dropping their oldest queued event."""
+        if queue.full():
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+        try:
+            queue.put_nowait(deepcopy(payload))
+        except asyncio.QueueFull:
+            # A concurrent callback filled the queue; the next event/snapshot
+            # still carries the current task state.
+            pass
+
+    def _notify_subscriber(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        queue: asyncio.Queue,
+        payload: dict[str, Any],
+    ) -> None:
+        if loop.is_closed():
+            return
+        loop.call_soon_threadsafe(self._enqueue_latest, queue, payload)
 
 
 task_stream_manager = TaskStreamManager()

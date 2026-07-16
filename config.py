@@ -1,6 +1,7 @@
 """Application configuration."""
 import sys
 from pathlib import Path
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -64,6 +65,21 @@ class Settings(BaseSettings):
     # Media paths
     media_path: Path = Path("/tmp/karaoke_media")
     cache_path: Path = Path("/tmp/karaoke_cache")
+    processing_max_workers: int = Field(
+        default=2,
+        validation_alias="KARAOKE_PROCESSING_MAX_WORKERS",
+        ge=1,
+    )
+    max_upload_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        validation_alias="KARAOKE_MAX_UPLOAD_BYTES",
+        ge=1,
+    )
+    upload_min_free_bytes: int = Field(
+        default=1024 * 1024 * 1024,
+        validation_alias="KARAOKE_UPLOAD_MIN_FREE_BYTES",
+        ge=0,
+    )
 
     # External services
     demucs_api_url: str = "http://localhost:8001"

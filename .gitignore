@@ -57,6 +57,7 @@ karaoke_media/
 karaoke_cache/
 demucs_svc/.cache/
 demucs_svc/model_data/
+demucs_svc/io/
 
 # Test coverage
 .coverage

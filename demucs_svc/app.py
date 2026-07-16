@@ -12,6 +12,7 @@ import threading
 import time
 import zipfile
 from collections import Counter
+from concurrent.futures import Future, ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 from typing import Literal
@@ -134,6 +135,33 @@ _gc_state = {
     "last_gc_mode": None,
     "last_gc_detail": None,
 }
+_job_executor_lock = threading.Lock()
+_job_executor: ThreadPoolExecutor | None = None
+_job_futures: dict[str, Future] = {}
+
+
+def _ensure_job_executor() -> ThreadPoolExecutor:
+    global _job_executor
+    with _job_executor_lock:
+        if _job_executor is None:
+            _job_executor = ThreadPoolExecutor(
+                max_workers=settings.max_concurrent_jobs,
+                thread_name_prefix="demucs-job",
+            )
+        return _job_executor
+
+
+def _submit_job(job_id: str, target, *args) -> None:
+    executor = _ensure_job_executor()
+    future = executor.submit(target, *args)
+    with _job_executor_lock:
+        _job_futures[job_id] = future
+
+    def forget(_future: Future) -> None:
+        with _job_executor_lock:
+            _job_futures.pop(job_id, None)
+
+    future.add_done_callback(forget)
 
 
 def _configured_api_key() -> str:
@@ -1041,9 +1069,46 @@ def prepare_job_input(
     return resolved_job_id, incoming_dir, output_dir, input_path
 
 
-def _start_job(payload: bytes, original_filename: str, config: SeparateConfig) -> DemucsJobState:
+async def prepare_job_upload(
+    upload_file: UploadFile,
+    *,
+    original_filename: str,
+    chunk_size: int = 1024 * 1024,
+) -> tuple[str, Path]:
+    """Stream an upload into bounded per-job scratch storage."""
+    job_id = uuid4().hex
+    incoming_dir = INCOMING_ROOT / job_id
+    output_dir = OUTPUT_ROOT / job_id
+    suffix = Path(original_filename).suffix or ".wav"
+    input_path = incoming_dir / f"input{suffix}"
+    incoming_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    total_bytes = 0
+    try:
+        with input_path.open("wb") as handle:
+            while True:
+                chunk = await upload_file.read(chunk_size)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > settings.max_upload_bytes:
+                    raise HTTPException(status_code=413, detail="Uploaded media exceeds the configured limit")
+                if shutil.disk_usage(INCOMING_ROOT).free - len(chunk) < settings.min_free_bytes:
+                    raise HTTPException(status_code=507, detail="Insufficient Demucs scratch storage")
+                handle.write(chunk)
+        return job_id, input_path
+    except Exception:
+        _cleanup_job_files(job_id)
+        raise
+
+
+def _start_job(payload: bytes | Path, original_filename: str, config: SeparateConfig) -> DemucsJobState:
     _cleanup_expired_jobs()
-    job_id, _incoming_dir, _output_dir, input_path = prepare_job_input(payload, original_filename)
+    if isinstance(payload, Path):
+        input_path = payload
+        job_id = payload.parent.name
+    else:
+        job_id, _incoming_dir, _output_dir, input_path = prepare_job_input(payload, original_filename)
     job = job_store.create(
         DemucsJobState(
             job_id=job_id,
@@ -1062,13 +1127,7 @@ def _start_job(payload: bytes, original_filename: str, config: SeparateConfig) -
             effective_device=("cpu" if config.separation_backend == "sherpa_spleeter" else config.device),
         )
     )
-    worker = threading.Thread(
-        target=_run_job,
-        args=(job_id, input_path, config),
-        daemon=True,
-        name=f"separation-job-{job_id}",
-    )
-    worker.start()
+    _submit_job(job_id, _run_job, job_id, input_path, config)
     return job
 
 
@@ -1142,9 +1201,13 @@ def _run_alignment_job(job_id: str, input_path: Path, config: SeparateConfig) ->
         _cleanup_expired_jobs()
 
 
-def _start_alignment_job(payload: bytes, original_filename: str, config: SeparateConfig) -> DemucsJobState:
+def _start_alignment_job(payload: bytes | Path, original_filename: str, config: SeparateConfig) -> DemucsJobState:
     _cleanup_expired_jobs()
-    job_id, _incoming_dir, _output_dir, input_path = prepare_job_input(payload, original_filename)
+    if isinstance(payload, Path):
+        input_path = payload
+        job_id = payload.parent.name
+    else:
+        job_id, _incoming_dir, _output_dir, input_path = prepare_job_input(payload, original_filename)
     job = job_store.create(
         DemucsJobState(
             job_id=job_id,
@@ -1156,13 +1219,7 @@ def _start_alignment_job(payload: bytes, original_filename: str, config: Separat
             job_kind="lyrics_alignment",
         )
     )
-    worker = threading.Thread(
-        target=_run_alignment_job,
-        args=(job_id, input_path, config),
-        daemon=True,
-        name=f"demucs-align-job-{job_id}",
-    )
-    worker.start()
+    _submit_job(job_id, _run_alignment_job, job_id, input_path, config)
     return job
 
 
@@ -1199,6 +1256,33 @@ def _startup_preload_whisperx_models() -> None:
 @app.on_event("shutdown")
 def _shutdown_gc_scheduler() -> None:
     _gc_scheduler_stop_event.set()
+    _shutdown_job_executor()
+
+
+def _shutdown_job_executor() -> None:
+    """Cancel queued work and terminate active child processes on shutdown."""
+    global _job_executor
+    for job in job_store.all():
+        if job.status not in {"queued", "running"}:
+            continue
+        job_store.update(
+            job.job_id,
+            cancel_requested=True,
+            status="canceled",
+            finished_at=utc_now(),
+            progress_message="Canceled",
+        )
+        _terminate_process(job.process)
+        _cleanup_job_files(job.job_id)
+    with _job_executor_lock:
+        executor = _job_executor
+        _job_executor = None
+        futures = list(_job_futures.values())
+        _job_futures.clear()
+    for future in futures:
+        future.cancel()
+    if executor is not None:
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _validated_config(
@@ -1398,8 +1482,15 @@ async def create_job(
         separation_backend=separation_backend,
         sherpa_spleeter_model=sherpa_spleeter_model,
     )
-    payload = await file.read()
-    job = _start_job(payload, file.filename or "input.wav", config)
+    original_filename = file.filename or "input.wav"
+    try:
+        _job_id, input_path = await prepare_job_upload(
+            file,
+            original_filename=original_filename,
+        )
+    finally:
+        await file.close()
+    job = _start_job(input_path, original_filename, config)
     base = str(request.base_url).rstrip("/")
     return DemucsJobCreateResponse(
         job_id=job.job_id,
@@ -1453,8 +1544,15 @@ async def create_alignment_job(
     )
     if not config.lyrics_text:
         raise HTTPException(status_code=422, detail="lyrics_text is required for alignment")
-    payload = await file.read()
-    job = _start_alignment_job(payload, file.filename or "vocals.wav", config)
+    original_filename = file.filename or "vocals.wav"
+    try:
+        _job_id, input_path = await prepare_job_upload(
+            file,
+            original_filename=original_filename,
+        )
+    finally:
+        await file.close()
+    job = _start_alignment_job(input_path, original_filename, config)
     base = str(request.base_url).rstrip("/")
     return DemucsJobCreateResponse(
         job_id=job.job_id,
@@ -1651,6 +1749,10 @@ def cancel_job(job_id: str):
         duration_ms=max(0, duration_ms),
         progress_message="Canceled",
     )
+    with _job_executor_lock:
+        future = _job_futures.get(job_id)
+    if future is not None:
+        future.cancel()
     process = job.process
     _terminate_process(process)
     job_store.update(job_id, process=None)
@@ -1738,9 +1840,16 @@ async def separate(
         separation_backend=separation_backend,
         sherpa_spleeter_model=sherpa_spleeter_model,
     )
-    payload = await file.read()
-    job = _start_job(payload, file.filename or "input.wav", config)
-    terminal_job = _wait_for_terminal_job(job.job_id)
+    original_filename = file.filename or "input.wav"
+    try:
+        _job_id, input_path = await prepare_job_upload(
+            file,
+            original_filename=original_filename,
+        )
+    finally:
+        await file.close()
+    job = _start_job(input_path, original_filename, config)
+    terminal_job = await asyncio.to_thread(_wait_for_terminal_job, job.job_id)
     if terminal_job.status == "failed":
         raise HTTPException(status_code=500, detail=f"Separation failed: {terminal_job.error_detail}")
     if terminal_job.status == "canceled":
