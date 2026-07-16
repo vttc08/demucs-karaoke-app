@@ -297,22 +297,18 @@ def test_connection_manager_detects_stale_websocket_activity():
 
     asyncio.run(manager.disconnect(websocket))
 
-def test_runtime_settings_update_settings_includes_demucs_health():
-    """Updating settings should still return current Demucs health."""
+def test_runtime_settings_update_settings_does_not_check_demucs_health():
+    """Saving settings should not block on the remote Demucs health check."""
     service = RuntimeSettingsService()
     with patch.object(
         RuntimeSettingsService,
         "get_demucs_health",
-        return_value=DemucsHealthResponse(
-            api_url="http://127.0.0.1:8001",
-            healthy=True,
-            detail="Demucs service is healthy",
-        ),
-    ):
+    ) as mock_health:
         result = service.update_settings(RuntimeSettingsUpdateRequest())
 
-    assert result.demucs_healthy is True
-    assert result.demucs_health_detail == "Demucs service is healthy"
+    mock_health.assert_not_called()
+    assert result.demucs_healthy is False
+    assert result.demucs_health_detail == "Health check pending"
 
 def test_runtime_settings_preload_whisperx_models_uses_current_settings():
     """Runtime settings service should forward the configured preload list to Demucs."""

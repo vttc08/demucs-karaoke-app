@@ -94,6 +94,11 @@ def test_queue_page_loads(client):
     assert b"Configure Queue" in response.content
     assert b"queue-toast" in response.content
     assert b"queue-config-lyrics-detail" in response.content
+    assert 'aria-label="Open queue lyrics help"' in response.text
+    assert 'href="/help/"' in response.text
+    assert 'id="queue-config-rewrap-options"' in response.text
+    assert 'id="queue-config-language-options"' in response.text
+    assert 'class="grid grid-cols-3 gap-2"' in response.text
     assert b"flex-none shrink-0" in response.content
     assert 'id="stage-remote-vocals-toggle-btn"' in response.text
     assert 'id="stage-remote-vocals-volume-slider"' in response.text
@@ -304,7 +309,10 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-shortcuts-panel"' in response.content
     assert b'id="stage-lyrics-settings-btn"' in response.content
     assert b'id="stage-lyrics-settings-panel"' in response.content
+    assert b'aria-label="Open lyrics style documentation"' in response.content
+    assert b'href="/help/"' in response.content
     assert b'id="stage-display-name"' in response.content
+    assert b'id="stage-lyrics-custom-font-preview"' not in response.content
     assert b'id="stage-lyrics-preset-select"' in response.content
     assert b'id="stage-lyrics-preset-name"' in response.content
     assert b'id="stage-lyrics-preset-apply"' in response.content
@@ -414,9 +422,20 @@ def test_settings_page_loads_for_admin(client):
     assert b"Admin session" in response.content
     assert b"Log out" in response.content
     assert b">Save<" in response.content
-    assert b">Refresh<" in response.content
+    assert b">Check Demucs<" in response.content
     assert 'href="/help/"' in response.text
     assert 'aria-label="Open documentation"' in response.text
+    assert response.text.count('data-settings-section=') == 6
+    assert response.text.count('data-settings-docs-link') == 6
+    assert response.text.count('target="_blank"') == 6
+    assert 'data-settings-section="processing"' in response.text
+    assert 'data-settings-section="whisperx"' in response.text
+    assert 'data-settings-section="paths"' in response.text
+    assert 'data-settings-section="downloads"' in response.text
+    assert 'data-settings-section="stage"' in response.text
+    assert 'data-settings-section="tools"' in response.text
+    assert 'id="ffmpeg_path"' in response.text
+    assert 'id="check-proxy-info-btn"' in response.text
     assert 'id="ytdlp_video_codec"' in response.text
     assert 'id="ffmpeg_audio_codec"' in response.text
     assert b"Admin Access" not in response.content

@@ -30,6 +30,11 @@ This document captures extension points for future lyric-style customization on 
   derives a label from platform, screen size, and id suffix for `/queue` targeting.
 - Shared lyric presets are now stored server-side and managed from `/stage` through `/api/lyrics-presets`;
   the stored preset payload should stay aligned with the same normalized stage settings object.
+- The desktop-only Style panel groups controls into display identity, typography, line layout,
+  color and contrast, lyrics window, motion, background media, and advanced transfer. Keep the
+  existing `stage-lyrics-settings-*` element IDs stable when refining that presentation; the
+  controller binds directly to them. Custom font inputs stay hidden until the Custom typeface is
+  selected so the default tuning flow remains concise.
 - The default stage baseline is the sans-serif CJK stack with 4.5vw text, 85% max width, 0.8vw cue-row
   spacing, 5px outline, one previous line, two next lines, 60% surrounding line size/opacity, and fade animation.
 - The karaoke preset uses the local `ZCOOL QingKe HuangYou` face instead of the decorative script fallback.
@@ -37,8 +42,9 @@ This document captures extension points for future lyric-style customization on 
   the explicit Apply or Save actions. At that point the page requests the first non-generic,
   non-local font family from Google Fonts once in light (300), regular (400), medium (500), and bold
   (700) weights when available; typing in the textbox does not trigger network requests.
-- The custom-font panel offers those four weights for Custom typefaces only and shows a live preview
-  at the selected weight. Built-in CJK presets retain their intentional karaoke weight.
+- The custom-font panel offers those four weights only for Custom typefaces. Built-in CJK presets
+  retain their intentional karaoke weight; operators can open the panel-header help link for the
+  broader documentation without adding explanatory text to the control row.
 - Cue-row spacing is separately configurable from wrapped-text line-height, so operators can make
   the visible lyric window denser or airier without changing the internal leading of a wrapped cue.
 - Outline rendering is stroke-first on supporting browsers, with a shadow fallback for older engines.

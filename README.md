@@ -157,6 +157,7 @@ and `/static/...`.
 
 4. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
        - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
+       - Settings are organized into collapsible **Karaoke Processing**, **WhisperX Lyrics**, **Application Paths**, **Downloads**, **Stage**, and **Tools** sections; each section links to the documentation homepage
        - View current runtime settings
        - Log out of the active admin session from the settings page
        - Update Demucs URL, direct-media cutoff, Demucs fallback poll interval, media/cache paths, tool paths, outbound proxy URL, and WhisperX alignment defaults

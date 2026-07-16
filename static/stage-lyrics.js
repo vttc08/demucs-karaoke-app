@@ -30,7 +30,6 @@ class StageLyricsController {
 
   static GOOGLE_FONT_WEIGHTS = [300, 400, 500, 700];
   static CUSTOM_FONT_WEIGHTS = new Set([300, 400, 500, 700]);
-  static CUSTOM_FONT_PREVIEW_SAMPLE = "Aa 你 Karaoke";
 
   static FONT_PRESETS = {
     karaoke_cjk: {
@@ -111,7 +110,7 @@ class StageLyricsController {
     this.importExport = options.importExport || null;
     this.fileInput = options.fileInput || null;
     this.status = options.status || null;
-    this.customFontPreview = options.customFontPreview || null;
+    this.customFontFields = Array.isArray(options.customFontFields) ? options.customFontFields : [];
     this.backgroundLayer = options.backgroundLayer || null;
     this.backgroundImage = options.backgroundImage || null;
     this.backgroundVideo = options.backgroundVideo || null;
@@ -863,28 +862,7 @@ class StageLyricsController {
     this.overlay.dataset.animation = this.reducedMotion ? "none" : this.settings.animation;
     this.applyBackgroundSettings();
     void this.ensureFontStackLoaded(fontFamily);
-    this.updateCustomFontPreview(fontFamily);
     this.renderWindow();
-  }
-
-  updateCustomFontPreview(fontFamily) {
-    if (!this.customFontPreview) {
-      return;
-    }
-
-    const isCustomPreset = this.settings.fontPreset === "custom";
-    const currentCustomFontFamily = String(this.settings.customFontFamily || this.appliedCustomFontFamily || "").trim();
-    const hasCustomFamily = Boolean(currentCustomFontFamily);
-    const previewFontFamily = isCustomPreset && hasCustomFamily
-      ? this.normalizeCustomFontStack(currentCustomFontFamily)
-      : fontFamily;
-
-    this.customFontPreview.textContent = isCustomPreset && hasCustomFamily
-      ? StageLyricsController.CUSTOM_FONT_PREVIEW_SAMPLE
-      : this.t("stage.lyrics_custom_font_preview_empty");
-    this.customFontPreview.classList.toggle("is-empty", !(isCustomPreset && hasCustomFamily));
-    this.customFontPreview.style.fontFamily = previewFontFamily || "";
-    this.customFontPreview.style.fontWeight = String(this.settings.customFontWeight);
   }
 
   applyBackgroundSettings() {
@@ -1250,6 +1228,9 @@ class StageLyricsController {
     if (this.inputs.customFontWeight) {
       this.inputs.customFontWeight.disabled = this.settings.fontPreset !== "custom";
     }
+    this.customFontFields.forEach((field) => {
+      field?.classList.toggle("is-hidden", this.settings.fontPreset !== "custom");
+    });
     if (this.inputs.sizeVwValue) {
       this.inputs.sizeVwValue.textContent = `${this.settings.sizeVw.toFixed(1)}vw`;
     }
@@ -1271,7 +1252,6 @@ class StageLyricsController {
     if (this.inputs.backgroundMediaOpacityPctValue) {
       this.inputs.backgroundMediaOpacityPctValue.textContent = `${this.settings.backgroundMediaOpacityPct}%`;
     }
-    this.updateCustomFontPreview(this.settings.fontPreset === "custom" ? this.settings.customFontFamily : "");
   }
 
   applySettingsFromTextarea() {

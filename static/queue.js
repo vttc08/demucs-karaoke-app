@@ -129,6 +129,7 @@ let modalKaraokeEnabled = false;
 let modalAlignLyricsEnabled = false;
 let modalAlignLyricsAutoEnabled = false;
 let modalProcessLyricsLinesEnabled = false;
+let modalProcessLyricsLinesAutoEnabled = false;
 let modalConfigInitializing = false;
 let queueToastTimer = null;
 let queuePresenceUsers = [];
@@ -615,7 +616,7 @@ function syncQueueConfigAlignControls() {
         } else if (!lyricsText) {
             queueConfigAlignDetail.textContent = t('lyrics.align_requires_text');
         } else {
-            queueConfigAlignDetail.textContent = t('queue.whisperx_align_detail');
+            queueConfigAlignDetail.textContent = t('queue.whisperx_align_short');
         }
     }
 
@@ -627,6 +628,8 @@ function syncQueueConfigAlignControls() {
     const canProcessLines = Boolean(canAlign && modalAlignLyricsEnabled);
     if (!canProcessLines && !modalConfigInitializing) {
         modalProcessLyricsLinesEnabled = false;
+    } else if (canProcessLines && modalProcessLyricsLinesAutoEnabled) {
+        modalProcessLyricsLinesEnabled = true;
     }
 
     if (queueConfigLineProcessingToggle) {
@@ -648,7 +651,7 @@ function syncQueueConfigAlignControls() {
         } else if (!lyricsText) {
             queueConfigLineProcessingDetail.textContent = t('lyrics.align_requires_text');
         } else {
-            queueConfigLineProcessingDetail.textContent = t('queue.process_lyrics_lines_detail');
+            queueConfigLineProcessingDetail.textContent = t('queue.rewrap_detail_short');
         }
     }
 
@@ -1053,7 +1056,8 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     modalKaraokeEnabled = defaults.karaokeEnabled;
     modalAlignLyricsAutoEnabled = Boolean(defaults.karaokeEnabled && defaults.lyricsEnabled);
     modalAlignLyricsEnabled = modalAlignLyricsAutoEnabled;
-    modalProcessLyricsLinesEnabled = false;
+    modalProcessLyricsLinesAutoEnabled = modalAlignLyricsAutoEnabled;
+    modalProcessLyricsLinesEnabled = modalProcessLyricsLinesAutoEnabled;
     modalConfigInitializing = true;
     lyricsManager.reset();
     lyricsManager.setMetadata(modalSelection.title || '', modalSelection.channel || '', modalSelection.title || '');
@@ -1143,6 +1147,7 @@ function closeQueueConfigModal() {
     modalAlignLyricsEnabled = false;
     modalAlignLyricsAutoEnabled = false;
     modalProcessLyricsLinesEnabled = false;
+    modalProcessLyricsLinesAutoEnabled = false;
     modalConfigInitializing = false;
 }
 
@@ -1267,9 +1272,9 @@ function syncQueueConfigModalUi() {
         if (!karaokeAvailable) {
             queueConfigKaraokeDetail.textContent = t('queue.demucs_offline', { detail: demucsHealth.detail });
         } else if (titleHints.karaokeLike) {
-            queueConfigKaraokeDetail.textContent = t('queue.karaoke_already_detail');
+            queueConfigKaraokeDetail.textContent = t('queue.karaoke_already_short');
         } else {
-            queueConfigKaraokeDetail.textContent = t('queue.remove_vocals_ai');
+            queueConfigKaraokeDetail.textContent = t('queue.karaoke_detail_short');
         }
     }
 
@@ -1292,9 +1297,9 @@ function syncQueueConfigModalUi() {
 
     if (queueConfigLyricsDetail) {
         if (titleHints.lyricsLike) {
-            queueConfigLyricsDetail.textContent = t('queue.lyrics_already_detail');
+            queueConfigLyricsDetail.textContent = t('queue.lyrics_already_short');
         } else {
-            queueConfigLyricsDetail.textContent = t('queue.lyrics_detail');
+            queueConfigLyricsDetail.textContent = t('queue.lyrics_detail_short');
         }
     }
     syncQueueConfigAlignControls();
@@ -1477,6 +1482,7 @@ if (queueConfigLineProcessingToggle) {
     queueConfigLineProcessingToggle.addEventListener('click', () => {
         if (queueConfigLineProcessingToggle.disabled || !lyricsManager) return;
         modalProcessLyricsLinesEnabled = !modalProcessLyricsLinesEnabled;
+        modalProcessLyricsLinesAutoEnabled = false;
         syncQueueConfigModalUi();
     });
 }
@@ -1491,7 +1497,8 @@ if (queueConfigLyricsToggle) {
         lyricsManager.setEnabled(newEnabled);
         modalAlignLyricsEnabled = Boolean(newEnabled);
         modalAlignLyricsAutoEnabled = Boolean(newEnabled);
-        modalProcessLyricsLinesEnabled = false;
+        modalProcessLyricsLinesAutoEnabled = Boolean(newEnabled);
+        modalProcessLyricsLinesEnabled = modalProcessLyricsLinesAutoEnabled;
 
         if (newEnabled) {
             if (getModalTitleHints().lyricsLike) {
@@ -1619,7 +1626,6 @@ async function refreshQueue(force = false) {
 function updateQueueDisplay(queue) {
     const queueList = document.getElementById('queue-list');
     if (!queueList) return;
-    
     if (queue.length === 0) {
         queueList.innerHTML = `
             <div class="text-center py-12">
@@ -1628,99 +1634,54 @@ function updateQueueDisplay(queue) {
                 </div>
                 <p class="text-on-surface-variant text-lg font-medium">${t('queue.empty')}</p>
                 <p class="text-on-surface-variant/60 text-sm">${t('queue.add_started')}</p>
-            </div>
-        `;
+            </div>`;
         return;
     }
 
     const movableItems = queue.filter((item) => item.status !== 'playing');
     const movableIndexById = new Map(movableItems.map((item, index) => [String(item.id), index]));
-    const movableCount = movableItems.length;
-
-    queueList.innerHTML = queue.map(item => {
-        const statusInfo = getStatusInfo(item.status);
-        const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/placeholder.png'));
-        const canOpenTaskDetails = ['downloading', 'processing'].includes(item.status) && Number.isFinite(Number(item.task_id));
-        const canOpenMediaDetails = ['ready', 'completed'].includes(item.status) && Number.isFinite(Number(item.media_id));
-        const leftActionHtml = item.status === 'playing' ? `
-                    <button class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center cursor-default" disabled title="${t('queue.playing')}">
-                        <span class="material-symbols-outlined">equalizer</span>
-                    </button>
-                    ` : isAdminUser ? `
-                    <div class="flex flex-col items-center gap-1">
-                        <button
-                            id="queue-move-up-${item.id}"
-                            class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                            onclick="moveSong('${item.id}', 'up')"
-                            ${movableIndexById.get(String(item.id)) === 0 ? 'disabled' : ''}
-                            title="${escapeHtml(t('queue.move_up'))}"
-                            aria-label="${escapeHtml(t('queue.move_up'))}"
-                        >
-                            <span class="material-symbols-outlined text-[18px]">keyboard_arrow_up</span>
-                        </button>
-                        <button
-                            id="queue-move-down-${item.id}"
-                            class="w-9 h-9 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center transition-colors hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
-                            onclick="moveSong('${item.id}', 'down')"
-                            ${movableIndexById.get(String(item.id)) === movableCount - 1 ? 'disabled' : ''}
-                            title="${escapeHtml(t('queue.move_down'))}"
-                            aria-label="${escapeHtml(t('queue.move_down'))}"
-                        >
-                            <span class="material-symbols-outlined text-[18px]">keyboard_arrow_down</span>
-                        </button>
-                    </div>
-                    ` : '<span class="w-10 h-10" aria-hidden="true"></span>';
-    const rightActionHtml = item.can_cancel_task ? `
-                    <button class="w-10 h-10 rounded-full bg-error/10 text-error flex items-center justify-center hover:bg-error/15 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                            onclick="cancelTask('${item.task_id}', this)"
-                            title="${escapeHtml(t('queue.cancel_task'))}"
-                            aria-label="${escapeHtml(t('queue.cancel_task'))}">
-                        <span class="material-symbols-outlined">close</span>
-                    </button>
-                    ` : item.can_remove ? `
-                    <button class="w-10 h-10 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center hover:text-error transition-colors"
-                            onclick="removeSong('${item.id}')">
-                        <span class="material-symbols-outlined">remove</span>
-                    </button>
-                    ` : '<span class="w-10 h-10" aria-hidden="true"></span>';
-        const leftColumnHtml = isAdminUser ? `
-                <div class="flex shrink-0 flex-col items-center gap-1">
-                    ${leftActionHtml}
-                </div>
-                ` : '';
-        const progressHtml = renderQueueProgressBlock(item);
-        const statusBadgeHtml = progressHtml ? '' : `
-                    <div class="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full ${statusInfo.bgClass}">
-                        ${statusInfo.icon}
-                        <span class="text-[10px] font-black uppercase tracking-tighter ${statusInfo.textClass}">${statusInfo.label}</span>
-                    </div>
-                    `;
-        return `
-            <div class="queue-item ${item.status === 'playing' ? 'glass-card border border-outline-variant/15 shadow-[0_0_20px_rgba(0,242,255,0.05)]' : 'bg-surface-container-low hover:bg-surface-container'} ${canOpenTaskDetails || canOpenMediaDetails ? 'cursor-pointer hover:border-primary/30' : ''} p-4 rounded-lg flex items-center gap-4 transition-all" data-id="${item.id}" data-media-id="${item.media_id ?? ''}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
-                ${leftColumnHtml}
-                <div class="relative w-16 h-16 rounded-md overflow-hidden shrink-0 ${item.status !== 'playing' ? 'grayscale-[50%]' : ''}">
-                    <img src="${thumbnail}" alt="${escapeHtml(item.title)}" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\\'w-full h-full bg-surface-container-highest flex items-center justify-center\\'><span class=\\'material-symbols-outlined text-on-surface-variant\\'>music_note</span></div>'">
-                </div>
-                <div class="flex-1 min-w-0">
-                    <h3 class="font-bold ${item.status === 'playing' ? 'text-on-surface' : 'text-on-surface/80'} truncate">${escapeHtml(item.title)}</h3>
-                    ${item.artist ? `<p class="text-xs text-on-surface-variant truncate">${escapeHtml(item.artist)}</p>` : ''}
-                    ${item.requested_by_name ? `<p class="mt-1 text-[11px] font-medium uppercase tracking-wide text-on-surface-variant">${escapeHtml(t('queue.requested_by', { name: item.requested_by_name }))}</p>` : ''}
-                    ${statusBadgeHtml}
-                    ${progressHtml}
-                    ${item.is_karaoke ? `
-                    <div class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary/10 border border-secondary/20">
-                        <span class="material-symbols-outlined text-[10px] text-secondary">mic</span>
-                        <span class="text-[8px] font-bold uppercase tracking-tighter text-secondary">${t('app.karaoke')}</span>
-                    </div>
-                    ` : ''}
-                </div>
-                <div class="flex shrink-0 items-center">
-                    ${rightActionHtml}
-                </div>
-            </div>
-        `;
-    }).join('');
+    const playingItems = queue.filter((item) => item.status === 'playing');
+    const upcomingItems = queue.filter((item) => item.status !== 'playing');
+    queueList.innerHTML = `
+        ${playingItems.map((item) => renderQueueStageItem(item, movableIndexById, movableItems.length)).join('')}
+        ${upcomingItems.length ? `<p class="queue-section-label">${escapeHtml(t('queue.up_next'))}</p>${upcomingItems.map((item) => renderQueueStageItem(item, movableIndexById, movableItems.length)).join('')}` : ''}`;
     window.KaraokeTaskProgress?.sync(queueList);
+}
+
+function renderQueueStageItem(item, movableIndexById, movableCount) {
+    const isPlaying = item.status === 'playing';
+    const isProcessing = ['downloading', 'processing'].includes(item.status);
+    const canOpenTaskDetails = isProcessing && Number.isFinite(Number(item.task_id));
+    const canOpenMediaDetails = ['ready', 'completed'].includes(item.status) && Number.isFinite(Number(item.media_id));
+    const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/placeholder.png'));
+    const movableIndex = movableIndexById.get(String(item.id));
+    const moveControls = isAdminUser && !isPlaying ? `
+        <div class="queue-move-controls">
+            <button id="queue-move-up-${item.id}" class="queue-move-button" onclick="moveSong('${item.id}', 'up')" ${movableIndex === 0 ? 'disabled' : ''} title="${escapeHtml(t('queue.move_up'))}" aria-label="${escapeHtml(t('queue.move_up'))}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_up</span></button>
+            <button id="queue-move-down-${item.id}" class="queue-move-button" onclick="moveSong('${item.id}', 'down')" ${movableIndex === movableCount - 1 ? 'disabled' : ''} title="${escapeHtml(t('queue.move_down'))}" aria-label="${escapeHtml(t('queue.move_down'))}"><span class="material-symbols-outlined text-[16px]">keyboard_arrow_down</span></button>
+        </div>` : '';
+    const status = getStatusInfo(item.status);
+    const statusHtml = isProcessing ? renderQueueProgressBlock(item) : !isPlaying ? `
+        <span class="queue-status-chip ${item.status === 'failed' ? 'queue-status-failed' : item.status === 'ready' ? 'queue-status-ready' : 'queue-status-waiting'}">${status.icon}${escapeHtml(status.label)}</span>` : '';
+    const actionHtml = item.can_cancel_task ? `
+        <button class="queue-row-action text-error hover:bg-error/15" onclick="cancelTask('${item.task_id}', this)" title="${escapeHtml(t('queue.cancel_task'))}" aria-label="${escapeHtml(t('queue.cancel_task'))}"><span class="material-symbols-outlined text-[19px]">close</span></button>` : item.can_remove ? `
+        <button class="queue-row-action hover:text-error" onclick="removeSong('${item.id}')" title="${escapeHtml(t('queue.remove'))}" aria-label="${escapeHtml(t('queue.remove'))}"><span class="material-symbols-outlined text-[19px]">remove</span></button>` : '';
+    return `
+        <article class="queue-item queue-stage-item ${isPlaying ? 'queue-stage-item-playing' : ''} ${canOpenTaskDetails || canOpenMediaDetails ? 'cursor-pointer hover:border-primary/30' : ''}" data-id="${item.id}" data-media-id="${item.media_id ?? ''}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
+            ${moveControls}
+            <div class="queue-cover ${isPlaying ? 'queue-cover-playing' : ''}"><img src="${thumbnail}" alt="${escapeHtml(item.title)}" class="h-full w-full object-cover" onerror="this.parentElement.innerHTML='<span class=\\'material-symbols-outlined text-2xl text-on-surface-variant\\'>music_note</span>'"></div>
+            <div class="min-w-0 flex-1">
+                <div class="flex min-w-0 items-center gap-2">
+                    ${isPlaying ? '<span class="queue-playing-equalizer" aria-label="' + escapeHtml(t('queue.playing')) + '"><span></span><span></span><span></span></span>' : ''}
+                    <h4 class="truncate font-headline text-base font-bold text-on-surface sm:text-lg">${escapeHtml(item.title)}</h4>
+                    ${isPlaying ? `<span class="queue-status-chip queue-status-playing">${escapeHtml(t('queue.playing'))}</span>` : ''}
+                </div>
+                ${item.artist ? `<p class="mt-0.5 truncate text-sm text-on-surface-variant">${escapeHtml(item.artist)}</p>` : ''}
+                ${item.requested_by_name ? `<p class="mt-1 truncate text-[11px] font-medium text-on-surface-variant">${escapeHtml(t('queue.requested_by', { name: item.requested_by_name }))}</p>` : ''}
+                ${statusHtml}
+            </div>
+            <div class="flex shrink-0 items-center">${actionHtml}</div>
+        </article>`;
 }
 
 function openQueueTaskInMedia(taskId) {
@@ -1985,6 +1946,8 @@ async function moveSong(songId, direction) {
         });
 
         if (response.ok) {
+            const item = await response.json();
+            upsertQueueItemState(item);
             return;
         }
 
