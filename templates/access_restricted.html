@@ -10,42 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        primary: "#00f2ff",
-                        secondary: "#3ce36a",
-                        tertiary: "#ffb950",
-                        background: "#0e0c1f",
-                        surface: "#0e0c1f",
-                        "surface-container": "#19172e",
-                        "surface-container-low": "#131126",
-                        "surface-container-high": "#1f1c36",
-                        "surface-container-highest": "#25223e",
-                        "surface-container-lowest": "#000000",
-                        "on-surface": "#e7e2fe",
-                        "on-surface-variant": "#c9c5d0",
-                        "outline-variant": "#48455b",
-                        error: "#ff6e84",
-                    },
-                    fontFamily: {
-                        headline: ["Space Grotesk", "sans-serif"],
-                        body: ["Inter", "sans-serif"],
-                    },
-                    borderRadius: {
-                        lg: "0.75rem",
-                        xl: "1rem",
-                        "2xl": "1.25rem",
-                        full: "9999px",
-                    },
-                },
-            },
-        }
-    </script>
+    <link rel="stylesheet" href="{{ static_asset_url('/static/tailwind.css') }}">
 
     <style>
         body {
@@ -66,9 +31,13 @@
             mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 85%);
             pointer-events: none;
         }
+
+        .access-page .rounded-2xl {
+            border-radius: 1.25rem;
+        }
     </style>
 </head>
-<body class="min-h-screen font-body">
+<body class="access-page min-h-screen font-body">
     <main class="noise relative mx-auto flex min-h-screen w-full max-w-7xl items-center px-4 py-8 sm:px-6 lg:px-8">
         <div class="relative z-10 grid w-full gap-6 lg:grid-cols-[1.2fr_0.8fr] lg:gap-8">
             <section class="relative overflow-hidden rounded-[1.5rem] bg-surface-container-low/80 p-6 shadow-[0_30px_80px_rgba(0,0,0,0.35)] ring-1 ring-white/5 backdrop-blur-xl sm:p-8 lg:p-10">

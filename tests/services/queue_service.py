@@ -1,4 +1,5 @@
 from .common import *
+from sqlalchemy import event
 
 
 
@@ -974,3 +975,31 @@ def test_queue_service_build_media_url_for_media_and_cache(tmp_path):
     finally:
         settings.media_path = original_media
         settings.cache_path = original_cache
+
+
+def test_get_queue_uses_constant_query_count(db_session):
+    service = QueueService()
+    for index in range(5):
+        service.add_to_queue(
+            db_session,
+            QueueItemCreate(
+                youtube_id=f"query-count-{index}",
+                title=f"Query Count {index}",
+                is_karaoke=False,
+            ),
+        )
+
+    statements: list[str] = []
+
+    def capture(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(db_session.bind, "before_cursor_execute", capture)
+    try:
+        queue = service.get_queue(db_session, is_admin=True)
+    finally:
+        event.remove(db_session.bind, "before_cursor_execute", capture)
+
+    assert len(queue) == 5
+    assert len(statements) == 2

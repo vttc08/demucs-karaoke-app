@@ -713,7 +713,9 @@ async function loadSettings() {
         setStatus(t("settings.loaded"));
         return true;
     } catch (error) {
-        setStatus(error.message || t("settings.load_unable"), true);
+        const message = String(error.message || t("settings.load_unable"));
+        setStatus(message, true);
+        showSaveFeedback(message, true);
         return false;
     } finally {
         setFormState(false);
@@ -781,6 +783,7 @@ async function checkDemucsHealth() {
         };
         applyDemucsHealthToUI(health);
         setStatus(health.detail, true);
+        showSaveFeedback(health.detail, true);
     } finally {
         if (checkDemucsBtn) {
             checkDemucsBtn.disabled = formBusy;

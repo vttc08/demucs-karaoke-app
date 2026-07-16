@@ -190,6 +190,7 @@ let currentTasks = [];
 let taskRefreshTimer = null;
 let taskRefreshPromise = null;
 let taskRefreshPending = false;
+let taskRenderFrame = null;
 let lastTaskRefreshAt = 0;
 let shouldScrollToTaskPanel = false;
 const mediaModalQueryParam = "media_id";
@@ -1386,6 +1387,16 @@ function scheduleTaskListRefresh(delayMs = 1000) {
     }, effectiveDelay);
 }
 
+function scheduleTaskListRender() {
+    if (taskRenderFrame !== null) {
+        return;
+    }
+    taskRenderFrame = window.requestAnimationFrame(() => {
+        taskRenderFrame = null;
+        renderTaskList(currentTasks);
+    });
+}
+
 function applyTaskSummarySnapshot(snapshots) {
     if (!Array.isArray(snapshots) || !currentTasks.length) {
         if (Array.isArray(snapshots) && snapshots.length) {
@@ -1406,7 +1417,7 @@ function applyTaskSummarySnapshot(snapshots) {
         }
     });
     if (changed) {
-        renderTaskList(currentTasks);
+        scheduleTaskListRender();
     }
     if (snapshots.some((snapshot) => !currentTasks.some((task) => Number(task.id) === Number(snapshot.task_id)))) {
         scheduleTaskListRefresh();
@@ -1432,7 +1443,7 @@ function applyTaskStreamEvent(payload) {
         return;
     }
     if (updateTaskLiveSnapshot(task, payload)) {
-        renderTaskList(currentTasks);
+        scheduleTaskListRender();
     }
     if (["done", "error"].includes(payload.event_type)) {
         scheduleTaskListRefresh();
@@ -1585,7 +1596,7 @@ function openEditModal(itemNode, { syncHistory = true } = {}) {
     const currentTitle = getItemFieldText(itemNode, "title");
     const currentArtistText = getItemFieldText(itemNode, "artist");
     const currentArtist = currentArtistText === t("common.unknown_artist") || currentArtistText === "Unknown Artist" ? "" : currentArtistText;
-    const placeholderThumbnail = appUrl("/static/placeholder.png");
+    const placeholderThumbnail = appUrl("/static/karaoke-icon.png");
     const currentThumbnail = itemNode.dataset.thumbnail || placeholderThumbnail;
     activeEditMediaPath = itemNode.dataset.mediaPath || "";
     const lyricsPath = itemNode.dataset.lyricsPath || "";

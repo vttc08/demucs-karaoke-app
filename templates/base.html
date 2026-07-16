@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ t('app.karaoke') }}{% endblock %}</title>
-    <link rel="icon" type="image/x-icon" href="{{ app_url('/static/favicon.ico') }}">
+    <link rel="icon" type="image/png" href="{{ app_url('/static/karaoke-icon.png') }}">
     <link rel="apple-touch-icon" href="{{ app_url('/static/karaoke-icon.png') }}">
     
     <!-- Fonts -->
@@ -13,69 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
     
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-    <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "primary": "#00f2ff",
-                        "secondary": "#3ce36a", 
-                        "tertiary": "#ffb950",
-                        "background": "#0e0c1f",
-                        "surface": "#0e0c1f",
-                        "surface-container": "#19172e",
-                        "surface-container-low": "#131126",
-                        "surface-container-lowest": "#000000",
-                        "surface-container-high": "#1f1c36",
-                        "surface-container-highest": "#25223e",
-                        "on-surface": "#e7e2fe",
-                        "on-surface-variant": "#c9c5d0",
-                        "outline-variant": "#48455b",
-                        "tertiary-container": "#8f43fb",
-                        "on-tertiary-container": "#ffffff",
-                        "on-primary": "#004343",
-                        "error": "#ff6e84"
-                    },
-                    fontFamily: {
-                        "headline": ["Space Grotesk", "sans-serif"],
-                        "body": ["Inter", "sans-serif"],
-                    },
-                    borderRadius: {
-                        "DEFAULT": "0.375rem",
-                        "lg": "0.5rem", 
-                        "xl": "0.75rem",
-                        "full": "9999px"
-                    },
-                },
-            },
-        }
-    </script>
-    
-    <!-- Custom Styles -->
-    <style>
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        
-        .glass-card {
-            background: linear-gradient(135deg, rgba(25, 23, 46, 0.7) 0%, rgba(19, 17, 38, 0.8) 100%);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-        }
-        
-        .neon-glow {
-            filter: drop-shadow(0 0 10px rgba(0, 242, 255, 0.3));
-        }
-        
-        body {
-            background: #0e0c1f;
-            color: #e7e2fe;
-        }
-    </style>
-    
+    <link rel="stylesheet" href="{{ static_asset_url('/static/tailwind.css') }}">
     <link rel="stylesheet" href="{{ app_url('/static/style.css') }}">
     {% block head %}{% endblock %}
 </head>

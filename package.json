@@ -1,0 +1,11 @@
+{
+  "name": "karaoke-frontend-assets",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i ./static/tailwind-input.css -o ./static/tailwind.css --minify"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "0.5.10",
+    "tailwindcss": "3.4.17"
+  }
+}

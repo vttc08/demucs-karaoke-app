@@ -132,6 +132,7 @@
     <span>{{ t('common.save') }}</span>
 </button>
 
+<p id="settings-status" class="sr-only" role="status" aria-live="polite"></p>
 <div id="save-feedback" class="settings-save-feedback pointer-events-none fixed inset-x-4 z-[60] flex -translate-y-3 items-center gap-2 rounded-lg border border-primary/30 bg-surface-container px-4 py-3 text-sm text-on-surface opacity-0 shadow-xl transition duration-200 md:inset-x-auto md:right-6 md:max-w-md" role="status" aria-live="polite"><span id="save-feedback-icon" class="material-symbols-outlined text-base text-primary">check_circle</span><span id="save-feedback-text" class="font-medium">{{ t('settings.saved') }}</span></div>
 {% endblock %}
 

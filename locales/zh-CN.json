@@ -482,6 +482,7 @@
   "queue.add_started": "搜索并添加歌曲即可开始！",
   "queue.ai_karaoke": "AI 卡拉 OK",
   "queue.clear_all": "全部清除",
+  "queue.confirm_clear": "清除除当前播放歌曲之外的所有歌曲吗？",
   "queue.clear_failed": "清空队列失败",
   "queue.cancel_task": "取消任务",
   "queue.canceling": "正在取消...",

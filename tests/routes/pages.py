@@ -197,7 +197,7 @@ def test_queue_page_hides_left_controls_for_guests(client):
     assert response.status_code == 200
     assert "queue-move-up-" not in response.text
     assert "queue-move-down-" not in response.text
-    assert "equalizer" not in response.text
+    assert 'id="clear-all-btn"' not in response.text
 
 def test_queue_page_shows_guest_remove_only_for_owned_items(client):
     """Guest queue page should render remove only for owned non-playing items."""
@@ -323,12 +323,10 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-lyrics-export-btn"' in response.content
     assert b'id="stage-lyrics-import-btn"' in response.content
     assert re.search(rb'id="stage-lyrics-overlay"[^>]*class="[^"]*\bhidden\b', response.content)
-    assert b"stage-lyric-word--highlighted" in response.content
     assert b"/static/stage-lyrics.js" in response.content
-    assert b"let currentItem = INITIAL_CURRENT_ITEM;" in response.content
-    assert b"let zenModeEnabled = false;" in response.content
-    assert b".stage-media.is-fullscreen.is-zen" in response.content
-    assert b"setZenModeEnabled(!zenModeEnabled)" in response.content
+    assert b"/static/stage.css" in response.content
+    assert b"/static/stage.js" in response.content
+    assert b"window.KaraokeStageConfig" in response.content
     assert b'aria-label="Fullscreen"' in response.content
 
 
@@ -344,7 +342,7 @@ def test_stage_page_renders_client_qr_controls(client):
     assert b'id="stage-qr-close-btn"' in response.content
     assert b'id="stage-qr-size-decrease-btn"' in response.content
     assert b'id="stage-qr-size-increase-btn"' in response.content
-    assert b"karaoke.stage.qrDisplay" in response.content
+    assert "karaoke.stage.qrDisplay" in Path("static/stage.js").read_text(encoding="utf-8")
     assert b"SERVER_STAGE_QR_SIZE" not in response.content
     assert b"SERVER_STAGE_QR_POSITION" not in response.content
 

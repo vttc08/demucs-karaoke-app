@@ -482,6 +482,7 @@
   "queue.add_started": "Search and add songs to get started!",
   "queue.ai_karaoke": "AI Karaoke",
   "queue.clear_all": "Clear All",
+  "queue.confirm_clear": "Clear every song except the one currently playing?",
   "queue.clear_failed": "Failed to clear queue",
   "queue.cancel_task": "Cancel Task",
   "queue.canceling": "Canceling...",
