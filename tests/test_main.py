@@ -22,6 +22,7 @@ def test_build_uvicorn_run_kwargs_sets_reload_and_shutdown_timeout():
         assert kwargs["port"] == 8123
         assert kwargs["reload"] is True
         assert kwargs["timeout_graceful_shutdown"] == 3
+        assert ".venv" in kwargs["reload_excludes"]
         assert "server-logs" in kwargs["reload_excludes"]
         assert "*.log" in kwargs["reload_excludes"]
     finally:

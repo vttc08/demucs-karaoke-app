@@ -83,7 +83,7 @@ The dev entrypoint uses a finite graceful-shutdown timeout, so active SSE/WebSoc
 
 Or with uvicorn directly:
 ```bash
-uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude 'logs/*' --reload-exclude '*.log' --reload-exclude '*.log.*'
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude '.venv' --reload-exclude 'logs/*' --reload-exclude '*.log' --reload-exclude '*.log.*'
 ```
 
 ### Production mode

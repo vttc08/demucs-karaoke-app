@@ -160,6 +160,7 @@ def build_uvicorn_run_kwargs() -> dict[str, object]:
         "port": settings.port,
         "reload": True,
         "reload_excludes": [
+            ".venv",
             str(log_dir),
             f"{log_dir}/*",
             f"{log_dir}/**/*",

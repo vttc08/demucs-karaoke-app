@@ -842,7 +842,7 @@
     }
 
     .stage-cdg-canvas {
-        display: block;
+        display: none;
         width: min(100%, calc((100dvh - 4rem) * 1.3888888889), calc(100vw - 2rem));
         max-width: 100%;
         aspect-ratio: 300 / 216;
@@ -851,8 +851,13 @@
     }
 
     .stage-lyrics-overlay--cdg .stage-cdg-canvas {
+        display: block;
         width: min(100%, calc((100dvh - 10rem) * 1.3888888889), calc(100vw - 2rem));
         max-height: calc(100dvh - 10rem);
+    }
+
+    .stage-lyrics-overlay--cdg .stage-lyrics-lines {
+        display: none;
     }
 
     .stage-lyrics-lines {

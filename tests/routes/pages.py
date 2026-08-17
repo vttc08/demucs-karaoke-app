@@ -331,6 +331,27 @@ def test_stage_page_loads_for_admin(client):
     assert b'aria-label="Fullscreen"' in response.content
 
 
+def test_stage_styles_only_show_cdg_canvas_in_cdg_mode():
+    """The inactive CDG canvas must not compete with normal lyrics for width."""
+    stylesheet = Path("static/stage.css").read_text(encoding="utf-8")
+    default_rule = re.search(r"\.stage-cdg-canvas\s*\{([^}]*)\}", stylesheet)
+    active_rule = re.search(
+        r"\.stage-lyrics-overlay--cdg\s+\.stage-cdg-canvas\s*\{([^}]*)\}",
+        stylesheet,
+    )
+    hidden_lyrics_rule = re.search(
+        r"\.stage-lyrics-overlay--cdg\s+\.stage-lyrics-lines\s*\{([^}]*)\}",
+        stylesheet,
+    )
+
+    assert default_rule is not None
+    assert active_rule is not None
+    assert hidden_lyrics_rule is not None
+    assert "display: none;" in default_rule.group(1)
+    assert "display: block;" in active_rule.group(1)
+    assert "display: none;" in hidden_lyrics_rule.group(1)
+
+
 def test_stage_page_renders_client_qr_controls(client):
     """Stage page should render client-side QR customization controls."""
     authenticate_admin_client(client)

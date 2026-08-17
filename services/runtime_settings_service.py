@@ -78,6 +78,7 @@ class RuntimeSettingsService:
         "stage_vocals_volume_default",
     )
     YTDLP_COMMAND_TIMEOUT_SECONDS = 60
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
     def get_demucs_health(
         self,
@@ -899,8 +900,10 @@ class RuntimeSettingsService:
     def _update_ytdlp_via_package_manager(self) -> subprocess.CompletedProcess[str]:
         """Update yt-dlp with the package manager used by the active install."""
         python_executable = self._resolve_ytdlp_python_executable()
-        if shutil.which("uv"):
-            cmd = ["uv", "pip", "install", "--upgrade", "yt-dlp", "--python", python_executable]
+        uv_executable = shutil.which("uv")
+        if uv_executable:
+            self._update_ytdlp_lock(uv_executable)
+            cmd = [uv_executable, "pip", "install", "--upgrade", "yt-dlp", "--python", python_executable]
         else:
             cmd = [python_executable, "-m", "pip", "install", "--upgrade", "yt-dlp"]
 
@@ -920,6 +923,32 @@ class RuntimeSettingsService:
             stderr = (error.stderr or "").strip()
             raise RuntimeError(
                 f"yt-dlp package-manager update failed: {stderr or 'unknown error'}"
+            ) from error
+
+    def _update_ytdlp_lock(self, uv_executable: str) -> None:
+        """Keep uv's project lockfile aligned with a runtime yt-dlp update."""
+        if not (self.PROJECT_ROOT / "pyproject.toml").is_file():
+            logger.info("Skipping yt-dlp lock update because project metadata is unavailable")
+            return
+
+        cmd = [uv_executable, "lock", "--upgrade-package", "yt-dlp"]
+        try:
+            subprocess.run(
+                cmd,
+                check=True,
+                capture_output=True,
+                text=True,
+                cwd=self.PROJECT_ROOT,
+                timeout=self.YTDLP_COMMAND_TIMEOUT_SECONDS,
+            )
+        except FileNotFoundError as error:
+            raise RuntimeError("uv lock update tool not found") from error
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("yt-dlp lockfile update timed out") from error
+        except subprocess.CalledProcessError as error:
+            stderr = (error.stderr or "").strip()
+            raise RuntimeError(
+                f"yt-dlp lockfile update failed: {stderr or 'unknown error'}"
             ) from error
 
     def update_ytdlp(self) -> YtDlpUpdateResponse:

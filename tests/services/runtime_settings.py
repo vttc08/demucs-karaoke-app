@@ -913,6 +913,38 @@ def test_runtime_settings_update_ytdlp_falls_back_for_pip_managed_install():
     assert mock_run.call_count == 2
     assert mock_run.call_args_list[1].args[0][1:4] == ["-m", "pip", "install"]
 
+
+def test_runtime_settings_update_ytdlp_updates_uv_lock_before_install():
+    """uv-managed fallback updates the lockfile so uv run keeps the new version."""
+    service = RuntimeSettingsService()
+    pip_managed_error = subprocess.CalledProcessError(
+        returncode=1,
+        cmd=["/home/project/.venv/bin/yt-dlp", "-U"],
+        stderr="ERROR: You installed yt-dlp with pip or using the wheel from PyPi; Use that to update",
+    )
+
+    with patch.object(
+        RuntimeSettingsService,
+        "get_ytdlp_version",
+        side_effect=[
+            Mock(version="2026.06.09", binary_path="/home/project/.venv/bin/yt-dlp"),
+            Mock(version="2026.07.04", binary_path="/home/project/.venv/bin/yt-dlp"),
+        ],
+    ):
+        with patch("services.runtime_settings_service.shutil.which", return_value="/usr/bin/uv"):
+            with patch("services.runtime_settings_service.subprocess.run") as mock_run:
+                mock_run.side_effect = [
+                    pip_managed_error,
+                    Mock(stdout="Updated lockfile"),
+                    Mock(stdout="Successfully installed yt-dlp-2026.7.4"),
+                ]
+                result = service.update_ytdlp()
+
+    assert result.updated is True
+    assert mock_run.call_count == 3
+    assert mock_run.call_args_list[1].args[0][1:] == ["lock", "--upgrade-package", "yt-dlp"]
+    assert mock_run.call_args_list[2].args[0][1:4] == ["pip", "install", "--upgrade"]
+
 def test_runtime_settings_update_ytdlp_falls_back_for_pip_managed_install_without_new_version():
     """Fallback updates that do not change the version should report up to date."""
     service = RuntimeSettingsService()

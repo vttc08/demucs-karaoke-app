@@ -201,7 +201,9 @@ For unattended startup, use Task Scheduler or a service wrapper such as NSSM. St
   remote requests carry `X-API-Key`.
 - Keep admin credentials out of environment files and logs.
 - Do not log proxy credentials or full external tool payloads.
-- Keep `yt-dlp` current from `/settings` or with `uv pip install --upgrade yt-dlp`.
+- Keep `yt-dlp` current from `/settings` or with `uv pip install --upgrade yt-dlp`. When the
+  application uses the `/settings` updater with a uv-managed project, it also updates the
+  `yt-dlp` entry in `uv.lock`, so the next `uv run` does not restore the previous version.
 - Test the real problem video after changing Deno or yt-dlp:
 
 ```bash
