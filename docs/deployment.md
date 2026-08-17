@@ -26,7 +26,74 @@ to yt-dlp search, metadata, and download commands.
 
 ## Docker
 
-No main-app Dockerfile is currently checked in. If you add one, keep the final image small and persist runtime data with volumes or bind mounts.
+`Dockerfile` builds the main app only; `demucs_svc/` stays on its separate
+GPU-capable host. It has two production targets:
+
+- `app` (the default) contains the locked application dependencies, `ffmpeg`,
+  and the Deno executable used by yt-dlp external JavaScript execution.
+- `vocal-sync` adds the optional `numpy` and `scipy` `vocal-sync` extra for
+  automatic guide-vocal offset estimation. It is intentionally larger.
+
+Neither target includes Node/npm, MkDocs, tests, the source documentation, or
+the Demucs service. It does retain the small shared lyric parsing modules that
+the main app imports for subtitle editing; no Demucs worker, model, or GPU
+dependency is included. The Docker build context is allowlisted in
+`.dockerignore`. It includes the checked-out `static/` tree, so the already-built
+help site at `static/docs/` is copied when it is present; Docker does not rebuild
+docs.
+
+Build the lightweight image:
+
+```bash
+docker build --target app -t karaoke:latest .
+```
+
+Build the optional vocal-sync image:
+
+```bash
+docker build --target vocal-sync -t karaoke:vocal-sync .
+```
+
+The Python, Deno, and Debian base images used here publish `linux/amd64` and
+`linux/arm64` variants. To publish a multi-platform manifest with Buildx:
+
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --target app \
+  --tag registry.example/karaoke:latest \
+  --push .
+```
+
+Use `--target vocal-sync` for the larger variant. Cross-platform builds need a
+Buildx builder with emulation configured when the builder does not natively
+support both architectures.
+
+### Persistent data and ownership
+
+The image runs unprivileged by default. For predictable bind-mount ownership,
+the included Compose file starts it directly under your host numeric user and
+group; files created in `/data` (SQLite database, media, cache, and logs) are
+therefore owned by that exact UID/GID rather than root. This needs no `s6`,
+`gosu`, or `su-exec` init wrapper.
+
+```bash
+cp .env.docker.example .env.docker
+mkdir -p data
+docker compose --env-file .env.docker up -d --build
+```
+
+Set `PUID` and `PGID` in `.env.docker` to the IDs that own the host data or
+network share (normally `id -u` and `id -g`). Ensure the host directory grants
+that identity read/write access before starting the container. The image makes
+an empty `/data` directory writable for its unprivileged default user, but a
+bind mount's host permissions always take precedence.
+
+To use a prebuilt image instead of Compose building locally, set
+`KARAOKE_IMAGE` to that image and omit the `build:` section from a deployment
+copy of `compose.yml`; retain `user: "${PUID}:${PGID}"` and the `/data` bind
+mount. `KARAOKE_BUILD_TARGET=vocal-sync` selects the scientific target during
+a local Compose build.
 
 Example runtime environment:
 

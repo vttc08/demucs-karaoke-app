@@ -1,0 +1,29 @@
+# Start from an empty context. The allowlist below matches the explicit runtime
+# COPY instructions in Dockerfile, including the prebuilt static documentation.
+*
+
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!config.py
+!database.py
+!logging_config.py
+!main.py
+!models.py
+!adapters/
+!adapters/**
+!demucs_svc/
+!demucs_svc/__init__.py
+!demucs_svc/lyrics_line_processor.py
+!demucs_svc/whisperx_pipeline.py
+!locales/
+!locales/**
+!routes/
+!routes/**
+!services/
+!services/**
+!static/
+!static/**
+!templates/
+!templates/**
