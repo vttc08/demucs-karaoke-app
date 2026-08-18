@@ -114,6 +114,22 @@ paths in the Compose environment when overriding the image. The experimental
 `app-no-deno` target remains available for local Docker builds, but it is not
 the default published image.
 
+### Publishing Docker images from GitHub
+
+The `docker-publish.yml` workflow builds and smoke-tests both production
+targets on pull requests and `dev`/`main` pushes. It publishes both targets
+as `linux/amd64` and `linux/arm64` images when a semantic version tag such as
+`v1.4.2` is pushed:
+
+```bash
+git tag v1.4.2
+git push https://github.com/vttc08/demucs-karaoke-app.git v1.4.2
+```
+
+Configure the repository variable `DOCKERHUB_USERNAME` and the repository
+secret `DOCKERHUB_TOKEN`. The lightweight target receives `latest`, while the
+vocal-sync target receives tags such as `1.4.2-vocal-sync` and `vocal-sync`.
+
 Example runtime environment:
 
 ```env
