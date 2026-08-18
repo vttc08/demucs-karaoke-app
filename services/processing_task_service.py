@@ -4,11 +4,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from config import settings
 from database import SessionLocal
 from models import (
     MediaItem,
@@ -625,8 +627,8 @@ class ProcessingTaskService:
 
         from services.websocket_manager import manager
 
-        await manager.broadcast_queue_item_progress(
-            {
+        await manager.run_on_owner_loop(
+            manager.broadcast_queue_item_progress({
                 "id": queue_item_id,
                 "task_id": task_id,
                 "status": status,
@@ -638,7 +640,7 @@ class ProcessingTaskService:
                 "processing_mode": progress_mode,
                 "processing_step_index": progress_step_index,
                 "processing_step_total": progress_step_total,
-            }
+            })
         )
 
     async def emit_log(
@@ -1026,14 +1028,20 @@ class ProcessingTaskService:
         queue_service = QueueService()
         response = queue_service._to_response(queue_item)
         if task.status == ProcessingTaskStatus.FAILED.value and task.last_error_summary:
-            await manager.broadcast_queue_item_failed(queue_item.id, task.last_error_summary)
+            await manager.run_on_owner_loop(
+                manager.broadcast_queue_item_failed(queue_item.id, task.last_error_summary)
+            )
         else:
-            await manager.broadcast_queue_item_updated(response.model_dump(mode="json"))
+            await manager.run_on_owner_loop(
+                manager.broadcast_queue_item_updated(response.model_dump(mode="json"))
+            )
 
         if task.status == ProcessingTaskStatus.DONE.value:
             promoted = queue_service.promote_next_ready_if_idle(db)
             if promoted:
-                await manager.broadcast_current_item_changed(promoted.id, None)
+                await manager.run_on_owner_loop(
+                    manager.broadcast_current_item_changed(promoted.id, None)
+                )
 
     async def _cancel_queue_and_media_side_effects(
         self,
@@ -1058,7 +1066,9 @@ class ProcessingTaskService:
 
         queue_service = QueueService()
         response = queue_service._to_response(queue_item)
-        await manager.broadcast_queue_item_updated(response.model_dump(mode="json"))
+        await manager.run_on_owner_loop(
+            manager.broadcast_queue_item_updated(response.model_dump(mode="json"))
+        )
 
     @staticmethod
     def _normalize_optional_id(value: str | None) -> str | None:
@@ -1068,15 +1078,26 @@ class ProcessingTaskService:
         return cleaned or None
 
 class TaskExecutionCoordinator:
-    """Start processing tasks in background threads without duplicate runners."""
+    """Run durable processing tasks with bounded background concurrency."""
 
-    def __init__(self):
+    def __init__(self, *, max_workers: int | None = None):
+        self._max_workers = max(1, int(max_workers or settings.processing_max_workers))
         self._active_task_ids: set[int] = set()
         self._task_contexts: dict[int, dict[str, Any]] = {}
         self._lock = threading.Lock()
+        self._executor: ThreadPoolExecutor | None = None
+
+    def _ensure_executor_locked(self) -> ThreadPoolExecutor:
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(
+                max_workers=self._max_workers,
+                thread_name_prefix="processing-task",
+            )
+        return self._executor
 
     def start(self, task_id: int):
         """Start a background worker for the task if one is not already running."""
+        future: Future
         with self._lock:
             if task_id in self._active_task_ids:
                 return
@@ -1084,16 +1105,24 @@ class TaskExecutionCoordinator:
             cancel_event = threading.Event()
             self._task_contexts[task_id] = {
                 "cancel_event": cancel_event,
-                "loop": None,
-                "task": None,
+                "future": None,
             }
-        thread = threading.Thread(
-            target=self._run_task,
-            args=(task_id,),
-            daemon=True,
-            name=f"processing-task-{task_id}",
+            executor = self._ensure_executor_locked()
+            future = executor.submit(self._run_task, task_id)
+            self._task_contexts[task_id]["future"] = future
+        future.add_done_callback(
+            lambda completed, completed_task_id=task_id: self._discard_canceled_future(
+                completed_task_id,
+                completed,
+            )
         )
-        thread.start()
+
+    def _discard_canceled_future(self, task_id: int, future: Future) -> None:
+        if not future.cancelled():
+            return
+        with self._lock:
+            self._active_task_ids.discard(task_id)
+            self._task_contexts.pop(task_id, None)
 
     def _run_task(self, task_id: int):
         from services.karaoke_service import KaraokeService
@@ -1106,7 +1135,6 @@ class TaskExecutionCoordinator:
             with self._lock:
                 context = self._task_contexts.get(task_id)
                 if context is not None:
-                    context["loop"] = loop
                     cancel_event = context["cancel_event"]
             coroutine = KaraokeService().process_task(
                 db,
@@ -1114,10 +1142,6 @@ class TaskExecutionCoordinator:
                 cancel_event=cancel_event,
             )
             task = loop.create_task(coroutine)
-            with self._lock:
-                context = self._task_contexts.get(task_id)
-                if context is not None:
-                    context["task"] = task
             loop.run_until_complete(task)
         except asyncio.CancelledError:
             logger.info("Background processing task canceled task_id=%s", task_id)
@@ -1137,6 +1161,7 @@ class TaskExecutionCoordinator:
 
     def cancel(self, task_id: int) -> bool:
         """Request cooperative cancellation for a running or queued task."""
+        future: Future | None = None
         with self._lock:
             context = self._task_contexts.get(task_id)
             if context is None:
@@ -1144,7 +1169,10 @@ class TaskExecutionCoordinator:
             cancel_event = context.get("cancel_event")
             if isinstance(cancel_event, threading.Event):
                 cancel_event.set()
-            return True
+            future = context.get("future")
+        if isinstance(future, Future):
+            future.cancel()
+        return True
 
     def cancel_many(self, task_ids: list[int]) -> list[int]:
         """Request cancellation for multiple tasks."""
@@ -1163,10 +1191,18 @@ class TaskExecutionCoordinator:
             cancel_event = context.get("cancel_event")
             return cancel_event if isinstance(cancel_event, threading.Event) else None
         
-    def retry(self, task_id: int):
-        """Retry a task by canceling it and starting a new execution."""
-        self.cancel(task_id)
-        self.start(task_id)
+    def shutdown(self, *, wait: bool = True) -> None:
+        """Request cooperative cancellation and retire worker threads."""
+        with self._lock:
+            contexts = list(self._task_contexts.values())
+            executor = self._executor
+            self._executor = None
+        for context in contexts:
+            cancel_event = context.get("cancel_event")
+            if isinstance(cancel_event, threading.Event):
+                cancel_event.set()
+        if executor is not None:
+            executor.shutdown(wait=wait, cancel_futures=True)
 
 
 processing_task_service = ProcessingTaskService()

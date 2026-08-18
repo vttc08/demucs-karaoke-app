@@ -5,7 +5,7 @@ import re
 import shutil
 from pathlib import Path
 from typing import List, Optional
-from sqlalchemy.orm import Session, object_session
+from sqlalchemy.orm import Session, joinedload, object_session
 from sqlalchemy import func
 from models import MediaItem, ProcessingTask, QueueItem, QueueItemCreate, QueueItemResponse, QueueStatus
 from config import settings
@@ -17,6 +17,7 @@ from services.ttml_parser import TTMLParseError, is_valid_xml, parse_ttml_to_whi
 logger = logging.getLogger(__name__)
 _AUDIO_SUFFIXES = {".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm"}
 _LYRICS_SUFFIXES = {".json", ".lrc", ".srt", ".txt", ".cdg"}
+_ACTIVE_TASK_UNSET = object()
 
 
 class QueueService:
@@ -169,11 +170,13 @@ class QueueService:
             List of queue items
         """
         items = self._get_active_queue_items(db, limit=limit)
+        active_tasks = self._active_tasks_for_queue_items(db, [item.id for item in items])
         return [
             self._to_viewer_response(
                 item,
                 is_admin=is_admin,
                 requester_id=requester_id,
+                active_task=active_tasks.get(item.id),
             )
             for item in items
         ]
@@ -695,14 +698,20 @@ class QueueService:
 
     @staticmethod
     def _normalize_required_metadata(value: str) -> str:
-        cleaned = value.strip()
-        return cleaned or value
+        cleaned = " ".join((value or "").split()).strip()
+        if not cleaned:
+            raise ValueError("title must not be blank")
+        if len(cleaned) > 200:
+            raise ValueError("title is too long")
+        return cleaned
 
     @staticmethod
     def _normalize_optional_metadata(value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
-        cleaned = value.strip()
+        cleaned = " ".join(value.split()).strip()
+        if len(cleaned) > 200:
+            raise ValueError("artist is too long")
         return cleaned or None
 
     def append_to_end(self, db: Session) -> int:
@@ -715,12 +724,35 @@ class QueueService:
     def _get_active_queue_items(self, db: Session, limit: int | None = None) -> list[QueueItem]:
         query = (
             db.query(QueueItem)
+            .options(joinedload(QueueItem.media))
             .filter(QueueItem.status.in_(self.ACTIVE_QUEUE_STATUSES))
             .order_by(QueueItem.position.asc(), QueueItem.id.asc())
         )
         if limit is not None:
             query = query.limit(limit)
         return query.all()
+
+    @staticmethod
+    def _active_tasks_for_queue_items(
+        db: Session,
+        queue_item_ids: list[int],
+    ) -> dict[int, ProcessingTask]:
+        if not queue_item_ids:
+            return {}
+        tasks = (
+            db.query(ProcessingTask)
+            .filter(
+                ProcessingTask.target_queue_item_id.in_(queue_item_ids),
+                ProcessingTask.status.in_(["pending", "downloading", "processing"]),
+            )
+            .order_by(ProcessingTask.id.desc())
+            .all()
+        )
+        result: dict[int, ProcessingTask] = {}
+        for task in tasks:
+            if task.target_queue_item_id is not None:
+                result.setdefault(task.target_queue_item_id, task)
+        return result
 
     def add_to_front(self, db: Session) -> int:
         """Return a sparse position value at queue head."""
@@ -767,7 +799,12 @@ class QueueService:
             item.position = index * self.POSITION_STEP
         db.commit()
 
-    def _to_response(self, item: QueueItem) -> QueueItemResponse:
+    def _to_response(
+        self,
+        item: QueueItem,
+        *,
+        active_task: ProcessingTask | None | object = _ACTIVE_TASK_UNSET,
+    ) -> QueueItemResponse:
         """Map queue row + related media row into API response."""
         media = item.media
         if media is None:
@@ -786,7 +823,8 @@ class QueueService:
             vocals_path=vocals_path,
             lyrics_path=lyrics_path,
         )
-        active_task = self._active_task_for_queue_item(item)
+        if active_task is _ACTIVE_TASK_UNSET:
+            active_task = self._active_task_for_queue_item(item)
         task_snapshot = (
             task_stream_manager.snapshot_now(active_task.id) if active_task is not None else None
         )
@@ -841,9 +879,10 @@ class QueueService:
         *,
         is_admin: bool = False,
         requester_id: str | None = None,
+        active_task: ProcessingTask | None | object = _ACTIVE_TASK_UNSET,
     ) -> QueueItemResponse:
         """Map a queue row into a response enriched with viewer permissions."""
-        response = self._to_response(item)
+        response = self._to_response(item, active_task=active_task)
         response.can_control_stage = self.can_control_stage_item(
             item,
             is_admin=is_admin,

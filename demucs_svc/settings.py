@@ -49,6 +49,21 @@ class DemucsSettings(BaseSettings):
     whisperx_preload_models: str = "transcription=tiny,align=en"
     demucs_gc_interval_seconds: float = 600.0
     demucs_gc_low_free_vram_bytes: int = 2 * 1024 * 1024 * 1024
+    max_concurrent_jobs: int = Field(
+        default=1,
+        validation_alias="DEMUCS_MAX_CONCURRENT_JOBS",
+        ge=1,
+    )
+    max_upload_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        validation_alias="DEMUCS_MAX_UPLOAD_BYTES",
+        ge=1,
+    )
+    min_free_bytes: int = Field(
+        default=1024 * 1024 * 1024,
+        validation_alias="DEMUCS_MIN_FREE_BYTES",
+        ge=0,
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

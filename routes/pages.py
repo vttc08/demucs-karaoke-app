@@ -197,6 +197,7 @@ async def demucs_karaoke_app(request: Request):
 async def login_page(request: Request, db: Session = Depends(get_db)):
     """Login and identification page."""
     return templates.TemplateResponse(
+        request,
         "login.html",
         {
             "request": request,
@@ -219,6 +220,7 @@ async def login_handler(
         admin = auth_service.authenticate_admin(db, username, password)
         if admin is None:
             return templates.TemplateResponse(
+                request,
                 "login.html",
                 {
                     "request": request,
@@ -281,6 +283,7 @@ async def queue_page(request: Request, db: Session = Depends(get_db)):
         max_length=40,
     )
     return templates.TemplateResponse(
+        request,
         "queue.html",
         {
             "request": request,
@@ -301,6 +304,7 @@ async def queue_lyrics_page(request: Request, db: Session = Depends(get_db)):
     """Queue-side lyrics viewer page for the currently playing item."""
     current_item = queue_service.get_current_item(db)
     return templates.TemplateResponse(
+        request,
         "queue_lyrics.html",
         {
             "request": request,
@@ -320,6 +324,7 @@ async def stage_page(request: Request, db: Session = Depends(get_db)):
     runtime_settings = runtime_settings_service.get_settings()
     lobby_media_url = stage_lobby_service.resolve_lobby_media_url()
     return templates.TemplateResponse(
+        request,
         "stage.html",
         {
             "request": request,
@@ -341,7 +346,7 @@ async def settings_page(request: Request, db: Session = Depends(get_db)):
     )
     if admin is None:
         return RedirectResponse(url=app_url("/login"), status_code=302)
-    return templates.TemplateResponse("settings.html", {"request": request})
+    return templates.TemplateResponse(request, "settings.html", {"request": request})
 
 
 @router.get("/media", response_class=HTMLResponse)
@@ -359,6 +364,7 @@ async def media_management_page(request: Request, db: Session = Depends(get_db))
         limit=20,
     )
     return templates.TemplateResponse(
+        request,
         "media_management.html",
         {
             "request": request,
@@ -408,6 +414,7 @@ async def media_editor_page(
         )
     )
     return templates.TemplateResponse(
+        request,
         "media_editor.html",
         {
             "request": request,
@@ -446,6 +453,7 @@ async def media_vocals_page(
     media_suffix = Path(media_item.media_path).suffix.lower()
     is_video = media_suffix in _VIDEO_SUFFIXES
     return templates.TemplateResponse(
+        request,
         "media_vocals.html",
         {
             "request": request,
@@ -483,6 +491,7 @@ async def media_subtitles_page(
         else:
             detail = translate(locale, "subtitle.not_found_detail")
         return templates.TemplateResponse(
+            request,
             "media_subtitles.html",
             {
                 "request": request,
@@ -502,6 +511,7 @@ async def media_subtitles_page(
     is_video = media_suffix in _VIDEO_SUFFIXES
     docs_target = app_url(build_docs_url(locale))
     return templates.TemplateResponse(
+        request,
         "media_subtitles.html",
         {
             "request": request,
@@ -549,6 +559,7 @@ async def media_subtitles_split_merge_page(
         else:
             detail = translate(locale, "subtitle.not_found_detail")
         return templates.TemplateResponse(
+            request,
             "media_subtitles_split_merge.html",
             {
                 "request": request,
@@ -564,6 +575,7 @@ async def media_subtitles_split_merge_page(
 
     docs_target = app_url(build_docs_url(locale, "subtitles"))
     return templates.TemplateResponse(
+        request,
         "media_subtitles_split_merge.html",
         {
             "request": request,
@@ -586,13 +598,14 @@ async def media_subtitles_split_merge_page(
 @router.get("/upload", response_class=HTMLResponse)
 async def upload_page(request: Request):
     """Media upload page for adding new tracks."""
-    return templates.TemplateResponse("upload.html", {"request": request})
+    return templates.TemplateResponse(request, "upload.html", {"request": request})
 
 
 @router.get("/access-restricted", response_class=HTMLResponse)
 async def access_restricted_page(request: Request):
     """Static access gate page for reverse proxy network checks."""
     return templates.TemplateResponse(
+        request,
         "access_restricted.html",
         {"request": request},
     )

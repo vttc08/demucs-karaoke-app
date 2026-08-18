@@ -32,6 +32,33 @@ class ConnectionManager:
             "current_time": 0.0,
         }
         self._sync_version = 0
+        self._owner_loop: asyncio.AbstractEventLoop | None = None
+
+    def bind_owner_loop(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
+        """Bind live socket I/O to the FastAPI application event loop."""
+        self._owner_loop = loop or asyncio.get_running_loop()
+
+    async def run_on_owner_loop(self, coroutine):
+        """Run a socket coroutine on the loop that owns ASGI connections."""
+        owner_loop = self._owner_loop
+        current_loop = asyncio.get_running_loop()
+        if (
+            owner_loop is None
+            or owner_loop is current_loop
+            or owner_loop.is_closed()
+            or not owner_loop.is_running()
+        ):
+            if owner_loop is not None and owner_loop is not current_loop:
+                self._owner_loop = None
+            return await coroutine
+        try:
+            future = asyncio.run_coroutine_threadsafe(coroutine, owner_loop)
+        except RuntimeError:
+            # The application loop may close between the state check and
+            # scheduling during shutdown or isolated service tests.
+            self._owner_loop = None
+            return await coroutine
+        return await asyncio.wrap_future(future)
 
     @staticmethod
     def _timestamp() -> str:

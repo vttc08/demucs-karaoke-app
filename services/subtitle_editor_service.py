@@ -22,7 +22,6 @@ from services.lyrics_service import LyricsService
 from services.queue_service import QueueService
 from services.subtitle_workflow_service import (
     SubtitleWorkflowConflictError,
-    SubtitleWorkflowNotFoundError,
     subtitle_workflow_service,
 )
 

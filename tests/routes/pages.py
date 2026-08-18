@@ -155,7 +155,8 @@ def test_queue_page_admin_shows_queue_as_controls(client):
 
 def test_queue_page_renders_simplified_chinese_locale(client):
     """Queue page should use the selected frontend locale cookie."""
-    response = client.get("/queue", cookies={LOCALE_COOKIE: "zh-CN"})
+    client.cookies.set(LOCALE_COOKIE, "zh-CN")
+    response = client.get("/queue")
 
     assert response.status_code == 200
     assert '<html class="dark" lang="zh-CN">' in response.text
@@ -197,7 +198,7 @@ def test_queue_page_hides_left_controls_for_guests(client):
     assert response.status_code == 200
     assert "queue-move-up-" not in response.text
     assert "queue-move-down-" not in response.text
-    assert "equalizer" not in response.text
+    assert 'id="clear-all-btn"' not in response.text
 
 def test_queue_page_shows_guest_remove_only_for_owned_items(client):
     """Guest queue page should render remove only for owned non-playing items."""
@@ -323,13 +324,32 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-lyrics-export-btn"' in response.content
     assert b'id="stage-lyrics-import-btn"' in response.content
     assert re.search(rb'id="stage-lyrics-overlay"[^>]*class="[^"]*\bhidden\b', response.content)
-    assert b"stage-lyric-word--highlighted" in response.content
     assert b"/static/stage-lyrics.js" in response.content
-    assert b"let currentItem = INITIAL_CURRENT_ITEM;" in response.content
-    assert b"let zenModeEnabled = false;" in response.content
-    assert b".stage-media.is-fullscreen.is-zen" in response.content
-    assert b"setZenModeEnabled(!zenModeEnabled)" in response.content
+    assert b"/static/stage.css" in response.content
+    assert b"/static/stage.js" in response.content
+    assert b"window.KaraokeStageConfig" in response.content
     assert b'aria-label="Fullscreen"' in response.content
+
+
+def test_stage_styles_only_show_cdg_canvas_in_cdg_mode():
+    """The inactive CDG canvas must not compete with normal lyrics for width."""
+    stylesheet = Path("static/stage.css").read_text(encoding="utf-8")
+    default_rule = re.search(r"\.stage-cdg-canvas\s*\{([^}]*)\}", stylesheet)
+    active_rule = re.search(
+        r"\.stage-lyrics-overlay--cdg\s+\.stage-cdg-canvas\s*\{([^}]*)\}",
+        stylesheet,
+    )
+    hidden_lyrics_rule = re.search(
+        r"\.stage-lyrics-overlay--cdg\s+\.stage-lyrics-lines\s*\{([^}]*)\}",
+        stylesheet,
+    )
+
+    assert default_rule is not None
+    assert active_rule is not None
+    assert hidden_lyrics_rule is not None
+    assert "display: none;" in default_rule.group(1)
+    assert "display: block;" in active_rule.group(1)
+    assert "display: none;" in hidden_lyrics_rule.group(1)
 
 
 def test_stage_page_renders_client_qr_controls(client):
@@ -344,7 +364,7 @@ def test_stage_page_renders_client_qr_controls(client):
     assert b'id="stage-qr-close-btn"' in response.content
     assert b'id="stage-qr-size-decrease-btn"' in response.content
     assert b'id="stage-qr-size-increase-btn"' in response.content
-    assert b"karaoke.stage.qrDisplay" in response.content
+    assert "karaoke.stage.qrDisplay" in Path("static/stage.js").read_text(encoding="utf-8")
     assert b"SERVER_STAGE_QR_SIZE" not in response.content
     assert b"SERVER_STAGE_QR_POSITION" not in response.content
 
@@ -449,7 +469,8 @@ def test_settings_page_uses_localized_docs_path_for_zh(client):
     """Settings docs button should follow the active locale."""
     authenticate_admin_client(client)
 
-    response = client.get("/settings", cookies={LOCALE_COOKIE: "zh-CN"})
+    client.cookies.set(LOCALE_COOKIE, "zh-CN")
+    response = client.get("/settings")
 
     assert response.status_code == 200
     assert 'href="/help/zh/"' in response.text
@@ -516,11 +537,8 @@ def test_logout_deletes_admin_session(client):
         )
         token, _ = service.create_admin_session(db, admin)
 
-    response = client.get(
-        "/logout",
-        cookies={ADMIN_SESSION_COOKIE: token},
-        follow_redirects=False,
-    )
+    client.cookies.set(ADMIN_SESSION_COOKIE, token)
+    response = client.get("/logout", follow_redirects=False)
 
     assert response.status_code == 302
     with TestingSessionLocal() as db:

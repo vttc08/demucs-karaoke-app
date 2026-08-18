@@ -8,6 +8,7 @@ const DEMUCS_GC_API = appUrl("/api/settings/demucs/gc");
 const PROXY_INFO_API = appUrl("/api/settings/proxy-info");
 const YTDLP_VERSION_API = appUrl("/api/settings/ytdlp/version");
 const YTDLP_UPDATE_API = appUrl("/api/settings/ytdlp/update");
+const YTDLP_NIGHTLY_UPDATE_API = appUrl("/api/settings/ytdlp/update-nightly");
 const WHISPERX_PRELOAD_API = appUrl("/api/settings/whisperx/preload");
 const form = document.getElementById("settings-form");
 const saveBtn = document.getElementById("save-settings-btn");
@@ -18,6 +19,7 @@ const saveFeedbackIcon = document.getElementById("save-feedback-icon");
 const saveFeedbackText = document.getElementById("save-feedback-text");
 const refreshYtdlpVersionBtn = document.getElementById("refresh-ytdlp-version-btn");
 const updateYtdlpBtn = document.getElementById("update-ytdlp-btn");
+const updateYtdlpNightlyBtn = document.getElementById("update-ytdlp-nightly-btn");
 const preloadWhisperxBtn = document.getElementById("preload-whisperx-btn");
 const proxyInfoBtn = document.getElementById("check-proxy-info-btn");
 const ytdlpVersionText = document.getElementById("ytdlp-version-text");
@@ -245,6 +247,9 @@ function setYtdlpActionsState(disabled) {
     if (updateYtdlpBtn) {
         updateYtdlpBtn.disabled = disabled;
     }
+    if (updateYtdlpNightlyBtn) {
+        updateYtdlpNightlyBtn.disabled = disabled;
+    }
 }
 
 function setWhisperxPreloadState(disabled) {
@@ -436,30 +441,33 @@ async function checkYtdlpVersion() {
     }
 }
 
-async function updateYtdlp() {
+async function updateYtdlp(channel = "stable") {
     if (!ytdlpVersionText) {
         return;
     }
+    const isNightly = channel === "nightly";
+    const updateApi = isNightly ? YTDLP_NIGHTLY_UPDATE_API : YTDLP_UPDATE_API;
     setYtdlpActionsState(true);
-    setYtdlpStatus(t("settings.updating_ytdlp"));
+    setYtdlpStatus(t(isNightly ? "settings.updating_ytdlp_nightly" : "settings.updating_ytdlp"));
     try {
-        const response = await fetch(YTDLP_UPDATE_API, {method: "POST"});
+        const response = await fetch(updateApi, {method: "POST"});
         if (!response.ok) {
             const errorPayload = await response.json();
-            throw new Error(errorPayload.detail || t("settings.update_ytdlp_failed"));
+            throw new Error(errorPayload.detail || t(isNightly ? "settings.update_ytdlp_nightly_failed" : "settings.update_ytdlp_failed"));
         }
         const data = await response.json();
         ytdlpVersionText.textContent = data.after_version;
         if (data.updated) {
-            setYtdlpStatus(t("settings.updated_ytdlp", { before: data.before_version, after: data.after_version }));
-            showSaveFeedback(t("settings.updated_ytdlp_success"), false);
+            setYtdlpStatus(t(isNightly ? "settings.updated_ytdlp_nightly" : "settings.updated_ytdlp", { before: data.before_version, after: data.after_version }));
+            showSaveFeedback(t(isNightly ? "settings.updated_ytdlp_nightly_success" : "settings.updated_ytdlp_success"), false);
         } else {
             setYtdlpStatus(t("settings.already_current_version", { version: data.after_version }));
-            showSaveFeedback(t("settings.ytdlp_already_current"), false);
+            showSaveFeedback(t(isNightly ? "settings.ytdlp_nightly_already_current" : "settings.ytdlp_already_current"), false);
         }
     } catch (error) {
-        setYtdlpStatus(String(error.message || t("settings.update_ytdlp_failed")), true);
-        showSaveFeedback(String(error.message || t("settings.update_ytdlp_failed")), true);
+        const fallbackMessage = t(isNightly ? "settings.update_ytdlp_nightly_failed" : "settings.update_ytdlp_failed");
+        setYtdlpStatus(String(error.message || fallbackMessage), true);
+        showSaveFeedback(String(error.message || fallbackMessage), true);
     } finally {
         setYtdlpActionsState(false);
     }
@@ -713,7 +721,9 @@ async function loadSettings() {
         setStatus(t("settings.loaded"));
         return true;
     } catch (error) {
-        setStatus(error.message || t("settings.load_unable"), true);
+        const message = String(error.message || t("settings.load_unable"));
+        setStatus(message, true);
+        showSaveFeedback(message, true);
         return false;
     } finally {
         setFormState(false);
@@ -781,6 +791,7 @@ async function checkDemucsHealth() {
         };
         applyDemucsHealthToUI(health);
         setStatus(health.detail, true);
+        showSaveFeedback(health.detail, true);
     } finally {
         if (checkDemucsBtn) {
             checkDemucsBtn.disabled = formBusy;
@@ -853,7 +864,10 @@ if (refreshYtdlpVersionBtn) {
     refreshYtdlpVersionBtn.addEventListener("click", checkYtdlpVersion);
 }
 if (updateYtdlpBtn) {
-    updateYtdlpBtn.addEventListener("click", updateYtdlp);
+    updateYtdlpBtn.addEventListener("click", () => updateYtdlp("stable"));
+}
+if (updateYtdlpNightlyBtn) {
+    updateYtdlpNightlyBtn.addEventListener("click", () => updateYtdlp("nightly"));
 }
 if (preloadWhisperxBtn) {
     preloadWhisperxBtn.addEventListener("click", preloadWhisperxModels);

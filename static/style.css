@@ -10,6 +10,11 @@ html.dark {
     color-scheme: dark;
 }
 
+body {
+    background: #0e0c1f;
+    color: #e7e2fe;
+}
+
 /* Material symbols font settings */
 .material-symbols-outlined {
     font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;

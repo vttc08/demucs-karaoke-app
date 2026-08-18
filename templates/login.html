@@ -4,49 +4,9 @@
     <meta charset="utf-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>{{ t('login.title') }}</title>
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link rel="stylesheet" href="{{ static_asset_url('/static/tailwind.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Epilogue:wght@800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-    <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    "colors": {
-                        "primary": "#00f2ff",
-                        "secondary": "#ff68a7",
-                        "tertiary": "#b586ff",
-                        "background": "#0e0c1f",
-                        "surface": "#0e0c1f",
-                        "surface-container": "#19172e",
-                        "surface-container-low": "#131126",
-                        "surface-container-lowest": "#000000",
-                        "surface-container-high": "#1f1c36",
-                        "surface-container-highest": "#25223e",
-                        "on-surface": "#e7e2fe",
-                        "on-surface-variant": "#aca8c2",
-                        "outline": "#76738b",
-                        "outline-variant": "#48455b",
-                        "primary-container": "#00ffff",
-                        "on-primary-container": "#005d5d",
-                        "tertiary-container": "#8f43fb",
-                        "on-tertiary-container": "#ffffff",
-                    },
-                    "borderRadius": {
-                        "DEFAULT": "1rem",
-                        "lg": "2rem",
-                        "xl": "3rem",
-                        "full": "9999px"
-                    },
-                    "fontFamily": {
-                        "headline": ["Epilogue"],
-                        "body": ["Plus Jakarta Sans"],
-                        "label": ["Plus Jakarta Sans"]
-                    }
-                },
-            },
-        }
-    </script>
     <style>
         .material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
@@ -76,7 +36,7 @@
         }
     </style>
 </head>
-<body class="bg-background text-on-background font-body selection:bg-primary-container selection:text-on-primary-container min-h-screen flex flex-col items-center justify-center p-4 md:p-6 relative overflow-x-hidden">
+<body class="bg-background text-on-background font-login-body selection:bg-primary-container selection:text-on-primary-container min-h-screen flex flex-col items-center justify-center p-4 md:p-6 relative overflow-x-hidden">
     <!-- Cinematic Background (Desktop) -->
     <div class="fixed inset-0 z-0 hidden md:block">
         <img class="w-full h-full object-cover opacity-20 brightness-50" alt="Cinematic karaoke lounge" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBG_OgSm5sQHtg2z5cnRAcTTzlxoJerM_GkeSrwmG3wcGSM7uXIYOWEIHnUq8ife4LIWtq2k1WxfZk5p7z0gDfBeA-UEVklki9QCWgn4SYtAMqzc5zMFpqD5Tm7qNeZFXeQ_r1ofkRy_OjaimT0Ns7k0gYkQvITEvexvfdRqjt6jMViawvRa0XsufKRwtvJFNgOCLwBtpUzLNMhOxK_-A67tFskzKsffbtlSFjAX4z6CAolxjwBzjqfZq3O9BXf-tLMO4dQ8k4lA4iB"/>
@@ -84,10 +44,10 @@
 
     <!-- Brand Identity Section -->
     <div class="w-full max-w-sm mb-8 md:mb-12 text-center z-10">
-        <div class="inline-flex items-center justify-center w-16 h-16 bg-surface-container-highest rounded-xl mb-6 border border-white/5">
+        <div class="inline-flex items-center justify-center w-16 h-16 bg-surface-container-highest rounded-[3rem] mb-6 border border-white/5">
             <span class="material-symbols-outlined text-primary text-4xl">mic_external_on</span>
         </div>
-        <h1 class="font-headline text-4xl md:text-6xl font-black text-white tracking-tighter leading-tight">
+        <h1 class="font-login-headline text-4xl md:text-6xl font-black text-white tracking-tighter leading-tight">
             {{ t('login.enter_pulse') }}
         </h1>
         <p class="text-on-surface-variant mt-4 font-medium tracking-wide text-sm md:text-base">{{ t('login.admin_access') }}</p>
@@ -97,7 +57,7 @@
     <div class="w-full max-w-[min(100%,384px)] md:max-w-md glass-card p-4 z-10 shadow-2xl border border-white/5">
         <div class="px-4 pb-8">
             {% if error %}
-            <div class="mb-5 rounded-lg border border-red-400/40 bg-red-950/40 px-4 py-3 text-sm font-semibold text-red-100">
+            <div class="mb-5 rounded-[2rem] border border-red-400/40 bg-red-950/40 px-4 py-3 text-sm font-semibold text-red-100">
                 {{ error }}
             </div>
             {% endif %}
@@ -119,7 +79,7 @@
                         <input name="password" class="form-input placeholder:text-outline font-medium" type="password" required/>
                     </div>
                 </div>
-                <button type="submit" class="w-full py-3 rounded-2xl bg-tertiary-container text-on-tertiary-container font-headline font-black text-base uppercase tracking-widest active:scale-95 transition-transform hover:brightness-110">
+                <button type="submit" class="w-full py-3 rounded-2xl bg-tertiary-container text-on-tertiary-container font-login-headline font-black text-base uppercase tracking-widest active:scale-95 transition-transform hover:brightness-110">
                     {{ t('login.access_control') }}
                 </button>
             </form>
@@ -138,7 +98,7 @@
 
     <!-- Asymmetric Decorative Element -->
     <div class="absolute bottom-10 right-10 opacity-20 transform rotate-12 pointer-events-none">
-        <span class="material-symbols-outlined text-[120px] text-secondary" style="font-variation-settings: 'FILL' 1;">music_note</span>
+        <span class="material-symbols-outlined text-[120px] text-[#ff68a7]" style="font-variation-settings: 'FILL' 1;">music_note</span>
     </div>
 </body>
 </html>

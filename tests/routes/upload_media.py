@@ -41,6 +41,48 @@ def test_upload_page_loads(client):
     assert 'id="lyrics-max-line-length"' in response.text
     assert 'id="lyrics-max-line-length-cjk"' in response.text
 
+
+def test_upload_rejects_blank_title(client):
+    response = client.post(
+        "/api/media/upload",
+        data={"title": "   ", "add_to_queue": "false"},
+        files={"file": ("blank.mp3", b"audio", "audio/mpeg")},
+    )
+
+    assert response.status_code == 400
+
+
+def test_upload_rejects_media_over_configured_limit(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    monkeypatch.setattr(settings, "max_upload_bytes", 3)
+    monkeypatch.setattr(settings, "upload_min_free_bytes", 0)
+
+    response = client.post(
+        "/api/media/upload",
+        data={"title": "Too Large", "add_to_queue": "false"},
+        files={"file": ("large.mp3", b"four", "audio/mpeg")},
+    )
+
+    assert response.status_code == 413
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_zip_upload_rejects_unsafe_compression_ratio(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "media_path", tmp_path)
+    monkeypatch.setattr(settings, "max_upload_bytes", 2 * 1024 * 1024)
+    monkeypatch.setattr(settings, "upload_min_free_bytes", 0)
+    archive_bytes = BytesIO()
+    with zipfile.ZipFile(archive_bytes, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("compressed.mp3", b"0" * (1024 * 1024))
+
+    response = client.post(
+        "/api/media/upload",
+        data={"title": "Compressed", "add_to_queue": "false"},
+        files={"file": ("compressed.zip", archive_bytes.getvalue(), "application/zip")},
+    )
+
+    assert response.status_code == 400
+
 def test_upload_media_saves_file_and_queues_item(client, tmp_path):
     """Uploaded media should be saved, catalogued, and queued when requested."""
     original_media = settings.media_path

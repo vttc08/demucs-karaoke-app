@@ -952,7 +952,7 @@ function buildQueueSelection(resultElement, triggerButton) {
         mediaItemId: resultElement.dataset.mediaItemId || null,
         title: resultElement.dataset.title || '',
         channel: resultElement.dataset.channel || '',
-        thumbnail: resultElement.dataset.thumbnail || appUrl('/static/placeholder.png'),
+        thumbnail: resultElement.dataset.thumbnail || appUrl('/static/karaoke-icon.png'),
         triggerButton,
     };
 }
@@ -1077,7 +1077,7 @@ async function openQueueConfigModal(resultElement, triggerButton) {
     if (queueConfigSongThumb) {
         queueConfigSongThumb.src = modalSelection.thumbnail;
         queueConfigSongThumb.onerror = () => {
-            queueConfigSongThumb.src = appUrl('/static/placeholder.png');
+            queueConfigSongThumb.src = appUrl('/static/karaoke-icon.png');
         };
     }
 
@@ -1169,7 +1169,7 @@ function displaySearchResults(results) {
         const mediaItemId = result.media_item_id ?? '';
         const title = escapeHtml(result.title || '');
         const channel = escapeHtml(result.channel || '');
-        const thumbnail = escapeHtml(appUrl(result.thumbnail || '/static/placeholder.png'));
+        const thumbnail = escapeHtml(appUrl(result.thumbnail || '/static/karaoke-icon.png'));
 
         if (isDownloaded) {
             return `
@@ -1653,7 +1653,7 @@ function renderQueueStageItem(item, movableIndexById, movableCount) {
     const isProcessing = ['downloading', 'processing'].includes(item.status);
     const canOpenTaskDetails = isProcessing && Number.isFinite(Number(item.task_id));
     const canOpenMediaDetails = ['ready', 'completed'].includes(item.status) && Number.isFinite(Number(item.media_id));
-    const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/placeholder.png'));
+    const thumbnail = escapeHtml(appUrl(item.thumbnail || '/static/karaoke-icon.png'));
     const movableIndex = movableIndexById.get(String(item.id));
     const moveControls = isAdminUser && !isPlaying ? `
         <div class="queue-move-controls">
@@ -1813,7 +1813,7 @@ function renderQueueProgressBlock(item) {
             <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.max(0, Math.min(100, percent))}">
                 <div class="h-full rounded-full bg-tertiary transition-all duration-300 ease-out" data-task-progress-fill style="width: ${Math.max(0, Math.min(100, percent))}%"></div>
             </div>
-            <p class="mt-1 text-[10px] text-on-surface-variant">${escapeHtml(label)}${separator}<span data-task-progress-percent-text class="${mode === 'indeterminate' ? 'hidden' : ''}">${escapeHtml(String(percent))}%</span></p>
+            <p class="mt-1 text-[10px] text-on-surface-variant"><span data-task-progress-label-text>${escapeHtml(label)}</span><span data-task-progress-separator>${separator}</span><span data-task-progress-percent-text class="${mode === 'indeterminate' ? 'hidden' : ''}">${escapeHtml(String(percent))}%</span></p>
         </div>
     `;
 }
@@ -1887,18 +1887,36 @@ function patchQueueItemProgressState(item) {
     if (index < 0) {
         return false;
     }
-    updateQueueState((queue) => {
-        const targetIndex = queue.findIndex((entry) => entry.id === normalizedId);
-        if (targetIndex < 0) {
-            return queue;
-        }
-        queue[targetIndex] = {
-            ...queue[targetIndex],
-            ...item,
-            id: normalizedId,
-        };
-        return queue;
-    });
+    currentQueueState[index] = {
+        ...currentQueueState[index],
+        ...item,
+        id: normalizedId,
+    };
+    const updated = currentQueueState[index];
+    const queueItem = queueList?.querySelector(`.queue-item[data-id="${normalizedId}"]`);
+    const progressNode = queueItem?.querySelector('[data-task-progress-key]');
+    if (!progressNode) {
+        updateQueueDisplay(currentQueueState);
+        return true;
+    }
+    const percent = Number.isFinite(Number(updated.processing_progress))
+        ? Math.max(0, Math.min(100, Number(updated.processing_progress)))
+        : 0;
+    const mode = updated.processing_mode || '';
+    const label = getQueueProgressLabel(updated);
+    queueItem.dataset.status = updated.status || '';
+    queueItem.dataset.processingProgress = String(percent);
+    queueItem.dataset.processingLabel = label;
+    progressNode.dataset.taskProgressStatus = updated.status || '';
+    progressNode.dataset.taskProgressStage = updated.processing_stage || '';
+    progressNode.dataset.taskProgressMode = mode;
+    progressNode.dataset.taskProgressReportedPercent = String(percent);
+    progressNode.dataset.taskProgressLabel = label;
+    const labelNode = progressNode.querySelector('[data-task-progress-label-text]');
+    const separatorNode = progressNode.querySelector('[data-task-progress-separator]');
+    if (labelNode) labelNode.textContent = label;
+    if (separatorNode) separatorNode.textContent = mode === 'indeterminate' ? '' : ' • ';
+    window.KaraokeTaskProgress?.sync(queueItem);
     return true;
 }
 

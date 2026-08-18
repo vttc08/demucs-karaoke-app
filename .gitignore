@@ -25,6 +25,7 @@ wheels/
 venv/
 ENV/
 env/
+node_modules/
 
 # IDE
 .vscode/
@@ -57,6 +58,7 @@ karaoke_media/
 karaoke_cache/
 demucs_svc/.cache/
 demucs_svc/model_data/
+demucs_svc/io/
 
 # Test coverage
 .coverage

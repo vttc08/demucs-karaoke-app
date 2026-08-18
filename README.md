@@ -83,7 +83,7 @@ The dev entrypoint uses a finite graceful-shutdown timeout, so active SSE/WebSoc
 
 Or with uvicorn directly:
 ```bash
-uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude 'logs/*' --reload-exclude '*.log' --reload-exclude '*.log.*'
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude '.venv' --reload-exclude 'logs/*' --reload-exclude '*.log' --reload-exclude '*.log.*'
 ```
 
 ### Production mode
@@ -203,6 +203,8 @@ sidecars, FFmpeg behavior, and the destructive replacement contract.
 See [docs/vocal-sync.md](docs/vocal-sync.md) for the Add Vocals workflow and offset semantics.
 
 6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
+        - Guest uploads are intentionally allowed so household users can add media without an admin session
+        - Uploads are streamed into temporary files and installed atomically; media and selected ZIP contents default to a 2 GiB limit with 1 GiB of disk headroom reserved
         - Upload MP3, MP4, WebM, MKV, MOV, AVI, M4V, or ZIP bundles into the media library with title and artist metadata
         - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use, the lyrics file picker accepts `.lrc`, `.txt`, or WhisperX `.json`, and WhisperX alignment can use a per-upload language override
         - Use **Autopilot** after selecting a media file to infer metadata, enable AI karaoke and lyrics sync, search lyrics, then turn on WhisperX alignment; it stops before upload so the result can be reviewed
@@ -262,6 +264,9 @@ When adding or modifying UI text in templates or JavaScript:
 5. **Test before commit**:
    ```bash
    uv run pytest
+   uv run ruff check adapters config.py database.py demucs_svc lyrics main.py models.py routes scripts services
+   uv run python scripts/audit_i18n.py --check
+   npm ci && npm run build:css
    ```
    Tests verify that all keys exist in all locales, so missing translations will fail the build.
 

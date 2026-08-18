@@ -41,6 +41,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan events."""
     # Startup
     logger.info("Starting karaoke application")
+    websocket_manager.bind_owner_loop()
     logger.info("Tool configuration loaded: ytdlp=%s ffmpeg=%s", settings.ytdlp_path, settings.ffmpeg_path)
 
     settings.ensure_paths()
@@ -92,6 +93,7 @@ async def lifespan(app: FastAPI):
 
     yield
     # Shutdown (cleanup if needed)
+    task_execution_coordinator.shutdown(wait=True)
     logger.info("Shutting down karaoke application")
 
 
@@ -158,6 +160,7 @@ def build_uvicorn_run_kwargs() -> dict[str, object]:
         "port": settings.port,
         "reload": True,
         "reload_excludes": [
+            ".venv",
             str(log_dir),
             f"{log_dir}/*",
             f"{log_dir}/**/*",

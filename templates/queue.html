@@ -83,6 +83,7 @@
                         <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_setting_label') }}</span>
                         <input id="queue-as-enabled-toggle" type="checkbox" class="h-4 w-4 accent-primary" />
                     </label>
+                    <p id="queue-as-current-label" class="text-[10px] text-on-surface-variant" aria-live="polite">{{ t('queue.queue_as_current_none') }}</p>
                 </div>
                 {% endif %}
                 <!-- Search Results -->
@@ -322,7 +323,7 @@
                             {% set step_mode = item.processing_mode or '' %}
                             <div class="mt-2 max-w-xs" data-task-progress-key="queue-{{ item.id }}" data-task-progress-status="{{ item.status.value }}" data-task-progress-stage="{{ item.processing_stage or '' }}" data-task-progress-mode="{{ step_mode }}" data-task-progress-reported-percent="{{ step_percent }}" data-task-progress-label="{{ step_label }}">
                                 <div class="h-1.5 overflow-hidden rounded-full bg-surface-container-highest" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ step_percent }}"><div class="h-full rounded-full bg-tertiary transition-all duration-300 ease-out" data-task-progress-fill style="width: {{ step_percent }}%"></div></div>
-                                <p class="mt-1 text-[10px] text-on-surface-variant">{{ step_label }}{% if step_mode != 'indeterminate' %} • <span data-task-progress-percent-text>{{ step_percent }}%</span>{% else %}<span data-task-progress-percent-text class="hidden"></span>{% endif %}</p>
+                                <p class="mt-1 text-[10px] text-on-surface-variant"><span data-task-progress-label-text>{{ step_label }}</span><span data-task-progress-separator>{% if step_mode != 'indeterminate' %} • {% endif %}</span><span data-task-progress-percent-text class="{% if step_mode == 'indeterminate' %}hidden{% endif %}">{% if step_mode != 'indeterminate' %}{{ step_percent }}%{% endif %}</span></p>
                             </div>
                             {% elif not is_playing %}
                             <span class="queue-status-chip {% if item.status.value == 'failed' %}queue-status-failed{% elif item.status.value == 'ready' %}queue-status-ready{% else %}queue-status-waiting{% endif %}">
@@ -375,7 +376,7 @@
             <div class="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 no-scrollbar">
                 <div class="flex items-center gap-3 rounded-xl bg-surface-container-highest/60 p-3">
                     <div class="h-12 w-12 overflow-hidden rounded-md bg-surface-container-lowest sm:h-14 sm:w-14">
-                        <img id="queue-config-song-thumb" src="{{ app_url('/static/placeholder.png') }}" alt="{{ t('queue.selected_song') }}" class="h-full w-full object-cover" />
+                        <img id="queue-config-song-thumb" src="{{ app_url('/static/karaoke-icon.png') }}" alt="{{ t('queue.selected_song') }}" class="h-full w-full object-cover" />
                     </div>
                     <div class="min-w-0">
                         <a id="queue-config-song-title" class="block truncate text-sm font-bold text-on-surface hover:underline underline-offset-2" target="_blank" rel="noopener noreferrer">{{ t('queue.selected_song') }}</a>
@@ -769,11 +770,8 @@ function removeSong(songId) {
     fetch(window.KaraokeURLs.appUrl(`/api/queue/${songId}`), {
         method: 'DELETE'
     }).then(async (response) => {
-        if (response.ok) {
-            // WebSocket will handle the update, no need to reload
-            console.log('Removed song:', songId);
-        } else {
-            let detail = window.KaraokeI18n?.t('queue.remove_failed') || 'Failed to remove song';
+        if (!response.ok) {
+            let detail = window.KaraokeI18n.t('queue.remove_failed');
             try {
                 const payload = await response.json();
                 if (payload?.detail) detail = payload.detail;
@@ -784,24 +782,21 @@ function removeSong(songId) {
         }
     }).catch(error => {
         console.error('Error:', error);
-        alert(window.KaraokeI18n?.t('queue.remove_failed') || 'Failed to remove song');
+        alert(window.KaraokeI18n.t('queue.remove_failed'));
     });
 }
 
 document.getElementById('clear-all-btn')?.addEventListener('click', function() {
-    if (confirm('Are you sure you want to clear all songs from the queue?')) {
+    if (confirm(window.KaraokeI18n.t('queue.confirm_clear'))) {
         fetch(window.KaraokeURLs.appUrl('/api/queue/clear'), {
             method: 'POST'
         }).then(response => {
-            if (response.ok) {
-                // WebSocket will handle the update, no need to reload
-                console.log('Queue cleared');
-            } else {
-                alert(window.KaraokeI18n?.t('queue.clear_failed') || 'Failed to clear queue');
+            if (!response.ok) {
+                alert(window.KaraokeI18n.t('queue.clear_failed'));
             }
         }).catch(error => {
             console.error('Error:', error);
-            alert(window.KaraokeI18n?.t('queue.clear_failed') || 'Failed to clear queue');
+            alert(window.KaraokeI18n.t('queue.clear_failed'));
         });
     }
 });

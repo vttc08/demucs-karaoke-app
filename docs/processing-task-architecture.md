@@ -51,6 +51,8 @@ Cancellation is a first-class terminal state:
 
 This state is intentionally not durable. It survives browser reconnects but not app restarts.
 
+The main app uses a bounded worker pool (`KARAOKE_PROCESSING_MAX_WORKERS`, default `2`). Live state may be published from worker threads, but subscriber queues are bounded and notifications are scheduled on each subscriber's owning event loop. Raw log lines stay on per-task streams instead of being fanned out through the summary stream.
+
 Terminal live state is retained only briefly:
 
 - `done` tasks stay replayable for about 60 seconds
@@ -124,6 +126,9 @@ When mocks or legacy callers are used in tests, the orchestration falls back to 
 ## Remote Separation Progress
 
 Remote Demucs execution now uses an async job contract on `demucs_svc`:
+
+- `DEMUCS_MAX_CONCURRENT_JOBS` defaults to `1`; excess jobs remain queued and can be canceled before execution.
+- Multipart inputs are copied to per-job scratch storage in chunks instead of being retained as one in-memory byte string.
 
 - `POST /jobs` uploads audio and starts remote processing
 - `GET /jobs/{job_id}/events` streams live job state as SSE with a monotonic sequence

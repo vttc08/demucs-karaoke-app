@@ -4,6 +4,7 @@ import json
 import logging
 import queue
 import re
+import shlex
 import subprocess
 import threading
 import time
@@ -138,7 +139,7 @@ class YtDlpAdapter:
             raise RuntimeError(f"YouTube search failed: {e.stderr[:200]}")
         except FileNotFoundError:
             logger.error("yt-dlp not found path=%s", self.ytdlp_path)
-            raise RuntimeError(f"yt-dlp not found. Please install it: pip install yt-dlp")
+            raise RuntimeError("yt-dlp not found. Please install it: pip install yt-dlp")
         except Exception as e:
             logger.exception("Unexpected error during search query=%r error=%s", query, str(e))
             raise RuntimeError(f"Search failed: {str(e)}")
@@ -490,9 +491,20 @@ class YtDlpAdapter:
             cmd.extend(resolution_args)
             cmd.extend(self._js_runtime_args())
             cmd.extend(self._proxy_args())
+            streaming_download = bool(
+                progress_callback or log_callback or cancel_event is not None
+            )
+            logger.info(
+                "%s download strategy %s/%s: format=%s client=%s; trying",
+                media_type.capitalize(),
+                idx + 1,
+                len(attempt_list),
+                fmt or "<default>",
+                client or "<default>",
+            )
 
             try:
-                if progress_callback or log_callback or cancel_event is not None:
+                if streaming_download:
                     self._run_streaming_download(
                         cmd,
                         progress_callback=progress_callback,
@@ -504,11 +516,9 @@ class YtDlpAdapter:
                 output_path = self._find_downloaded_file(output_dir, output_stem, extensions)
                 if not output_path.exists():
                     last_error = f"file not found: {output_path}"
-                    logger.warning(
-                        "Download attempt succeeded but output missing (%s, client=%s)",
-                        fmt or "<default>",
-                        client or "<default>",
-                    )
+                    # A zero exit status without an output is still a failed
+                    # strategy; preserve the exact command for investigation.
+                    self._log_download_command_failure(cmd, last_error)
                     continue
                 logger.info(
                     "%s downloaded successfully: %s (format=%s, client=%s)",
@@ -520,15 +530,13 @@ class YtDlpAdapter:
                 return output_path
             except subprocess.TimeoutExpired:
                 last_error = "Download timed out"
-                logger.warning(
-                    "%s download attempt timed out (%s, client=%s)",
-                    media_type.capitalize(),
-                    fmt or "<default>",
-                    client or "<default>",
-                )
+                if not streaming_download:
+                    self._log_download_command_failure(cmd, last_error)
             except subprocess.CalledProcessError as e:
                 stderr = self._decode_stderr(e.stderr)
                 last_error = self._extract_relevant_error(stderr, e.returncode)
+                if not streaming_download:
+                    self._log_download_command_failure(cmd, last_error)
                 remaining = len(attempt_list) - (idx + 1)
                 if (
                     remaining > 0
@@ -548,7 +556,10 @@ class YtDlpAdapter:
                         client or "<default>",
                         last_error,
                     )
-
+            except FileNotFoundError:
+                if not streaming_download:
+                    self._log_download_command_failure(cmd, "yt-dlp executable was not found")
+                raise
         logger.error(
             "%s download failed for %s after fallback attempts: %s",
             media_type.capitalize(),
@@ -556,6 +567,18 @@ class YtDlpAdapter:
             last_error,
         )
         raise RuntimeError(f"Download failed: {last_error}")
+
+    @staticmethod
+    def _log_download_command_failure(cmd: list[str], error: str) -> None:
+        """Log a readable command after a download strategy fails."""
+        logger.error(
+            "yt-dlp download strategy failed\n"
+            "  Error: %s\n"
+            "  Command:\n"
+            "    %s\n",
+            error,
+            shlex.join(cmd),
+        )
 
     def _run_streaming_download(
         self,
@@ -567,13 +590,17 @@ class YtDlpAdapter:
         cancel_event: threading.Event | None = None,
     ) -> None:
         """Run a yt-dlp download command and stream stdout/stderr lines."""
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
-        )
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+        except FileNotFoundError:
+            self._log_download_command_failure(cmd, "yt-dlp executable was not found")
+            raise
         stdout_lines: list[str] = []
         line_queue: queue.Queue[object] = queue.Queue()
         reader_thread: threading.Thread | None = None
@@ -608,7 +635,7 @@ class YtDlpAdapter:
                         raise subprocess.TimeoutExpired(cmd, timeout_seconds, output="\n".join(stdout_lines))
                     try:
                         item = line_queue.get(timeout=min(0.1, max(remaining, 0.0)))
-                    except queue.Empty as exc:
+                    except queue.Empty:
                         continue
                     if item is _STREAM_DONE:
                         break
@@ -649,6 +676,18 @@ class YtDlpAdapter:
                     stderr=stderr,
                     output="\n".join(stdout_lines),
                 )
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as exc:
+            error = (
+                "Download timed out"
+                if isinstance(exc, subprocess.TimeoutExpired)
+                else self._extract_relevant_error(
+                    self._decode_stderr(exc.stderr),
+                    exc.returncode,
+                )
+            )
+            self._log_download_command_failure(cmd, error)
+            self._terminate_process(process)
+            raise
         except asyncio.CancelledError:
             self._terminate_process(process)
             raise

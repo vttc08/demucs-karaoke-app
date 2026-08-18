@@ -1,11 +1,15 @@
 """API routes for media library maintenance operations."""
 
+import asyncio
 import json
 import logging
+import os
 import shutil
 import subprocess
+import threading
 import zipfile
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, Response
@@ -62,6 +66,67 @@ _ZIP_THUMBNAIL_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
 _ZIP_LYRICS_EXTENSIONS = (".json", ".lrc", ".srt", ".txt", ".cdg")
 _ZIP_VOCALS_EXTENSIONS = (".mp3", ".wav", ".m4a", ".flac", ".aac", ".ogg", ".opus", ".webm")
 _MEDIA_FILE_KINDS = {"main", "vocals", "lyrics"}
+_MAX_METADATA_LENGTH = 200
+_MAX_ZIP_COMPRESSION_RATIO = 100
+_UPLOAD_FILE_LOCK = threading.Lock()
+
+
+def _normalized_upload_metadata(title: str, artist: str | None) -> tuple[str, str | None]:
+    normalized_title = " ".join((title or "").split()).strip()
+    normalized_artist = " ".join((artist or "").split()).strip() or None
+    if not normalized_title:
+        raise HTTPException(status_code=400, detail="title must not be blank")
+    if len(normalized_title) > _MAX_METADATA_LENGTH:
+        raise HTTPException(status_code=400, detail="title is too long")
+    if normalized_artist and len(normalized_artist) > _MAX_METADATA_LENGTH:
+        raise HTTPException(status_code=400, detail="artist is too long")
+    return normalized_title, normalized_artist
+
+
+def _ensure_upload_disk_space(next_chunk_bytes: int = 0) -> None:
+    free_bytes = shutil.disk_usage(settings.media_path).free
+    if free_bytes - max(0, int(next_chunk_bytes)) < settings.upload_min_free_bytes:
+        raise HTTPException(status_code=507, detail="Insufficient media storage")
+
+
+def _copy_upload_to_media(
+    upload_file: UploadFile,
+    *,
+    stem: str,
+    suffix: str,
+) -> tuple[str, Path]:
+    """Install an upload atomically while enforcing size and disk limits."""
+    settings.media_path.mkdir(parents=True, exist_ok=True)
+    with _UPLOAD_FILE_LOCK:
+        final_stem = stem
+        counter = 1
+        while (settings.media_path / f"{final_stem}{suffix}").exists():
+            final_stem = f"{stem}_{counter}"
+            counter += 1
+        filename = f"{final_stem}{suffix}"
+        target_path = settings.media_path / filename
+        temporary_path = settings.media_path / f".{filename}.{uuid4().hex}.upload"
+        total_bytes = 0
+        try:
+            upload_file.file.seek(0)
+            with temporary_path.open("xb") as destination:
+                while True:
+                    chunk = upload_file.file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > settings.max_upload_bytes:
+                        raise HTTPException(
+                            status_code=413,
+                            detail="Uploaded media exceeds the configured limit",
+                        )
+                    _ensure_upload_disk_space(len(chunk))
+                    destination.write(chunk)
+            os.replace(temporary_path, target_path)
+            return filename, target_path
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            raise
 
 
 @router.get("/{item_id}/trim-info")
@@ -333,15 +398,14 @@ async def upload_media(
     db: Session = Depends(get_db),
 ):
     """Upload a new media file and create a library entry."""
-    ext = Path(file.filename).suffix.lower()
+    ext = Path(file.filename or "").suffix.lower()
     if ext not in _UPLOAD_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail="Supported uploads are .mp3, .mp4, .webm, .mkv, .mov, .avi, .m4v, and .zip",
         )
 
-    normalized_title = queue_service._normalize_required_metadata(title)
-    normalized_artist = queue_service._normalize_optional_metadata(artist)
+    normalized_title, normalized_artist = _normalized_upload_metadata(title, artist)
     queued_item = None
     karaoke_requested = bool(is_karaoke)
     alignment_requested = bool(align_lyrics)
@@ -373,6 +437,8 @@ async def upload_media(
         normalized_max_line_length_cjk = None
     elif alignment_requested:
         karaoke_requested = True
+    installed_media_path: Path | None = None
+    upload_committed = False
 
     try:
         if ext == ".zip":
@@ -394,24 +460,22 @@ async def upload_media(
                         process_lyrics_lines=False,
                     ),
                 )
+                upload_committed = True
                 await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
             else:
                 db.commit()
+                upload_committed = True
             db.refresh(media_item)
         else:
             stem = build_media_stem(normalized_title, normalized_artist)
-            final_stem = stem
-            counter = 1
-            while (settings.media_path / f"{final_stem}{ext}").exists():
-                final_stem = f"{stem}_{counter}"
-                counter += 1
-
-            filename = f"{final_stem}{ext}"
-            target_path = settings.media_path / filename
-
-            settings.media_path.mkdir(parents=True, exist_ok=True)
-            with target_path.open("wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            filename, target_path = await asyncio.to_thread(
+                _copy_upload_to_media,
+                file,
+                stem=stem,
+                suffix=ext,
+            )
+            installed_media_path = target_path
+            final_stem = target_path.stem
             media_item = MediaItem(
                 title=normalized_title,
                 artist=normalized_artist,
@@ -476,9 +540,11 @@ async def upload_media(
                         ),
                     ),
                 )
+                upload_committed = True
                 await manager.broadcast_queue_item_added(queued_item.model_dump(mode="json"))
             else:
                 db.commit()
+                upload_committed = True
             db.refresh(media_item)
 
             try:
@@ -520,11 +586,17 @@ async def upload_media(
                     karaoke_warning_detail = str(exc)
     except HTTPException:
         db.rollback()
+        if installed_media_path is not None and not upload_committed:
+            media_thumbnail_service.remove_thumbnail_for_media_file(installed_media_path)
+            installed_media_path.unlink(missing_ok=True)
         raise
     except Exception as exc:
         db.rollback()
+        if installed_media_path is not None and not upload_committed:
+            media_thumbnail_service.remove_thumbnail_for_media_file(installed_media_path)
+            installed_media_path.unlink(missing_ok=True)
         logger.exception("Failed to upload media file: %s", file.filename)
-        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(exc)}")
+        raise HTTPException(status_code=500, detail="Failed to upload media file") from exc
 
     logger.info(
         "Media uploaded: id=%s title=%s artist=%s add_to_queue=%s",
@@ -563,6 +635,14 @@ def _import_zip_media_bundle(
         pass
 
     try:
+        upload_file.file.seek(0, os.SEEK_END)
+        archive_size = upload_file.file.tell()
+        upload_file.file.seek(0)
+        if archive_size > settings.max_upload_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail="Uploaded media exceeds the configured limit",
+            )
         with zipfile.ZipFile(upload_file.file) as archive:
             root_entries = [
                 info
@@ -587,6 +667,26 @@ def _import_zip_media_bundle(
             vocals_entry = _select_zip_vocals_entry(archive, source_stem, _ZIP_VOCALS_EXTENSIONS)
             lyrics_entry = _select_zip_entry(archive, source_stem, _ZIP_LYRICS_EXTENSIONS)
             thumbnail_entry = _select_zip_entry(archive, source_stem, _ZIP_THUMBNAIL_EXTENSIONS)
+
+            selected_entries = [
+                entry
+                for entry in (main_entry, vocals_entry, lyrics_entry, thumbnail_entry)
+                if entry is not None
+            ]
+            expanded_bytes = sum(max(0, int(entry.file_size)) for entry in selected_entries)
+            if expanded_bytes > settings.max_upload_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail="ZIP contents exceed the configured expansion limit",
+                )
+            for entry in selected_entries:
+                compressed_size = max(1, int(entry.compress_size))
+                if entry.file_size > compressed_size * _MAX_ZIP_COMPRESSION_RATIO:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="ZIP entry compression ratio is unsafe",
+                    )
+            _ensure_upload_disk_space(expanded_bytes)
 
             settings.media_path.mkdir(parents=True, exist_ok=True)
             target_stem = source_stem

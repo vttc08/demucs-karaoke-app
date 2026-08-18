@@ -6,6 +6,7 @@ from typing import Optional
 
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _WHITESPACE_RE = re.compile(r"\s+")
+_MAX_MEDIA_STEM_LENGTH = 180
 
 
 def _clean_segment(value: str) -> str:
@@ -29,4 +30,5 @@ def build_media_stem(title: str, artist: Optional[str] = None, fallback: Optiona
     else:
         stem = _clean_segment(fallback or "media")
 
-    return stem or _clean_segment(fallback or "media") or "media"
+    resolved = stem or _clean_segment(fallback or "media") or "media"
+    return resolved[:_MAX_MEDIA_STEM_LENGTH].rstrip(" .-_") or "media"

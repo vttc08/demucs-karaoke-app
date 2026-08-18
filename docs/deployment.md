@@ -26,7 +26,93 @@ to yt-dlp search, metadata, and download commands.
 
 ## Docker
 
-No main-app Dockerfile is currently checked in. If you add one, keep the final image small and persist runtime data with volumes or bind mounts.
+`Dockerfile` builds the main app only; `demucs_svc/` stays on its separate
+GPU-capable host. It has three production targets:
+
+- `app` (the default) contains the locked application dependencies, `ffmpeg`,
+  and the Deno executable used by yt-dlp external JavaScript execution.
+- `app-no-deno` is an experimental smaller core target. It omits Deno and
+  leaves `YTDLP_DENO_PATH` blank, so videos requiring yt-dlp external
+  JavaScript execution may fail.
+- `vocal-sync` adds the optional `numpy` and `scipy` `vocal-sync` extra for
+  automatic guide-vocal offset estimation. It is intentionally larger.
+
+Neither target includes Node/npm, MkDocs, tests, the source documentation, or
+the Demucs service. It does retain the small shared lyric parsing modules that
+the main app imports for subtitle editing; no Demucs worker, model, or GPU
+dependency is included. The Docker build context is allowlisted in
+`.dockerignore`. It includes the checked-out `static/` tree, so the already-built
+help site at `static/docs/` is copied when it is present; Docker does not rebuild
+docs.
+
+Build the lightweight image:
+
+```bash
+docker build --target app -t karaoke:latest .
+```
+
+Build and inspect the Deno-free variant:
+
+```bash
+docker build --target app-no-deno -t karaoke:no-deno .
+docker image ls karaoke:latest karaoke:no-deno
+```
+
+Use `KARAOKE_BUILD_TARGET=app-no-deno` with the included Compose file for a
+local trial. If an existing `/data/karaoke.db` has a persisted Deno path in
+the app settings, clear it in `/settings` before switching targets; persisted
+runtime settings override the image's default environment value.
+
+Build the optional vocal-sync image:
+
+```bash
+docker build --target vocal-sync -t karaoke:vocal-sync .
+```
+
+The Python, Deno, and Debian base images used here publish `linux/amd64` and
+`linux/arm64` variants. To publish a multi-platform manifest with Buildx:
+
+```bash
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --target app \
+  --tag registry.example/karaoke:latest \
+  --push .
+```
+
+Use `--target vocal-sync` for the larger variant. Cross-platform builds need a
+Buildx builder with emulation configured when the builder does not natively
+support both architectures.
+
+### Persistent data and ownership
+
+The image runs unprivileged by default. For predictable bind-mount ownership,
+the included Compose file starts it directly under your host numeric user and
+group; files created in `/data` (SQLite database, media, cache, and logs) are
+therefore owned by that exact UID/GID rather than root. This needs no `s6`,
+`gosu`, or `su-exec` init wrapper.
+
+```bash
+cp .env.docker.example .env.docker
+mkdir -p data
+docker compose --env-file .env.docker pull
+docker compose --env-file .env.docker up -d
+```
+
+Set `PUID` and `PGID` in `.env.docker` to the IDs that own the host data or
+network share (normally `id -u` and `id -g`). Ensure the host directory grants
+that identity read/write access before starting the container. The image makes
+an empty `/data` directory writable for its unprivileged default user, but a
+bind mount's host permissions always take precedence.
+
+The included Compose file uses the published lightweight image
+`vttc08/demucs-karaoke-app:latest` and has no local build step. Set
+`KARAOKE_IMAGE` to a version or variant tag when needed, for example
+`vttc08/demucs-karaoke-app:1.4.2` or
+`vttc08/demucs-karaoke-app:1.4.2-vocal-sync`. Keep the preconfigured tool
+paths in the Compose environment when overriding the image. The experimental
+`app-no-deno` target remains available for local Docker builds, but it is not
+the default published image.
 
 Example runtime environment:
 
@@ -42,10 +128,28 @@ YTDLP_DENO_PATH=/usr/local/bin/deno
 FFMPEG_PATH=ffmpeg
 DEMUCS_API_URL=http://demucs-host:8001
 DEMUCS_API_KEY=
+KARAOKE_PROCESSING_MAX_WORKERS=2
+KARAOKE_MAX_UPLOAD_BYTES=2147483648
+KARAOKE_UPLOAD_MIN_FREE_BYTES=1073741824
 ```
 
 If the Demucs host is protected, set the same key on both sides so the main app sends `X-API-Key`
 on every request. Leave the value blank when the service is intentionally open on a trusted LAN.
+
+Frontend CSS is generated and committed, so Node is not needed on the production host. After changing templates, JavaScript class strings, or `tailwind.config.js`, rebuild it in the development checkout:
+
+```bash
+npm ci
+npm run build:css
+```
+
+The Demucs host has separate worker-local resource controls:
+
+```dotenv
+DEMUCS_MAX_CONCURRENT_JOBS=1
+DEMUCS_MAX_UPLOAD_BYTES=2147483648
+DEMUCS_MIN_FREE_BYTES=1073741824
+```
 
 ### Bundle Deno In The Image
 
@@ -183,7 +287,12 @@ For unattended startup, use Task Scheduler or a service wrapper such as NSSM. St
   remote requests carry `X-API-Key`.
 - Keep admin credentials out of environment files and logs.
 - Do not log proxy credentials or full external tool payloads.
-- Keep `yt-dlp` current from `/settings` or with `uv pip install --upgrade yt-dlp`.
+- Keep `yt-dlp` current from `/settings` or with `uv pip install --upgrade yt-dlp`. When the
+  application uses the `/settings` updater with a uv-managed project, it also updates the
+  `yt-dlp` entry in `uv.lock`, so the next `uv run` does not restore the previous version.
+- The `/settings` page also provides **Install yt-dlp Nightly**. For standalone binaries it runs
+  `yt-dlp --update-to nightly`; for uv/pip-managed installs it permits prereleases during the
+  package update and lockfile refresh, so a later `uv run` keeps the nightly version.
 - Test the real problem video after changing Deno or yt-dlp:
 
 ```bash

@@ -90,8 +90,8 @@ class QueueItem(Base):
     max_line_length_cjk = Column(Integer, nullable=True)
     status = Column(String, default=QueueStatus.PENDING)
     error = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     media = relationship("MediaItem", back_populates="queue_items")
 
 
@@ -129,7 +129,7 @@ class RuntimeSetting(Base):
 
     key = Column(String, primary_key=True, index=True)
     value = Column(String, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 class LyricsPreset(Base):
