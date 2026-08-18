@@ -95,7 +95,8 @@ therefore owned by that exact UID/GID rather than root. This needs no `s6`,
 ```bash
 cp .env.docker.example .env.docker
 mkdir -p data
-docker compose --env-file .env.docker up -d --build
+docker compose --env-file .env.docker pull
+docker compose --env-file .env.docker up -d
 ```
 
 Set `PUID` and `PGID` in `.env.docker` to the IDs that own the host data or
@@ -104,11 +105,14 @@ that identity read/write access before starting the container. The image makes
 an empty `/data` directory writable for its unprivileged default user, but a
 bind mount's host permissions always take precedence.
 
-To use a prebuilt image instead of Compose building locally, set
-`KARAOKE_IMAGE` to that image and omit the `build:` section from a deployment
-copy of `compose.yml`; retain `user: "${PUID}:${PGID}"` and the `/data` bind
-mount. `KARAOKE_BUILD_TARGET=vocal-sync` selects the scientific target during
-a local Compose build.
+The included Compose file uses the published lightweight image
+`vttc08/demucs-karaoke-app:latest` and has no local build step. Set
+`KARAOKE_IMAGE` to a version or variant tag when needed, for example
+`vttc08/demucs-karaoke-app:1.4.2` or
+`vttc08/demucs-karaoke-app:1.4.2-vocal-sync`. Keep the preconfigured tool
+paths in the Compose environment when overriding the image. The experimental
+`app-no-deno` target remains available for local Docker builds, but it is not
+the default published image.
 
 Example runtime environment:
 
