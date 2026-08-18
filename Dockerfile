@@ -6,7 +6,7 @@ ARG UV_VERSION=0.11.2
 FROM denoland/deno:bin-${DENO_VERSION} AS deno
 
 # uv is used only while building the virtual environment; it is not present in
-# either production target.
+# any production target.
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
 FROM python:3.12-slim-bookworm AS dependencies
@@ -37,7 +37,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CACHE_PATH=/data/cache \
     LOG_DIR=/data/logs \
     YTDLP_PATH=yt-dlp \
-    YTDLP_DENO_PATH=/usr/local/bin/deno \
+    YTDLP_DENO_PATH="" \
     FFMPEG_PATH=ffmpeg
 
 RUN apt-get update \
@@ -47,7 +47,6 @@ RUN apt-get update \
     && chmod 0777 /data
 
 WORKDIR /app
-COPY --from=deno /deno /usr/local/bin/deno
 COPY adapters/ ./adapters/
 COPY demucs_svc/__init__.py demucs_svc/lyrics_line_processor.py demucs_svc/whisperx_pipeline.py ./demucs_svc/
 COPY locales/ ./locales/
@@ -64,10 +63,18 @@ EXPOSE 8000
 VOLUME ["/data"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
+FROM runtime-base AS runtime-with-deno
+ENV YTDLP_DENO_PATH=/usr/local/bin/deno
+COPY --from=deno /deno /usr/local/bin/deno
+
 # Opt-in scientific stack for automatic guide-vocal offset estimation.
-FROM runtime-base AS vocal-sync
+FROM runtime-with-deno AS vocal-sync
 COPY --from=vocal-sync-dependencies /opt/venv /opt/venv
 
 # Lightweight default: core application dependencies only.
-FROM runtime-base AS app
+FROM runtime-with-deno AS app
+COPY --from=dependencies /opt/venv /opt/venv
+
+# Experimental smallest core image. yt-dlp external JavaScript execution is unavailable.
+FROM runtime-base AS app-no-deno
 COPY --from=dependencies /opt/venv /opt/venv

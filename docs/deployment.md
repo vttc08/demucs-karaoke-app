@@ -27,10 +27,13 @@ to yt-dlp search, metadata, and download commands.
 ## Docker
 
 `Dockerfile` builds the main app only; `demucs_svc/` stays on its separate
-GPU-capable host. It has two production targets:
+GPU-capable host. It has three production targets:
 
 - `app` (the default) contains the locked application dependencies, `ffmpeg`,
   and the Deno executable used by yt-dlp external JavaScript execution.
+- `app-no-deno` is an experimental smaller core target. It omits Deno and
+  leaves `YTDLP_DENO_PATH` blank, so videos requiring yt-dlp external
+  JavaScript execution may fail.
 - `vocal-sync` adds the optional `numpy` and `scipy` `vocal-sync` extra for
   automatic guide-vocal offset estimation. It is intentionally larger.
 
@@ -47,6 +50,18 @@ Build the lightweight image:
 ```bash
 docker build --target app -t karaoke:latest .
 ```
+
+Build and inspect the Deno-free variant:
+
+```bash
+docker build --target app-no-deno -t karaoke:no-deno .
+docker image ls karaoke:latest karaoke:no-deno
+```
+
+Use `KARAOKE_BUILD_TARGET=app-no-deno` with the included Compose file for a
+local trial. If an existing `/data/karaoke.db` has a persisted Deno path in
+the app settings, clear it in `/settings` before switching targets; persisted
+runtime settings override the image's default environment value.
 
 Build the optional vocal-sync image:
 
