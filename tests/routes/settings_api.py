@@ -472,6 +472,24 @@ def test_update_ytdlp_error(client):
     assert response.status_code == 400
     assert "yt-dlp update failed" in response.json()["detail"]
 
+
+def test_update_ytdlp_nightly(client):
+    """Nightly yt-dlp update endpoint should select the nightly channel."""
+    authenticate_admin_client(client)
+    with patch(
+        "routes.settings.runtime_settings_service.update_ytdlp",
+        return_value={
+            "before_version": "2026.03.01",
+            "after_version": "2026.03.16-nightly",
+            "updated": True,
+            "detail": "Updated yt-dlp nightly",
+        },
+    ) as update_mock:
+        response = client.post("/api/settings/ytdlp/update-nightly")
+    assert response.status_code == 200
+    assert response.json()["after_version"] == "2026.03.16-nightly"
+    update_mock.assert_called_once_with("nightly")
+
 def test_preload_whisperx_models(client):
     """WhisperX preload endpoint should proxy the remote preload request."""
     authenticate_admin_client(client)
