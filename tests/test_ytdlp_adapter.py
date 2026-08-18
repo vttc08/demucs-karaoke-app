@@ -1,6 +1,7 @@
 """Tests for yt-dlp adapter command construction and output selection."""
 import asyncio
 from pathlib import Path
+import shlex
 import subprocess
 import threading
 
@@ -47,6 +48,43 @@ def test_download_audio_raises_when_file_missing(monkeypatch, tmp_path):
 
     with pytest.raises(RuntimeError, match="file not found"):
         adapter.download_audio("missing123", tmp_path)
+
+
+def test_download_failure_logs_copyable_full_command_for_each_failed_strategy(
+    monkeypatch, tmp_path, caplog
+):
+    """Every failed download strategy should expose its complete rerunnable command."""
+    adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
+    youtube_id = "command123"
+    calls = []
+    expected_output = tmp_path / f"{youtube_id}.mp4"
+    original_proxy = settings.ytdlp_proxy_url
+    original_deno = settings.ytdlp_deno_path
+    settings.ytdlp_proxy_url = "socks5://127.0.0.1:1080"
+    settings.ytdlp_deno_path = "/opt/deno"
+
+    def fake_run(cmd, check, capture_output, timeout):
+        calls.append(cmd)
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(returncode=1, cmd=cmd, stderr=b"download failed")
+        expected_output.write_bytes(b"video")
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    caplog.set_level("INFO", logger="adapters.ytdlp")
+    try:
+        assert adapter.download_video(youtube_id, tmp_path) == expected_output
+    finally:
+        settings.ytdlp_proxy_url = original_proxy
+        settings.ytdlp_deno_path = original_deno
+
+    assert "yt-dlp download strategy failed" in caplog.text
+    assert "  Error: download failed" in caplog.text
+    assert f"  Command:\n    {shlex.join(calls[0])}\n\n" in caplog.text
+    assert "Video download strategy 1/4" in caplog.text
+    assert "Video download strategy 2/4" in caplog.text
+    assert "--proxy socks5://127.0.0.1:1080" in caplog.text
+    assert "--js-runtimes deno:/opt/deno" in caplog.text
 
 
 def test_download_video_retries_without_ios_client(monkeypatch, tmp_path):

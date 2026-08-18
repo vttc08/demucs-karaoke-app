@@ -155,7 +155,7 @@ def test_successful_processing_task_removes_only_its_cache(db_session, tmp_path,
     assert legacy_artifact.exists()
 
 
-def test_failed_processing_task_retains_task_cache(db_session, tmp_path, monkeypatch):
+def test_failed_processing_task_retains_task_cache(db_session, tmp_path, monkeypatch, caplog):
     cache_root = tmp_path / "cache"
     cache_root.mkdir()
     monkeypatch.setattr(settings, "cache_path", cache_root)
@@ -175,6 +175,14 @@ def test_failed_processing_task_retains_task_cache(db_session, tmp_path, monkeyp
     db_session.refresh(task)
     assert task.status == ProcessingTaskStatus.FAILED.value
     assert all(artifact.exists() for artifact in artifacts)
+    failure_records = [
+        record
+        for record in caplog.records
+        if record.name == "services.karaoke_service"
+        and record.message.startswith("Processing task failed")
+    ]
+    assert failure_records
+    assert all(record.exc_info is None for record in failure_records)
 
 
 def test_vocal_sync_success_cleanup_preserves_review_cache(tmp_path, monkeypatch):

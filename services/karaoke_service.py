@@ -114,7 +114,7 @@ class KaraokeService:
             logger.info("Processing task canceled task_id=%s", task.id)
             await self._finalize_cancellation(db, task)
         except Exception as exc:
-            logger.exception("Processing task failed task_id=%s", task.id)
+            logger.error("Processing task failed task_id=%s error=%s", task.id, exc)
             failure_summary = str(exc)
             failure_detail = failure_summary[-400:]
             await processing_task_service.set_status(
