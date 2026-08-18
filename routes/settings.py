@@ -133,3 +133,12 @@ def update_ytdlp(_admin=Depends(require_admin_user)):
         return runtime_settings_service.update_ytdlp()
     except RuntimeError as error:
         raise HTTPException(status_code=400, detail=str(error))
+
+
+@router.post("/ytdlp/update-nightly", response_model=YtDlpUpdateResponse)
+def update_ytdlp_nightly(_admin=Depends(require_admin_user)):
+    """Update yt-dlp to the nightly release channel."""
+    try:
+        return runtime_settings_service.update_ytdlp("nightly")
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error))

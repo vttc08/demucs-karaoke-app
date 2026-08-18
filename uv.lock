@@ -6,6 +6,9 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
+[options]
+prerelease-mode = "allow"
+
 [[package]]
 name = "annotated-doc"
 version = "0.0.4"
@@ -1826,11 +1829,11 @@ wheels = [
 
 [[package]]
 name = "yt-dlp"
-version = "2026.7.4"
+version = "2026.8.17.73947.dev0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/47/c5/9972af4b472b0d55badf841ebafd2f98944cb0ae0f46e11d01f363ea5b91/yt_dlp-2026.7.4.tar.gz", hash = "sha256:b094813404f87a9dd2186f00815231df32e5fd8a5403be0f807b3bb2d21a4432", size = 3049326, upload-time = "2026-07-04T22:42:14.837Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/63/aa/1c6d667223b6a4b72b06dc0d077330126d87129e1f0d814f91c34a46ce39/yt_dlp-2026.8.17.73947.dev0.tar.gz", hash = "sha256:34e176e29b59dd3bd208e42be72b77efb275bbbf3b07eb1eb158960da5128a55", size = 3051786, upload-time = "2026-08-17T07:43:53.769Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/8a/cd4c9b02c10c563adfe78118310129641900e1cd6de888cfae2452072696/yt_dlp-2026.7.4-py3-none-any.whl", hash = "sha256:f11f2b11d5a8ac4059f9bdf29fa4407dc7c6bb00c5097e95ca22a7a9db518266", size = 3184705, upload-time = "2026-07-04T22:42:12.989Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/bd/f197767d3d812e63eac07578beaf6a4dc8d9307fbfe30174efa1f70223da/yt_dlp-2026.8.17.73947.dev0-py3-none-any.whl", hash = "sha256:5ce7f6362f8eb39689a1f0dd398831583c7cbba2b4b07cb91f0ae352fe43c054", size = 3185648, upload-time = "2026-08-17T07:43:51.522Z" },
 ]
 
 [[package]]

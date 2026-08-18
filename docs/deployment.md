@@ -290,6 +290,9 @@ For unattended startup, use Task Scheduler or a service wrapper such as NSSM. St
 - Keep `yt-dlp` current from `/settings` or with `uv pip install --upgrade yt-dlp`. When the
   application uses the `/settings` updater with a uv-managed project, it also updates the
   `yt-dlp` entry in `uv.lock`, so the next `uv run` does not restore the previous version.
+- The `/settings` page also provides **Install yt-dlp Nightly**. For standalone binaries it runs
+  `yt-dlp --update-to nightly`; for uv/pip-managed installs it permits prereleases during the
+  package update and lockfile refresh, so a later `uv run` keeps the nightly version.
 - Test the real problem video after changing Deno or yt-dlp:
 
 ```bash
