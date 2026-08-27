@@ -86,21 +86,14 @@ EXPOSE 8000
 VOLUME ["/data"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
-# Debian's FFmpeg package is the default for broad distro integration. The
-# static target below is an alternative for comparing image size and runtime
-# behavior without pulling FFmpeg's shared-library dependency tree.
-FROM runtime-base AS runtime-with-debian-ffmpeg
-USER root
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
-USER 10001:10001
-
-FROM runtime-base AS runtime-with-static-ffmpeg
+# All production images use the pinned static FFmpeg binaries. This avoids
+# Debian's large shared-library dependency tree while retaining ffmpeg and
+# ffprobe at the paths expected by the application.
+FROM runtime-base AS runtime-with-ffmpeg
 COPY --from=ffmpeg-static /out/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=ffmpeg-static /out/ffprobe /usr/local/bin/ffprobe
 
-FROM runtime-with-debian-ffmpeg AS runtime-with-deno
+FROM runtime-with-ffmpeg AS runtime-with-deno
 ENV YTDLP_DENO_PATH=/usr/local/bin/deno
 COPY --from=deno /deno /usr/local/bin/deno
 
@@ -113,14 +106,5 @@ FROM runtime-with-deno AS app
 COPY --from=dependencies /opt/venv /opt/venv
 
 # Experimental smallest core image. yt-dlp external JavaScript execution is unavailable.
-FROM runtime-base AS app-no-deno
+FROM runtime-with-ffmpeg AS app-no-deno
 COPY --from=dependencies /opt/venv /opt/venv
-
-# Experimental image using the pinned static FFmpeg binaries instead of the
-# Debian package. This target is intentionally separate from `app` while it is
-# being evaluated for compatibility and size reduction.
-FROM runtime-with-static-ffmpeg AS app-static-ffmpeg
-COPY --from=dependencies /opt/venv /opt/venv
-
-FROM runtime-with-static-ffmpeg AS vocal-sync-static-ffmpeg
-COPY --from=vocal-sync-dependencies /opt/venv /opt/venv

@@ -65,13 +65,15 @@ jobs:
             check: >-
               python -c "import fastapi, yt_dlp" &&
               test -x /usr/local/bin/deno &&
-              ffmpeg -version >/dev/null
+              ffmpeg -version >/dev/null &&
+              ffprobe -version >/dev/null
           - target: vocal-sync
             image: karaoke:ci-vocal-sync
             check: >-
               python -c "import fastapi, numpy, scipy, yt_dlp" &&
               test -x /usr/local/bin/deno &&
-              ffmpeg -version >/dev/null
+              ffmpeg -version >/dev/null &&
+              ffprobe -version >/dev/null
 
     steps:
       - name: Checkout

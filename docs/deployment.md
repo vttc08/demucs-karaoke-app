@@ -30,14 +30,11 @@ to yt-dlp search, metadata, and download commands.
 GPU-capable host. It has three production targets:
 
 - `app` (the default) contains the locked application dependencies, `ffmpeg`,
-  and the Deno executable used by yt-dlp external JavaScript execution.
+  and the Deno executable used by yt-dlp external JavaScript execution. Its
+  FFmpeg tools are pinned static binaries, not the Debian package.
 - `app-no-deno` is an experimental smaller core target. It omits Deno and
   leaves `YTDLP_DENO_PATH` blank, so videos requiring yt-dlp external
   JavaScript execution may fail.
-- `app-static-ffmpeg` is an experimental target that replaces Debian's
-  FFmpeg package with pinned static `ffmpeg` and `ffprobe` binaries.
-- `vocal-sync-static-ffmpeg` combines the static FFmpeg binaries with the
-  optional vocal-sync Python dependencies.
 - `vocal-sync` adds the optional `numpy` and `scipy` `vocal-sync` extra for
   automatic guide-vocal offset estimation. It is intentionally larger.
 
@@ -73,16 +70,16 @@ Build the optional vocal-sync image:
 docker build --target vocal-sync -t karaoke:vocal-sync .
 ```
 
-To compare the static FFmpeg variant locally:
+The production targets use the static FFmpeg build. Verify it locally with:
 
 ```bash
-docker build --target app-static-ffmpeg -t karaoke:static-ffmpeg .
-docker run --rm --entrypoint /bin/sh karaoke:static-ffmpeg \
+docker build --target app -t karaoke:latest .
+docker run --rm --entrypoint /bin/sh karaoke:latest \
   -c 'ffmpeg -version >/dev/null && ffprobe -version >/dev/null'
-docker image inspect karaoke:static-ffmpeg --format '{{.Size}} bytes'
+docker image inspect karaoke:latest --format '{{.Size}} bytes'
 ```
 
-The static target downloads the provider's pinned 7.0.2 release archive for
+The build downloads the provider's pinned 7.0.2 release archive for
 the Docker `amd64` or `arm64` architecture, verifies its published MD5, and
 copies only `ffmpeg` and `ffprobe` into the final image. The provider's
 archive is GPLv3-licensed; review that license before redistribution. Its
