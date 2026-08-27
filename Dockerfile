@@ -23,6 +23,12 @@ RUN apk add --no-cache curl tar xz \
          *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
        esac \
     && curl --fail --location --silent --show-error \
+         --connect-timeout 20 \
+         --max-time 900 \
+         --retry 6 \
+         --retry-delay 10 \
+         --retry-max-time 900 \
+         --retry-all-errors \
          --output /tmp/ffmpeg.tar.xz \
          "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${archive_arch}-static.tar.xz" \
     && echo "${checksum}  /tmp/ffmpeg.tar.xz" | md5sum -c - \
