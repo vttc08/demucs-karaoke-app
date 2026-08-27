@@ -115,8 +115,6 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "major=${version%%.*}" >> "$GITHUB_OUTPUT"
-          echo "minor=${version%.*}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -130,27 +128,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Publish lightweight app
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          target: app
-          platforms: ${{ env.PLATFORMS }}
-          push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.minor }}
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}
-            ${{ env.IMAGE_NAME }}:latest
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.version.outputs.version }}
-          cache-from: type=gha,scope=app-release
-          cache-to: type=gha,mode=max,scope=app-release
-          provenance: mode=max
-          sbom: true
-
+      # Publish vocal-sync first so the normal image's latest tag is the most
+      # recently pushed entry when Docker Hub is sorted by newest.
       - name: Publish vocal-sync app
         uses: docker/build-push-action@v6
         with:
@@ -160,14 +139,30 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}-vocal-sync
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.minor }}-vocal-sync
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major }}-vocal-sync
-            ${{ env.IMAGE_NAME }}:vocal-sync
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}-vocal-sync
           cache-from: type=gha,scope=vocal-sync-release
           cache-to: type=gha,mode=max,scope=vocal-sync-release
+          provenance: mode=max
+          sbom: true
+
+      - name: Publish lightweight app
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: app
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_NAME }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=app-release
+          cache-to: type=gha,mode=max,scope=app-release
           provenance: mode=max
           sbom: true

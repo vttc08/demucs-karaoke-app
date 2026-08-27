@@ -127,8 +127,10 @@ git push https://github.com/vttc08/demucs-karaoke-app.git v1.4.2
 ```
 
 Configure the repository variable `DOCKERHUB_USERNAME` and the repository
-secret `DOCKERHUB_TOKEN`. The lightweight target receives `latest`, while the
-vocal-sync target receives tags such as `1.4.2-vocal-sync` and `vocal-sync`.
+secret `DOCKERHUB_TOKEN`. For a release tag such as `v0.0.1-dev`, the workflow
+publishes exactly three tags: `0.0.1-dev`, `0.0.1-dev-vocal-sync`, and `latest`.
+The `latest` tag is attached to the lightweight image and is pushed after
+vocal-sync so it appears first when Docker Hub is sorted by newest.
 
 Example runtime environment:
 
