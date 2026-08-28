@@ -134,6 +134,9 @@ class Settings(BaseSettings):
     # WebSocket
     ws_heartbeat_interval: int = 30
 
+    # Locale
+    enabled_locales: str = "en"
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.karaoke_base_path = normalize_base_path(self.karaoke_base_path)

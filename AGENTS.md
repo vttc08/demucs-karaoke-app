@@ -57,7 +57,7 @@ When making UI changes or adding new frontend features:
 - All user-facing text must use the translation system via `t("key")` helper
 - Template strings: use `{{ t("key") }}` in Jinja templates
 - JavaScript strings: use `window.KaraokeI18n.t("key", {param: value})` in static JS files
-- Never hardcode UI text; add it to `locales/en.json` first, then translate to `locales/zh-CN.json`
+- Never hardcode UI text; add it to `locales/en.json` first, then translate to `locales/zh-CN.json` and other `locales/*.json` if needed
 - Preserve placeholder syntax: `{key}`, `{count}`, etc. in translations; don't replace them
 - Run `uv run pytest` before committing - tests verify catalog key parity across all locales
 - See [docs/internationalization.md](docs/internationalization.md) for details on adding a new language
