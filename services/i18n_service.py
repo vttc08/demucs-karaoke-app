@@ -12,7 +12,9 @@ LOCALE_COOKIE = "karaoke_locale"
 DEFAULT_LOCALE = "en"
 SUPPORTED_LOCALES = {
     "en": "English",
+    "fr": "Français",
     "zh-CN": "简体中文",
+    "zh-TW": "繁體中文",
 }
 _LOCALE_DIR = Path(__file__).resolve().parent.parent / "locales"
 
@@ -36,8 +38,11 @@ def normalize_locale(locale: str | None) -> str | None:
     lowered = cleaned.lower()
     if lowered == "zh" or lowered.startswith("zh-cn") or lowered.startswith("zh-hans"):
         return "zh-CN"
-    if lowered.startswith("en"):
-        return "en"
+    if lowered == "zh-tw" or lowered.startswith("zh-hant"):
+        return "zh-TW"
+    all_supported_languages = [code.lower() for code in SUPPORTED_LOCALES]
+    if lowered in all_supported_languages:
+        return next(code for code in SUPPORTED_LOCALES if code.lower() == lowered)
     return None
 
 
