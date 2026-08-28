@@ -4,18 +4,21 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from config import Settings
 
 from fastapi import Request
 
 
 LOCALE_COOKIE = "karaoke_locale"
 DEFAULT_LOCALE = "en"
-SUPPORTED_LOCALES = {
+ENABLED_LOCALES = Settings().enabled_locales.split(",")
+ALL_LOCALES = {
     "en": "English",
     "fr": "Français",
     "zh-CN": "简体中文",
     "zh-TW": "繁體中文",
 }
+SUPPORTED_LOCALES = {code: label for code, label in ALL_LOCALES.items() if code in ENABLED_LOCALES}
 _LOCALE_DIR = Path(__file__).resolve().parent.parent / "locales"
 
 

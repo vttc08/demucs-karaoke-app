@@ -254,10 +254,14 @@ def test_language_route_rejects_external_redirect_targets(client):
 def test_locale_catalogs_have_matching_keys():
     """Every supported locale should expose the same UI translation keys."""
     locale_dir = Path("locales")
+    locales = [f.stem for f in locale_dir.glob("*.json")]
     english_keys = set(json.loads((locale_dir / "en.json").read_text(encoding="utf-8")))
-    chinese_keys = set(json.loads((locale_dir / "zh-CN.json").read_text(encoding="utf-8")))
-
-    assert chinese_keys == english_keys
+    for locale in locales:
+        if locale == "en":
+            continue
+        path = locale_dir / f"{locale}.json"
+        chinese_keys = set(json.loads(path.read_text(encoding="utf-8")))
+        assert chinese_keys == english_keys, f"Locale {locale} has mismatched keys"
 
 def test_queue_page_shows_admin_queue_controls(client):
     """Admin queue page should show destructive queue controls."""

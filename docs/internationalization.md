@@ -6,9 +6,12 @@ The app uses a small catalog-based i18n setup for frontend UI text.
 
 - `en`: English fallback/source catalog
 - `zh-CN`: Simplified Chinese UI catalog
+- `fr`: French UI catalog
 
 Only frontend UI copy is translated. Song titles, artists, lyrics, media filenames, provider output,
 and API payload content remain unchanged.
+
+Only enabled locales are loaded at runtime. To enable a locale, add it to the `ENABLED_LOCALES` env var in `.env`.
 
 ## Runtime Flow
 
@@ -20,13 +23,13 @@ and API payload content remain unchanged.
 
 ## Add A Locale
 
-1. Add the locale code and label to `SUPPORTED_LOCALES` in `services/i18n_service.py`.
+1. Add the locale code and label to `ALL_LOCALES` in `services/i18n_service.py`.
 2. Create `locales/<code>.json` with the same keys as `locales/en.json`.
 3. Translate UI strings only; keep placeholders like `{title}` and `{count}` unchanged.
 4. Run:
 
 ```bash
-uv run pytest
+uv run pytest tests/routes/pages.py::test_locale_catalogs_have_matching_keys
 ```
 
 Also run the catalog reachability audit:

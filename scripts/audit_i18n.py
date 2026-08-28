@@ -7,7 +7,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CATALOG_PATHS = (ROOT / "locales/en.json", ROOT / "locales/zh-CN.json")
+LOCALES_DIR = ROOT / "locales"
+CATALOG_PATHS = list(LOCALES_DIR.glob("*.json"))
+# CATALOG_PATHS = (ROOT / "locales/en.json", ROOT / "locales/zh-CN.json")
 SOURCE_SUFFIXES = {".py", ".js", ".html", ".md"}
 EXCLUDED_PARTS = {".git", ".venv", "node_modules", "static/docs", "docs-site"}
 # Add a key here only when production code constructs it dynamically instead
