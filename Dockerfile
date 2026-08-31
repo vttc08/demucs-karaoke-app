@@ -13,6 +13,7 @@ FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 # John Van Sickle publishes architecture-specific, self-contained FFmpeg
 # archives. Keep only ffmpeg and ffprobe; the archive also contains manpages,
 # source metadata, and optional VMAF models that the app does not use.
+# Uses Github release instead of downloading from source to improve reliability.
 FROM alpine:3.22 AS ffmpeg-static
 ARG FFMPEG_VERSION
 ARG TARGETARCH
@@ -30,7 +31,7 @@ RUN apk add --no-cache curl tar xz \
          --retry-max-time 900 \
          --retry-all-errors \
          --output /tmp/ffmpeg.tar.xz \
-         "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${archive_arch}-static.tar.xz" \
+         "https://github.com/pythondev-account/ffmpeg-static/releases/latest/download/ffmpeg-release-${archive_arch}-static.tar.xz" \
     && echo "${checksum}  /tmp/ffmpeg.tar.xz" | md5sum -c - \
     && mkdir /tmp/ffmpeg \
     && tar -xJf /tmp/ffmpeg.tar.xz --strip-components=1 -C /tmp/ffmpeg \
