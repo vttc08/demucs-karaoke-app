@@ -84,6 +84,7 @@ COPY routes/ ./routes/
 COPY services/ ./services/
 COPY static/ ./static/
 COPY templates/ ./templates/
+COPY scripts/ ./scripts/
 COPY config.py database.py logging_config.py main.py models.py ./
 
 # The default numeric identity is intentionally unprivileged. Override it with

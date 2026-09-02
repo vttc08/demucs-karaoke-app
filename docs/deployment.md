@@ -39,9 +39,12 @@ GPU-capable host. It has three production targets:
   automatic guide-vocal offset estimation. It is intentionally larger.
 
 Neither target includes Node/npm, MkDocs, tests, the source documentation, or
-the Demucs service. It does retain the small shared lyric parsing modules that
-the main app imports for subtitle editing; no Demucs worker, model, or GPU
-dependency is included. The Docker build context is allowlisted in
+the Demucs service. It does retain the small shared lyric-processing modules
+from `demucs_svc` that the main app imports for subtitle editing; these are
+library code only, not the Demucs worker, model, or GPU dependency. The main
+app continues to call the separately deployed Demucs service over its HTTP API.
+The image also includes the operational scripts needed to create an admin user
+and seed the built-in stage presets. The Docker build context is allowlisted in
 `.dockerignore`. It includes the checked-out `static/` tree, so the already-built
 help site at `static/docs/` is copied when it is present; Docker does not rebuild
 docs.
@@ -60,9 +63,10 @@ docker image ls karaoke:latest karaoke:no-deno
 ```
 
 Use `KARAOKE_BUILD_TARGET=app-no-deno` with the included Compose file for a
-local trial. If an existing `/data/karaoke.db` has a persisted Deno path in
-the app settings, clear it in `/settings` before switching targets; persisted
-runtime settings override the image's default environment value.
+local trial. The image's explicit environment values take precedence over
+persisted `/settings` values after restart. If you need the database to control
+a setting, leave that setting out of the Compose environment; this is
+especially relevant when switching between the Deno and Deno-free targets.
 
 Build the optional vocal-sync image:
 
@@ -123,6 +127,22 @@ that identity read/write access before starting the container. The image makes
 an empty `/data` directory writable for its unprivileged default user, but a
 bind mount's host permissions always take precedence.
 
+Create the first admin account from inside the running container:
+
+```bash
+docker compose exec -it karaoke python scripts/admin_user.py create --username admin
+```
+
+The command prompts for the password without echoing it. To install the
+default stage lyric presets and their bundled assets, run:
+
+```bash
+docker compose exec -it karaoke python scripts/default_presets.py
+```
+
+Both commands use the container's configured `DATABASE_URL` and storage paths,
+so they update the same `/data` volume used by the application.
+
 The included Compose file uses the published lightweight image
 `vttc08/demucs-karaoke-app:latest` and has no local build step. Set
 `KARAOKE_IMAGE` to a version or variant tag when needed, for example
@@ -131,6 +151,29 @@ The included Compose file uses the published lightweight image
 paths in the Compose environment when overriding the image. The experimental
 `app-no-deno` target remains available for local Docker builds, but it is not
 the default published image.
+
+### Environment and persisted settings
+
+For a local `uv` run, the application reads `.env` from the application
+working directory. For Docker Compose, the host `.env` or the file supplied by
+`--env-file` is used by Compose for variable substitution; it is not copied
+into the container automatically. Only variables listed under the Compose
+service's `environment:` section, together with Dockerfile `ENV` defaults, are
+passed to the application.
+
+The effective precedence is:
+
+```text
+container/process environment > .env (local runs) > runtime_settings SQLite rows > code defaults
+```
+
+Settings changed through `/settings` are applied immediately and written to
+the `runtime_settings` table. On restart, a persisted value is restored only
+when the corresponding setting is not explicitly present in the environment.
+This is intentional for deployment-critical values such as the database,
+media/cache paths, service URL, and executable paths. Keep `/data` mounted and
+keep `DATABASE_URL` pointed at the same database if settings should survive
+container recreation.
 
 ### Publishing Docker images from GitHub
 
