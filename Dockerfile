@@ -56,6 +56,16 @@ FROM dependencies AS vocal-sync-dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project --extra vocal-sync
 
+# Build the embedded help site in Docker so clean checkouts do not depend on
+# the gitignored static/docs/ artifact being present in the build context.
+FROM python:3.12-slim-bookworm AS docs
+WORKDIR /build
+COPY docs-site/requirements.txt ./docs-site/requirements.txt
+RUN pip install --no-cache-dir -r docs-site/requirements.txt
+COPY docs-site/ ./docs-site/
+COPY scripts/build_docs.py ./scripts/build_docs.py
+RUN python scripts/build_docs.py
+
 FROM python:3.12-slim-bookworm AS runtime-base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -86,6 +96,9 @@ COPY static/ ./static/
 COPY templates/ ./templates/
 COPY scripts/ ./scripts/
 COPY config.py database.py logging_config.py main.py models.py ./
+# The generated site is produced above instead of relying on the ignored local
+# static/docs/ directory being included in a clean checkout.
+COPY --from=docs /build/static/docs ./static/docs/
 
 # The default numeric identity is intentionally unprivileged. Override it with
 # Compose's `user: "${PUID}:${PGID}"` to match ownership on a host bind mount.

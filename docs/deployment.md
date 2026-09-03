@@ -45,9 +45,9 @@ library code only, not the Demucs worker, model, or GPU dependency. The main
 app continues to call the separately deployed Demucs service over its HTTP API.
 The image also includes the operational scripts needed to create an admin user
 and seed the built-in stage presets. The Docker build context is allowlisted in
-`.dockerignore`. It includes the checked-out `static/` tree, so the already-built
-help site at `static/docs/` is copied when it is present; Docker does not rebuild
-docs.
+`.dockerignore`. Docker builds the MkDocs source in a dedicated intermediate
+stage and copies only the generated help site into `static/docs/`; the final
+image does not contain MkDocs or the source documentation.
 
 Build the lightweight image:
 

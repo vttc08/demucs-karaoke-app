@@ -23,10 +23,14 @@
 !routes/**
 !services/
 !services/**
+!docs-site/
+!docs-site/docs/
+!docs-site/docs/**
+!docs-site/mkdocs.yml
+!docs-site/requirements.txt
 !static/
 !static/**
 !templates/
 !templates/**
 !scripts/
 !scripts/**
-
