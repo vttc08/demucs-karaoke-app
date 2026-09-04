@@ -2,6 +2,36 @@
 
 Lightweight AI-powered karaoke application for home use.
 
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Setup](#setup)
+- [Running](#running)
+  - [Development mode](#development-mode)
+  - [Production mode](#production-mode)
+  - [Reverse proxy subpath](#reverse-proxy-subpath)
+- [Usage](#usage)
+  - [Language switching](#language-switching)
+  - [Frontend i18n Development](#frontend-i18n-development)
+- [API Endpoints](#api-endpoints)
+- [Architecture](#architecture)
+- [Development](#development)
+  - [Running tests](#running-tests)
+  - [Debug logging](#debug-logging)
+  - [Test title inference from CLI](#test-title-inference-from-cli)
+  - [Lyrics provider debug CLI](#lyrics-provider-debug-cli)
+  - [With coverage](#with-coverage)
+  - [Logging](#logging)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+  - [yt-dlp issues](#yt-dlp-issues)
+  - [ffmpeg issues](#ffmpeg-issues)
+  - [Separation service not available](#separation-service-not-available)
+  - [WebSocket troubleshooting](#websocket-troubleshooting)
+  - [Remote Demucs (Windows + NVIDIA)](#remote-demucs-windows--nvidia)
+- [License](#license)
+
 ## Features
 
 - **Mobile Queue Page**: Search YouTube, add songs to queue
@@ -27,16 +57,19 @@ Lightweight AI-powered karaoke application for home use.
 ## Setup
 
 1. **Install uv** (if not already installed):
+
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 2. **Clone and navigate**:
+
 ```bash
 cd /home/kevin/Documents/karaoke
 ```
 
 3. **Create environment and install dependencies**:
+
 ```bash
 uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -44,6 +77,7 @@ uv pip install -e ".[dev]"
 ```
 
 4. **Install system dependencies**:
+
 ```bash
 # Ubuntu/Debian
 sudo apt-get install ffmpeg
@@ -53,6 +87,7 @@ pip install yt-dlp
 ```
 
 5. **Configure environment**:
+
 ```bash
 cp .env.example .env
 # Edit .env with your settings
@@ -62,9 +97,11 @@ preserved. Leave it empty to serve the app at `/`, which is the default and keep
 URLs unchanged.
 
 6. **Initialize database**:
+
 Database is created automatically on first run.
 
 7. **Create an admin user**:
+
 Admin accounts are managed from the server, not from the browser. Create or reset an admin password
 with:
 ```bash
