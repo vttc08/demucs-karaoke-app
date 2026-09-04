@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     demucs_api_key: str = ""
     demucs_model: str = "htdemucs"
     demucs_device: str = "cuda"
-    demucs_output_format: str = "wav"
+    demucs_output_format: str = "mp3"
     demucs_mp3_bitrate: int = 320
     separation_backend: str = "demucs"
     sherpa_spleeter_model: str = "fp16"
