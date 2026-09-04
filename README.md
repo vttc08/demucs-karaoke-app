@@ -8,7 +8,7 @@ DMKaraoke is a lightweight web application for home karaoke. It uses machine lea
 
 - [Quick Start](#quick-start)
   - [Karaoke App Only](#karaoke-app-only)
-- [Demucs/WhisperX Service](#demucswhisperx-service)
+  - [Demucs/WhisperX Service](#demucswhisperx-service)
   - [Clients](#clients)
 - [Features](#features)
 - [Screenshots](#screenshots)
