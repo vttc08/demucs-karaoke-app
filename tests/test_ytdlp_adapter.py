@@ -13,6 +13,7 @@ from config import settings
 
 def test_download_audio_uses_explicit_audio_selection_first(monkeypatch, tmp_path):
     """Audio download should start with an explicit audio-only selector."""
+    monkeypatch.setattr(settings, "ytdlp_deno_path", "")
     adapter = YtDlpAdapter(ytdlp_path="/bin/yt-dlp")
     youtube_id = "abc123"
     expected_output = tmp_path / f"{youtube_id}.audio.m4a"
