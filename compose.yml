@@ -1,13 +1,13 @@
 services:
   karaoke:
-    image: ${KARAOKE_IMAGE:-vttc08/demucs-karaoke-app:latest}
+    image: vttc08/demucs-karaoke-app:latest
     container_name: karaoke
     user: "${PUID:-1000}:${PGID:-1000}"
     ports:
-      - "${KARAOKE_PORT:-8000}:8000"
+      - "8000:8000"
+    env_file:
+      - .env
     environment:
-      HOST: 0.0.0.0
-      PORT: 8000
       DATABASE_URL: sqlite:////data/karaoke.db
       MEDIA_PATH: /data/media
       CACHE_PATH: /data/cache
@@ -15,9 +15,6 @@ services:
       YTDLP_PATH: yt-dlp
       YTDLP_DENO_PATH: /usr/local/bin/deno
       FFMPEG_PATH: ffmpeg
-      DEMUCS_API_URL: ${DEMUCS_API_URL:-http://demucs-host:8001}
-      DEMUCS_API_KEY: ${DEMUCS_API_KEY:-}
-      KARAOKE_BASE_PATH: ${KARAOKE_BASE_PATH:-}
     volumes:
-      - ${KARAOKE_DATA_DIR:-./data}:/data
+      - ./data:/data
     restart: unless-stopped
