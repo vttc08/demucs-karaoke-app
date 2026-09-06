@@ -1,6 +1,6 @@
 # DMKaraoke
 
-> Image coming soon.
+![DMKaraoke](static/readme/title.webp)
 
 DMKaraoke is a lightweight web application for home karaoke. It uses machine learning to separate vocals and create word-by-word synced lyrics. The application is **completely free**, with **no advertisements** and **zero cloud subscription fees**. It creates karaoke on your own device.
 
