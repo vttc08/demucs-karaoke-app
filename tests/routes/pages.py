@@ -552,9 +552,11 @@ def test_access_restricted_page_loads(client):
     """Test access restricted page renders."""
     response = client.get("/access-restricted")
     assert response.status_code == 200
-    assert b"Access restricted" in response.content
+    assert b"Access denied" in response.content
+    assert b"Access restricted" not in response.content
+    assert b"Your current IP address is not authorized" in response.content
     assert b'href="/queue"' in response.content
-    assert b"Return to karaoke" in response.content
+    assert b"Try again" in response.content
 
 def test_app_startup_triggers_media_scan():
     """Application lifespan should run media library scan on startup."""
