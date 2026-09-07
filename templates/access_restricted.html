@@ -63,6 +63,14 @@
                             {{ t('access.description') }}
                         </p>
 
+                        <a
+                            href="{{ app_url('/queue') }}"
+                            class="mt-6 inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-on-primary shadow-[0_0_28px_rgba(0,242,255,0.2)] transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface-container-low active:scale-[0.98]"
+                        >
+                            <span class="material-symbols-outlined text-lg">arrow_forward</span>
+                            {{ t('access.return_to_app') }}
+                        </a>
+
                         <div class="mt-6 flex flex-wrap gap-2">
                             <span class="rounded-full border border-white/10 bg-surface-container-high/70 px-3 py-1 text-[11px] font-semibold text-on-surface-variant">{{ t('access.approved_lan') }}</span>
                             <span class="rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-semibold text-primary">{{ t('access.wan_check') }}</span>
