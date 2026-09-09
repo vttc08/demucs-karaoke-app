@@ -106,4 +106,4 @@ Install the matching PyTorch build using the command above, adjusted for your CU
 
 ## Next Steps
 
-- [Configuring Demucs](../configuration/index.md)
+- [Configuring Demucs](../configuration/index.md#demucs-service)
