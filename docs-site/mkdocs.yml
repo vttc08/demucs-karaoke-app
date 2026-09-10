@@ -85,7 +85,7 @@ nav:
       - Downloads: configuration/downloads.md
       - Stage: configuration/stage.md
       - Tools: configuration/tools.md
-      - Custom Lyrics Provider: configuration/tools/custom-lyrics-provider.md
+      - Custom Lyrics Provider: configuration/custom-lyrics-provider.md
   - Tasks:
       - For Users: tasks/for-users.md
       - Karaoke Tasks: tasks/karaoke-tasks.md

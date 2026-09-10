@@ -1,39 +1,41 @@
-# whisperx lyrics
+# WhisperX Lyrics
 
-![]i will add the screenshot later
+![WhisperX Lyrics settings](../assets/images/settings/whisperx-lyrics.webp){ width="400" }
 
-to make word by word synced karaoke timing from standard lrc files
-the main app or during the demucs process sends
-the standard text or lrc files and the separated vocal traks to Demucs service.
-whisperx is used to detect the language, run wav2vec model against
-the lyrics and vocals track and creates .json file
-containing fully synced lyrics.
+WhisperX creates word-by-word karaoke timing from plain-text or LRC lyrics. During processing, the main application sends the lyrics and separated vocal track to the Demucs service. WhisperX detects the language, aligns the lyrics with the vocals, and returns a JSON file containing fully synchronized lyrics.
 
-make each if the configuration option ###, capitalize first word and the values in inline quote 
+Use this page to configure the WhisperX language and alignment workflow. These settings can also be set with [environment variables](environments.md) when a deployment needs fixed values.
 
-whisperx transcription model
+### WhisperX transcription model
 
-default tiny. this model is only used for language detection
-the backend do not need perform any audio transcription
-tiny model is recommended 
+The transcription model used by WhisperX for language detection. The default is `tiny`, which is recommended because the backend does not need to transcribe the complete audio when the language is already known.
 
-whisperx alignment language
+### WhisperX alignment language
 
-??? note detect language or not
-for regular karaoke, it's recommended to enable detect language
-especially your karaoke song covers many foreign languages 
-it's possible to override it for individual songs
-but some guest may not interaxt with advanced settings 
+The language that WhisperX uses for alignment. Enter a language code such as `en` or `zh`.
 
-sometimes the whisperx language detection can be insccurate
-leading to wrong model used and bad karaoke timings
-if your songs are primarily single language, manually specify it.
+??? note "Choose between language detection and a fixed language"
 
-language code e.g. en, zh which whisperx will treat the 
-audio as and use the corresponding model, set this if all your karaoke songs are
-same language, it will skip the transcription step.
+    Enable language detection for a karaoke library containing songs in several languages. WhisperX can choose the appropriate alignment model, and automatic detection is usually easier for less-technical guests. Individual songs can override the detected language.
 
-detect language before transcription 
+    If your library is primarily in one language, manually specify that language. This avoids unnecessary detection and the possibility of an inaccurate result selecting the wrong model and producing poor karaoke timing. When a language is specified manually, the language-detection transcription step can be skipped.
 
-recommended. check this option so whisperx detect the language and use the correct model
+### Detect language before transcription
 
+Enable this option to have WhisperX detect the audio language before alignment and select the appropriate model.
+
+### Use synced lyrics timings
+
+This option is disabled by default and is recommended to remain disabled. WhisperX can accept synced LRC lines, such as `[0:01.000] line`, which provide individual timestamps for each lyric line and can improve alignment speed.
+
+However, lyrics from external sources are rarely synchronized with the video or audio used for karaoke. Using those timestamps can therefore result in worse word-level alignment quality.
+
+### WhisperX preload list
+
+The comma-separated list of WhisperX models to download and load in advance. The default is `transcription=tiny,align=en`. Entries use the format `type=model`, for example:
+
+- `transcription=tiny`: preload the transcription model used for language detection.
+- `align=en`: preload the English alignment model.
+- `align=zh`: preload the Chinese alignment model.
+
+The models must be downloaded before they can be used. The **Preload WhisperX** button downloads and loads the configured models in advance, before the first karaoke processing job.

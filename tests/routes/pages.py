@@ -447,7 +447,13 @@ def test_settings_page_loads_for_admin(client):
     assert b"Log out" in response.content
     assert b">Save<" in response.content
     assert b">Check Demucs<" in response.content
-    assert 'href="/help/"' in response.text
+    assert 'href="/help/configuration/settings/"' in response.text
+    assert 'href="/help/configuration/karaoke-processing/"' in response.text
+    assert 'href="/help/configuration/whisperx-lyrics/"' in response.text
+    assert 'href="/help/configuration/application-paths/"' in response.text
+    assert 'href="/help/configuration/downloads/"' in response.text
+    assert 'href="/help/configuration/stage/"' in response.text
+    assert 'href="/help/configuration/tools/"' in response.text
     assert 'aria-label="Open documentation"' in response.text
     assert response.text.count('data-settings-section=') == 6
     assert response.text.count('data-settings-docs-link') == 6
@@ -477,7 +483,7 @@ def test_settings_page_uses_localized_docs_path_for_zh(client):
     response = client.get("/settings")
 
     assert response.status_code == 200
-    assert 'href="/help/zh/"' in response.text
+    assert 'href="/help/zh/configuration/settings/"' in response.text
     assert 'aria-label="打开文档"' in response.text
 
 
