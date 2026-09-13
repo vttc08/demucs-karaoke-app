@@ -12,6 +12,7 @@
 YouTube has a vast library of karaoke videos, including channels such as [Sing King](https://www.youtube.com/channel/UCwTRjvjVge51X-ILJ4i22ew). For a popular song, there is a good chance that a karaoke video is already available. This is the easiest way to get started and **does not require the Demucs service**. However, karaoke style and customization are limited.
 
 - Search for a song. Searching by title and artist is usually sufficient.
+- You can also directly paste a YouTube URL into the search box. 
 
 !!! tip "[Parallel YouTube search](../configuration/downloads.md#parallel-youtube-search)"
     Enable parallel YouTube search to search for the original query and a karaoke variant at the same time. This can help find existing karaoke videos.
