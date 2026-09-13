@@ -51,6 +51,8 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
@@ -94,6 +96,7 @@ nav:
       - Create AI Karaoke: tasks/create-ai-karaoke.md
       - Stage & Branding: tasks/stage-and-branding.md
       - Server Administration: tasks/server-administration.md
+      - Media Administration: tasks/media-administration.md
   - Troubleshooting:
       - Troubleshooting: troubleshooting/index.md
   - Deployment:
