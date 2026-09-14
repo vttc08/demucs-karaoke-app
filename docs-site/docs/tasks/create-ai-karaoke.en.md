@@ -185,4 +185,6 @@ Use [Sherpa+Spleeter](../configuration/karaoke-processing.md#separation-backend)
 
 There is no easy CPU-only alternative to WhisperX. A typical three-minute song may take one to two minutes to separate. However, some songs have a TTML lyrics upgrade available. TTML already contains word-synchronized lyrics and skips WhisperX processing.
 
+TTML timings are official music-lyrics timings, typically matching the original song release rather than a particular video edit. They are not a good fit for music videos with intros, outros, or other edits because the lyrics can become offset from the video. Use TTML for non-music videos with the original song timing or for uploaded MP3 files; use WhisperX when the video includes extra or changed sections.
+
 Using `Sherpa+Spleeter` with a TTML upgrade provides the fastest and best-case karaoke experience on CPU-only devices.

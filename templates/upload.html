@@ -9,7 +9,12 @@
     <section class="glass-card rounded-2xl border border-white/10 p-6 sm:p-8">
         <div class="mb-8 text-center sm:text-left">
             <p class="text-[11px] font-bold uppercase tracking-widest text-primary">{{ t('upload.archive_entry') }}</p>
-            <h2 class="mt-1 font-headline text-2xl font-black tracking-tight text-on-surface sm:text-3xl">{{ t('upload.ingest') }}</h2>
+            <div class="mt-1 flex items-center justify-center gap-2 sm:justify-start">
+                <h2 class="font-headline text-2xl font-black tracking-tight text-on-surface sm:text-3xl">{{ t('upload.ingest') }}</h2>
+                <a href="{{ docs_url('tasks/create-ai-karaoke') }}#create-karaoke-from-uploaded-files" target="_blank" rel="noopener noreferrer" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40" aria-label="{{ t('upload.ai_karaoke_help') }}" title="{{ t('upload.ai_karaoke_help') }}">
+                    <span class="material-symbols-outlined text-base">help</span>
+                </a>
+            </div>
             <p class="mt-2 text-sm text-on-surface-variant">{{ t('upload.ingest_detail') }}</p>
         </div>
 
@@ -155,7 +160,7 @@
 
                         <p id="upload-lyrics-upgrade-hint" class="hidden text-[11px] leading-tight text-on-surface-variant sm:text-xs">
                             {{ t('lyrics.ttml_upgrade_hint') }}
-                            <a href="{{ app_url('/help/') }}" target="_blank" rel="noopener noreferrer" class="text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/80">{{ t('lyrics.ttml_upgrade_docs') }}</a>
+                            <a href="{{ docs_url('tasks/create-ai-karaoke') }}#ttml-lyrics-upgrade" target="_blank" rel="noopener noreferrer" class="text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/80">{{ t('lyrics.ttml_upgrade_docs') }}</a>
                         </p>
 
                         <div class="rounded-xl border border-primary/20 bg-primary/5 p-3 ring-1 ring-white/5">

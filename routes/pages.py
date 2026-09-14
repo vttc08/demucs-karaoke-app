@@ -509,7 +509,7 @@ async def media_subtitles_page(
 
     media_suffix = Path(media_item.media_path).suffix.lower()
     is_video = media_suffix in _VIDEO_SUFFIXES
-    docs_target = app_url(build_docs_url(locale))
+    docs_root = app_url(build_docs_url(locale, "tasks/media-administration"))
     return templates.TemplateResponse(
         request,
         "media_subtitles.html",
@@ -530,7 +530,9 @@ async def media_subtitles_page(
                 "upload_url": app_url(f"/api/media/{media_item.id}/subtitles/upload"),
                 "files_url": app_url(f"/api/media/{media_item.id}/files"),
                 "package_url": app_url(f"/api/media/{media_item.id}/download"),
-                "docs_url": docs_target,
+                "docs_url": f"{docs_root}#resynchronize-inaccurate-whisperx-lyrics",
+                "ass_docs_url": f"{docs_root}#ssa-karaoke-timing",
+                "srt_docs_url": f"{docs_root}#srt-word-editing",
                 "split_merge_url": app_url(f"/media-subtitles/{media_item.id}/split-merge"),
             },
         },
@@ -573,7 +575,8 @@ async def media_subtitles_split_merge_page(
             status_code=404,
         )
 
-    docs_target = app_url(build_docs_url(locale, "subtitles"))
+    docs_target = app_url(build_docs_url(locale, "tasks/media-administration"))
+    docs_target = f"{docs_target}#split-and-merge-lines"
     return templates.TemplateResponse(
         request,
         "media_subtitles_split_merge.html",

@@ -44,6 +44,7 @@ def test_media_vocals_page_renders_admin_shell(client, tmp_path, monkeypatch):
     assert 'id="vocal-sync-youtube-selected"' in response.text
     assert 'id="vocal-sync-prepare-youtube"' in response.text
     assert 'type="submit" aria-label="Prepare Upload"' in response.text
+    assert 'href="/help/tasks/create-ai-karaoke/#add-vocals-to-a-premade-karaoke-video"' in response.text
 
 
 def test_prepare_youtube_returns_task_id(client):

@@ -22,7 +22,12 @@
                     <div class="flex flex-wrap items-end justify-between gap-3">
                         <div class="min-w-0">
                             <p class="text-[10px] font-black uppercase tracking-[0.18em] text-on-surface-variant">{{ t('vocalsync.workspace') }}</p>
-                            <h2 id="vocal-sync-search-heading" class="mt-1 truncate font-headline text-2xl font-black tracking-tight text-on-surface sm:text-[1.75rem]">{{ vocal_sync.title }}</h2>
+                            <div class="mt-1 flex items-center gap-2">
+                                <h2 id="vocal-sync-search-heading" class="truncate font-headline text-2xl font-black tracking-tight text-on-surface sm:text-[1.75rem]">{{ vocal_sync.title }}</h2>
+                                <a href="{{ docs_url('tasks/create-ai-karaoke') }}#add-vocals-to-a-premade-karaoke-video" target="_blank" rel="noopener noreferrer" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant transition hover:text-primary" aria-label="{{ t('settings.docs_help') }}" title="{{ t('settings.docs_help') }}">
+                                    <span class="material-symbols-outlined text-base">help</span>
+                                </a>
+                            </div>
                             <p class="truncate text-xs font-semibold text-primary">{{ vocal_sync.artist or t('common.unknown_artist') }}</p>
                         </div>
                         <span id="vocal-sync-state" class="rounded-full border border-white/10 bg-surface-container-highest/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">

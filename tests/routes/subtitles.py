@@ -66,6 +66,9 @@ def test_media_subtitles_page_renders_admin_shell(client, tmp_path, monkeypatch)
     assert "Lyrics Editor" in response.text
     assert 'data-subtitle-upload-form="ass"' in response.text
     assert 'data-subtitle-upload-form="srt"' in response.text
+    assert 'href="/help/tasks/media-administration/#resynchronize-inaccurate-whisperx-lyrics"' in response.text
+    assert 'href="/help/tasks/media-administration/#ssa-karaoke-timing"' in response.text
+    assert 'href="/help/tasks/media-administration/#srt-word-editing"' in response.text
 
 
 def test_media_subtitles_page_shows_404_when_synced_lyrics_are_missing(client, tmp_path, monkeypatch):
@@ -349,6 +352,7 @@ def test_media_subtitles_split_merge_page_renders_admin_shell(client, tmp_path, 
     assert "Split/Merge Editor" in response.text
     assert f'data-json-url="/api/media/{media_id}/subtitles/json"' in response.text
     assert f'href="/media-subtitles/{media_id}"' in response.text
+    assert 'href="/help/tasks/media-administration/#split-and-merge-lines"' in response.text
 
 
 def test_media_subtitles_split_merge_page_returns_404_shell_when_json_missing(client, tmp_path, monkeypatch):
