@@ -47,4 +47,4 @@ The Demucs service works best with a CUDA-enabled NVIDIA GPU. It can run without
 
 Back up your app data and media periodically, and upgrade when new versions are released. See [Backup, restore, and upgrade](backup-and-restore.md) for more information.
 
-See [Production deployments](../deployment/index.md) for more information about deploying DMKaraoke in production, including additional services such as proxy servers, reverse proxies, monitoring, and access control.
+See [server administration](../tasks/server-administration.md) for more information about deploying DMKaraoke in production, including additional services such as proxy servers, reverse proxies, monitoring, and access control.

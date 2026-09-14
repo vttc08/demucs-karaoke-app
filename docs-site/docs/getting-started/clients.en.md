@@ -12,7 +12,7 @@ In addition, browsers in some older Apple devices only support H.264 + AAC media
 ## Guest Clients
 Any device with a modern web browser will work to search, queue and control karaoke media. 
 
-The guest must be able to reach the main application server, either local network or internet. If Wi-Fi client isolation (or Guest Network) is used, consider using a reverse proxy and enable hairpin NAT on your router. More network configuration will be covered in [deployment](deployment/index.md).
+The guest must be able to reach the main application server, either local network or internet. If Wi-Fi client isolation (or Guest Network) is used, consider using a reverse proxy and enable hairpin NAT on your router. More network configuration will be covered in [server administration](tasks/server-administration.md).
 
 For a shared device, a tablet/laptop is suitable, consider enabling kiosk mode to prevent guests from leaving the app. 
 

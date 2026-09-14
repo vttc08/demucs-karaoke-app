@@ -41,6 +41,8 @@ It may not be convenient to reach for the keyboard to control the stage device. 
 !!! note "Guest and admin control"
     Guests can manage their own queued songs, while administrators can queue on behalf of another user and manage the full queue.
 
+    As an administrator, you can also remove or rearrange songs queued by other users. 
+
 
 - **Pause/Play**: Pause or resume the current song.
 - **Skip**: Skip the current song.

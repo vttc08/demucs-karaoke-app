@@ -52,7 +52,7 @@ After the song is queued, the application downloads the source, separates the vo
 
 !!! note "If processing fails"
 
-    If downloading fails, refer to [troubleshooting](#exact-link-will-be-added-later). If vocal separation or lyrics alignment fails, takes too long, or produces incorrect results, use the same troubleshooting guide for additional options.
+    If downloading fails, see the [yt-dlp troubleshooting guide](../troubleshooting/index.md#yt-dlp-fails-to-download). For vocal separation problems, see [Vocal separation is very slow](../troubleshooting/index.md#vocal-separation-is-very-slow). For lyrics alignment problems or incorrect synchronization, see [WhisperX alignment troubleshooting](../troubleshooting/index.md#whisperx-alignment-fails-or-takes-too-long) and [WhisperX synchronization troubleshooting](../troubleshooting/index.md#whisperx-lyrics-are-poorly-synchronized).
 
 ## Create karaoke from a lyrics video
 
@@ -75,7 +75,7 @@ The song requires vocal-separation processing. It appears on the stage after pro
 
 !!! note "If processing fails"
 
-    If downloading or vocal separation fails, refer to [troubleshooting](#exact-link-will-be-added-later) for additional options.
+    If downloading fails, see the [yt-dlp troubleshooting guide](../troubleshooting/index.md#yt-dlp-fails-to-download). If vocal separation fails or takes too long, see [Vocal separation is very slow](../troubleshooting/index.md#vocal-separation-is-very-slow).
 
 ## Create karaoke from uploaded files
 
@@ -106,7 +106,7 @@ Enable **Add to queue** to add the song to the queue and show it on the stage af
 
 !!! note "If processing fails"
 
-    If vocal separation or lyrics alignment fails, takes too long, or produces incorrect results, refer to [troubleshooting](#exact-link-will-be-added-later) for additional options.
+    If vocal separation fails or takes too long, see [Vocal separation is very slow](../troubleshooting/index.md#vocal-separation-is-very-slow). If lyrics alignment fails, takes too long, or produces incorrect synchronization, see [WhisperX alignment troubleshooting](../troubleshooting/index.md#whisperx-alignment-fails-or-takes-too-long) and [WhisperX synchronization troubleshooting](../troubleshooting/index.md#whisperx-lyrics-are-poorly-synchronized).
 
 ## Modify existing video
 
@@ -135,7 +135,7 @@ Refer to [Create karaoke from a music video](#create-karaoke-from-a-music-video)
 
 !!! note "If processing fails"
 
-    If vocal separation or lyrics alignment fails, takes too long, or produces incorrect results, refer to [troubleshooting](#exact-link-will-be-added-later) for additional options.
+    If vocal separation fails or takes too long, see [Vocal separation is very slow](../troubleshooting/index.md#vocal-separation-is-very-slow). If lyrics alignment fails, takes too long, or produces incorrect synchronization, see [WhisperX alignment troubleshooting](../troubleshooting/index.md#whisperx-alignment-fails-or-takes-too-long) and [WhisperX synchronization troubleshooting](../troubleshooting/index.md#whisperx-lyrics-are-poorly-synchronized).
 
 ## Add vocals to a premade karaoke video
 

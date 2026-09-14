@@ -99,5 +99,3 @@ nav:
       - Media Administration: tasks/media-administration.md
   - Troubleshooting:
       - Troubleshooting: troubleshooting/index.md
-  - Deployment:
-      - Deployment: deployment/index.md
