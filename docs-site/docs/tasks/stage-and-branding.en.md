@@ -15,7 +15,7 @@ This page explains how to configure the stage for guests, customize the lyrics d
 
 ### 1. Configure the stage QR code
 
-To provide a seamless experience for guests, configure a QR code with a URL that their devices can access. A [reverse proxy with access control](#link-to-deployment-consideration) can be useful when the queue should not be publicly available.
+To provide a seamless experience for guests, configure a QR code with a URL that their devices can access. A [reverse proxy with access control](server-administration.md#restrict-access-to-guest-wi-fi-users) can be useful when the queue should not be publicly available.
 
 ![Stage display](../assets/images/stage.webp)
 
@@ -41,7 +41,7 @@ Here are two ways to create or choose lobby media:
 
     Follow [Queue a premade karaoke video](karaoke-tasks.md#queue-a-premade-karaoke-video) to download a video to the library.
 
-    - You can [rename the video](create-ai-karaoke.md#1-open-the-media-editor), for example to `stage-lobby.mp4`, for easy reference.
+    - You can [rename the video](create-ai-karaoke.md), for example to `stage-lobby.mp4`, for easy reference.
 
 -   __Create a video with Remotion__
 

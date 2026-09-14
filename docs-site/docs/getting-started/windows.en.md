@@ -38,7 +38,7 @@ uv pip install -e .
     If git is not available, you can download the zip from GitHub and extract it.
 
 !!! note
-    The default installation do not include `numpy` and `scipy`, which are required for [vocal sync](link to be added later). If you need vocal sync, install the `vocal-sync` extra:
+    The default installation does not include `numpy` and `scipy`, which are required for [vocal sync](../tasks/create-ai-karaoke.md). If you need vocal sync, install the `vocal-sync` extra:
 
     ```powershell
     uv pip install -e .[vocal-sync]
@@ -59,7 +59,7 @@ uv run scripts/build_docs.py
 cp .env.example .env
 ```
 
-The default environment configuration which should work for most use cases. You can review the detailed configuration in the [configuration section](../configuration/index.md).
+The default environment configuration should work for most use cases. You can review the detailed configuration in the [Settings page](../configuration/settings.md).
 
 ### 6. Running the application
 
@@ -82,7 +82,7 @@ Once the application is running, open `http://<your-server-ip>:8000/login` and l
 
 ## Next Steps
 
-- [Configuring the application](../configuration/index.md)
+- [Configure the application](../configuration/settings.md)
 - [Deploy Demucs service (optional)](demucs-service.md)
 - [Clients](clients.md)
-- [Explore features](../features/index.md)
+- [Explore the queue page](../features/queue-page.md)

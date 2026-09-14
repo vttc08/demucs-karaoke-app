@@ -32,7 +32,7 @@ There are several ways to queue a song. Choose the option that best matches the 
 
     Use a lyrics video and let the application remove the original vocals.
 
-    [Queue a lyrics video](create-ai-karaoke.md#create-karaoke-from-a-lyrics-video)
+    [Queue a lyrics video](create-ai-karaoke.md)
 
 -   ![Immersive karaoke](../assets/images/immersivekaraoke.webp)
 
@@ -40,11 +40,11 @@ There are several ways to queue a song. Choose the option that best matches the 
 
     Create a personalized karaoke track with vocal separation, synchronized lyrics, and the original music video or album art.
 
-    [Queue a music video](create-ai-karaoke.md#create-karaoke-from-a-music-video)
+    [Queue a music video](create-ai-karaoke.md)
 
 </div>
 
-You can also [upload your own music file](create-ai-karaoke.md#create-karaoke-from-uploaded-files) and add vocal separation and synchronized lyrics.
+You can also [upload your own music file](create-ai-karaoke.md) and add vocal separation and synchronized lyrics.
 
 Take a moment to review the available queueing options. This will help you choose the right option for the type of YouTube video you found and understand what the application can do with it.
 

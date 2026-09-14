@@ -20,7 +20,7 @@ YouTube has a vast library of karaoke videos, including channels such as [Sing K
 - The application automatically detects the karaoke video, so no karaoke processing is needed. Queue it and wait for the download to complete.
 - The song is added to the queue and appears on the stage once the download is complete.
 
-If downloading fails, please refer to [troubleshooting](#exact-link-will-be-added-later).
+If downloading fails, please refer to the [yt-dlp troubleshooting guide](../troubleshooting/index.md).
 
 ## Queue a song as another user
 
@@ -50,13 +50,13 @@ It may not be convenient to reach for the keyboard to control the stage device. 
 - **FF+5**: Fast-forward the current song by 5 seconds.
 - **Vocals**: Toggle the vocal backing track on or off (supported songs only).
 - **Vocal Volume**: Adjust the vocal volume (supported songs only).
-- **Style**: Adjust advanced lyrics [customization](#will-link-later) (supported songs only).
+- **Style**: Adjust advanced lyrics [customization](stage-and-branding.md#customize-the-stage-display) (supported songs only).
 
 ## Use your own song
 
 If you have downloaded karaoke videos or have trouble downloading using the application, you can upload your own media to the library. 
 
-The application support a variety of commonly used media formats:
+The application supports a variety of commonly used media formats:
 
 - Video: MP4, WEBM, MKV, MOV, AVI, M4V
 - Audio: MP3, WAV, M4A, FLAC, AAC, OGG, OPUS, WEBM
@@ -68,7 +68,7 @@ The application support a variety of commonly used media formats:
 
     - Open the Media page and click **Upload**.
     - Select a media file and optionally provide a title and artist.
-    - For advanced karaoke processing options, refer to [Create karaoke from uploaded files](create-ai-karaoke.md#create-karaoke-from-uploaded-files).
+    - For advanced karaoke processing options, refer to the [Create karaoke from uploaded files](create-ai-karaoke.md).
 
 - __Externally__
 

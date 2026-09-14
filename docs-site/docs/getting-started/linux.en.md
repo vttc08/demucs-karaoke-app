@@ -23,7 +23,7 @@ uv pip install -e .
 
 !!! note
 
-    The default installation does not include `numpy` and `scipy`, which are required for [vocal sync](link to be added later). If you need vocal sync, install the `vocal-sync` extra:
+    The default installation does not include `numpy` and `scipy`, which are required for [vocal sync](../tasks/create-ai-karaoke.md). If you need vocal sync, install the `vocal-sync` extra:
 
 ```bash
 uv pip install -e ".[vocal-sync]"
@@ -51,7 +51,7 @@ uv run scripts/build_docs.py
 
 Store the environment in `/etc/karaoke.env`:
 
-The following configuration should work for most use cases. Replace the example paths and service URL with values for your host. You can review the detailed configuration in the configuration section when it becomes available.
+The following configuration should work for most use cases. Replace the example paths and service URL with values for your host. You can review the detailed configuration in the [configuration section](../configuration/settings.md).
 
 ```env
 HOST=0.0.0.0

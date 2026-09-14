@@ -93,7 +93,7 @@ You can partially fix this by [reducing the text size or increasing the maximum 
 
 There are two ways to fix the lines:
 
-1. Set [Rewrap Lyrics Lines](create-ai-karaoke.md#2-configure-karaoke-options) during WhisperX processing. The default is 36 characters per line for English and 12 for CJK. Choose a limit that works best with your lyric presets and customization.
+1. Set **Rewrap Lyrics Lines** during WhisperX processing on the [Create AI Karaoke](create-ai-karaoke.md) page. The default is 36 characters per line for English and 12 for CJK. Choose a limit that works best with your lyric presets and customization.
 2. Use split and merge manually. Split a long line at the word where it flows best, or combine multiple smaller lines.
 
 ![Split and Merge](../assets/images/sysadmin/merge-split.gif)
@@ -108,7 +108,7 @@ There are two ways to fix the lines:
 
 When a YouTube video is downloaded, it retains the default metadata: the title is the video title, the artist is blank, and the filename is `<video_title>.mp4`. This may not be ideal for library organization. The video is also downloaded as-is, and many karaoke videos contain intros and outros that are not suitable for seamless karaoke.
 
-See [Modify Existing Video](create-ai-karaoke.md#modify-existing-video) for information about adjusting video metadata.
+See [Modify Existing Video](create-ai-karaoke.md) for information about adjusting video metadata.
 
 ### Lossless Trim
 

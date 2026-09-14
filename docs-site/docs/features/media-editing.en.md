@@ -40,4 +40,4 @@ WhisperX output may not be perfect, and you may want to make minor adjustments t
 
 It may be useful to add backing vocals to a premade karaoke video for practice. The **Add Vocals** feature lets you search YouTube or upload a full song, then extract its vocals with Demucs.
 
-With a supported [vocal-sync](link to be added later) installation, the extracted vocals can be synchronized automatically with the original karaoke video. You can also adjust the vocal track timing manually to add or subtract a delay.
+With the supported [vocal-sync extra](../tasks/create-ai-karaoke.md) installed, the extracted vocals can be synchronized automatically with the original karaoke video. See the **Add vocals to a premade karaoke video** section for the complete workflow. You can also adjust the vocal track timing manually to add or subtract a delay.
