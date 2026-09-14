@@ -258,10 +258,15 @@ The translation files are located in `locales/` as `<language_code>.json` files 
 
 Create a new file and add your translated strings. Please ensure all keys are translated before creating a pull request.
 
+Add the locales in [`i18n_service.py`](https://github.com/vttc08/demucs-karaoke-app/blob/main/services/i18n_service.py) in `ALL_LOCALES`.
+
+It's also required to add the language to [`mkdocs.yml`](https://github.com/vttc08/demucs-karaoke-app/blob/main/docs-site/mkdocs.yml) under `i18n.languages`, this provides a fallback in MkDocs, you do not need to add documentation translations for `locales` `.json` file changes.
+
 When completed, run the following commands to validate all keys are translated.
 
 ```bash
 uv run pytest tests/routes/pages.py::test_locale_catalogs_have_matching_keys
+uv run pytest tests/test_docs_i18n.py
 uv run python scripts/audit_i18n.py --check
 ```
 
