@@ -103,6 +103,8 @@
 .trim-cdg-panel {
     display: grid;
     gap: 0.85rem;
+    align-self: start;
+    align-content: start;
     padding: 1rem 1.05rem;
     border-radius: 1.25rem;
     border: 1px solid rgba(255, 216, 79, 0.18);
@@ -152,11 +154,13 @@
 
 .trim-cdg-actions {
     display: flex;
+    align-items: flex-start;
     justify-content: flex-start;
 }
 
 .trim-cdg-actions button {
     display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 0.45rem;
     min-height: 2.45rem;
