@@ -1663,9 +1663,13 @@ function renderQueueStageItem(item, movableIndexById, movableCount) {
     const status = getStatusInfo(item.status);
     const statusHtml = isProcessing ? renderQueueProgressBlock(item) : !isPlaying ? `
         <span class="queue-status-chip ${item.status === 'failed' ? 'queue-status-failed' : item.status === 'ready' ? 'queue-status-ready' : 'queue-status-waiting'}">${status.icon}${escapeHtml(status.label)}</span>` : '';
-    const actionHtml = item.can_cancel_task ? `
-        <button class="queue-row-action text-error hover:bg-error/15" onclick="cancelTask('${item.task_id}', this)" title="${escapeHtml(t('queue.cancel_task'))}" aria-label="${escapeHtml(t('queue.cancel_task'))}"><span class="material-symbols-outlined text-[19px]">close</span></button>` : item.can_remove ? `
+    const retryActionHtml = item.can_retry_task ? `
+        <button class="queue-row-action text-primary hover:bg-primary/15" onclick="retryTask('${item.task_id}', this)" title="${escapeHtml(t('common.retry'))}" aria-label="${escapeHtml(t('common.retry'))}"><span class="material-symbols-outlined text-[19px]">refresh</span></button>` : '';
+    const removeActionHtml = item.can_remove ? `
         <button class="queue-row-action hover:text-error" onclick="removeSong('${item.id}')" title="${escapeHtml(t('queue.remove'))}" aria-label="${escapeHtml(t('queue.remove'))}"><span class="material-symbols-outlined text-[19px]">remove</span></button>` : '';
+    const cancelActionHtml = item.can_cancel_task ? `
+        <button class="queue-row-action text-error hover:bg-error/15" onclick="cancelTask('${item.task_id}', this)" title="${escapeHtml(t('queue.cancel_task'))}" aria-label="${escapeHtml(t('queue.cancel_task'))}"><span class="material-symbols-outlined text-[19px]">close</span></button>` : '';
+    const actionHtml = retryActionHtml + cancelActionHtml + (item.can_cancel_task ? '' : removeActionHtml);
     return `
         <article class="queue-item queue-stage-item ${isPlaying ? 'queue-stage-item-playing' : ''} ${canOpenTaskDetails || canOpenMediaDetails ? 'cursor-pointer hover:border-primary/30' : ''}" data-id="${item.id}" data-media-id="${item.media_id ?? ''}" data-task-id="${item.task_id ?? ''}" data-status="${item.status}" data-processing-progress="${item.processing_progress ?? ''}" data-processing-label="${escapeHtml(item.processing_label || '')}">
             ${moveControls}
@@ -2032,8 +2036,53 @@ async function cancelTask(taskId, button) {
     }
 }
 
+async function retryTask(taskId, button) {
+    const numericTaskId = Number(taskId);
+    if (!Number.isFinite(numericTaskId) || numericTaskId <= 0) {
+        return;
+    }
+    const actionButton = button || null;
+    const originalHtml = actionButton?.innerHTML || "";
+    if (actionButton) {
+        actionButton.disabled = true;
+        actionButton.setAttribute("aria-busy", "true");
+        actionButton.title = t('queue.retrying');
+        actionButton.setAttribute("aria-label", t('queue.retrying'));
+        actionButton.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">sync</span>';
+    }
+    try {
+        const response = await fetch(window.KaraokeURLs.appUrl(`/api/tasks/${numericTaskId}/retry`), {
+            method: "POST",
+        });
+        if (!response.ok) {
+            let detail = t('queue.retry_task_failed');
+            try {
+                const payload = await response.json();
+                if (payload?.detail) {
+                    detail = payload.detail;
+                }
+            } catch (_) {
+                // Keep fallback text.
+            }
+            throw new Error(detail);
+        }
+        refreshQueue(true);
+    } catch (error) {
+        console.error('Error retrying task:', error);
+        alert(error instanceof Error ? error.message : t('queue.retry_task_failed'));
+        if (actionButton) {
+            actionButton.disabled = false;
+            actionButton.removeAttribute("aria-busy");
+            actionButton.title = t('common.retry');
+            actionButton.setAttribute("aria-label", t('common.retry'));
+            actionButton.innerHTML = originalHtml || '<span class="material-symbols-outlined">refresh</span>';
+        }
+    }
+}
+
 window.moveSong = moveSong;
 window.cancelTask = cancelTask;
+window.retryTask = retryTask;
 
 // WebSocket connection for real-time queue updates
 class QueueWebSocket {

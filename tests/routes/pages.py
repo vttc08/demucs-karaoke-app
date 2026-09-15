@@ -47,6 +47,50 @@ def test_get_queue_with_items(client):
     assert data[0]["title"] == "Song 1"
     assert data[1]["title"] == "Song 2"
 
+
+def test_get_queue_exposes_retry_for_owned_failed_task(client):
+    """A failed queue task should expose its retry action to its owner."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="queue-retry-action",
+            file_stem="queue-retry-action",
+            title="Queue Retry Action",
+            media_path="/media/queue-retry-action.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1,
+            user_id="queue-owner",
+            status=QueueStatus.FAILED.value,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+        db.add(
+            ProcessingTask(
+                task_type="queue_prepare",
+                source_kind="youtube",
+                target_queue_item_id=queue_item.id,
+                target_media_item_id=media.id,
+                status=ProcessingTaskStatus.FAILED.value,
+                stage="failed",
+            )
+        )
+        db.commit()
+        queue_item_id = queue_item.id
+
+    client.cookies.set("karaoke_guest_id", "queue-owner")
+    response = client.get("/api/queue/")
+
+    assert response.status_code == 200
+    payload = next(item for item in response.json() if item["id"] == queue_item_id)
+    assert payload["can_retry_task"] is True
+    assert payload["task_id"] is not None
+
 def test_get_current_item_empty(client):
     """Test getting current item when queue is empty."""
     response = client.get("/api/queue/current")

@@ -447,6 +447,8 @@
   "queue.cancel_task": "Annuler la tâche",
   "queue.canceling": "Annulation...",
   "queue.cancel_task_failed": "Impossible d'annuler la tâche",
+  "queue.retrying": "Nouvelle tentative...",
+  "queue.retry_task_failed": "Échec de la nouvelle tentative",
   "queue.close_config": "Fermer la configuration",
   "queue.config": "Configurer la file d'attente",
   "queue.config_help": "Ouvrir l'aide aux paroles de la file d'attente",

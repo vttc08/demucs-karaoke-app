@@ -447,6 +447,8 @@
   "queue.cancel_task": "取消任务",
   "queue.canceling": "正在取消...",
   "queue.cancel_task_failed": "取消任务失败",
+  "queue.retrying": "正在重试...",
+  "queue.retry_task_failed": "重试任务失败",
   "queue.close_config": "关闭配置",
   "queue.config": "配置队列",
   "queue.config_help": "打开队列歌词帮助",

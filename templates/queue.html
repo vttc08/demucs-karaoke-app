@@ -344,10 +344,14 @@
                             </span>
                             {% endif %}
                         </div>
-                        <div class="flex shrink-0 items-center">
+                        <div class="flex shrink-0 items-center gap-1">
+                            {% if item.can_retry_task %}
+                            <button class="queue-row-action text-primary hover:bg-primary/15" onclick="retryTask('{{ item.task_id }}', this)" title="{{ t('common.retry') }}" aria-label="{{ t('common.retry') }}"><span class="material-symbols-outlined text-[19px]">refresh</span></button>
+                            {% endif %}
                             {% if item.can_cancel_task %}
                             <button class="queue-row-action text-error hover:bg-error/15" onclick="cancelTask('{{ item.task_id }}', this)" title="{{ t('queue.cancel_task') }}" aria-label="{{ t('queue.cancel_task') }}"><span class="material-symbols-outlined text-[19px]">close</span></button>
-                            {% elif item.can_remove %}
+                            {% endif %}
+                            {% if item.can_remove %}
                             <button class="queue-row-action hover:text-error" onclick="removeSong('{{ item.id }}')" title="{{ t('queue.remove') }}" aria-label="{{ t('queue.remove') }}"><span class="material-symbols-outlined text-[19px]">remove</span></button>
                             {% endif %}
                         </div>

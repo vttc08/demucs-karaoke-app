@@ -447,6 +447,8 @@
   "queue.cancel_task": "Cancel Task",
   "queue.canceling": "Canceling...",
   "queue.cancel_task_failed": "Failed to cancel task",
+  "queue.retrying": "Retrying...",
+  "queue.retry_task_failed": "Failed to retry task",
   "queue.close_config": "Close configuration",
   "queue.config": "Configure Queue",
   "queue.config_help": "Open queue lyrics help",

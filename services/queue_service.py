@@ -743,7 +743,13 @@ class QueueService:
             db.query(ProcessingTask)
             .filter(
                 ProcessingTask.target_queue_item_id.in_(queue_item_ids),
-                ProcessingTask.status.in_(["pending", "downloading", "processing"]),
+                ProcessingTask.status.in_([
+                    "pending",
+                    "downloading",
+                    "processing",
+                    "failed",
+                    "canceled",
+                ]),
             )
             .order_by(ProcessingTask.id.desc())
             .all()
@@ -893,12 +899,39 @@ class QueueService:
             is_admin=is_admin,
             requester_id=requester_id,
         )
+        response.can_retry_task = self.can_retry_queue_item_task(
+            item,
+            active_task=active_task,
+            is_admin=is_admin,
+            requester_id=requester_id,
+        )
         response.can_remove = self.can_remove_queue_item(
             item,
             is_admin=is_admin,
             requester_id=requester_id,
         )
         return response
+
+    def can_retry_queue_item_task(
+        self,
+        item: QueueItem,
+        *,
+        active_task: ProcessingTask | None | object = _ACTIVE_TASK_UNSET,
+        is_admin: bool = False,
+        requester_id: str | None = None,
+    ) -> bool:
+        """Return whether the current viewer may retry the queue item's terminal task."""
+        if active_task is _ACTIVE_TASK_UNSET:
+            active_task = self._active_task_for_queue_item(item)
+        if active_task is None or active_task.status not in {"failed", "canceled"}:
+            return False
+        if is_admin:
+            return True
+        return self.can_manage_queue_item(
+            item,
+            is_admin=is_admin,
+            requester_id=requester_id,
+        )
 
     def can_remove_queue_item(
         self,
