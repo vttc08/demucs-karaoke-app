@@ -20,9 +20,11 @@ a loading state.
 
 ## Range handling
 
-- FFprobe reads the duration, stream types, and I-frame timestamps.
-- Video start values snap backward to the nearest I-frame.
-- Video end values snap forward to the nearest I-frame or the media duration.
+- FFprobe reads the duration and stream types, then scans the first video stream's packet metadata
+  for keyframe-marked random-access timestamps. This avoids decoding the video and does not confuse
+  VP9 intra-only pictures with independently decodable keyframes.
+- Video start values snap backward to the nearest keyframe.
+- Video end values snap forward to the nearest keyframe or the media duration.
 - Audio-only files use the exact requested values.
 - The backend repeats validation and snapping; frontend values are not trusted.
 - The item cannot be trimmed while it is playing or has an active processing task.

@@ -308,6 +308,7 @@ def test_has_audio_stream_returns_false_when_probe_fails(
 
 def test_get_video_keyframes_normalizes_media_start_time(monkeypatch, tmp_path):
     adapter = FFmpegAdapter(ffmpeg_path="/opt/bin/ffmpeg")
+    captured = {}
     monkeypatch.setattr(
         adapter,
         "probe_media",
@@ -320,16 +321,61 @@ def test_get_video_keyframes_normalizes_media_start_time(monkeypatch, tmp_path):
     )
 
     def fake_run(cmd, check, capture_output, text):
+        captured["cmd"] = cmd
         return subprocess.CompletedProcess(
             args=cmd,
             returncode=0,
-            stdout='{"frames":[{"best_effort_timestamp_time":"2.0"},'
-            '{"pts_time":"6.5"},{"best_effort_timestamp_time":"20.0"}]}',
+            stdout='{"packets":[{"pts_time":"2.0","flags":"K_"},'
+            '{"pts_time":"3.0","flags":"__"},'
+            '{"dts_time":"6.5","flags":"K_"},'
+            '{"pts_time":"20.0","flags":"K_"},'
+            '{"pts_time":"invalid","flags":"K_"},'
+            '{"pts_time":"8.0"},null]}',
         )
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
     assert adapter.get_video_keyframes(tmp_path / "input.mp4") == [0.0, 4.5, 10.0]
+    assert captured["cmd"] == [
+        "/opt/bin/ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_packets",
+        "-show_entries",
+        "packet=pts_time,dts_time,flags",
+        "-of",
+        "json",
+        str(tmp_path / "input.mp4"),
+    ]
+
+
+def test_get_video_keyframes_returns_origin_when_key_packets_are_unavailable(
+    monkeypatch, tmp_path
+):
+    adapter = FFmpegAdapter(ffmpeg_path="/opt/bin/ffmpeg")
+    monkeypatch.setattr(
+        adapter,
+        "probe_media",
+        lambda _path: {
+            "duration": 10.0,
+            "start_time": 0.0,
+            "has_video": True,
+            "has_audio": False,
+        },
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout='{"packets":[{"pts_time":"1.0","flags":"__"}]}',
+        ),
+    )
+
+    assert adapter.get_video_keyframes(tmp_path / "input.webm") == [0.0]
 
 
 def test_lossless_trim_maps_all_streams_and_uses_copy(monkeypatch, tmp_path):
