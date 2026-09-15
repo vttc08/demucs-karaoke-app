@@ -9,6 +9,7 @@ import logging
 import random
 import re
 import string
+import time
 import unicodedata
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -29,12 +30,13 @@ from services.ttml_parser import (
 
 logger = logging.getLogger(__name__)
 
-_MUSIXMATCH_BASE_URL = "https://apic-desktop.musixmatch.com/ws/1.1/macro.subtitles.get"
+_MUSIXMATCH_BASE_URL = "https://apic-appmobile.musixmatch.com/ws/1.1/macro.subtitles.get"
 _MUSIXMATCH_PARAMS = {
     "format": "json",
     "namespace": "lyrics_richsynched",
     "subtitle_format": "mxm",
-    "app_id": "web-desktop-app-v1.0",
+    "app_id": "mac-ios-v2.0",
+    "optional_calls": "track.richsync",
 }
 _MUSIXMATCH_DISCLAIMER_RE = re.compile(r"not\s+for\s+commercial\s+use", re.IGNORECASE)
 _NETEASE_USER_AGENT = (
@@ -169,33 +171,41 @@ class MusixmatchLyricsProvider:
     """Musixmatch-backed lyrics fetch provider."""
 
     name = "musixmatch"
+    _cached_mobile_token: Optional[str] = None
+    _cached_mobile_token_source: Optional[str] = None
 
     def __init__(self, token: Optional[str] = None, base_url: Optional[str] = None):
         self.token = (token if token is not None else settings.musixmatch_token).strip()
         self.base_url = (base_url or _MUSIXMATCH_BASE_URL).rstrip("/")
+        self.token_url = f"{self.base_url.rsplit('/', 1)[0]}/token.get"
         self.headers = {
-            "authority": "apic-desktop.musixmatch.com",
-            "cookie": "x-mxm-token-guid=",
+            "Host": "apic-appmobile.musixmatch.com",
+            "authority": "apic-appmobile.musixmatch.com",
+            "X-Cookie": "x-mxm-token-guid=",
+            "x-mxm-app-version": "10.1.1",
+            "X-User-Agent": "Musixmatch/2025120901 CFNetwork/3860.300.31 Darwin/25.2.0",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Connection": "keep-alive",
+            "Accept": "application/json",
         }
 
     async def fetch(self, inferred_song: ls_module.InferredSong, **kwargs: Any) -> Optional[ls_module.LyricsPayload]:
         if not self.token or not inferred_song.title.strip():
             return None
 
-        params = {
-            **_MUSIXMATCH_PARAMS,
-            "q_track": inferred_song.title,
-            "q_artist": inferred_song.artist or "",
-            "q_artists": inferred_song.artist or "",
-            "usertoken": self.token,
-        }
         try:
             async with ls_module.httpx.AsyncClient(
                 **ls_module.build_httpx_client_kwargs(timeout=10.0)
             ) as client:
-                response = await client.get(self.base_url, params=params, headers=self.headers)
-                response.raise_for_status()
-                payload = response.json()
+                token = self._active_token()
+                payload = await self._request_macro(client, inferred_song, token)
+                if self._extract_api_status(payload) == 401:
+                    self._invalidate_cached_token()
+                    token = await self._request_mobile_token(client)
+                    if not token:
+                        return None
+                    self._cache_mobile_token(token)
+                    payload = await self._request_macro(client, inferred_song, token)
         except ls_module.httpx.HTTPError as exc:
             logger.warning(
                 "Musixmatch request failed title=%r artist=%r error=%s",
@@ -218,6 +228,24 @@ class MusixmatchLyricsProvider:
             return None
 
         resolved_song = self._resolve_song(inferred_song, macro_calls)
+        is_match, title_similarity, artist_similarity = self._match_confidence(
+            inferred_song,
+            resolved_song,
+        )
+        if not is_match:
+            logger.warning(
+                "Musixmatch result rejected: metadata mismatch requested_title=%r "
+                "requested_artist=%r returned_title=%r returned_artist=%r "
+                "title_similarity=%.2f artist_similarity=%.2f",
+                inferred_song.title,
+                inferred_song.artist,
+                resolved_song.title,
+                resolved_song.artist,
+                title_similarity,
+                artist_similarity,
+            )
+            return None
+
         synced = self._extract_synced_lrc(macro_calls)
         if synced:
             alternatives: tuple[ls_module.LyricsAlternative, ...] = ()
@@ -261,6 +289,85 @@ class MusixmatchLyricsProvider:
                 provider_score=70.0,
             )
         return None
+
+    def _active_token(self) -> str:
+        provider_type = type(self)
+        if (
+            provider_type._cached_mobile_token
+            and provider_type._cached_mobile_token_source == self.token
+        ):
+            return provider_type._cached_mobile_token
+        return self.token
+
+    def _cache_mobile_token(self, token: str) -> None:
+        provider_type = type(self)
+        provider_type._cached_mobile_token = token
+        provider_type._cached_mobile_token_source = self.token
+
+    def _invalidate_cached_token(self) -> None:
+        provider_type = type(self)
+        if provider_type._cached_mobile_token_source == self.token:
+            provider_type._cached_mobile_token = None
+            provider_type._cached_mobile_token_source = None
+
+    async def _request_macro(
+        self,
+        client: ls_module.httpx.AsyncClient,
+        inferred_song: ls_module.InferredSong,
+        token: str,
+    ) -> object:
+        params = {
+            **_MUSIXMATCH_PARAMS,
+            "q_track": inferred_song.title,
+            "q_artist": inferred_song.artist or "",
+            "q_artists": inferred_song.artist or "",
+            "usertoken": token,
+            "t": str(int(time.time() * 1000)),
+        }
+        response = await client.get(self.base_url, params=params, headers=self.headers)
+        response.raise_for_status()
+        return response.json()
+
+    async def _request_mobile_token(
+        self,
+        client: ls_module.httpx.AsyncClient,
+    ) -> Optional[str]:
+        response = await client.get(
+            self.token_url,
+            params={
+                "app_id": _MUSIXMATCH_PARAMS["app_id"],
+                "user_language": "en",
+                "t": str(int(time.time() * 1000)),
+            },
+            headers=self.headers,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if self._extract_api_status(payload) != 200:
+            logger.warning(
+                "Musixmatch mobile token refresh rejected status=%s",
+                self._extract_api_status(payload),
+            )
+            return None
+
+        message = payload.get("message") if isinstance(payload, dict) else None
+        body = message.get("body") if isinstance(message, dict) else None
+        token = str(body.get("user_token") or "").strip() if isinstance(body, dict) else ""
+        if not token:
+            logger.warning("Musixmatch mobile token refresh returned no token")
+            return None
+        logger.info("Musixmatch mobile token refreshed")
+        return token
+
+    @staticmethod
+    def _extract_api_status(payload: object) -> object:
+        if not isinstance(payload, dict):
+            return None
+        message = payload.get("message")
+        if not isinstance(message, dict):
+            return None
+        header = message.get("header")
+        return header.get("status_code") if isinstance(header, dict) else None
 
     @staticmethod
     def _extract_macro_calls(payload: object) -> Optional[dict]:
@@ -320,6 +427,68 @@ class MusixmatchLyricsProvider:
         track_name = str(track.get("track_name", "")).strip() or inferred_song.title
         artist_name = str(track.get("artist_name", "")).strip() or inferred_song.artist
         return ls_module.InferredSong(title=track_name, artist=artist_name, source=inferred_song.source)
+
+    @staticmethod
+    def _match_confidence(
+        requested_song: ls_module.InferredSong,
+        returned_song: ls_module.InferredSong,
+    ) -> tuple[bool, float, float]:
+        """Check that Musixmatch matched the song that was actually requested."""
+        requested_title = MusixmatchLyricsProvider._normalize_match_text(requested_song.title)
+        returned_title = MusixmatchLyricsProvider._normalize_match_text(returned_song.title)
+        title_similarity = MusixmatchLyricsProvider._similarity(
+            requested_title,
+            returned_title,
+        )
+        title_matches = MusixmatchLyricsProvider._texts_match(
+            requested_title,
+            returned_title,
+            minimum_similarity=0.70,
+        )
+
+        requested_artist = MusixmatchLyricsProvider._normalize_match_text(
+            requested_song.artist or ""
+        )
+        returned_artist = MusixmatchLyricsProvider._normalize_match_text(
+            returned_song.artist or ""
+        )
+        if not requested_artist:
+            return title_matches, title_similarity, 1.0
+
+        artist_similarity = MusixmatchLyricsProvider._similarity(
+            requested_artist,
+            returned_artist,
+        )
+        artist_matches = MusixmatchLyricsProvider._texts_match(
+            requested_artist,
+            returned_artist,
+            minimum_similarity=0.60,
+        )
+        if title_similarity >= 0.90:
+            # Exact or near-exact titles are safe when Musixmatch canonicalizes
+            # an artist alias or transliteration differently from our metadata.
+            return True, title_similarity, artist_similarity
+        return title_matches and artist_matches, title_similarity, artist_similarity
+
+    @staticmethod
+    def _normalize_match_text(value: str) -> str:
+        normalized = unicodedata.normalize("NFKC", value).casefold()
+        normalized = re.sub(r"[^\w\s]", " ", normalized)
+        return " ".join(normalized.split())
+
+    @staticmethod
+    def _similarity(left: str, right: str) -> float:
+        if not left or not right:
+            return 0.0
+        return difflib.SequenceMatcher(None, left, right).ratio()
+
+    @staticmethod
+    def _texts_match(left: str, right: str, *, minimum_similarity: float) -> bool:
+        if not left or not right:
+            return False
+        if left == right or f" {left} " in f" {right} " or f" {right} " in f" {left} ":
+            return True
+        return MusixmatchLyricsProvider._similarity(left, right) >= minimum_similarity
 
     @staticmethod
     def _extract_synced_lrc(macro_calls: dict) -> Optional[str]:

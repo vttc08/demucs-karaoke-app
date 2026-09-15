@@ -359,6 +359,7 @@ class QueueItemResponse(BaseModel):
     can_remove: bool = False
     can_control_stage: bool = False
     can_cancel_task: bool = False
+    can_retry_task: bool = False
     is_karaoke: bool
     status: QueueStatus
     thumbnail: Optional[str] = None

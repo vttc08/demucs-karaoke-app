@@ -3,11 +3,41 @@
 # Deno's official bin image supplies only the architecture-matched executable.
 ARG DENO_VERSION=2.8.0
 ARG UV_VERSION=0.11.2
+ARG FFMPEG_VERSION=7.0.2
 FROM denoland/deno:bin-${DENO_VERSION} AS deno
 
 # uv is used only while building the virtual environment; it is not present in
 # any production target.
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
+
+# John Van Sickle publishes architecture-specific, self-contained FFmpeg
+# archives. Keep only ffmpeg and ffprobe; the archive also contains manpages,
+# source metadata, and optional VMAF models that the app does not use.
+# Uses Github release instead of downloading from source to improve reliability.
+FROM alpine:3.22 AS ffmpeg-static
+ARG FFMPEG_VERSION
+ARG TARGETARCH
+RUN apk add --no-cache curl tar xz \
+    && case "${TARGETARCH}" in \
+         amd64) archive_arch=amd64; checksum=7fa72b652e19bf84c9461e332ea1cdf3 ;; \
+         arm64) archive_arch=arm64; checksum=807afe21601db0a73e426121c7d636ea ;; \
+         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+       esac \
+    && curl --fail --location --silent --show-error \
+         --connect-timeout 20 \
+         --max-time 900 \
+         --retry 6 \
+         --retry-delay 10 \
+         --retry-max-time 900 \
+         --retry-all-errors \
+         --output /tmp/ffmpeg.tar.xz \
+         "https://github.com/pythondev-account/ffmpeg-static/releases/latest/download/ffmpeg-release-${archive_arch}-static.tar.xz" \
+    && echo "${checksum}  /tmp/ffmpeg.tar.xz" | md5sum -c - \
+    && mkdir /tmp/ffmpeg \
+    && tar -xJf /tmp/ffmpeg.tar.xz --strip-components=1 -C /tmp/ffmpeg \
+    && install -D -m 0755 /tmp/ffmpeg/ffmpeg /out/ffmpeg \
+    && install -D -m 0755 /tmp/ffmpeg/ffprobe /out/ffprobe \
+    && rm -rf /tmp/ffmpeg /tmp/ffmpeg.tar.xz
 
 FROM python:3.12-slim-bookworm AS dependencies
 COPY --from=uv /uv /uvx /bin/
@@ -26,6 +56,16 @@ FROM dependencies AS vocal-sync-dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project --extra vocal-sync
 
+# Build the embedded help site in Docker so clean checkouts do not depend on
+# the gitignored static/docs/ artifact being present in the build context.
+FROM python:3.12-slim-bookworm AS docs
+WORKDIR /build
+COPY docs-site/requirements.txt ./docs-site/requirements.txt
+RUN pip install --no-cache-dir -r docs-site/requirements.txt
+COPY docs-site/ ./docs-site/
+COPY scripts/build_docs.py ./scripts/build_docs.py
+RUN python scripts/build_docs.py
+
 FROM python:3.12-slim-bookworm AS runtime-base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -41,7 +81,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FFMPEG_PATH=ffmpeg
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir /app /data \
     && chmod 0777 /data
@@ -54,7 +94,11 @@ COPY routes/ ./routes/
 COPY services/ ./services/
 COPY static/ ./static/
 COPY templates/ ./templates/
+COPY scripts/ ./scripts/
 COPY config.py database.py logging_config.py main.py models.py ./
+# The generated site is produced above instead of relying on the ignored local
+# static/docs/ directory being included in a clean checkout.
+COPY --from=docs /build/static/docs ./static/docs/
 
 # The default numeric identity is intentionally unprivileged. Override it with
 # Compose's `user: "${PUID}:${PGID}"` to match ownership on a host bind mount.
@@ -63,7 +107,14 @@ EXPOSE 8000
 VOLUME ["/data"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
-FROM runtime-base AS runtime-with-deno
+# All production images use the pinned static FFmpeg binaries. This avoids
+# Debian's large shared-library dependency tree while retaining ffmpeg and
+# ffprobe at the paths expected by the application.
+FROM runtime-base AS runtime-with-ffmpeg
+COPY --from=ffmpeg-static /out/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ffmpeg-static /out/ffprobe /usr/local/bin/ffprobe
+
+FROM runtime-with-ffmpeg AS runtime-with-deno
 ENV YTDLP_DENO_PATH=/usr/local/bin/deno
 COPY --from=deno /deno /usr/local/bin/deno
 
@@ -76,5 +127,5 @@ FROM runtime-with-deno AS app
 COPY --from=dependencies /opt/venv /opt/venv
 
 # Experimental smallest core image. yt-dlp external JavaScript execution is unavailable.
-FROM runtime-base AS app-no-deno
+FROM runtime-with-ffmpeg AS app-no-deno
 COPY --from=dependencies /opt/venv /opt/venv

@@ -1,534 +1,296 @@
-# Karaoke App
+# DMKaraoke
 
-Lightweight AI-powered karaoke application for home use.
+![DMKaraoke](static/readme/title.webp)
+
+DMKaraoke is a lightweight web application for home karaoke. It uses machine learning to separate vocals and create word-by-word synced lyrics. The application is **completely free**, with **no advertisements** and **zero cloud subscription fees**. It creates karaoke on your own device.
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+  - [Karaoke App Only](#karaoke-app-only)
+  - [Demucs/WhisperX Service](#demucswhisperx-service)
+  - [Clients](#clients)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Comparison](#comparison)
+- [Translation](#translation)
+- [Development](#development)
+- [License](#license)
+
+## Quick Start
+
+This section is meant to help most people get the application running quickly with mostly default settings. For detailed configuration and usage, please review the [detailed installation guide](https://vttc08.github.io/demucs-karaoke-app/getting-started/overview/).
+
+### Karaoke App Only
+
+For a typical Linux home server setup, Docker installation is recommended and it's listed here.
+
+<details>
+<summary>Docker installation</summary>
+
+1. Download Docker Compose and `.env.example`.
+
+   ```bash
+   wget https://raw.githubusercontent.com/vttc08/demucs-karaoke-app/refs/heads/main/compose.yml
+   wget https://raw.githubusercontent.com/vttc08/demucs-karaoke-app/refs/heads/main/.env.example
+   ```
+
+1. Prepare the environment and folders.
+
+   ```bash
+   mkdir -p data
+   mv .env.example .env
+   ```
+
+   - The application runs as a non-root user by default, so the `data` folder must be created beforehand.
+   - You can change `user: uid:gid` to match your host permissions.
+
+1. Configure the environment using a text editor such as `vim` or `nano`.
+
+   - Review both the `environment` section in `compose.yml` and `.env`. The default configuration should be sufficient for most use cases.
+   > Note: Musixmatch and Last.fm tokens are required for the best lyrics experience. Without them, lyrics functionality will be degraded.
+   - [Last.fm token](https://www.last.fm/api/authentication)
+   - Musixmatch Token (desktop app required): [follow this guide](https://spicetify.app/docs/faq#sometimes-popup-lyrics-andor-lyrics-plus-seem-to-not-work)
+
+1. Start the application.
+
+   ```bash
+   docker compose up
+   # Use `-d` to start in the background, then use `docker compose logs -f` to view logs.
+   ```
+
+1. Configure the admin user and default presets.
+
+   ```bash
+   docker compose exec -it karaoke python scripts/admin_user.py create --username admin
+   docker compose exec -it karaoke python scripts/default_presets.py
+   ```
+
+Optional: configure stage loop (documentation link to be added later).
+
+You should be able to search, download or queue existing karaoke songs.
+
+</details>
+
+### Demucs/WhisperX Service
+
+For advanced features such as vocal separation and karaoke lyrics timing, the Demucs service is required. This service can be installed on a different computer. An Nvidia GPU is preferred for CUDA acceleration, but CPU-only mode will work more slowly.
+
+> Note: I do not have a Linux machine with Nvidia graphics, so these steps have only been tested on Windows. If you have experience running GPU-accelerated machine learning in Linux or Docker, feel free to test and contribute.
+
+<details>
+<summary>Installing Demucs service</summary>
+
+1. Install [Python 3.10](https://www.python.org/downloads/release/python-3100/).
+
+   - Only Python 3.10 has been tested with all ML dependencies. Newer Python versions may not work.
+   - You can also try using `uv` or `conda`, as long as you have a working virtual environment that can run `whisperx` and `demucs`.
+
+1. Download the code.
+
+   ```powershell
+   git clone https://github.com/vttc08/demucs-karaoke-app
+   ```
+
+   - If Git is not available, you can download and extract the repository as a ZIP file, then open the resulting folder in PowerShell.
+
+1. Install dependencies.
+
+   ```powershell
+   py -3.10 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install --upgrade pip
+   ```
+
+   Download [PyTorch](https://pytorch.org/get-started/locally/):
+
+   ```powershell
+   pip install torch==2.8.0+cu126 torchaudio==2.8.0+cu126 torchvision==0.23.0+cu126 --index-url https://download.pytorch.org/whl/cu126
+   ```
+
+   - Choose CPU if your GPU doesn't support CUDA.
+
+   Project dependencies:
+
+   ```powershell
+   cd demucs-karaoke-app # the location where you downloaded the code
+   cd demucs_svc
+   pip install -r requirements.txt
+   ```
+
+1. Prepare a Hugging Face token. Some WhisperX models require authentication.
+
+   Accept the license agreement for the following models:
+
+   - [pyannote/speaker-diarization](https://huggingface.co/pyannote/speaker-diarization)
+   - [pyannote/segmentation](https://huggingface.co/pyannote/segmentation)
+
+   Generate a personal access token from [Hugging Face](https://huggingface.co/settings/tokens) and save it to a file.
+
+   ```powershell
+   New-Item -ItemType Directory -Force -Path $env:HF_HOME | Out-Null
+   $env:HF_TOKEN_PATH="$env:HF_HOME\token"
+   Set-Content -Path $env:HF_TOKEN_PATH -Value "<your_huggingface_token>"
+   ```
+
+   If `HF_HOME` is not set, check your system or user environment variables.
+
+1. Run the application.
+
+   ```powershell
+   uvicorn.exe app:app --host 0.0.0.0 --port 8001
+   ```
+
+1. Verify application health.
+
+PyTorch:
+
+   ```powershell
+   python -c "import torch, torchaudio; print(torch.__version__); print(torchaudio.__version__); print(torch.cuda.is_available())"
+   ```
+
+Web app:
+
+   ```powershell
+   (curl.exe -fsSL http://localhost:8001/health | ConvertFrom-Json).status # ok
+   (curl.exe -fsSL http://localhost:8001/health | ConvertFrom-Json).supported_backends # demucs sherpa_spleeter
+   ```
+
+#### Conda quick setup
+
+If you prefer Conda, create an environment and install the Demucs service dependencies with:
+
+```powershell
+conda create --name demucs-karaoke python=3.10
+conda activate demucs-karaoke
+cd demucs-karaoke-app\demucs_svc
+python -m pip install -r requirements.txt
+```
+
+Install the matching PyTorch build using the command above, adjusted for your CUDA or CPU setup. Then continue with the Hugging Face token, service startup, and health-check steps.
+
+</details>
+
+<details>
+<summary>Configuration web interface</summary>
+
+Navigate to [http://application:8000/login](http://application:8000/login), or use the server's IP address (and base URL, if configured). Log in, then navigate to [/settings](http://application:8000/settings).
+
+Under Karaoke Processing, enter the IP address of the server you just installed Demucs service on.
+
+- The main app server must be able to reach Demucs. Check [Troubleshooting](README.dev.md#troubleshooting) if it cannot.
+- If the Demucs service is running on another network, you can use [Tailscale](https://tailscale.com/kb/1017/install) or a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for reachability.
+
+Scroll down to the bottom and click `Check Demucs`.
+
+For more Demucs-related configuration, please refer to [Separation Backends](docs/separation-backends.md).
+
+</details>
+
+### Clients
+
+<details>
+<summary>Client requirements</summary>
+
+You'll preferably need a desktop computer that can output video over HDMI and sound to your karaoke setup. This quick start does not cover complex karaoke AV setups. A modern web browser such as Chrome, Edge, or Firefox will work.
+
+Android is also supported and can display the stage. On iOS devices, multi-track audio is not supported, so iPhones and iPads cannot play instrumental and vocal tracks simultaneously. See the iOS device limitations and workarounds documentation for more information.
+
+</details>
 
 ## Features
 
-- **Mobile Queue Page**: Search YouTube, add songs to queue
-- **Stage Page**: Auto-play queue with karaoke mode
-- **Karaoke Mode**: Vocal removal + optional sidecar lyrics overlay
-- **Queue Lyrics Viewer**: Phone-friendly lyrics page for the currently playing song (synced + unsynced, line-based cues, aligned JSON preferred when AI karaoke returns it)
-- **Subtitle Workflow**: Admin-only ASS/Aegisub, SRT/SubtitleEdit, and TTML-to-JSON import workflow for round-tripping synced JSON lyrics
-- **Non-Karaoke Mode**: Play original videos
-- **Real-time Queue Updates**: WebSocket push with polling fallback
-- **Mobile-Friendly Reconnects**: Lifecycle-aware websocket recovery on queue, lyrics, and stage pages for faster return after backgrounding or screen-off on mobile browsers
-- **Live Queue Presence**: Queue page shows active guests and join toasts in real time
-- **Frontend Language Switching**: English and Simplified Chinese UI labels with a header selector
+- **User queues**: A mobile-friendly page for searching and adding songs with real-time updates.
+- **Video and lyrics downloads**: Powered by YouTube, Musixmatch, and more; choose any karaoke style.
+- **Flexible architecture**: Heavy ML dependencies are decoupled, keeping the main application lightweight and suitable for most deployments.
+- **AI/ML karaoke processing**: Remove vocals from songs with Demucs and generate word-by-word karaoke timing with WhisperX.
+- **Customizable karaoke display**: Change the lyrics font, style, and display on stage.
+- **Bring your own media**: Upload your own songs and videos for AI/ML karaoke processing.
+- **Media editor**: Use the basic video trimmer and subtitle editor to fix minor karaoke inconsistencies.
+- **Highly configurable**: Start with sensible defaults, then fine-tune settings and scripting options.
+- **Multilingual**: Support English, Chinese, and more for the user interface and lyrics display.
 
-## Requirements
+## Screenshots
 
-- Python 3.11+
-- `uv` for dependency management
-- `yt-dlp` for YouTube downloads
-- Optional: Deno for yt-dlp external JavaScript execution on videos that require it
-- `ffmpeg` for video processing
-- Separation service with Demucs or CPU-only Sherpa+Spleeter (separate machine or CPU host)
+| Standard YouTube karaoke | Lyrics video + vocal removal | Immersive (MV + lyrics) |
+| --- | --- | --- |
+| ![Standard YouTube karaoke](static/readme/regularkaraoke.webp) | ![Lyrics video with vocal removal](static/readme/lyricskaraoke.webp) | ![Immersive karaoke](static/readme/immersivekaraoke.webp) |
 
-## Setup
+<details>
+<summary>Screenshots</summary>
 
-1. **Install uv** (if not already installed):
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+![Queue page](static/readme/queue.webp)
+
+![Stage](static/readme/stage.webp)
+
+![Media](static/readme/media.webp)
+
+![Settings](static/readme/settings.webp)
+
+| Subtitle Editor | Video Trimmer | Add Vocals |
+| --- | --- | --- |
+| ![Subtitle Editor](static/readme/subtitleeditor.webp) | ![Video Trimmer](static/readme/videotrimmer.webp) | ![Add Vocals](static/readme/addvocals.webp) |
+
+</details>
+
+
+## Comparison
+
+Why not YouTube karaoke (Sing King, Musisi, Zoom)?
+
+There are many applications that also use YouTube to display karaoke. The limitations of simple YouTube videos include:
+
+- Not all songs have premade karaoke versions, especially non-English songs.
+- Lyric styles and branding are not customizable.
+- Vocal backing tracks cannot be turned on or off for practice.
+
+As long as there is audio and lyrics, this app can make karaoke tracks from it.
+
+## Translation
+
+Currently, the application is translated into English, simplified and traditional Chinese, and French, while the documentation is translated into simplified Chinese only. You can help with translation.
+
+The translation files are located in `locales/` as `<language_code>.json` files containing key-value pairs for UI strings and their translations.
+
+```json
+  "lyrics.help_default": "Search or upload lyrics to continue.",
 ```
 
-2. **Clone and navigate**:
-```bash
-cd /home/kevin/Documents/karaoke
-```
+Create a new file and add your translated strings. Please ensure all keys are translated before creating a pull request.
 
-3. **Create environment and install dependencies**:
-```bash
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-uv pip install -e ".[dev]"
-```
+Add the locales in [`i18n_service.py`](https://github.com/vttc08/demucs-karaoke-app/blob/main/services/i18n_service.py) in `ALL_LOCALES`.
 
-4. **Install system dependencies**:
-```bash
-# Ubuntu/Debian
-sudo apt-get install ffmpeg
+It's also required to add the language to [`mkdocs.yml`](https://github.com/vttc08/demucs-karaoke-app/blob/main/docs-site/mkdocs.yml) under `i18n.languages`, this provides a fallback in MkDocs, you do not need to add documentation translations for `locales` `.json` file changes.
 
-# Install yt-dlp
-pip install yt-dlp
-```
-
-5. **Configure environment**:
-```bash
-cp .env.example .env
-# Edit .env with your settings
-```
-Set `KARAOKE_BASE_PATH=/karaoke` only when a reverse proxy forwards requests with that prefix
-preserved. Leave it empty to serve the app at `/`, which is the default and keeps existing local
-URLs unchanged.
-
-6. **Initialize database**:
-Database is created automatically on first run.
-
-7. **Create an admin user**:
-Admin accounts are managed from the server, not from the browser. Create or reset an admin password
-with:
-```bash
-uv run python scripts/admin_user.py create --username admin
-```
-The password is stored in SQLite as a PBKDF2-SHA256 hash with a random salt. The login page creates
-a server-side admin session after successful authentication.
-
-## Running
-
-### Development mode
-```bash
-uv run python main.py
-```
-The dev entrypoint uses a finite graceful-shutdown timeout, so active SSE/WebSocket clients will not block Ctrl-C or hot reload forever.
-
-Or with uvicorn directly:
-```bash
-uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude '.venv' --reload-exclude 'logs/*' --reload-exclude '*.log' --reload-exclude '*.log.*'
-```
-
-### Production mode
-```bash
-uv run uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-For Docker, systemd, and Windows deployment notes, including optional Deno support for yt-dlp external JavaScript execution, see [docs/deployment.md](docs/deployment.md).
-
-### Reverse proxy subpath
-
-To serve the app from a subpath such as `/karaoke`, set:
+When completed, run the following commands to validate all keys are translated.
 
 ```bash
-KARAOKE_BASE_PATH=/karaoke
+uv run pytest tests/routes/pages.py::test_locale_catalogs_have_matching_keys
+uv run pytest tests/test_docs_i18n.py
+uv run python scripts/audit_i18n.py --check
 ```
 
-The proxy should preserve the prefix when forwarding, so upstream requests arrive as
-`/karaoke/queue`, `/karaoke/api/queue/ws`, `/karaoke/static/...`, and `/karaoke/media/...`.
-When this variable is unset, the app continues to serve `/queue`, `/stage`, `/api/...`, `/media/...`,
-and `/static/...`.
-
-## Usage
-
-1. **Queue Page** (Mobile): Open `http://<server-ip>:8000/queue`
-     - First-time guests see a dismissible stage-name prompt on the queue page instead of a blocking login page
-     - Guests can skip naming and continue as a generated `Guest ####` name, or edit their name from the queue greeting
-     - See who is currently on the queue page in a live roster, with a small toast when new guests join
-     - Search for songs (local library full-text on title/artist + YouTube in parallel)
-     - Use the library and upload shortcuts under search to browse local media or add your own files
-     - Or paste a YouTube link / video id directly to add external search results
-     - Local matches are preferred in results; duplicate YouTube matches are hidden
-     - Tap **Add** on a YouTube result to open the queue configuration interaction
-     - Tap **Add** on a local library result to enqueue it immediately as a local file
-     - Choose **AI Karaoke Processing** and enable **Lyrics** to reveal the prominent WhisperX word-alignment toggle, title/artist inputs, manual search, a Google search link, an editable lyrics box, lyrics file upload, and an optional WhisperX language override before adding to queue; resolved metadata is saved back into the media entry before queueing
-     - Confirm to add to queue
-     - Queue items show who requested them
-      - Open **Lyrics Viewer** from the queue page to read current-song lyrics on phone/secondary display
-     - Admins can use remote stage controls for any current song; guests can use them only while their own queued song is playing
-     - Queue remote controls include `play/pause`, `skip`, `resync`, and a `+5` relative forward seek button handled by the active stage player
-     - Admin queue controls can target connected stage displays, apply shared lyric presets, and adjust lyric text size/max width without changing each display's browser-local defaults
-     - When an admin queues a song as a live guest from the queue presence list, that guest becomes the owner for later stage controls and queue-item actions; manual typed queue-as names remain display-only
-    - Admin users can clear queued songs, remove individual queued items, and move non-playing queue items up or down
-    - Guest users can remove only their own non-playing queue items from the queue page
-    - Queue status updates in real time (downloading, processing, ready, playing, failed)
-   
-2. **Queue Lyrics Viewer** (Mobile/Desktop): Open `http://<server-ip>:8000/queue/lyrics`
-      - Dedicated lyrics companion view for the currently playing queue item
-      - Synced `.lrc` / `.json` lyrics highlight and auto-follow playback time
-      - Manual scrolling pauses auto-follow until **Follow live** is tapped
-      - Unsynced `.txt` lyrics render as large, freely scrollable text
-      - Optional simplified-Chinese and pinyin display toggles re-render Chinese lyrics only, leaving non-Chinese text unchanged
-      - If no lyrics sidecar is present, the page shows title/artist plus a Google lyrics link
-
-3. **Stage View Page** (Desktop / Mobile Desktop Mode): Open `http://<server-ip>:8000/stage`
-     - Requires an admin session created by the server-managed admin login flow
-     - Presentation-first stage output with fullscreen-optimized player
-     - Fullscreen zen mode keeps the playbar, song metadata, overlays, and cursor hidden across manual skips and automatic song changes; press `Z` to toggle it
-     - Always-on playback shell: queue items switch in-place without full page reload, so fullscreen is preserved during track transitions
-     - Audio-only items such as MP3s use embedded album art as the stage background when available, with a branded fallback background otherwise
-     - When the queue is empty, stage loops lobby media; when a song becomes playable, stage switches to it automatically and returns to lobby when queue drains
-     - Responsive controls overlay: desktop adds a dedicated playback seek bar row, while mobile stays icon-first and moves detailed vocals volume adjustment to `/queue`
-     - Toggle the lyrics overlay on or off while playback is running; vocal mix and lyrics visibility persist across song changes, and the centered karaoke-style overlay only appears in fullscreen so it does not block stage controls on mobile
-     - Legacy MP3+G/CDG sidecars discovered from the media library render directly in the browser canvas instead of going through the timed-text lyrics pipeline
-     - Desktop stage also includes keyboard shortcuts, lyrics-style customization, and a help icon: `←`/`→` seek 5 seconds, `R` resync, `V` vocals, `L` lyrics, `Q` QR, `?` help; the help panel stays open until you close it explicitly
-     - Lyrics style settings are stored in the browser for quick per-device JSON download/apply/upload and include CJK-safe font presets, size, color, outline, line-window, animation options, and optional fullscreen background image/video media from `/media/...`, including a crop-style fill for aligned karaoke cues; admins can also manage shared lyric presets from the stage panel, name each stage display locally, receive targeted preset changes from `/queue`, and toggle the background video off directly without going through preset override
-     - New `/stage` tabs auto-name themselves from device/platform and screen size with a short local id suffix until you set a custom display name
-    - Compact "up next" chips without queue-management actions
-    - Auto-advances when song ends
-   - Receives queue/control updates via WebSocket (`/api/queue/ws`) without periodic polling
-
-4. **Settings Page** (Mobile/Desktop): Open `http://<server-ip>:8000/settings`
-       - Requires an admin session created by the server-managed admin login flow; settings management APIs are also admin-only
-       - Settings are organized into collapsible **Karaoke Processing**, **WhisperX Lyrics**, **Application Paths**, **Downloads**, **Stage**, and **Tools** sections; each section links to the documentation homepage
-       - View current runtime settings
-       - Log out of the active admin session from the settings page
-       - Update Demucs URL, direct-media cutoff, Demucs fallback poll interval, media/cache paths, tool paths, outbound proxy URL, and WhisperX alignment defaults
-       - Optionally set a Demucs API key for WAN or CG-NAT deployments; when blank, the service stays open as before
-       - Check the configured proxy egress IP, org, and city/country from the backend using `ipinfo.io/json`
-       - Enable/disable concurrent yt-dlp search mode
-       - Enable/disable concurrent lyrics providers (NetEase, LRCLib)
-       - Configure WhisperX transcription model, alignment language, language detection, synced-lyrics mode, and preload list for Demucs-side lyric alignment
-       - Use the WhisperX preload button to ask the remote Demucs host to download/cache the listed models on demand
-       - Trigger a remote Demucs garbage-collection pass from the settings page when you want to reclaim GPU memory without shell access
-       - Configure **Stage Lobby Media URL** (`/media/...` or `/cache/...`) for empty-queue loop playback
-       - Configure the stage QR overlay URL for the fullscreen stage view; QR size and placement are adjusted per device on `/stage`
-       - Configure the default vocals volume used when `/stage` or `/queue` loads after a restart
-       - Optionally configure a Deno runtime path for yt-dlp external JavaScript execution
-       - Check current yt-dlp version and update from UI; release binaries use `yt-dlp -U`, while pip/uv installs fall back to an in-environment package update
-      - Apply settings immediately without restarting the app (for processing/runtime behavior)
-       - Persist changes to the database so settings survive app reloads and restarts
-       - View real-time Demucs engine health (online/offline with detail)
-
-5. **Media Library Page** (Mobile/Desktop): Open `http://<server-ip>:8000/media`
-          - Browse existing database-backed media entries in responsive card/table layouts
-          - View title, artist, and capability badges (multi-track, lyrics)
-          - Legacy MP3+G/CDG sidecars are discovered as lyrics sidecars and stored in `lyrics_path`
-          - Local thumbnails prefer an adjacent same-name image sidecar (`.png`, `.jpg`, `.jpeg`, or `.webp`)
-          - Local audio files reuse embedded album art by writing a durable adjacent thumbnail sidecar when cover art is available
-          - Use **Add to Queue** to enqueue a local media row through the existing queue API
-          - Guests can browse and queue items only; edit, scan, upload, and delete controls are admin-only
-          - Admin users can use **Rename** to update title/artist in the database and optionally rename on-disk media/sidecar files
-          - The edit modal can enable **AI Karaoke** for single-track media when Demucs is online; saving creates a monitored media-processing task, and WhisperX lyrics alignment can use a per-save language override
-          - Existing multi-track items show AI Karaoke as enabled but locked, preventing duplicate separation work
-          - Admin users can use **Refresh Sidecars** in the edit modal to rescan just one item's vocals and lyrics sidecars
-          - Lyrics sidecars are classified by suffix: `.lrc` and `.txt` stay under the normal lyrics badge, while WhisperX word-aligned `.json` sidecars get a separate badge; legacy `.cdg` sidecars are treated as read-only display assets and do not unlock the text-lyrics editor
-          - Admin users can open **Lossless Trim** from the edit modal to retain an intro/outro interval without re-encoding; video boundaries snap outward to I-frames and attached vocals/lyrics are shifted to the same interval, while CDG sidecars relabel the same entry point to **Transcode to MP4** and use the editor's fallback path instead
-          - Admin users can open **Add Vocals** from the edit modal to prepare a vocal source from YouTube or upload, review the estimated sync offset, and commit a new guide-vocal sidecar
-          - Admin users can open **Lyrics Editor** from the edit modal to export ASS or SRT subtitle files, edit them in Aegisub or SubtitleEdit, and import the result back into the canonical JSON lyrics sidecar; the subtitle workflow page also accepts TTML uploads on the fallback import path and converts them to JSON
-          - Admin users can use **Delete** to remove the media row and any on-disk media/sidecar files; guest users do not see delete actions
-          - Admin users can open the media edit modal file panel to download the main file or tracked sidecars individually, delete sidecars when they want to re-run processing, or download the whole package as a ZIP; missing tracked sidecars are hidden so the panel only shows real on-disk files
-          - Admin users can trigger **Scan Library** to reconcile DB with filesystem on demand
-          - App also performs one media-library scan on startup/restart
-
-See [docs/lossless-trim-editor.md](docs/lossless-trim-editor.md) for supported
-sidecars, FFmpeg behavior, and the destructive replacement contract.
-See [docs/vocal-sync.md](docs/vocal-sync.md) for the Add Vocals workflow and offset semantics.
-
-6. **Upload Page** (Mobile/Desktop): Open `http://<server-ip>:8000/upload`
-        - Guest uploads are intentionally allowed so household users can add media without an admin session
-        - Uploads are streamed into temporary files and installed atomically; media and selected ZIP contents default to a 2 GiB limit with 1 GiB of disk headroom reserved
-        - Upload MP3, MP4, WebM, MKV, MOV, AVI, M4V, or ZIP bundles into the media library with title and artist metadata
-        - Optionally search, paste, edit, or upload lyrics; saved lyrics are persisted as sidecars for later stage overlay use, the lyrics file picker accepts `.lrc`, `.txt`, or WhisperX `.json`, and WhisperX alignment can use a per-upload language override
-        - Use **Autopilot** after selecting a media file to infer metadata, enable AI karaoke and lyrics sync, search lyrics, then turn on WhisperX alignment; it stops before upload so the result can be reviewed
-        - **AI Karaoke** is available only while Demucs is online and can process uploads whether or not **Add to queue** is enabled
-        - Queued AI uploads use the queue preparation task; non-queued AI uploads create a media-library karaoke task
-        - If Demucs becomes unavailable during submission, the upload is still saved and optionally queued without karaoke processing
-        - Keep the default checked **Add to queue** toggle enabled to enqueue the new media item after upload
-        - Uploaded audio files write embedded album art to a durable adjacent thumbnail sidecar when present
-        - ZIP uploads are treated as imports: the archive must contain one main audio/video file and may include matching `.vocals.*`, `.lrc` / `.json`, and `.png` / `.jpg` / `.jpeg` / `.webp` sidecars; unrelated files are ignored
-        - Successful uploads redirect to the media management page
-
-7. **Access Restricted Page**: Open `http://<server-ip>:8000/access-restricted`
-        - Static reverse-proxy gate page for users who are outside the approved home network
-        - Explains the Wi-Fi / WAN IP check and common masking tools like iCloud Private Relay, Clash, and V2Ray
-
-8. **Login Page**: Open `http://<server-ip>:8000/login`
-        - Guest identification happens inline on the queue page.
-        - Admins sign in with a server-created account stored in the local database.
-        - Admin credentials cannot be created from the web UI.
-
-### Language switching
-
-The shared page header includes a language selector. The app currently supports English (`en`) and
-Simplified Chinese (`zh-CN`) for frontend UI labels only. Song titles, artists, lyrics, filenames,
-provider responses, and other backend content are shown as-is. The selected language is stored in a
-`karaoke_locale` cookie and applies to server-rendered templates and dynamic frontend messages.
-
-See [docs/internationalization.md](docs/internationalization.md) for adding another locale.
-
-### Frontend i18n Development
-
-When adding or modifying UI text in templates or JavaScript:
-
-1. **Add strings to the English catalog** (`locales/en.json`):
-   ```json
-   {
-     "action.queue_song": "Add to Queue",
-     "status.loading": "Loading...",
-     "error.upload_failed": "Upload failed"
-   }
-   ```
-
-2. **Translate to all supported locales** (currently `zh-CN`):
-   - Keep the same keys and placeholder format (`{key}`, `{count}`)
-   - Only translate the value, never the key
-
-3. **Use in templates** (Jinja2):
-   ```html
-   <button>{{ t("action.queue_song") }}</button>
-   ```
-
-4. **Use in JavaScript**:
-   ```javascript
-   const message = window.KaraokeI18n.t("status.loading", {item: title});
-   ```
-
-5. **Test before commit**:
-   ```bash
-   uv run pytest
-   uv run ruff check adapters config.py database.py demucs_svc lyrics main.py models.py routes scripts services
-   uv run python scripts/audit_i18n.py --check
-   npm ci && npm run build:css
-   ```
-   Tests verify that all keys exist in all locales, so missing translations will fail the build.
-
-When concurrent yt-dlp search is enabled:
-- Query without `karaoke` triggers two parallel searches: `<query>` and `<query> karaoke`
-- Query containing `karaoke` uses single-search mode
-- Combined results are staggered/interleaved and de-duplicated by video id
-
-When karaoke mode is enabled:
-- App removes vocals with Demucs and remuxes the output media into the media library root (no subtitle burn path).
-- When lyrics are provided for karaoke processing, the Demucs sidecar flow can optionally run WhisperX forced alignment and stores an `aligned_lyrics.json` sidecar alongside the separated stems.
-- Karaoke prep uses the direct-media cutoff to decide whether small video files go straight to Demucs or get converted to audio first; set it to `0` to always extract/download audio for video files, or raise it on a fast LAN to send more media files directly.
-- Karaoke remuxes and vocals sidecars are served from `/media`, not `/cache`.
-- Lyrics workflow remains available from the queue modal (provider resolve/manual upload), and lyrics are stored as sidecars for stage overlay display.
-- If Demucs is offline/unhealthy, karaoke processing fails fast and queue UI disables karaoke toggles.
-
-Lyrics lookup behavior:
-- Musixmatch is tried first when configured.
-- If Musixmatch misses, NetEase, LRCLib, and any custom providers from `LYRICS_PROVIDER_CUSTOM_PATHS` run concurrently and the highest-scoring result wins.
-- When Musixmatch returns synced LRC and a matching ISRC, the app optionally fetches a validated TTML upgrade from `LYRICS_TTML_STORAGE_URL`. The upgrade is bounded by a short timeout and never blocks the original LRC result; LRC remains the default and the lyrics editor shows a compact upgrade/restore toggle before WhisperX processing.
-- Debug output shows the selected provider score plus provider-specific diagnostics for troubleshooting.
-- The queue modal can pre-resolve lyrics, let users replace them with manual synced text, and persist those lyrics as sidecars when the item is queued. TTML upgrades are normalized to canonical JSON sidecars before persistence so rescans retain timed lyrics.
-- See [docs/custom_lyrics_providers.md](docs/custom_lyrics_providers.md) for the runtime custom-provider contract and a HelloWorld example.
-- See [custom_presets.md](custom_presets.md) for ready-to-use stage lyric presets, JSON settings, and an AI design prompt.
-
-## API Endpoints
-
-See [docs/API.md](docs/API.md) for full API documentation.
-
-### Real-time endpoint
-
-- WebSocket: `/api/queue/ws`
-  - Server heartbeat: `ping`
-  - Client response: `pong`
-  - Queue events: `queue_item_added`, `queue_item_updated`, `queue_item_progress`, `queue_item_removed`, `queue_cleared`, `current_item_changed`, `queue_item_failed`
-  - Stage control events: `stage_control_command`, `stage_state_update`
-  - Client command message: `stage_command` (`play`, `pause`, `skip`, `seek`, `resync`, vocals, lyrics)
-  - Stage commands require an admin session unless the current queue item belongs to the guest sending the command
-
-## Architecture
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for system design details.
+Modifying translation strings is welcome too.
 
 ## Development
 
-### Running tests
+For information about contributing, development setup, testing, and AI-agent workflows, see [README.dev.md](README.dev.md).
+
+To add new features or fix bugs, please create a new branch:
+
+```bash
+git checkout -b feat/my-feature
+```
+
+The project uses `uv` for dependency management. See the [development setup instructions](README.dev.md#setup) for configuring the environment with dependencies.
+
+Run pytest before committing or opening a pull request:
+
 ```bash
 uv run pytest
 ```
 
-The route and service suites are split into focused modules so changes stay local:
-
-- `tests/routes/` holds route/API groups
-- `tests/services/` holds service groups
-- `tests/test_routes.py` and `tests/test_services.py` are import shims for pytest discovery
-- shared fixtures live in `tests/conftest.py`, `tests/routes/common.py`, and `tests/services/common.py`
-
-Use `uv run` for Python commands in this workspace; bare `python` is not guaranteed to be on PATH.
-See [docs/testing.md](docs/testing.md) for the module map.
-
-### Debug logging
-Set `LOG_LEVEL=DEBUG` in your local `.env` when you want to see `logger.debug(...)` output during
-agent-assisted debugging. Switch it back to `INFO` when you're done.
-
-### Test title inference from CLI
-```bash
-# Run against sample titles in lyrics/karaoke_titles.py
-uv run scripts/lyrics_inference_cli.py --samples
-# or: uv run python scripts/lyrics_inference_cli.py --samples
-
-# Add custom titles
-uv run scripts/lyrics_inference_cli.py --title "JAY CHOU (周杰伦) - PIAO YI (飄移)"
-
-# Interactive mode
-uv run scripts/lyrics_inference_cli.py --interactive
-```
-Set `LASTFM_API_KEY` in `.env` to enable online Last.fm-assisted inference; otherwise the CLI uses regex-only local inference.
-
-### Lyrics provider debug CLI
-```bash
-uv run scripts/lyrics_debug_cli.py
-```
-Use this menu-driven helper to step through the bundled karaoke titles or paste a custom YouTube title, then inspect the inferred metadata, provider, and editable lyrics box.
-
-NetEase implementation notes:
-- Adapted from `cqjjjzr/MusicBee-NeteaseLyrics` (search + lyric flow) and `Gaohaoyang/netease-music-downloader` (lyrics retrieval endpoint behavior).
-- Keeps a Python-native runtime path (no Node dependency in production provider flow).
-
-### With coverage
-```bash
-uv run pytest --cov=. --cov-report=html
-```
-
-### Logging
-The app uses centralized Python logging with:
-- Console output
-- Rotating file logs
-
-Root logging is configured once at startup, and `LOG_LEVEL` controls whether debug calls are
-emitted.
-
-Configure via `.env`:
-- `LOG_LEVEL` (e.g. `DEBUG`, `INFO`, `WARNING`, `ERROR`)
-- `LOG_DIR` (default `./logs`)
-- `LOG_FILE_NAME` (default `karaoke.log`)
-- `LOG_MAX_BYTES` (default `5242880`)
-- `LOG_BACKUP_COUNT` (default `5`)
-- `LOG_TO_FILE_IN_RELOAD` (default `false`)
-
-Example:
-```bash
-LOG_LEVEL=DEBUG
-LOG_DIR=./logs
-```
-
-Logs are written to `${LOG_DIR}/${LOG_FILE_NAME}` and rotated automatically.
-
-Hot reload note: by default file logging is disabled while running under reload mode to prevent log-write reload loops. Set `LOG_TO_FILE_IN_RELOAD=true` only if needed.
-
-## Project Structure
-
-```
-karaoke/
-├── main.py                 # FastAPI app entry point
-├── config.py              # Configuration
-├── models.py              # Data models
-├── database.py            # Database setup
-├── routes/                # API routes
-│   ├── queue.py          # Queue endpoints
-│   ├── search.py         # Search endpoints
-│   └── pages.py          # HTML pages
-├── services/              # Business logic
-│   ├── queue_service.py
-│   ├── youtube_service.py
-│   ├── lyrics_service.py
-│   ├── lyrics_inference.py
-│   ├── lyrics_types.py
-│   ├── lyrics_provider_loader.py
-│   ├── lyrics_providers.py
-│   ├── karaoke_service.py
-│   └── demucs_client.py
-├── adapters/              # External tool wrappers
-│   ├── ytdlp.py
-│   └── ffmpeg.py
-├── templates/             # HTML templates
-├── static/                # CSS/JS
-└── tests/                 # Test files
-```
-
-## Troubleshooting
-
-### yt-dlp issues
-```bash
-# Update yt-dlp
-uv pip install --upgrade yt-dlp
-# or, inside the same Python environment
-python -m pip install --upgrade yt-dlp
-```
-
-For karaoke mode, this app downloads source audio directly from yt-dlp formats (instead of yt-dlp ffmpeg postprocessing), which avoids `ffprobe/ffmpeg not found` during the audio-download step.
-The downloader uses explicit audio-only selectors first for karaoke audio downloads, so yt-dlp does not silently fall back to a video-only stream under the audio filename. It still uses progressive fallback for unavailable video formats and logs expected format-unavailable fallbacks at `INFO` level to reduce warning noise. Before the app sends any media file directly to Demucs, it checks for audio streams with ffprobe. If a YouTube-backed yt-dlp video fallback produces a video-only file, the app keeps that video for playback/remuxing but downloads a separate audio-only file for Demucs. Local non-YouTube files with no audio fail before Demucs with a clear no-audio-stream error. When you set a video resolution cap in Settings, the app adds yt-dlp's resolution sort flag, for example `-S "res:720"`, so downloads stay at or below the chosen height. Leave the setting at `Default` to keep the current behavior unchanged.
-Some YouTube videos require yt-dlp's external JavaScript execution support. The Python dependency `yt-dlp-ejs` is included in this project, but the JavaScript runtime itself is optional. Install Deno and set **Deno path** in Settings, or set `YTDLP_DENO_PATH=/usr/local/bin/deno` in the environment. Leave it empty to keep the old command shape.
-Runtime proxy is supported through settings (`yt-dlp Proxy URL`) and applied to:
-- yt-dlp search/download commands
-- lyrics provider requests (Musixmatch, NetEase, LRCLib, and Last.fm metadata lookup)
-Supported schemes: `http`, `https`, `socks4`, `socks4a`, `socks5`, `socks5h`.
-Leave proxy empty for direct connections.
-
-Manual yt-dlp debugging commands (replace `VIDEO_ID`):
-
-```bash
-# Inspect available formats
-yt-dlp -F "https://www.youtube.com/watch?v=VIDEO_ID"
-
-# Karaoke mode: separate video-only file
-yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
-  -f "bestvideo[ext=mp4]/best[ext=mp4]/bestvideo/best" \
-  --extractor-args "youtube:player_client=web" \
-  --no-playlist \
-  -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
-
-# Karaoke mode: separate audio-only file
-yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
-  -f "bestaudio[ext=m4a]/bestaudio" \
-  --extractor-args "youtube:player_client=web" \
-  --no-playlist \
-  -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
-
-# Non-karaoke mode: single progressive file (video+audio)
-yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
-  -S "res:720" \
-  -f "best[ext=mp4]/best" \
-  --extractor-args "youtube:player_client=web" \
-  --no-playlist \
-  -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
-
-# Last-resort default selection (lets yt-dlp choose)
-yt-dlp "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --no-playlist \
-  -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
-
-# When a video needs external JavaScript execution
-yt-dlp --js-runtimes "deno:/usr/local/bin/deno" \
-  "https://www.youtube.com/watch?v=VIDEO_ID" \
-  --no-playlist \
-  -o "/tmp/karaoke_media/VIDEO_ID.%(ext)s"
-```
-
-To cap downloads from the UI, set **yt-dlp Video Resolution** to `360p`, `480p`, `720p`, `1080p`, or `2160p`. `Default` keeps the old behavior.
-
-If you want to manually test via proxy, add:
-
-```bash
---proxy "socks5://127.0.0.1:1080"
-```
-
-### ffmpeg issues
-```bash
-# Check ffmpeg installation
-ffmpeg -version
-```
-`ffmpeg` is still required for karaoke media extraction/remux operations.
-
-### Separation service not available
-Karaoke mode requires `demucs_svc` running. Configure `DEMUCS_API_URL` for the main app and select
-Demucs or Sherpa+Spleeter from `/settings`. See [Separation Backends](docs/separation-backends.md)
-for CPU-only setup and model installation.
-If you expose `demucs_svc` outside a trusted LAN, set the same optional `DEMUCS_API_KEY` on both
-the main app and the Demucs service so requests carry `X-API-Key`.
-
-### WebSocket troubleshooting
-
-- If real-time updates are unavailable, the queue page automatically falls back to periodic polling.
-- Stage view (`/stage`) is WebSocket-first and reconnects automatically for real-time updates/control.
-- Verify reverse proxy/network path allows WebSocket upgrade requests to `/api/queue/ws`.
-
-### Remote Demucs (Windows + NVIDIA)
-Use your Windows project venv/service path:
-
-```powershell
-cd C:\Users\hubcc\Documents\Projects\karaoke\demucs_svc
-C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe -m pip install -r requirements.txt
-C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe .\download_sherpa_models.py --variant fp16
-C:\Users\hubcc\Documents\Projects\karaoke\.venv\Scripts\python.exe -m uvicorn app:app --host 0.0.0.0 --port 8001
-```
-
-The worker has its own `requirements.txt` and can run independently of the main app's
-environment. When launching from the repository root instead, use
-`python -m demucs_svc.download_sherpa_models`; when the current directory is already
-`demucs_svc`, use `python .\download_sherpa_models.py` as shown above.
-
-Then verify from Linux host:
-
-```bash
-auth_header=()
-if [ -n "$DEMUCS_API_KEY" ]; then
-  auth_header=(-H "X-API-Key: $DEMUCS_API_KEY")
-fi
-
-curl "${auth_header[@]}" http://10.10.120.191:8001/health
-curl "${auth_header[@]}" http://10.10.120.191:8001/metrics
-```
+When making a pull request, select the base branch `dev` instead of `main`.
 
 ## License
 

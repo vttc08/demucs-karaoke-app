@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - docs-site/**
+      - locales/**
       - scripts/build_docs.py
       - main.py
       - pyproject.toml

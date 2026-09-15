@@ -20,10 +20,15 @@ inference in `lyrics_inference.py`, built-in network providers in
 `lyrics_providers.py`, custom loading in `lyrics_provider_loader.py`, and
 `lyrics_service.py` limited to provider orchestration and cue/sidecar parsing.
 
-Resolution remains Musixmatch-first. If it does not resolve lyrics, NetEase,
-LRCLib, and loaded custom providers run concurrently and the highest-scoring
-normalized payload is selected. Plain string results from custom providers are
-normalized into the shared `LyricsPayload` type.
+Resolution remains Musixmatch-first, but a result is accepted only when its
+returned track title and artist confidently match the requested metadata. The
+provider uses Musixmatch's app-mobile endpoint and mobile client headers; a
+configured token that is incompatible or expired is replaced with a short-lived
+mobile token and reused in-process until the API rejects it. If Musixmatch does
+not resolve matching lyrics, NetEase, LRCLib, and loaded custom providers run
+concurrently and the highest-scoring normalized payload is selected. Plain
+string results from custom providers are normalized into the shared
+`LyricsPayload` type.
 
 The service continues to import and expose the shared contracts and provider
 classes through its module namespace so existing consumers do not need to

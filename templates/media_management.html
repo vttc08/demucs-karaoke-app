@@ -131,7 +131,12 @@
                 <div class="flex flex-col gap-4">
                     <div class="max-w-2xl">
                         <p class="text-[11px] font-bold uppercase tracking-widest text-primary">{{ t('media.digital_archive') }}</p>
-                        <h2 class="mt-1 font-headline text-xl font-black tracking-tight text-on-surface sm:text-2xl">{{ t('media.manage') }}</h2>
+                        <div class="mt-1 flex items-center gap-2">
+                            <h2 class="font-headline text-xl font-black tracking-tight text-on-surface sm:text-2xl">{{ t('media.manage') }}</h2>
+                            <a href="{{ docs_url('features/media-page') }}#highlights" target="_blank" rel="noopener noreferrer" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40" aria-label="{{ t('media.highlights_help') }}" title="{{ t('media.highlights_help') }}">
+                                <span class="material-symbols-outlined text-base">help</span>
+                            </a>
+                        </div>
                         <p class="mt-1 max-w-xl text-sm text-on-surface-variant">{{ t('media.manage_detail') }}</p>
                         <div class="mt-3 flex flex-wrap gap-2">
                             {% if is_admin %}
@@ -525,7 +530,12 @@
                         <div class="sm:hidden">
                             <div class="mx-auto mb-2 h-1.5 w-12 rounded-full bg-white/10"></div>
                         </div>
-                        <h3 class="font-headline text-xl font-black tracking-tight text-on-surface">{{ t('media.edit_details') }}</h3>
+                        <div class="flex min-w-0 items-center gap-2">
+                            <h3 class="truncate font-headline text-xl font-black tracking-tight text-on-surface">{{ t('media.edit_details') }}</h3>
+                            <a href="{{ docs_url('tasks/create-ai-karaoke') }}#modify-existing-video" target="_blank" rel="noopener noreferrer" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition hover:text-primary" aria-label="{{ t('settings.docs_help') }}" title="{{ t('settings.docs_help') }}">
+                                <span class="material-symbols-outlined text-base">help</span>
+                            </a>
+                        </div>
                         <button
                             type="button"
                             data-edit-modal-close
@@ -745,7 +755,7 @@
 
                                     <p id="media-edit-lyrics-upgrade-hint" class="hidden text-[11px] leading-tight text-on-surface-variant sm:text-xs">
                                         {{ t('lyrics.ttml_upgrade_hint') }}
-                                        <a href="{{ app_url('/help/') }}" target="_blank" rel="noopener noreferrer" class="text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/80">{{ t('lyrics.ttml_upgrade_docs') }}</a>
+                                        <a href="{{ docs_url('tasks/create-ai-karaoke') }}#ttml-lyrics-upgrade" target="_blank" rel="noopener noreferrer" class="text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/80">{{ t('lyrics.ttml_upgrade_docs') }}</a>
                                     </p>
 
                                     <div class="rounded-xl border border-primary/20 bg-primary/5 p-3 ring-1 ring-white/5">

@@ -63,22 +63,16 @@
                         class="hidden absolute top-full right-0 mt-1 z-50 min-w-32 rounded-lg bg-surface-container border border-white/10 shadow-lg"
                     >
                         <div class="py-2">
+                            {% for locale in supported_locales() %}
                             <button
                                 type="button"
-                                data-language="en"
-                                class="w-full flex items-center gap-3 px-4 py-2 text-sm text-on-surface hover:bg-surface-container-high/50 transition-colors {% if current_locale(request) == 'en' %}bg-primary/10 text-primary{% endif %}"
+                                data-language="{{ locale.code }}"
+                                class="w-full flex items-center gap-3 px-4 py-2 text-sm text-on-surface hover:bg-surface-container-high/50 transition-colors {% if current_locale(request) == locale.code %}bg-primary/10 text-primary{% endif %}"
                             >
                                 <span class="material-symbols-outlined text-base">language</span>
-                                <span>English</span>
+                                <span>{{ locale.label }}</span>
                             </button>
-                            <button
-                                type="button"
-                                data-language="zh-CN"
-                                class="w-full flex items-center gap-3 px-4 py-2 text-sm text-on-surface hover:bg-surface-container-high/50 transition-colors {% if current_locale(request) == 'zh-CN' %}bg-primary/10 text-primary{% endif %}"
-                            >
-                                <span class="material-symbols-outlined text-base">language</span>
-                                <span>中文</span>
-                            </button>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>

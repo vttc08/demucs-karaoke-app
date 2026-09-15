@@ -291,30 +291,31 @@ class FFmpegAdapter:
             self.ffprobe_path,
             "-v",
             "error",
-            "-skip_frame",
-            "nokey",
             "-select_streams",
             "v:0",
-            "-show_frames",
+            "-show_packets",
             "-show_entries",
-            "frame=best_effort_timestamp_time,pts_time",
+            "packet=pts_time,dts_time,flags",
             "-of",
             "json",
             str(source_path),
         ]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         payload = json.loads(result.stdout or "{}")
-        frames = payload.get("frames") if isinstance(payload, dict) else []
-        if not isinstance(frames, list):
-            frames = []
+        packets = payload.get("packets") if isinstance(payload, dict) else []
+        if not isinstance(packets, list):
+            packets = []
 
         start_time = float(media["start_time"])
         duration = float(media["duration"])
         timestamps: set[float] = {0.0}
-        for frame in frames:
-            if not isinstance(frame, dict):
+        for packet in packets:
+            if not isinstance(packet, dict):
                 continue
-            raw = frame.get("best_effort_timestamp_time") or frame.get("pts_time")
+            flags = packet.get("flags")
+            if not isinstance(flags, str) or not flags.startswith("K"):
+                continue
+            raw = packet.get("pts_time") or packet.get("dts_time")
             timestamp = self._finite_float(raw)
             if timestamp is None:
                 continue

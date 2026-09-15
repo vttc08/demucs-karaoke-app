@@ -346,6 +346,246 @@ def test_musixmatch_fetch_returns_lrc_with_quality_checked_ttml_alternative(
     if has_upgrade:
         assert payload.alternatives[0].format == "ttml"
 
+
+def test_musixmatch_fetch_rejects_unrelated_macro_result(monkeypatch):
+    from services import lyrics_providers as lp_module
+
+    musixmatch_payload = {
+        "message": {
+            "body": {
+                "macro_calls": {
+                    "matcher.track.get": {
+                        "message": {
+                            "header": {"status_code": 200},
+                            "body": {
+                                "track": {
+                                    "track_name": "NOKIA",
+                                    "artist_name": "Drake",
+                                }
+                            },
+                        }
+                    },
+                    "track.lyrics.get": {
+                        "message": {
+                            "body": {
+                                "lyrics": {
+                                    "lyrics_body": "Unrelated lyrics",
+                                    "restricted": False,
+                                }
+                            }
+                        }
+                    },
+                }
+            }
+        }
+    }
+
+    class FakeResponse:
+        def json(self):
+            return musixmatch_payload
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr(lp_module.ls_module.httpx, "AsyncClient", FakeClient)
+    provider = lp_module.MusixmatchLyricsProvider(
+        token="token",
+        base_url="https://musixmatch.test",
+    )
+
+    payload = asyncio.run(
+        provider.fetch(
+            lp_module.ls_module.InferredSong(
+                title="Sailor Song",
+                artist="Gigi Perez",
+                source="lastfm",
+            )
+        )
+    )
+
+    assert payload is None
+
+
+def test_musixmatch_refreshes_incompatible_token_and_uses_mobile_contract(monkeypatch):
+    from services import lyrics_providers as lp_module
+
+    token_payload = {
+        "message": {
+            "header": {"status_code": 200},
+            "body": {"user_token": "fresh-mobile-token"},
+        }
+    }
+    unauthorized_payload = {
+        "message": {
+            "header": {"status_code": 401},
+            "body": {},
+        }
+    }
+    lyrics_payload = {
+        "message": {
+            "header": {"status_code": 200},
+            "body": {
+                "macro_calls": {
+                    "matcher.track.get": {
+                        "message": {
+                            "header": {"status_code": 200},
+                            "body": {
+                                "track": {
+                                    "track_name": "Sailor Song",
+                                    "artist_name": "Gigi Perez",
+                                }
+                            },
+                        }
+                    },
+                    "track.lyrics.get": {
+                        "message": {
+                            "body": {
+                                "lyrics": {
+                                    "lyrics_body": "Correct lyrics",
+                                    "restricted": False,
+                                }
+                            }
+                        }
+                    },
+                }
+            },
+        }
+    }
+    calls = []
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def json(self):
+            return self.payload
+
+        def raise_for_status(self):
+            return None
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url, *, params, headers):
+            calls.append((url, params, headers))
+            if url.endswith("/token.get"):
+                return FakeResponse(token_payload)
+            if params["usertoken"] == "desktop-token":
+                return FakeResponse(unauthorized_payload)
+            return FakeResponse(lyrics_payload)
+
+    monkeypatch.setattr(lp_module.ls_module.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(lp_module.MusixmatchLyricsProvider, "_cached_mobile_token", None)
+    monkeypatch.setattr(lp_module.MusixmatchLyricsProvider, "_cached_mobile_token_source", None)
+    provider = lp_module.MusixmatchLyricsProvider(token="desktop-token")
+
+    payload = asyncio.run(
+        provider.fetch(
+            lp_module.ls_module.InferredSong(
+                title="Sailor Song",
+                artist="Gigi Perez",
+                source="lastfm",
+            )
+        )
+    )
+
+    assert payload is not None
+    assert payload.lyrics == "Correct lyrics"
+    assert len(calls) == 3
+    assert calls[0][0] == lp_module._MUSIXMATCH_BASE_URL
+    assert calls[0][1]["app_id"] == "mac-ios-v2.0"
+    assert calls[0][1]["subtitle_format"] == "mxm"
+    assert calls[0][1]["q_track"] == "Sailor Song"
+    assert calls[0][1]["q_artist"] == "Gigi Perez"
+    assert calls[0][2]["Host"] == "apic-appmobile.musixmatch.com"
+    assert calls[0][2]["X-Cookie"] == "x-mxm-token-guid="
+    assert calls[1][0].endswith("/token.get")
+    assert calls[2][1]["usertoken"] == "fresh-mobile-token"
+
+    second_provider = lp_module.MusixmatchLyricsProvider(token="desktop-token")
+    second_payload = asyncio.run(
+        second_provider.fetch(
+            lp_module.ls_module.InferredSong(
+                title="Sailor Song",
+                artist="Gigi Perez",
+                source="lastfm",
+            )
+        )
+    )
+
+    assert second_payload is not None
+    assert len(calls) == 4
+    assert calls[3][1]["usertoken"] == "fresh-mobile-token"
+
+
+@pytest.mark.parametrize(
+    ("returned_title", "returned_artist"),
+    [
+        ("Sailor Song (Acoustic Version)", "Gigi Perez feat. Another Artist"),
+        ("Nothing Else Matters - Remastered 2021", "Metallica"),
+        ("Try", "P!nk"),
+        ("月亮惹的祸", "張宇 Phil Chang"),
+        ("Coming Home", "Diddy"),
+    ],
+)
+def test_musixmatch_match_confidence_accepts_common_metadata_variants(
+    returned_title,
+    returned_artist,
+):
+    from services import lyrics_providers as lp_module
+
+    requested_title = {
+        "Sailor Song (Acoustic Version)": "Sailor Song",
+        "Nothing Else Matters - Remastered 2021": "Nothing Else Matters",
+        "Try": "Try",
+        "月亮惹的祸": "月亮惹的祸",
+        "Coming Home": "Coming Home",
+    }[returned_title]
+    requested_artist = {
+        "Gigi Perez feat. Another Artist": "Gigi Perez",
+        "Metallica": "Metallica",
+        "P!nk": "Pink",
+        "張宇 Phil Chang": "Phil Chang",
+        "Diddy": "Sean Combs",
+    }[returned_artist]
+    requested = lp_module.ls_module.InferredSong(
+        title=requested_title,
+        artist=requested_artist,
+        source="lastfm",
+    )
+    returned = lp_module.ls_module.InferredSong(
+        title=returned_title,
+        artist=returned_artist,
+        source="lastfm",
+    )
+
+    is_match, _title_similarity, _artist_similarity = (
+        lp_module.MusixmatchLyricsProvider._match_confidence(requested, returned)
+    )
+
+    assert is_match is True
+
+
 def test_netease_provider_prefers_cjk_candidate_and_rejects_low_confidence():
     """Candidate selector should avoid unrelated songs and pick CJK-near matches."""
     from services import lyrics_providers as lp_module

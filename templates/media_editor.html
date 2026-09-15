@@ -26,7 +26,12 @@
                 <span>{{ t('trim.back_to_media') }}</span>
             </a>
             <div>
-                <p class="trim-eyebrow">{{ t('trim.lossless_editor') }}</p>
+                <div class="flex items-center justify-between gap-2">
+                    <p class="trim-eyebrow">{{ t('trim.lossless_editor') }}</p>
+                    <a href="{{ docs_url('tasks/media-administration') }}#lossless-trim" target="_blank" rel="noopener noreferrer" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant transition hover:text-primary" aria-label="{{ t('settings.docs_help') }}" title="{{ t('settings.docs_help') }}">
+                        <span class="material-symbols-outlined text-base">help</span>
+                    </a>
+                </div>
                 <h2>{{ trim_info.title }}</h2>
                 <p>{{ trim_info.artist or t('common.unknown_artist') }}</p>
             </div>
@@ -61,6 +66,16 @@
                     <h2 class="truncate">{{ trim_info.title }}</h2>
                     <p class="truncate">{{ trim_info.artist or t('common.unknown_artist') }}</p>
                 </div>
+                <a
+                    href="{{ docs_url('tasks/media-administration') }}#lossless-trim"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="{{ t('settings.docs_help') }}"
+                    title="{{ t('settings.docs_help') }}"
+                    class="grid size-9 shrink-0 place-items-center rounded-full"
+                >
+                    <span class="material-symbols-outlined pointer-events-none text-base">help</span>
+                </a>
             </header>
 
             <section class="trim-player-panel">
@@ -206,8 +221,14 @@
                                 <span class="material-symbols-outlined">info</span>
                             </summary>
                             <div class="trim-action-help-panel" role="note" aria-label="{{ t('trim.action_help') }}">
+                                <strong>{{ t('trim.action_help') }}</strong>
+                                <p>{{ t('trim.action_help_in_out') }}</p>
+                                <p>{{ t('trim.action_help_keyframes_shortcuts') }}</p>
+                                <p>{{ t('trim.action_help_frame_shortcuts') }}</p>
+                                <p>{{ t('trim.action_help_range_shortcuts') }}</p>
                                 <p>{{ t('trim.action_help_set') }}</p>
                                 <p>{{ t('trim.action_help_jump') }}</p>
+                                <p>{{ t('trim.action_help_keyframe_buttons') }}</p>
                             </div>
                         </details>
                     </div>

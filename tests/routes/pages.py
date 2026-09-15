@@ -47,6 +47,50 @@ def test_get_queue_with_items(client):
     assert data[0]["title"] == "Song 1"
     assert data[1]["title"] == "Song 2"
 
+
+def test_get_queue_exposes_retry_for_owned_failed_task(client):
+    """A failed queue task should expose its retry action to its owner."""
+    with TestingSessionLocal() as db:
+        media = MediaItem(
+            youtube_id="queue-retry-action",
+            file_stem="queue-retry-action",
+            title="Queue Retry Action",
+            media_path="/media/queue-retry-action.mp4",
+            missing=False,
+        )
+        db.add(media)
+        db.commit()
+        db.refresh(media)
+        queue_item = QueueItem(
+            media_id=media.id,
+            position=1,
+            user_id="queue-owner",
+            status=QueueStatus.FAILED.value,
+        )
+        db.add(queue_item)
+        db.commit()
+        db.refresh(queue_item)
+        db.add(
+            ProcessingTask(
+                task_type="queue_prepare",
+                source_kind="youtube",
+                target_queue_item_id=queue_item.id,
+                target_media_item_id=media.id,
+                status=ProcessingTaskStatus.FAILED.value,
+                stage="failed",
+            )
+        )
+        db.commit()
+        queue_item_id = queue_item.id
+
+    client.cookies.set("karaoke_guest_id", "queue-owner")
+    response = client.get("/api/queue/")
+
+    assert response.status_code == 200
+    payload = next(item for item in response.json() if item["id"] == queue_item_id)
+    assert payload["can_retry_task"] is True
+    assert payload["task_id"] is not None
+
 def test_get_current_item_empty(client):
     """Test getting current item when queue is empty."""
     response = client.get("/api/queue/current")
@@ -90,12 +134,18 @@ def test_queue_page_loads(client):
     assert b"Karaoke Queue" in response.content
     assert b'id="queue-singer-name"' in response.content
     assert b'id="singer-name-modal"' in response.content
+    assert 'href="/help/tasks/for-users/"' in response.text
+    assert "New to Karaoke? Read the user guide." in response.text
+    assert 'href="/help/tasks/for-users/#queue-a-song"' in response.text
+    assert 'href="/help/tasks/karaoke-tasks/#control-queue-remotely"' in response.text
+    assert 'href="/help/tasks/stage-and-branding/#modify-lyrics-from-queue-control"' in response.text
     assert b"queue-config-modal" in response.content
     assert b"Configure Queue" in response.content
     assert b"queue-toast" in response.content
     assert b"queue-config-lyrics-detail" in response.content
     assert 'aria-label="Open queue lyrics help"' in response.text
-    assert 'href="/help/"' in response.text
+    assert 'href="/help/tasks/create-ai-karaoke/#create-karaoke-from-a-music-video"' in response.text
+    assert 'href="/help/tasks/create-ai-karaoke/#ttml-lyrics-upgrade"' in response.text
     assert 'id="queue-config-rewrap-options"' in response.text
     assert 'id="queue-config-language-options"' in response.text
     assert 'class="grid grid-cols-3 gap-2"' in response.text
@@ -178,6 +228,17 @@ def test_queue_page_renders_requester_label(client):
     assert response.status_code == 200
     assert "Requested by Alex" in response.text
 
+
+def test_queue_page_name_help_uses_locale_docs_path(client):
+    """The first-visit name prompt should link to the localized user guide."""
+    client.cookies.set(LOCALE_COOKIE, "zh-CN")
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert 'href="/help/zh/tasks/for-users/"' in response.text
+    assert "第一次使用 Karaoke？查看用户指南。" in response.text
+
 def test_queue_page_hides_left_controls_for_guests(client):
     """Guest queue cards should not render the left-side action column."""
     created = client.post(
@@ -254,10 +315,14 @@ def test_language_route_rejects_external_redirect_targets(client):
 def test_locale_catalogs_have_matching_keys():
     """Every supported locale should expose the same UI translation keys."""
     locale_dir = Path("locales")
+    locales = [f.stem for f in locale_dir.glob("*.json")]
     english_keys = set(json.loads((locale_dir / "en.json").read_text(encoding="utf-8")))
-    chinese_keys = set(json.loads((locale_dir / "zh-CN.json").read_text(encoding="utf-8")))
-
-    assert chinese_keys == english_keys
+    for locale in locales:
+        if locale == "en":
+            continue
+        path = locale_dir / f"{locale}.json"
+        chinese_keys = set(json.loads(path.read_text(encoding="utf-8")))
+        assert chinese_keys == english_keys, f"Locale {locale} has mismatched keys"
 
 def test_queue_page_shows_admin_queue_controls(client):
     """Admin queue page should show destructive queue controls."""
@@ -311,7 +376,7 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-lyrics-settings-btn"' in response.content
     assert b'id="stage-lyrics-settings-panel"' in response.content
     assert b'aria-label="Open lyrics style documentation"' in response.content
-    assert b'href="/help/"' in response.content
+    assert b'href="/help/tasks/stage-and-branding/#customize-the-stage-display"' in response.content
     assert b'id="stage-display-name"' in response.content
     assert b'id="stage-lyrics-custom-font-preview"' not in response.content
     assert b'id="stage-lyrics-preset-select"' in response.content
@@ -443,7 +508,13 @@ def test_settings_page_loads_for_admin(client):
     assert b"Log out" in response.content
     assert b">Save<" in response.content
     assert b">Check Demucs<" in response.content
-    assert 'href="/help/"' in response.text
+    assert 'href="/help/configuration/settings/"' in response.text
+    assert 'href="/help/configuration/karaoke-processing/"' in response.text
+    assert 'href="/help/configuration/whisperx-lyrics/"' in response.text
+    assert 'href="/help/configuration/application-paths/"' in response.text
+    assert 'href="/help/configuration/downloads/"' in response.text
+    assert 'href="/help/configuration/stage/"' in response.text
+    assert 'href="/help/configuration/tools/"' in response.text
     assert 'aria-label="Open documentation"' in response.text
     assert response.text.count('data-settings-section=') == 6
     assert response.text.count('data-settings-docs-link') == 6
@@ -473,7 +544,7 @@ def test_settings_page_uses_localized_docs_path_for_zh(client):
     response = client.get("/settings")
 
     assert response.status_code == 200
-    assert 'href="/help/zh/"' in response.text
+    assert 'href="/help/zh/configuration/settings/"' in response.text
     assert 'aria-label="打开文档"' in response.text
 
 
@@ -548,7 +619,11 @@ def test_access_restricted_page_loads(client):
     """Test access restricted page renders."""
     response = client.get("/access-restricted")
     assert response.status_code == 200
-    assert b"Access restricted" in response.content
+    assert b"Access denied" in response.content
+    assert b"Access restricted" not in response.content
+    assert b"Your current IP address is not authorized" in response.content
+    assert b'href="/queue"' in response.content
+    assert b"Try again" in response.content
 
 def test_app_startup_triggers_media_scan():
     """Application lifespan should run media library scan on startup."""
