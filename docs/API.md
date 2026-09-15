@@ -909,7 +909,7 @@ GET /api/media/{item_id}/trim-info
 ```
 
 Admin-only endpoint returning the current duration, stream types, attached sidecars, and normalized
-I-frame timestamps for the first video stream.
+packet-keyframe timestamps for the first video stream.
 
 **Response:**
 ```json
@@ -936,8 +936,9 @@ POST /api/media/{item_id}/trim
 ```
 
 Admin-only synchronous endpoint that replaces the primary media and attached synchronized sidecars.
-Video start/end values are snapped outward to surrounding I-frames before FFmpeg stream copy. The
-same resolved timestamps trim the vocals sidecar and shift LRC, SRT, or WhisperX JSON lyrics.
+Video start/end values are snapped outward to surrounding packet-marked keyframes before FFmpeg
+stream copy. The same resolved timestamps trim the vocals sidecar and shift LRC, SRT, or WhisperX
+JSON lyrics.
 
 **Request:**
 ```json

@@ -69,7 +69,7 @@ This project currently uses two services:
 - Edit, refresh-sidecar, scan, upload-shortcut, and delete controls are admin-only.
 - The media edit and scan API routes enforce admin sessions server-side so the page stays queue-only even if a guest tampers with the DOM.
 - The edit modal links to the admin-only `/media-editor/{item_id}` page. It renders an immediate
-  shell with the native browser media player, then hydrates duration and ffprobe I-frame timestamps
+  shell with the native browser media player, then hydrates duration and ffprobe packet-keyframe timestamps
   asynchronously from `/api/media/{item_id}/trim-info` without introducing a frontend framework.
   When the attached lyrics sidecar is CDG, the same page switches to a transcode fallback instead of
   offering lossless trim.
@@ -84,8 +84,8 @@ This project currently uses two services:
   disk, which keeps the modal from rendering broken download/delete actions for stale DB paths.
 - `MediaTrimService` owns trim validation, conflict checks, sidecar shifting, and atomic file
   replacement. `FFmpegAdapter` owns ffprobe metadata/keyframe reads and `ffmpeg -c copy` remuxing.
-- Video ranges snap outward to surrounding keyframes; audio-only ranges retain exact requested
-  timestamps. The resolved range is also applied to vocals and timed lyrics.
+- Video ranges snap outward to surrounding packet-marked random-access keyframes; audio-only ranges
+  retain exact requested timestamps. The resolved range is also applied to vocals and timed lyrics.
 - Staged files and temporary rollback files are created beside each source so `os.replace` remains
   same-filesystem and atomic. Rollback files are removed after success and are not permanent backups.
 - The Add Vocals page at `/media-vocals/{item_id}` prepares guide vocals for an existing karaoke
