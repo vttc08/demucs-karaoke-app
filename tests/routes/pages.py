@@ -90,12 +90,18 @@ def test_queue_page_loads(client):
     assert b"Karaoke Queue" in response.content
     assert b'id="queue-singer-name"' in response.content
     assert b'id="singer-name-modal"' in response.content
+    assert 'href="/help/tasks/for-users/"' in response.text
+    assert "New to Karaoke? Read the user guide." in response.text
+    assert 'href="/help/tasks/for-users/#queue-a-song"' in response.text
+    assert 'href="/help/tasks/karaoke-tasks/#control-queue-remotely"' in response.text
+    assert 'href="/help/tasks/stage-and-branding/#modify-lyrics-from-queue-control"' in response.text
     assert b"queue-config-modal" in response.content
     assert b"Configure Queue" in response.content
     assert b"queue-toast" in response.content
     assert b"queue-config-lyrics-detail" in response.content
     assert 'aria-label="Open queue lyrics help"' in response.text
-    assert 'href="/help/"' in response.text
+    assert 'href="/help/tasks/create-ai-karaoke/#create-karaoke-from-a-music-video"' in response.text
+    assert 'href="/help/tasks/create-ai-karaoke/#ttml-lyrics-upgrade"' in response.text
     assert 'id="queue-config-rewrap-options"' in response.text
     assert 'id="queue-config-language-options"' in response.text
     assert 'class="grid grid-cols-3 gap-2"' in response.text
@@ -177,6 +183,17 @@ def test_queue_page_renders_requester_label(client):
 
     assert response.status_code == 200
     assert "Requested by Alex" in response.text
+
+
+def test_queue_page_name_help_uses_locale_docs_path(client):
+    """The first-visit name prompt should link to the localized user guide."""
+    client.cookies.set(LOCALE_COOKIE, "zh-CN")
+
+    response = client.get("/queue")
+
+    assert response.status_code == 200
+    assert 'href="/help/zh/tasks/for-users/"' in response.text
+    assert "第一次使用 Karaoke？查看用户指南。" in response.text
 
 def test_queue_page_hides_left_controls_for_guests(client):
     """Guest queue cards should not render the left-side action column."""
@@ -315,7 +332,7 @@ def test_stage_page_loads_for_admin(client):
     assert b'id="stage-lyrics-settings-btn"' in response.content
     assert b'id="stage-lyrics-settings-panel"' in response.content
     assert b'aria-label="Open lyrics style documentation"' in response.content
-    assert b'href="/help/"' in response.content
+    assert b'href="/help/tasks/stage-and-branding/#customize-the-stage-display"' in response.content
     assert b'id="stage-display-name"' in response.content
     assert b'id="stage-lyrics-custom-font-preview"' not in response.content
     assert b'id="stage-lyrics-preset-select"' in response.content
@@ -447,7 +464,13 @@ def test_settings_page_loads_for_admin(client):
     assert b"Log out" in response.content
     assert b">Save<" in response.content
     assert b">Check Demucs<" in response.content
-    assert 'href="/help/"' in response.text
+    assert 'href="/help/configuration/settings/"' in response.text
+    assert 'href="/help/configuration/karaoke-processing/"' in response.text
+    assert 'href="/help/configuration/whisperx-lyrics/"' in response.text
+    assert 'href="/help/configuration/application-paths/"' in response.text
+    assert 'href="/help/configuration/downloads/"' in response.text
+    assert 'href="/help/configuration/stage/"' in response.text
+    assert 'href="/help/configuration/tools/"' in response.text
     assert 'aria-label="Open documentation"' in response.text
     assert response.text.count('data-settings-section=') == 6
     assert response.text.count('data-settings-docs-link') == 6
@@ -477,7 +500,7 @@ def test_settings_page_uses_localized_docs_path_for_zh(client):
     response = client.get("/settings")
 
     assert response.status_code == 200
-    assert 'href="/help/zh/"' in response.text
+    assert 'href="/help/zh/configuration/settings/"' in response.text
     assert 'aria-label="打开文档"' in response.text
 
 

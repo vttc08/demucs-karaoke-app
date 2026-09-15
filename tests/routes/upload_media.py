@@ -33,6 +33,7 @@ def test_upload_page_loads(client):
     assert not re.search(r'<input[^>]*id="artist-name"[^>]*required', response.text)
     assert 'id="infer-metadata-btn"' in response.text
     assert 'id="upload-autopilot-btn"' in response.text
+    assert 'href="/help/tasks/create-ai-karaoke/#create-karaoke-from-uploaded-files"' in response.text
     assert "Infer from filename" in response.text
     assert 'accept=".mp3,.mp4,.webm,.mkv,.mov,.avi,.m4v,.zip"' in response.text
     assert 'accept=".lrc,.txt,.json,.ttml"' in response.text
@@ -732,6 +733,7 @@ def test_media_management_page_loads(client):
     assert response.status_code == 200
     assert b"Media" in response.content
     assert b"Manage Existing Media" in response.content
+    assert 'href="/help/features/media-page/#highlights"' in response.text
 
 
 def test_media_management_page_loads_with_media_id_query_param(client):
@@ -742,6 +744,7 @@ def test_media_management_page_loads_with_media_id_query_param(client):
     assert b"Media" in response.content
     assert b'id="media-edit-modal"' in response.content
     assert b"/static/media_management.js" in response.content
+    assert 'href="/help/tasks/create-ai-karaoke/#modify-existing-video"' in response.text
 
 def test_media_management_page_uses_database_rows(client):
     """Media management page should render DB-backed library rows and stats."""

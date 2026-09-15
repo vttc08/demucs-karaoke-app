@@ -77,23 +77,31 @@
                         <span class="min-w-0 truncate whitespace-nowrap text-[10px] font-bold leading-none text-on-surface sm:text-sm">{{ t('common.lyrics') }}</span>
                     </a>
                 </div>
-                {% if is_admin %}
-                <div id="queue-as-settings-panel" class="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-1.5">
-                    <label class="flex items-center justify-between gap-3">
-                        <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_setting_label') }}</span>
-                        <input id="queue-as-enabled-toggle" type="checkbox" class="h-4 w-4 accent-primary" />
-                    </label>
-                    <p id="queue-as-current-label" class="text-[10px] text-on-surface-variant" aria-live="polite">{{ t('queue.queue_as_current_none') }}</p>
+                <div class="flex items-center gap-2">
+                    <a href="{{ docs_url('tasks/for-users') }}#queue-a-song" target="_blank" rel="noopener noreferrer" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40" aria-label="{{ t('queue.search_help') }}" title="{{ t('queue.search_help') }}">
+                        <span class="material-symbols-outlined text-lg">help</span>
+                    </a>
+                    {% if is_admin %}
+                    <div id="queue-as-settings-panel" class="min-w-0 flex-1 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-1.5">
+                        <label class="flex items-center justify-between gap-3">
+                            <span class="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant">{{ t('queue.queue_as_setting_label') }}</span>
+                            <input id="queue-as-enabled-toggle" type="checkbox" class="h-4 w-4 accent-primary" />
+                        </label>
+                        <p id="queue-as-current-label" class="text-[10px] text-on-surface-variant" aria-live="polite">{{ t('queue.queue_as_current_none') }}</p>
+                    </div>
+                    {% endif %}
                 </div>
-                {% endif %}
                 <!-- Search Results -->
                 <div id="search-results" class="flex flex-col gap-3"></div>
             </section>
 
             <details class="collapsible-panel group rounded-xl bg-surface-container-low p-4" {% if is_admin %}open{% endif %}>
                 <summary class="collapsible-summary flex cursor-pointer items-center justify-between gap-3 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
-                    <div class="min-w-0">
+                    <div class="flex min-w-0 items-center gap-2">
                         <h3 class="font-headline font-black text-xl tracking-tight text-on-surface">{{ t('queue.stage_controls') }}</h3>
+                        <a href="{{ docs_url('tasks/karaoke-tasks') }}#control-queue-remotely" target="_blank" rel="noopener noreferrer" class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40" aria-label="{{ t('queue.stage_controls_help') }}" title="{{ t('queue.stage_controls_help') }}">
+                            <span class="material-symbols-outlined text-base">help</span>
+                        </a>
                     </div>
                     <div class="flex shrink-0 items-center gap-2">
                         <span id="stage-remote-status" class="text-xs text-on-surface-variant">{{ t('queue.connecting') }}</span>
@@ -207,7 +215,12 @@
                         </div>
                         <div class="flex items-center justify-between gap-3">
                             <div class="min-w-0">
-                                <p class="text-[11px] font-black uppercase tracking-widest text-on-surface-variant">{{ t('queue.stage_lyrics_settings') }}</p>
+                                <div class="flex items-center gap-2">
+                                    <p class="text-[11px] font-black uppercase tracking-widest text-on-surface-variant">{{ t('queue.stage_lyrics_settings') }}</p>
+                                    <a href="{{ docs_url('tasks/stage-and-branding') }}#modify-lyrics-from-queue-control" target="_blank" rel="noopener noreferrer" class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40" aria-label="{{ t('stage.lyrics_settings_help') }}" title="{{ t('stage.lyrics_settings_help') }}">
+                                        <span class="material-symbols-outlined text-sm">help</span>
+                                    </a>
+                                </div>
                                 <p id="stage-remote-lyrics-settings-status" class="mt-0.5 truncate text-xs text-on-surface-variant">{{ t('queue.stage_lyrics_choose_target') }}</p>
                             </div>
                             <button id="stage-remote-stage-refresh-btn" type="button" class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-on-surface transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60" aria-label="{{ t('queue.refresh_stage_displays') }}" title="{{ t('queue.refresh_stage_displays') }}">
@@ -360,7 +373,7 @@
             <div class="flex items-center justify-between border-b border-outline-variant/20 px-5 py-4">
                 <div class="flex min-w-0 items-center gap-2">
                     <h3 class="truncate font-headline text-xl font-black tracking-tight text-on-surface">{{ t('queue.config') }}</h3>
-                    <a href="{{ app_url('/help/') }}" target="_blank" rel="noopener noreferrer" class="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40" aria-label="{{ t('queue.config_help') }}" title="{{ t('queue.config_help') }}">
+                    <a href="{{ docs_url('tasks/create-ai-karaoke') }}#create-karaoke-from-a-music-video" target="_blank" rel="noopener noreferrer" class="inline-flex h-8 w-8 flex-none items-center justify-center rounded-full bg-surface-container-highest text-on-surface-variant transition-colors hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/40" aria-label="{{ t('queue.config_help') }}" title="{{ t('queue.config_help') }}">
                         <span class="material-symbols-outlined text-lg">help</span>
                     </a>
                 </div>
@@ -543,7 +556,7 @@
 
                     <p id="queue-config-lyrics-upgrade-hint" class="hidden text-[11px] leading-tight text-on-surface-variant sm:text-xs">
                         {{ t('lyrics.ttml_upgrade_hint') }}
-                        <a href="{{ app_url('/help/') }}" target="_blank" rel="noopener noreferrer" class="text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/80">{{ t('lyrics.ttml_upgrade_docs') }}</a>
+                        <a href="{{ docs_url('tasks/create-ai-karaoke') }}#ttml-lyrics-upgrade" target="_blank" rel="noopener noreferrer" class="text-primary underline decoration-primary/50 underline-offset-2 hover:text-primary/80">{{ t('lyrics.ttml_upgrade_docs') }}</a>
                     </p>
 
                     <div class="space-y-2">
@@ -621,6 +634,15 @@
             <div>
                 <span class="text-[10px] font-bold uppercase tracking-widest text-primary block mb-1">{{ t('queue.stage_name') }}</span>
                 <h2 class="font-headline text-2xl font-black tracking-tight text-on-surface">{{ t('queue.what_call') }}</h2>
+                <a
+                    href="{{ docs_url('tasks/for-users') }}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-primary underline decoration-primary/40 underline-offset-2 transition hover:text-on-surface"
+                >
+                    {{ t('queue.name_help') }}
+                    <span class="material-symbols-outlined text-sm">open_in_new</span>
+                </a>
             </div>
             <button
                 id="singer-name-close-btn"

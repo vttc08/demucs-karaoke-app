@@ -37,7 +37,7 @@ This is a lightweight AI-powered karaoke app for home use.
 
 ## Required behavior for agents
 Before making changes, read:
-- `README.md`
+- `README.dev.md`
 - `ARCHITECTURE.md`
 - relevant docs in `/docs`
 

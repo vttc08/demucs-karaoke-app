@@ -1,27 +1,50 @@
-# 快速开始
+# 开始使用 { #getting-started }
 
-这个示例文档集要在两种位置都能工作：
+DMKaraoke 由两项服务组成。
 
-- 作为 FastAPI 的 `/help` 内嵌页面
-- 作为 GitHub Pages 或 Cloudflare Pages 的独立静态站点
+- [主应用](#ways-to-deploy)：提供点歌队列、舞台控制和媒体管理功能的 Web 服务器。
+- [Demucs 服务](demucs-service.md)：独立运行 WhisperX 和 Demucs，用于分离人声和生成带时间轴的歌词。
 
-链接会保持相对部署路径，因此同一份构建产物可以直接移动到不同主机。
+这种架构让你可以在性能要求较低的家用服务器上运行主应用，并将卡拉 OK 处理任务交给性能更强的电脑上的 Demucs 服务。Demucs 服务既可以运行在自己的另一台电脑上，也可以通过互联网使用朋友的电脑。两项服务通过 HTTP 通信，因此一项 Demucs 服务可以同时为多台卡拉 OK 服务器提供处理能力。
 
-## 试试看
+![DMKaraoke 架构](../assets/images/architecture.webp)
 
-![示例文档插图](../assets/images/docs-demo.svg)
+建议在 Linux 服务器上使用 Docker 容器部署 DMKaraoke 主应用。此外也支持不使用 Docker 的安装方式，例如直接安装在 Linux 系统或 LXC 容器中；也可以安装在 Windows 上。
 
-1. 打开 [点歌页面](../features/queue-page.md) 并沿着内部链接浏览。
-2. 阅读 [制作 AI 卡拉 OK](../tasks/create-ai-karaoke.md) 了解一个简短流程。
-3. 访问 [故障排查](../troubleshooting/index.md) 验证跨页面跳转。
+## 部署方式 { #ways-to-deploy }
 
-## Markdown 特性
+主应用是一项轻量级的 FastAPI Web 服务，使用 SQLite 数据库。它可以在任何 x64 或 ARM64 Linux 服务器上运行，包括 Raspberry Pi 4 或较旧的办公电脑。
 
-| 功能 | 示例 |
-| --- | --- |
-| 链接 | [点歌页面](../features/queue-page.md) |
-| 回链 | [故障排查](../troubleshooting/index.md) |
-| 图片 | 上方插图 |
+<div class="grid cards" markdown>
 
-> 这一页故意保持精简，方便先确认语言切换和资源路径都正常，再继续扩展内容。
+-   :material-docker: **Docker**
 
+    Linux 服务器的推荐部署方式。
+
+    [:octicons-arrow-right-24: 查看 Docker 指南](docker.md)
+
+-   :material-linux: **Linux**
+
+    不使用 Docker，直接运行主应用。
+
+    [:octicons-arrow-right-24: 查看 Linux 指南](linux.md)
+
+-   :material-microsoft-windows: **Windows**
+
+    在 Windows 上安装主应用或 Demucs 服务。
+
+    [:octicons-arrow-right-24: 查看 Windows 指南](windows.md)
+
+</div>
+
+### Demucs 服务 { #demucs-service }
+
+使用支持 CUDA 的 NVIDIA GPU 时，Demucs 服务可以获得最佳处理性能。没有此类 GPU 也可以运行，但会改用 CPU 处理，因此速度较慢。你也可以将 Demucs 服务部署在另一台电脑上。
+
+- [Demucs 服务](demucs-service.md)
+
+## 生产环境注意事项 { #production-considerations }
+
+请定期备份应用数据和媒体文件，并在新版本发布后及时升级。有关备份、迁移和升级方法，请参阅[备份、恢复和升级](backup-and-restore.md)。
+
+如果要在生产环境中部署 DMKaraoke，还应规划代理服务器或反向代理、监控和访问控制等配套服务。详情请参阅[服务器管理](../tasks/server-administration.md)。

@@ -115,13 +115,13 @@ therefore owned by that exact UID/GID rather than root. This needs no `s6`,
 `gosu`, or `su-exec` init wrapper.
 
 ```bash
-cp .env.docker.example .env.docker
+cp .env.example .env
 mkdir -p data
-docker compose --env-file .env.docker pull
-docker compose --env-file .env.docker up -d
+docker compose --env-file .env pull
+docker compose --env-file .env up -d
 ```
 
-Set `PUID` and `PGID` in `.env.docker` to the IDs that own the host data or
+Set `PUID` and `PGID` in `.env` to the IDs that own the host data or
 network share (normally `id -u` and `id -g`). Ensure the host directory grants
 that identity read/write access before starting the container. The image makes
 an empty `/data` directory writable for its unprivileged default user, but a

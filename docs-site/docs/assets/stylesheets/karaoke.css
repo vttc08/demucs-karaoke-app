@@ -277,6 +277,35 @@ nav.md-nav--primary > label.md-nav__title[for="__drawer"] {
   color: #aca8c2;
 }
 
+@media screen and (max-width: 600px) {
+  .md-typeset {
+    font-size: 0.78rem;
+  }
+
+  .md-typeset p,
+  .md-typeset li,
+  .md-typeset blockquote {
+    line-height: 1.55;
+  }
+
+  .md-typeset p {
+    margin: 0.75em 0;
+  }
+
+  .md-typeset h1 {
+    font-size: 1.45rem;
+  }
+
+  .md-typeset h2 {
+    font-size: 1.2rem;
+    margin-top: 1.6rem;
+  }
+
+  .md-typeset h3 {
+    font-size: 1.05rem;
+  }
+}
+
 .md-typeset img {
   border-radius: 1rem;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
@@ -295,7 +324,7 @@ nav.md-nav--primary > label.md-nav__title[for="__drawer"] {
 
 @media screen and (max-width: 44.9375em) {
   .md-typeset h1 {
-    font-size: 1.9rem;
+    font-size: 1.45rem;
   }
 
   .md-content__inner {

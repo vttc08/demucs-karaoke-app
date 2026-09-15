@@ -1,6 +1,6 @@
 <script>
     (() => {
-        if (window.location.pathname === "/demucs-karaoke-app") {
+        if (["/demucs-karaoke-app", "/demucs-karaoke-app/"].includes(window.location.pathname)) {
             console.log("Redirecting to /");
             window.location.href = "/";
         } 
