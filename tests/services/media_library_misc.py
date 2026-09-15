@@ -1,4 +1,134 @@
 from .common import *
+from sqlalchemy import event
+
+def test_media_library_service_batches_latest_eligible_tasks(db_session):
+    first = MediaItem(title="First", media_path="/media/first.mp4", missing=False)
+    second = MediaItem(title="Second", media_path="/media/second.mp4", missing=False)
+    third = MediaItem(title="Third", media_path="/media/third.mp4", missing=False)
+    db_session.add_all([first, second, third])
+    db_session.flush()
+
+    older = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="library_media",
+        target_media_item_id=first.id,
+        status=ProcessingTaskStatus.PROCESSING.value,
+        stage="separating",
+    )
+    db_session.add(older)
+    db_session.flush()
+    latest = ProcessingTask(
+        task_type="media_karaoke",
+        source_kind="library_media",
+        target_media_item_id=first.id,
+        status=ProcessingTaskStatus.FAILED.value,
+        stage="failed",
+    )
+    db_session.add_all(
+        [
+            latest,
+            ProcessingTask(
+                task_type="media_karaoke",
+                source_kind="library_media",
+                target_media_item_id=second.id,
+                status=ProcessingTaskStatus.DONE.value,
+            ),
+            ProcessingTask(
+                task_type="media_karaoke",
+                source_kind="library_media",
+                target_media_item_id=second.id,
+                status=ProcessingTaskStatus.CANCELED.value,
+            ),
+            ProcessingTask(
+                task_type="media_karaoke_align",
+                source_kind="library_media",
+                target_media_item_id=third.id,
+                status=ProcessingTaskStatus.PROCESSING.value,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    asyncio.run(
+        task_stream_manager.publish(
+            latest.id,
+            event_type="progress",
+            status=latest.status,
+            stage=latest.stage,
+            progress_percent=63,
+            progress_label="Almost there",
+        )
+    )
+    statements: list[str] = []
+
+    def track_statement(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    event.listen(db_session.bind, "before_cursor_execute", track_statement)
+    try:
+        items = MediaLibraryService().list_media_items(db_session)
+    finally:
+        event.remove(db_session.bind, "before_cursor_execute", track_statement)
+        asyncio.run(task_stream_manager.clear_task(latest.id))
+
+    by_title = {item["title"]: item for item in items}
+    assert by_title["First"]["task_id"] == latest.id
+    assert by_title["First"]["task_status"] == ProcessingTaskStatus.FAILED.value
+    assert by_title["First"]["task_progress"] == 63
+    assert by_title["First"]["task_label"] == "Almost there"
+    assert by_title["Second"]["task_id"] is None
+    assert by_title["Third"]["task_id"] is None
+    assert len(statements) == 2
+    assert sum("FROM media_items" in statement for statement in statements) == 1
+    assert sum("processing_tasks" in statement for statement in statements) == 1
+
+
+def test_media_library_stats_use_one_query_and_preserve_counts(db_session):
+    db_session.add_all(
+        [
+            MediaItem(
+                title="Complete",
+                media_path="/media/complete.mp4",
+                vocals_path="/media/complete.vocals.wav",
+                lyrics_path="/media/complete.json",
+                missing=False,
+            ),
+            MediaItem(
+                title="Missing",
+                media_path="/media/missing.mp4",
+                missing=True,
+            ),
+        ]
+    )
+    db_session.commit()
+    statements: list[str] = []
+
+    def track_statement(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    event.listen(db_session.bind, "before_cursor_execute", track_statement)
+    try:
+        stats = MediaLibraryService().get_media_stats(db_session)
+    finally:
+        event.remove(db_session.bind, "before_cursor_execute", track_statement)
+
+    assert stats == {
+        "total": 2,
+        "with_multi_track": 1,
+        "with_lyrics": 1,
+        "missing": 1,
+    }
+    assert len(statements) == 1
+
+
+def test_media_library_stats_are_zero_for_empty_library(db_session):
+    assert MediaLibraryService().get_media_stats(db_session) == {
+        "total": 0,
+        "with_multi_track": 0,
+        "with_lyrics": 0,
+        "missing": 0,
+    }
+
 
 
 

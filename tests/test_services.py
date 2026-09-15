@@ -1,5 +1,6 @@
 from tests.services.queue_service import *  # noqa: F401,F403
 from tests.services.auth_service import *  # noqa: F401,F403
+from tests.services.i18n_service import *  # noqa: F401,F403
 from tests.services.media_library_sync import *  # noqa: F401,F403
 from tests.services.media_library_maintenance import *  # noqa: F401,F403
 from tests.services.media_library_misc import *  # noqa: F401,F403

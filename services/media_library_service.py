@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from models import MediaItem, ProcessingTask
@@ -20,48 +20,84 @@ class MediaLibraryService:
             .order_by(MediaItem.updated_at.desc(), MediaItem.id.desc())
             .all()
         )
-        return [self._to_page_item(db, row) for row in rows]
+        tasks_by_media_id = self._latest_tasks_by_media_id(db, rows)
+        return [
+            self._to_page_item(row, tasks_by_media_id.get(row.id))
+            for row in rows
+        ]
 
     def get_media_stats(self, db: Session) -> dict[str, int]:
-        total = int(db.query(func.count(MediaItem.id)).scalar() or 0)
-        with_multi_track = int(
-            db.query(func.count(MediaItem.id))
-            .filter(MediaItem.vocals_path.isnot(None), MediaItem.vocals_path != "")
-            .scalar()
-            or 0
-        )
-        with_lyrics = int(
-            db.query(func.count(MediaItem.id))
-            .filter(MediaItem.lyrics_path.isnot(None), MediaItem.lyrics_path != "")
-            .scalar()
-            or 0
-        )
-        missing = int(
-            db.query(func.count(MediaItem.id)).filter(MediaItem.missing.is_(True)).scalar()
-            or 0
-        )
+        total, with_multi_track, with_lyrics, missing = db.query(
+            func.count(MediaItem.id),
+            func.sum(
+                case(
+                    (
+                        MediaItem.vocals_path.isnot(None)
+                        & (MediaItem.vocals_path != ""),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+            func.sum(
+                case(
+                    (
+                        MediaItem.lyrics_path.isnot(None)
+                        & (MediaItem.lyrics_path != ""),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ),
+            func.sum(case((MediaItem.missing.is_(True), 1), else_=0)),
+        ).one()
         return {
-            "total": total,
-            "with_multi_track": with_multi_track,
-            "with_lyrics": with_lyrics,
-            "missing": missing,
+            "total": int(total or 0),
+            "with_multi_track": int(with_multi_track or 0),
+            "with_lyrics": int(with_lyrics or 0),
+            "missing": int(missing or 0),
         }
 
     @staticmethod
-    def _to_page_item(db: Session, item: MediaItem) -> dict[str, Any]:
+    def _latest_tasks_by_media_id(
+        db: Session,
+        items: list[MediaItem],
+    ) -> dict[int, ProcessingTask]:
+        media_item_ids = [item.id for item in items]
+        if not media_item_ids:
+            return {}
+
+        latest_task_ids = (
+            db.query(func.max(ProcessingTask.id).label("task_id"))
+            .filter(
+                ProcessingTask.target_media_item_id.in_(media_item_ids),
+                ProcessingTask.task_type == "media_karaoke",
+                ProcessingTask.status.in_(
+                    ["pending", "downloading", "processing", "failed"]
+                ),
+            )
+            .group_by(ProcessingTask.target_media_item_id)
+            .subquery()
+        )
+        tasks = (
+            db.query(ProcessingTask)
+            .join(latest_task_ids, ProcessingTask.id == latest_task_ids.c.task_id)
+            .all()
+        )
+        return {
+            task.target_media_item_id: task
+            for task in tasks
+            if task.target_media_item_id is not None
+        }
+
+    @staticmethod
+    def _to_page_item(
+        item: MediaItem,
+        task: ProcessingTask | None,
+    ) -> dict[str, Any]:
         lyrics_kind = None
         if item.lyrics_path and item.lyrics_path.strip():
             lyrics_kind = Path(item.lyrics_path).suffix.lower().lstrip(".") or None
-        task = (
-            db.query(ProcessingTask)
-            .filter(
-                ProcessingTask.target_media_item_id == item.id,
-                ProcessingTask.task_type == "media_karaoke",
-                ProcessingTask.status.in_(["pending", "downloading", "processing", "failed"]),
-            )
-            .order_by(ProcessingTask.id.desc())
-            .first()
-        )
         task_snapshot = task_stream_manager.snapshot_now(task.id) if task else None
         return {
             "id": item.id,

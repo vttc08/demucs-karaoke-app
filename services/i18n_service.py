@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from config import Settings
@@ -22,6 +23,7 @@ SUPPORTED_LOCALES = {code: label for code, label in ALL_LOCALES.items() if code 
 _LOCALE_DIR = Path(__file__).resolve().parent.parent / "locales"
 
 
+@lru_cache(maxsize=1)
 def load_catalogs() -> dict[str, dict[str, str]]:
     """Load locale catalogs from disk."""
     catalogs: dict[str, dict[str, str]] = {}
