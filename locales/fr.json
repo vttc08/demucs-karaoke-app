@@ -635,7 +635,7 @@
   "settings.parallel_search": "Recherche YouTube parallèle",
   "settings.parallel_search_detail": "Recherche la requête d'origine et une variante karaoké en même temps.",
   "settings.qr_url": "URL du QR code de la scène",
-  "settings.qr_url_detail": "Facultatif. Utilisé par la superposition du QR code de la vue scène. Par défaut, utilise le nom d'hôte actuel si vide.",
+  "settings.qr_url_detail": "Facultatif. Utilisé par la superposition du QR code de la vue scène. Par défaut, utilise l'URL actuelle de la file d'attente si ce champ est vide.",
   "settings.lobby_media_path": "URL du média du lobby de la scène",
   "settings.lobby_media_path_detail": "Facultatif. URL /media/... ou /cache/... à jouer en boucle lorsque la file d'attente est vide.",
   "settings.vocals_volume_default": "Volume des voix par défaut",

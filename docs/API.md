@@ -745,6 +745,7 @@ GET /api/qr?data=<text>&size=<pixels>
 **Response:**
 - Returns a binary `image/png` payload containing the QR code.
 - Uses the bundled `segno` library with a fixed dark-on-light palette so no external QR service is required.
+- Always emits a standard QR code, including for short payloads, for broad scanner compatibility.
 
 ---
 
