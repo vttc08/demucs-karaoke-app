@@ -104,7 +104,10 @@ def test_app_serves_pages_assets_api_and_websocket_under_configured_subpath(tmp_
             "routes.pages.stage_lobby_service.resolve_lobby_media_url",
             return_value="/media/stage-lobby-fallback.mp4",
         ):
-            assert client.get("/karaoke/stage").status_code == 200
+            stage_page = client.get("/karaoke/stage")
+            assert stage_page.status_code == 200
+            assert 'window.KARAOKE_BASE_PATH = "/karaoke";' in stage_page.text
+            assert "/karaoke/static/stage.js" in stage_page.text
         assert client.get("/karaoke/settings").status_code == 200
         assert client.get("/karaoke/media").status_code == 200
         assert client.get("/karaoke/upload").status_code == 200
