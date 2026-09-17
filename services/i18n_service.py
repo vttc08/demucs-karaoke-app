@@ -15,6 +15,7 @@ DEFAULT_LOCALE = "en"
 ENABLED_LOCALES = Settings().enabled_locales.split(",")
 ALL_LOCALES = {
     "en": "English",
+    "es": "Español",
     "fr": "Français",
     "zh-CN": "简体中文",
     "zh-TW": "繁體中文",
@@ -48,6 +49,9 @@ def normalize_locale(locale: str | None) -> str | None:
     all_supported_languages = [code.lower() for code in SUPPORTED_LOCALES]
     if lowered in all_supported_languages:
         return next(code for code in SUPPORTED_LOCALES if code.lower() == lowered)
+    primary_language = lowered.split("-", 1)[0]
+    if primary_language in all_supported_languages:
+        return next(code for code in SUPPORTED_LOCALES if code.lower() == primary_language)
     return None
 
 
