@@ -248,7 +248,7 @@ As long as there is audio and lyrics, this app can make karaoke tracks from it.
 
 ## Translation
 
-Currently, the application is translated into English, simplified and traditional Chinese, and French, while the documentation is translated into simplified Chinese only. You can help with translation.
+Currently, the application is translated into English, Spanish, simplified and traditional Chinese, and French. The documentation is available in English, Spanish, and simplified Chinese. You can help with translation.
 
 The translation files are located in `locales/` as `<language_code>.json` files containing key-value pairs for UI strings and their translations.
 

@@ -5,13 +5,14 @@ The app uses a small catalog-based i18n setup for frontend UI text.
 ## Current Locales
 
 - `en`: English fallback/source catalog
+- `es`: Spanish UI catalog
 - `zh-CN`: Simplified Chinese UI catalog
 - `fr`: French UI catalog
 
 Only frontend UI copy is translated. Song titles, artists, lyrics, media filenames, provider output,
 and API payload content remain unchanged.
 
-The documentation site follows the app's primary language slugs (`en`, `fr`, and `zh`). It currently
+The documentation site follows the app's primary language slugs (`en`, `es`, `fr`, and `zh`). It
 builds the English Markdown pages as a fallback for languages whose documentation translation does
 not exist yet, so documentation links remain styled and usable while translations are contributed.
 For example, both `zh-CN` and `zh-TW` use the shared `/help/zh/` documentation tree for now.
