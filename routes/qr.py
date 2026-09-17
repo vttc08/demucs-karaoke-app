@@ -3,7 +3,7 @@ from io import BytesIO
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from segno import make as make_qr
+from segno import make_qr
 
 router = APIRouter(prefix="/api", tags=["qr"])
 

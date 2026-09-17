@@ -1619,7 +1619,7 @@ function resolveStageQrUrl() {
     if (configured) {
         return configured;
     }
-    return window.location.hostname;
+    return new URL(window.KaraokeURLs.appUrl("/queue"), window.location.origin).href;
 }
 
 function clampNumber(value, min, max, fallback) {

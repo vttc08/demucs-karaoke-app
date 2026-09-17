@@ -41,6 +41,9 @@ plugins:
           name: English
           default: true
           build: true
+        - locale: es
+          name: Español
+          build: true
         - locale: fr
           name: Français
           build: true

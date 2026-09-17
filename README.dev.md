@@ -43,7 +43,7 @@ Lightweight AI-powered karaoke application for home use.
 - **Real-time Queue Updates**: WebSocket push with polling fallback
 - **Mobile-Friendly Reconnects**: Lifecycle-aware websocket recovery on queue, lyrics, and stage pages for faster return after backgrounding or screen-off on mobile browsers
 - **Live Queue Presence**: Queue page shows active guests and join toasts in real time
-- **Frontend Language Switching**: English and Simplified Chinese UI labels with a header selector
+- **Frontend Language Switching**: English, Spanish, French, and Chinese UI labels with a header selector
 
 ## Requirements
 
@@ -264,8 +264,8 @@ See [docs/vocal-sync.md](docs/vocal-sync.md) for the Add Vocals workflow and off
 
 ### Language switching
 
-The shared page header includes a language selector. The app currently supports English (`en`) and
-Simplified Chinese (`zh-CN`) for frontend UI labels only. Song titles, artists, lyrics, filenames,
+The shared page header includes a language selector. The app currently supports English (`en`),
+Spanish (`es`), French (`fr`), and Chinese (`zh-CN`, `zh-TW`) for frontend UI labels only. Song titles, artists, lyrics, filenames,
 provider responses, and other backend content are shown as-is. The selected language is stored in a
 `karaoke_locale` cookie and applies to server-rendered templates and dynamic frontend messages.
 
@@ -284,7 +284,7 @@ When adding or modifying UI text in templates or JavaScript:
    }
    ```
 
-2. **Translate to all supported locales** (currently `zh-CN`):
+2. **Translate to all supported locales** (currently `es`, `fr`, `zh-CN`, and `zh-TW`):
    - Keep the same keys and placeholder format (`{key}`, `{count}`)
    - Only translate the value, never the key
 

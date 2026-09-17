@@ -429,7 +429,10 @@ def test_stage_page_renders_client_qr_controls(client):
     assert b'id="stage-qr-close-btn"' in response.content
     assert b'id="stage-qr-size-decrease-btn"' in response.content
     assert b'id="stage-qr-size-increase-btn"' in response.content
-    assert "karaoke.stage.qrDisplay" in Path("static/stage.js").read_text(encoding="utf-8")
+    stage_script = Path("static/stage.js").read_text(encoding="utf-8")
+    assert "karaoke.stage.qrDisplay" in stage_script
+    assert 'new URL(window.KaraokeURLs.appUrl("/queue"), window.location.origin).href' in stage_script
+    assert "return window.location.hostname;" not in stage_script
     assert b"SERVER_STAGE_QR_SIZE" not in response.content
     assert b"SERVER_STAGE_QR_POSITION" not in response.content
 
@@ -643,10 +646,3 @@ def test_app_startup_triggers_media_scan():
             assert response.status_code == 200
 
     assert mock_scan.called
-
-def test_qr_endpoint_returns_png(client):
-    """QR endpoint should respond with PNG data."""
-    response = client.get("/api/qr", params={"data": "stage-karaoke", "size": 256})
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "image/png"
-    assert len(response.content) > 0

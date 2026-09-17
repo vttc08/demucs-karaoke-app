@@ -635,7 +635,7 @@
   "settings.parallel_search": "並行 YouTube 搜索",
   "settings.parallel_search_detail": "同時搜索原始查詢和卡拉 OK 變體。",
   "settings.qr_url": "舞臺二維碼 URL",
-  "settings.qr_url_detail": "可選。用於舞臺視圖二維碼浮層。留空時默認使用當前主機名。",
+  "settings.qr_url_detail": "可選。用於舞臺視圖二維碼浮層。留空時默認使用目前的佇列 URL。",
   "settings.lobby_media_path": "舞臺大廳媒體 URL",
   "settings.lobby_media_path_detail": "可選。隊列爲空時循環播放的 /media/... 或 /cache/... URL。",
   "settings.vocals_volume_default": "默認人聲音量",
