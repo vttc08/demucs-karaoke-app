@@ -192,6 +192,8 @@ secret `DOCKERHUB_TOKEN`. For a release tag such as `v0.0.1-dev`, the workflow
 publishes exactly three tags: `0.0.1-dev`, `0.0.1-dev-vocal-sync`, and `latest`.
 The `latest` tag is attached to the lightweight image and is pushed after
 vocal-sync so it appears first when Docker Hub is sorted by newest.
+After both images are published, the workflow updates the Docker Hub repository
+description from the root `README.md` using the same credentials.
 
 Example runtime environment:
 
