@@ -168,3 +168,11 @@ jobs:
           cache-to: type=gha,mode=max,scope=app-release
           provenance: mode=max
           sbom: true
+
+      - name: Sync Docker Hub description from README
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.IMAGE_NAME }}
+          readme-filepath: ./README.md

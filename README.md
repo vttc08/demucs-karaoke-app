@@ -178,12 +178,12 @@ Navigate to [http://application:8000/login](http://application:8000/login), or u
 
 Under Karaoke Processing, enter the IP address of the server you just installed Demucs service on.
 
-- The main app server must be able to reach Demucs. Check [Troubleshooting](README.dev.md#troubleshooting) if it cannot.
-- If the Demucs service is running on another network, you can use [Tailscale](https://tailscale.com/kb/1017/install) or a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for reachability.
+- The main app server must be able to reach Demucs. Check [Troubleshooting](https://vttc08.github.io/demucs-karaoke-app/troubleshooting/) if it cannot.
+- If the Demucs service is running on another network, see the [Tailscale](https://vttc08.github.io/demucs-karaoke-app/tasks/server-administration/#tailscale) or [Cloudflare Tunnel](https://vttc08.github.io/demucs-karaoke-app/tasks/server-administration/#cloudflare-tunnel) setup guide for reachability.
 
 Scroll down to the bottom and click `Check Demucs`.
 
-For more Demucs-related configuration, please refer to [Separation Backends](docs/separation-backends.md).
+For more Demucs-related configuration, please refer to [Separation Backends](https://vttc08.github.io/demucs-karaoke-app/configuration/karaoke-processing/#separation-options).
 
 </details>
 
