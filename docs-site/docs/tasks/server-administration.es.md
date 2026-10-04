@@ -51,8 +51,8 @@ Por ejemplo, en Nginx Proxy Manager, crea una Access List, añade la subred dom�
         allow all;
         proxy_pass http://<your-application-ip>:<your-application-port>;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     error_page 403 = @handle_403;
@@ -62,6 +62,10 @@ Por ejemplo, en Nginx Proxy Manager, crea una Access List, añade la subred dom�
         return 302 https://<your-karaoke-domain>/access-restricted;
     }
     ```
+
+### Dirección del cliente detrás de un proxy inverso { #client-address-behind-a-reverse-proxy }
+
+Uvicorn solo usa `X-Forwarded-For` y `X-Forwarded-Proto` cuando confía en el par conectado directamente. Define `FORWARDED_ALLOW_IPS` con la dirección IP del proxy tal como la ve la aplicación, o con un rango CIDR que contenga únicamente proxies de confianza. El valor predeterminado es `127.0.0.1`, que normalmente no coincide con un proxy de Docker o remoto. Uvicorn no usa `X-Real-IP`. En Docker Compose, añade el ajuste al archivo `.env` de la aplicación; para iniciar localmente, expórtalo o pásalo a Uvicorn mediante `--forwarded-allow-ips`. Consulta la [referencia de variables de entorno](../configuration/environments.md#server-and-routing). Mantén privado el puerto de la aplicación o restríngelo al proxy, y nunca uses `*` si clientes no confiables pueden acceder directamente a la aplicación.
 
 ??? note "Configuración de Caddy"
 

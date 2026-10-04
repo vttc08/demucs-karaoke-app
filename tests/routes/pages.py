@@ -1,6 +1,7 @@
 from .common import *
 import threading
 from routes.pages import auth_service, build_docs_url
+from uvicorn import Config
 
 
 def test_settings_page_renders_separation_backend_controls(client):
@@ -590,6 +591,38 @@ def test_admin_login_throttles_before_password_verification(client, monkeypatch)
     assert response.headers["retry-after"]
     assert "Too many sign-in attempts" in response.text
     assert verify.call_count == 10
+
+
+def test_admin_login_uses_trusted_forwarded_client_address(client, monkeypatch):
+    """Different clients behind one trusted proxy get separate IP budgets."""
+    monkeypatch.setenv("FORWARDED_ALLOW_IPS", "172.23.0.5")
+    server = Config(app, log_config=None)
+    server.load()
+
+    with TestClient(server.loaded_app, client=("172.23.0.5", 50000)) as proxy_client:
+        with patch.object(auth_service, "authenticate_admin", return_value=None) as verify:
+            for _ in range(10):
+                response = proxy_client.post(
+                    "/login",
+                    data={"type": "admin", "username": "admin", "password": "wrong"},
+                    headers={"X-Forwarded-For": "198.51.100.10"},
+                )
+                assert response.status_code == 401
+
+            blocked = proxy_client.post(
+                "/login",
+                data={"type": "admin", "username": "admin", "password": "wrong"},
+                headers={"X-Forwarded-For": "198.51.100.10"},
+            )
+            other_client = proxy_client.post(
+                "/login",
+                data={"type": "admin", "username": "admin", "password": "wrong"},
+                headers={"X-Forwarded-For": "198.51.100.11"},
+            )
+
+    assert blocked.status_code == 429
+    assert other_client.status_code == 401
+    assert verify.call_count == 11
 
 
 def test_admin_login_worker_cap_rejects_before_verification(client, monkeypatch):

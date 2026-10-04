@@ -16,6 +16,50 @@ uv run python scripts/admin_user.py create --username admin
 - Set `KARAOKE_BASE_PATH=/karaoke` only when the reverse proxy preserves that prefix upstream.
 - Back up the SQLite database and media directory together, especially before large library scans or cleanup.
 
+### Client address behind a reverse proxy
+
+The admin login limiter uses the client address reported by Uvicorn. Uvicorn accepts
+`X-Forwarded-For` and `X-Forwarded-Proto` only when the immediate connection comes from
+a trusted proxy. Its default trusted peer is `127.0.0.1`; a Docker or remote proxy
+usually has a different address, so without configuration all its users share the
+proxy's address for login limiting. Uvicorn does not use `X-Real-IP`.
+
+Set `FORWARDED_ALLOW_IPS` to the **proxy address as seen inside the app**, not the
+visitors' addresses. It accepts comma-separated IP addresses and CIDR ranges. For
+example, if a reverse proxy on a dedicated Docker network connects from
+`172.23.0.5`, set this in `.env`:
+
+```dotenv
+FORWARDED_ALLOW_IPS=172.23.0.5
+```
+
+The included Compose file passes `.env` into the container through `env_file`, and
+Uvicorn reads this variable at startup. Restart the app container after changing it.
+Find the proxy container's address on the shared network with
+`docker network inspect <network-name>`; keep that address stable or update the
+setting when it changes.
+For a local `uv run uvicorn` or `uv run python main.py` launch, export
+`FORWARDED_ALLOW_IPS` in the shell first, or pass
+`--forwarded-allow-ips 172.23.0.5` to Uvicorn directly. The application's
+Pydantic `.env` loader does not export this Uvicorn setting to the process.
+Use a CIDR only when every peer in that range may set forwarding headers. Avoid `*`:
+if someone can reach the app directly, they could choose their own apparent address
+and bypass the per-address login limit. The proxy must set `X-Forwarded-For` to the
+real client address (or a vetted proxy chain) and `X-Forwarded-Proto` to its public
+scheme. For a single Nginx proxy, the relevant forwarding headers are:
+
+```nginx
+proxy_set_header X-Forwarded-For $remote_addr;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+If the proxy shares a Docker network with the app, connect to `karaoke:8000` on that
+network and remove the app's `ports:` publication. If the proxy runs on the Docker
+host, bind the published app port to loopback (`127.0.0.1:8000:8000`), then trust
+the Docker gateway address that the app actually sees for that connection. The
+included `compose.yml` publishes `8000:8000` on all host interfaces for direct LAN
+use; restrict that port before trusting any Docker gateway or network range.
+
 The app can run without Deno. Leave `YTDLP_DENO_PATH` blank until a video needs yt-dlp external JavaScript execution. When Deno is configured, the app adds:
 
 ```bash
@@ -154,12 +198,15 @@ the default published image.
 
 ### Environment and persisted settings
 
-For a local `uv` run, the application reads `.env` from the application
-working directory. For Docker Compose, the host `.env` or the file supplied by
-`--env-file` is used by Compose for variable substitution; it is not copied
-into the container automatically. Only variables listed under the Compose
-service's `environment:` section, together with Dockerfile `ENV` defaults, are
-passed to the application.
+For a local `uv` run, the application's Pydantic settings read `.env` from
+the working directory; Uvicorn-specific settings such as `FORWARDED_ALLOW_IPS`
+must be exported to the process or passed as CLI options. For Docker Compose,
+the host `.env` or the file supplied by `--env-file` is used for Compose
+variable substitution. The included service also has `env_file: .env`, which
+passes those values into the container. Its explicit `environment:` entries
+override matching `env_file` values, and Dockerfile `ENV` provides defaults.
+`docker compose --env-file other.env` changes the substitution file but does
+not replace the service's literal `env_file: .env` entry.
 
 The effective precedence is:
 

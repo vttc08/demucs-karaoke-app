@@ -34,6 +34,7 @@ Les variables suivantes configurent l'application principale FastAPI.
 | `HOST` | `0.0.0.0` | Network address on which the application listens. `0.0.0.0` listens on all interfaces, which is normally required for Docker and LAN access. |
 | `PORT` | `8000` | Port on which the application listens. |
 | `KARAOKE_BASE_PATH` | empty | Optional URL prefix for a reverse proxy, such as `/karaoke`. Leave empty when the app is served at `/`. The proxy must preserve the prefix when forwarding requests. |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Comma-separated IP addresses or CIDR ranges of trusted reverse proxies. This Uvicorn setting controls whether `X-Forwarded-For` and `X-Forwarded-Proto` are accepted. See [client address behind a reverse proxy](../tasks/server-administration.md#client-address-behind-a-reverse-proxy). |
 | `ENABLED_LOCALES` | `en` | Comma-separated locale codes available in the user interface, such as `en,zh-CN`. Use `zh-CN` for Simplified Chinese; `zh` alone is not sufficient. |
 
 ### Base de données et stockage { #database-and-storage }

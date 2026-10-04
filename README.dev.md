@@ -142,6 +142,8 @@ The proxy should preserve the prefix when forwarding, so upstream requests arriv
 `/karaoke/queue`, `/karaoke/api/queue/ws`, `/karaoke/static/...`, and `/karaoke/media/...`.
 When this variable is unset, the app continues to serve `/queue`, `/stage`, `/api/...`, `/media/...`,
 and `/static/...`.
+For client IP handling and login limits behind a proxy or Docker NAT, see
+[Client address behind a reverse proxy](docs/deployment.md#client-address-behind-a-reverse-proxy).
 
 ## Usage
 
