@@ -100,6 +100,11 @@ def test_app_serves_pages_assets_api_and_websocket_under_configured_subpath(tmp_
             token, _ = service.create_admin_session(db, admin)
         client.cookies.set(ADMIN_SESSION_COOKIE, token)
 
+        settings_page = client.get("/karaoke/settings")
+        assert settings_page.status_code == 200
+        assert 'action="/karaoke/logout" method="post"' in settings_page.text
+        assert client.get("/karaoke/logout").status_code == 405
+
         with patch(
             "routes.pages.stage_lobby_service.resolve_lobby_media_url",
             return_value="/media/stage-lobby-fallback.mp4",

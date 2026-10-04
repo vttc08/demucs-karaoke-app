@@ -1,9 +1,11 @@
 """HTML page routes."""
+import threading
 from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Request, Depends, Form
+from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from sqlalchemy.orm import Session
@@ -22,6 +24,7 @@ from services.subtitle_workflow_service import (
 )
 from services.stage_lobby_service import StageLobbyService
 from services.auth_service import ADMIN_SESSION_COOKIE, SESSION_DAYS, AuthService
+from services.login_attempt_service import login_attempt_limiter
 from services.i18n_service import (
     LOCALE_COOKIE,
     catalog_payload,
@@ -40,6 +43,7 @@ runtime_settings_service = RuntimeSettingsService()
 stage_lobby_service = StageLobbyService()
 media_trim_service = MediaTrimService()
 auth_service = AuthService()
+_admin_login_slots = threading.BoundedSemaphore(4)
 _VIDEO_SUFFIXES = {".mp4", ".webm", ".mkv", ".mov", ".avi", ".m4v"}
 _DOCS_ROOT = "/help"
 
@@ -217,7 +221,25 @@ async def login_handler(
 ):
     """Handle login and identification."""
     if type == "admin":
-        admin = auth_service.authenticate_admin(db, username, password)
+        retry_after = login_attempt_limiter.reserve(
+            request.client.host if request.client else "unknown", username
+        )
+        if retry_after or not _admin_login_slots.acquire(blocking=False):
+            return templates.TemplateResponse(
+                request,
+                "login.html",
+                {
+                    "request": request,
+                    "admin_configured": auth_service.count_admins(db) > 0,
+                    "error": translate(resolve_locale(request), "login.too_many_attempts"),
+                },
+                status_code=429,
+                headers={"Retry-After": str(retry_after or 1)},
+            )
+        try:
+            admin = await run_in_threadpool(auth_service.authenticate_admin, db, username, password)
+        finally:
+            _admin_login_slots.release()
         if admin is None:
             return templates.TemplateResponse(
                 request,
@@ -255,10 +277,17 @@ async def login_handler(
     return response
 
 
-@router.get("/logout")
-async def logout(request: Request, db: Session = Depends(get_db)):
+@router.post("/logout")
+async def logout(
+    request: Request,
+    csrf_token: str = Form(""),
+    db: Session = Depends(get_db),
+):
     """Log out and clear cookies."""
-    auth_service.delete_admin_session(db, request.cookies.get(ADMIN_SESSION_COOKIE))
+    session_token = request.cookies.get(ADMIN_SESSION_COOKIE)
+    if not auth_service.valid_logout_csrf_token(session_token, csrf_token):
+        raise HTTPException(status_code=403)
+    auth_service.delete_admin_session(db, session_token)
     response = RedirectResponse(url=app_url("/login"), status_code=302)
     response.delete_cookie(key="karaoke_singer", path="/")
     response.delete_cookie(key=ADMIN_SESSION_COOKIE, path="/")
@@ -346,7 +375,16 @@ async def settings_page(request: Request, db: Session = Depends(get_db)):
     )
     if admin is None:
         return RedirectResponse(url=app_url("/login"), status_code=302)
-    return templates.TemplateResponse(request, "settings.html", {"request": request})
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {
+            "request": request,
+            "logout_csrf_token": auth_service.logout_csrf_token(
+                request.cookies.get(ADMIN_SESSION_COOKIE)
+            ),
+        },
+    )
 
 
 @router.get("/media", response_class=HTMLResponse)

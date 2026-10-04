@@ -363,6 +363,10 @@ For unattended startup, use Task Scheduler or a service wrapper such as NSSM. St
 
 ## Security And Operations
 
+- Keep the app's upstream port private to the reverse proxy. For multiple app workers, add a
+  proxy-side limit for admin login attempts because the built-in login limiter is per process.
+- Configure the app server to trust forwarded client IP headers only from the reverse proxy;
+  the login limiter uses the resulting client address, never a raw request header.
 - Do not expose `/settings`, `/media`, or admin APIs directly to the public internet without a trusted reverse proxy and access policy.
 - If you expose `demucs_svc` beyond the LAN, set `DEMUCS_API_KEY` there and in the main app so
   remote requests carry `X-API-Key`.

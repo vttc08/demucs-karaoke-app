@@ -1,5 +1,6 @@
 from .common import *
-from routes.pages import build_docs_url
+import threading
+from routes.pages import auth_service, build_docs_url
 
 
 def test_settings_page_renders_separation_backend_controls(client):
@@ -569,6 +570,75 @@ def test_admin_login_rejects_invalid_credentials(client):
     assert ADMIN_SESSION_COOKIE not in response.cookies
     assert "Invalid admin username or password" in response.text
 
+
+def test_admin_login_throttles_before_password_verification(client, monkeypatch):
+    """The next attempt is rejected before the expensive verifier runs."""
+    with patch.object(auth_service, "authenticate_admin", return_value=None) as verify:
+        for _ in range(10):
+            response = client.post(
+                "/login",
+                data={"type": "admin", "username": "Admin", "password": "wrong"},
+            )
+            assert response.status_code == 401
+
+        response = client.post(
+            "/login",
+            data={"type": "admin", "username": "admin", "password": "wrong"},
+        )
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"]
+    assert "Too many sign-in attempts" in response.text
+    assert verify.call_count == 10
+
+
+def test_admin_login_worker_cap_rejects_before_verification(client, monkeypatch):
+    """A full verifier pool rejects new admin attempts without hashing."""
+    monkeypatch.setattr("routes.pages._admin_login_slots", threading.BoundedSemaphore(0))
+    with patch.object(auth_service, "authenticate_admin") as verify:
+        response = client.post(
+            "/login",
+            data={"type": "admin", "username": "admin", "password": "wrong"},
+        )
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "1"
+    verify.assert_not_called()
+
+
+def test_admin_login_verification_runs_off_request_thread(client):
+    """Password verification runs in a worker thread."""
+    verifier_has_event_loop = []
+
+    def verify(*_args):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            verifier_has_event_loop.append(False)
+        else:
+            verifier_has_event_loop.append(True)
+        return None
+
+    with patch.object(auth_service, "authenticate_admin", side_effect=verify):
+        response = client.post(
+            "/login",
+            data={"type": "admin", "username": "admin", "password": "wrong"},
+        )
+
+    assert response.status_code == 401
+    assert verifier_has_event_loop == [False]
+
+
+def test_guest_identification_does_not_use_admin_login_limit(client):
+    for _ in range(11):
+        response = client.post(
+            "/login",
+            data={"type": "guest", "username": "Singer"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 302
+        assert response.headers["location"] == "/queue"
+
 def test_login_page_is_admin_only(client):
     """Login page should not show guest identification controls."""
     response = client.get("/login")
@@ -612,9 +682,27 @@ def test_logout_deletes_admin_session(client):
         token, _ = service.create_admin_session(db, admin)
 
     client.cookies.set(ADMIN_SESSION_COOKIE, token)
-    response = client.get("/logout", follow_redirects=False)
+    settings_response = client.get("/settings")
+    assert 'action="/logout" method="post"' in settings_response.text
+    csrf_token = service.logout_csrf_token(token)
+
+    get_response = client.get("/logout", follow_redirects=False)
+    assert get_response.status_code == 405
+    with TestingSessionLocal() as db:
+        assert service.get_admin_for_session(db, token) is not None
+
+    invalid_response = client.post("/logout", data={"csrf_token": "wrong"})
+    assert invalid_response.status_code == 403
+    with TestingSessionLocal() as db:
+        assert service.get_admin_for_session(db, token) is not None
+
+    response = client.post(
+        "/logout", data={"csrf_token": csrf_token}, follow_redirects=False
+    )
 
     assert response.status_code == 302
+    assert response.headers["location"] == "/login"
+    assert "max-age=0" in response.headers["set-cookie"].lower()
     with TestingSessionLocal() as db:
         assert service.get_admin_for_session(db, token) is None
 

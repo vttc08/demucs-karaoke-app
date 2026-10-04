@@ -1,4 +1,64 @@
 from .common import *
+from concurrent.futures import ThreadPoolExecutor
+from services.login_attempt_service import LoginAttemptLimiter
+
+
+def test_login_attempt_limiter_counts_ip_and_account_before_verification(monkeypatch):
+    limiter = LoginAttemptLimiter()
+    monkeypatch.setattr("services.login_attempt_service.time.monotonic", lambda: 100.0)
+
+    for index in range(limiter.IP_LIMIT):
+        assert limiter.reserve("192.0.2.1", f"user-{index}") == 0
+    assert limiter.reserve("192.0.2.1", "another-user") == 60
+
+    for index in range(limiter.ACCOUNT_LIMIT):
+        assert limiter.reserve(f"192.0.2.{index + 2}", "ADMIN") == 0
+    assert limiter.reserve("198.51.100.1", "admin") == 300
+
+    monkeypatch.setattr("services.login_attempt_service.time.monotonic", lambda: 401.0)
+    assert limiter.reserve("192.0.2.1", "admin") == 0
+
+
+def test_login_attempt_limiter_bounds_stored_keys(monkeypatch):
+    limiter = LoginAttemptLimiter()
+    limiter.MAX_KEYS = 2
+    monkeypatch.setattr("services.login_attempt_service.time.monotonic", lambda: 100.0)
+
+    assert limiter.reserve("192.0.2.1", "admin") == 0
+    assert limiter.reserve("198.51.100.1", "other") == limiter.IP_WINDOW_SECONDS
+    assert len(limiter._attempts) == 2
+
+
+def test_login_attempt_limiter_reservations_are_atomic(monkeypatch):
+    limiter = LoginAttemptLimiter()
+    monkeypatch.setattr("services.login_attempt_service.time.monotonic", lambda: 100.0)
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        results = list(pool.map(lambda index: limiter.reserve("192.0.2.1", f"user-{index}"), range(20)))
+
+    assert results.count(0) == limiter.IP_LIMIT
+    assert results.count(60) == 10
+
+
+def test_blocked_ip_is_rejected_before_account_key_work(monkeypatch):
+    limiter = LoginAttemptLimiter()
+    monkeypatch.setattr("services.login_attempt_service.time.monotonic", lambda: 100.0)
+    for _ in range(limiter.IP_LIMIT):
+        assert limiter.reserve("192.0.2.1", "admin") == 0
+
+    with patch("services.login_attempt_service.hashlib.sha256", side_effect=AssertionError("account hashed")):
+        assert limiter.reserve("192.0.2.1", "unexpected name") == 60
+
+
+def test_logout_token_is_bound_to_admin_session():
+    service = AuthService()
+    token = service.logout_csrf_token("session-one")
+
+    assert token
+    assert token != "session-one"
+    assert service.valid_logout_csrf_token("session-one", token)
+    assert not service.valid_logout_csrf_token("session-two", token)
+    assert not service.valid_logout_csrf_token(None, token)
 
 
 

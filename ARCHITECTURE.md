@@ -419,7 +419,12 @@ The stage page uses a websocket-first model:
 - Successful admin login creates an `admin_sessions` row. The browser receives an HttpOnly,
   SameSite=Lax cookie containing only the random session token; the database stores a SHA-256 hash
   of that token.
-- Logout deletes the persisted admin session and clears the cookie.
+- Admin login attempts are limited per client address and normalized username in each app process.
+  At most four password checks run concurrently, outside the async request loop. A limit returns
+  `429` with `Retry-After`; the process-local attempt history resets on restart and is not shared
+  across multiple app workers. Use proxy limits as an additional control for multi-worker deployments.
+- Logout is a POST from the settings page with a token bound to the admin session. It deletes the
+  persisted admin session and clears the cookie; GET requests cannot log a user out.
 - Guest login remains a lightweight device/stage-name identifier for the current sprint. It is not
   an authorization boundary. First-time guests are prompted inline on the queue page, can dismiss the
   prompt to receive a generated guest name, and can edit that name from the queue greeting.
