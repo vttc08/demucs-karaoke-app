@@ -12,7 +12,7 @@ router = APIRouter(tags=["media"])
 def _resolve_safe_path(base_dir: Path, relative_path: str) -> Path:
     candidate = (base_dir / relative_path).resolve()
     base_resolved = base_dir.resolve()
-    if not str(candidate).startswith(str(base_resolved)):
+    if not candidate.is_relative_to(base_resolved):
         raise HTTPException(status_code=400, detail="Invalid media path")
     return candidate
 

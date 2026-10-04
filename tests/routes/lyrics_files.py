@@ -1,6 +1,53 @@
 from .common import *
 
 
+@pytest.mark.parametrize("route", ["media", "cache"])
+@pytest.mark.parametrize("escape", ["%2e%2e/", "%2e%2e%2f", "symlink"])
+def test_file_routes_reject_prefix_sibling_escape(client, tmp_path, monkeypatch, route, escape):
+    root = tmp_path / route
+    root.mkdir()
+    sibling = tmp_path / f"{route}-backup"
+    sibling.mkdir()
+    (sibling / "private.txt").write_text("private", encoding="utf-8")
+    monkeypatch.setattr(settings, f"{route}_path", root)
+
+    if escape == "symlink":
+        (root / "backup").symlink_to(sibling, target_is_directory=True)
+        path = "backup/private.txt"
+    else:
+        path = f"{escape}{sibling.name}/private.txt"
+
+    response = client.get(f"/{route}/{path}")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid media path"}
+
+
+@pytest.mark.parametrize("route", ["media", "cache"])
+def test_file_routes_preserve_nested_files_symlinks_and_missing_files(client, tmp_path, monkeypatch, route):
+    root = tmp_path / route
+    nested = root / "album"
+    nested.mkdir(parents=True)
+    (nested / "song name.txt").write_text("lyrics", encoding="utf-8")
+    (root / "alias.txt").symlink_to(nested / "song name.txt")
+    monkeypatch.setattr(settings, f"{route}_path", root)
+
+    for path in ("album/song%20name.txt", "alias.txt", "album/%2e%2e/alias.txt"):
+        response = client.get(f"/{route}/{path}")
+        assert response.status_code == 200
+        assert response.text == "lyrics"
+
+    response = client.get(f"/{route}/alias.txt", headers={"Range": "bytes=0-2"})
+    assert response.status_code == 206
+    assert response.content == b"lyr"
+    assert response.headers["content-range"] == "bytes 0-2/6"
+
+    for path in ("missing.txt", "album"):
+        response = client.get(f"/{route}/{path}")
+        assert response.status_code == 404
+        assert response.json() == {"detail": f"{route.capitalize()} file not found"}
+
+
 
 def test_media_file_served_from_media_mount(client):
     """Test files under configured media path are served by app mount."""

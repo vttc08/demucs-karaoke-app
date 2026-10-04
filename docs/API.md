@@ -731,6 +731,9 @@ GET /cache/{file_path}
 Serves files from the configured `CACHE_PATH` (or runtime `cache_path` setting)
 under a stable `/cache/...` URL prefix.
 
+Both file routes require the resolved path to remain inside their configured root,
+including symlink targets. Escapes return `400`; missing files and directories return `404`.
+
 ---
 
 ### Generate QR Code
