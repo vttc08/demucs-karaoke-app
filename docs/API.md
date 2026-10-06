@@ -226,6 +226,8 @@ Queue payload can identify the target with either:
 - `media_item_id` (for direct enqueue of local library search matches).
 - `queue_as_name` is optional and admin-only. When provided by an authenticated admin session, it overrides the displayed requester label for that queued item.
 
+Queue creation request bodies are limited to 512 KiB, and `lyrics_text` is limited to 262,144 characters. The larger field limit leaves room for verbose word-timed TTML from a typical 3–5 minute song; the request-body limit remains the overall cap. Oversized request bodies return `413`; lyrics exceeding the field limit are rejected as invalid input.
+
 If the `youtube_id` already exists in `media_items` with a usable local media file, the queue item is created against that existing media row and processing reuses the stored file instead of re-downloading the video again.
 When `lyrics_text` is supplied for karaoke items, plain/LRC input is persisted as a reusable cache sidecar so karaoke processing can skip a second lookup. TTML/XML input is treated as already timed and is normalized to a canonical JSON sidecar beside the media file; `lyrics_format` is optional and is inferred when omitted. WhisperX-style JSON remains a media-sidecar format, while plain text remains an unsynced cache input until alignment completes.
 - `process_lyrics_lines` is an optional queue-only WhisperX override. When true, the server rewrites long plain/LRC lines before alignment using `max_line_length` (default `36`) and `max_line_length_cjk` (default `12`).
