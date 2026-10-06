@@ -2,7 +2,7 @@
 
 ![Paramètres des outils](../assets/images/settings/tools.webp){ width="400" }
 
-Utilisez cette section pour inspecter l'état du réseau et du stockage sans modifier la configuration principale de l'application. Ces actions ne sont disponibles que pour les administrateurs.
+Utilisez cette section pour inspecter l'état du réseau et du stockage en tenant compte du fait que Vérifier Demucs enregistre d’abord les paramètres actuels. Ces actions ne sont disponibles que pour les administrateurs.
 
 ### Informations sur le proxy { #proxy-info }
 
@@ -19,6 +19,8 @@ Sélectionnez**Clean cache & DB**pour supprimer les fichiers de cache temporaire
 ### Vérifier Demucs { #check-demucs }
 
 Utilisez cette option pour vérifier la connectivité au service Demucs après avoir ajouté ou modifié l'URL ou la clé API Demucs.
+
+Vérifier Demucs enregistre d’abord le formulaire actuel, y compris l’URL et la clé API, puis vérifie le service enregistré. Si l’enregistrement échoue, aucune requête de vérification n’est envoyée.
 
 ### Exécuter Demucs GC { #run-demucs-gc }
 

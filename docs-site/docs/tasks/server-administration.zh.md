@@ -51,8 +51,8 @@
         allow all;
         proxy_pass http://<your-application-ip>:<your-application-port>;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     error_page 403 = @handle_403;
@@ -62,6 +62,10 @@
         return 302 https://<your-karaoke-domain>/access-restricted;
     }
     ```
+
+### 反向代理后的客户端地址 { #client-address-behind-a-reverse-proxy }
+
+Uvicorn 仅在直接连接的对端受信任时才会使用 `X-Forwarded-For` 和 `X-Forwarded-Proto`。请将 `FORWARDED_ALLOW_IPS` 设置为应用实际看到的代理 IP 地址，或只包含可信代理的 CIDR 网段。默认值为 `127.0.0.1`，通常与 Docker 或远程代理的地址不符。Uvicorn 不使用 `X-Real-IP`。使用 Docker Compose 时，请将此设置添加到应用的 `.env` 文件；本地启动时，请先导出该变量，或将 `--forwarded-allow-ips` 参数传给 Uvicorn。请参阅[环境变量参考](../configuration/environments.md#server-and-routing)。请将应用端口保持为私有，或仅允许代理访问；如果不受信任的客户端可以直接访问应用，切勿使用 `*`。
 
 ??? note "Caddy 配置"
 

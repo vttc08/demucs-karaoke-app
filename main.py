@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from middleware import QueueRequestBodyLimitMiddleware
 from database import SessionLocal, init_db
 from config import settings
 
@@ -110,6 +111,10 @@ def create_app() -> FastAPI:
     settings.ensure_paths()
 
     base_path = settings.karaoke_base_path
+    created_app.add_middleware(
+        QueueRequestBodyLimitMiddleware,
+        queue_path=f"{base_path}/api/queue",
+    )
     docs_dir = Path("static/docs")
     docs_assets_dir = docs_dir / "assets"
 

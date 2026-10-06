@@ -45,6 +45,9 @@ class AuthService:
         admin.password_hash = base64.b64encode(password_hash).decode("ascii")
         admin.password_iterations = PBKDF2_ITERATIONS
         admin.updated_at = _utc_now()
+        db.query(AdminSession).filter(
+            AdminSession.admin_user_id == admin.id
+        ).delete(synchronize_session=False)
         db.commit()
         db.refresh(admin)
         return admin
@@ -121,6 +124,19 @@ class AuthService:
             return
         db.delete(session)
         db.commit()
+
+    @staticmethod
+    def logout_csrf_token(session_token: str | None) -> str:
+        """Create a form token without exposing the admin session cookie."""
+        if not session_token:
+            return ""
+        return hmac.new(
+            session_token.encode("utf-8"), b"karaoke-logout", hashlib.sha256
+        ).hexdigest()
+
+    def valid_logout_csrf_token(self, session_token: str | None, form_token: str) -> bool:
+        expected = self.logout_csrf_token(session_token)
+        return bool(expected) and hmac.compare_digest(expected, form_token)
 
     def count_admins(self, db: Session) -> int:
         """Return number of configured admin users."""

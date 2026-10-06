@@ -17,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
+MAX_INLINE_LYRICS_CHARS = 256 * 1024
 
 
 def utc_now() -> datetime:
@@ -243,7 +244,9 @@ class QueueItemCreate(BaseModel):
     title: str
     artist: Optional[str] = None
     is_karaoke: bool = False
-    lyrics_text: Optional[str] = None
+    lyrics_text: Optional[str] = Field(
+        default=None, max_length=MAX_INLINE_LYRICS_CHARS
+    )
     lyrics_format: Optional[Literal["lrc", "txt", "json", "ttml"]] = None
     align_lyrics: bool = False
     whisperx_align_language_override: Optional[str] = None

@@ -1,4 +1,8 @@
+import asyncio
+
 from .common import *
+from middleware import MAX_QUEUE_REQUEST_BODY_BYTES, QueueRequestBodyLimitMiddleware
+from models import MAX_INLINE_LYRICS_CHARS
 
 
 TTML_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -163,6 +167,72 @@ def test_add_to_queue(client):
     assert data["title"] == "Test Song"
     assert data["is_karaoke"] is True
     assert data["status"] == "pending"
+
+
+def test_add_to_queue_rejects_oversized_body_and_lyrics(client):
+    response = client.post(
+        "/api/queue/",
+        content=b" " * (MAX_QUEUE_REQUEST_BODY_BYTES + 1),
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 413
+
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "long-lyrics",
+            "title": "Long lyrics",
+            "lyrics_text": "x" * 65_537,
+        },
+    )
+    assert response.status_code == 200
+
+    response = client.post(
+        "/api/queue/",
+        json={
+            "youtube_id": "oversized-lyrics",
+            "title": "Oversized lyrics",
+            "lyrics_text": "x" * (MAX_INLINE_LYRICS_CHARS + 1),
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_queue_body_limit_rejects_streamed_body_without_content_length():
+    async def run_request():
+        events = iter(
+            [
+                {"type": "http.request", "body": b"1234", "more_body": True},
+                {"type": "http.request", "body": b"5678", "more_body": False},
+            ]
+        )
+        responses = []
+
+        async def receive():
+            return next(events)
+
+        async def send(message):
+            responses.append(message)
+
+        async def app(scope, receive, send):
+            raise AssertionError("oversized request reached the application")
+
+        middleware = QueueRequestBodyLimitMiddleware(
+            app, queue_path="/api/queue", max_bytes=7
+        )
+        await middleware(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/api/queue/",
+                "headers": [],
+            },
+            receive,
+            send,
+        )
+        assert responses[0]["status"] == 413
+
+    asyncio.run(run_request())
 
 def test_add_to_queue_persists_whisperx_language_override(client):
     """Queue items should persist a per-song WhisperX language override."""

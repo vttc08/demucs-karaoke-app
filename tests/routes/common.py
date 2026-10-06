@@ -27,6 +27,7 @@ from models import (
 )
 from services import lyrics_service as lyrics_service_module
 from services.auth_service import ADMIN_SESSION_COOKIE, AuthService
+from services.login_attempt_service import login_attempt_limiter
 from services.i18n_service import LOCALE_COOKIE
 from services.media_naming import build_media_stem
 from services.media_thumbnail_service import MediaThumbnailService
@@ -59,6 +60,7 @@ app.dependency_overrides[get_db] = override_get_db
 @pytest.fixture(scope="function")
 def client():
     """Create test client and database."""
+    login_attempt_limiter.clear()
     canonical_stage_vocals_volume_default = type(settings).model_fields[
         "stage_vocals_volume_default"
     ].default
