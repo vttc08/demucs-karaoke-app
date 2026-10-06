@@ -419,6 +419,8 @@ The stage page uses a websocket-first model:
 - Successful admin login creates an `admin_sessions` row. The browser receives an HttpOnly,
   SameSite=Lax cookie containing only the random session token; the database stores a SHA-256 hash
   of that token.
+- Replacing an admin password deletes all of that account's sessions in the same transaction, so
+  old browser cookies stop authorizing requests and the admin must log in again.
 - Admin login attempts are limited per client address and normalized username in each app process.
   At most four password checks run concurrently, outside the async request loop. A limit returns
   `429` with `Retry-After`; the process-local attempt history resets on restart and is not shared

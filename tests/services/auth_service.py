@@ -85,6 +85,7 @@ def test_auth_service_rotates_salt_when_password_changes(db_session):
     first = service.create_or_update_admin(
         db_session, "admin", "correct horse battery staple"
     )
+    old_token, _ = service.create_admin_session(db_session, first)
     first_salt = first.password_salt
 
     updated = service.create_or_update_admin(
@@ -94,9 +95,12 @@ def test_auth_service_rotates_salt_when_password_changes(db_session):
     assert updated.id == first.id
     assert updated.password_salt != first_salt
     assert db_session.query(AdminUser).count() == 1
+    assert service.get_admin_for_session(db_session, old_token) is None
     assert service.authenticate_admin(
         db_session, "admin", "another correct password"
     )
+    new_token, _ = service.create_admin_session(db_session, updated)
+    assert service.get_admin_for_session(db_session, new_token).id == updated.id
     assert service.authenticate_admin(
         db_session, "admin", "correct horse battery staple"
     ) is None

@@ -45,6 +45,9 @@ class AuthService:
         admin.password_hash = base64.b64encode(password_hash).decode("ascii")
         admin.password_iterations = PBKDF2_ITERATIONS
         admin.updated_at = _utc_now()
+        db.query(AdminSession).filter(
+            AdminSession.admin_user_id == admin.id
+        ).delete(synchronize_session=False)
         db.commit()
         db.refresh(admin)
         return admin
