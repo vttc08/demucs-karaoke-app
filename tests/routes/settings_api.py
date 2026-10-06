@@ -358,32 +358,42 @@ def test_get_demucs_health(client):
         assert "detail" in data
 
 
-def test_get_demucs_health_accepts_currently_edited_settings(client):
-    """Health checks should be able to validate settings before the next save."""
-    health = {
-        "api_url": "http://separation.test",
-        "healthy": True,
-        "detail": "OK",
-    }
-    with patch(
-        "routes.settings.runtime_settings_service.get_demucs_health",
-        return_value=health,
-    ) as mock_health:
-        response = client.get(
-            "/api/settings/demucs-health",
-            params={
-                "demucs_api_url": "http://separation.test",
-                "separation_backend": "sherpa_spleeter",
-                "sherpa_spleeter_model": "int8",
-            },
-        )
+@pytest.mark.parametrize("params", [
+    {"demucs_api_url": "https://attacker.example"},
+    {"demucs_api_url": "http://127.0.0.1:1234"},
+    {"demucs_api_url": ""},
+    {"separation_backend": "sherpa_spleeter", "sherpa_spleeter_model": "int8"},
+])
+def test_get_demucs_health_rejects_query_overrides(client, params):
+    with patch("services.demucs_client.httpx.get") as outbound:
+        response = client.get("/api/settings/demucs-health", params=params)
+    assert response.status_code == 400
+    outbound.assert_not_called()
 
+
+@pytest.mark.parametrize("backend", ["demucs", "sherpa_spleeter"])
+def test_guest_demucs_health_uses_configured_url_and_key(client, monkeypatch, backend):
+    monkeypatch.setattr(settings, "demucs_api_url", "http://configured-worker:8001")
+    monkeypatch.setattr(settings, "demucs_api_key", "configured-secret")
+    monkeypatch.setattr(settings, "separation_backend", backend)
+    monkeypatch.setattr(settings, "sherpa_spleeter_model", "int8")
+    with patch("services.demucs_client.httpx.get") as outbound:
+        outbound.return_value.status_code = 200
+        outbound.return_value.json.return_value = {
+            "status": "healthy", "supported_backends": ["demucs", "sherpa_spleeter"]
+        }
+        response = client.get("/api/settings/demucs-health")
     assert response.status_code == 200
-    mock_health.assert_called_once_with(
-        demucs_api_url="http://separation.test",
-        separation_backend="sherpa_spleeter",
-        sherpa_spleeter_model="int8",
+    assert response.json()["healthy"] is True
+    expected_kwargs = {"headers": {"X-API-Key": "configured-secret"}, "timeout": 5.0}
+    if backend != "demucs":
+        expected_kwargs["params"] = {
+            "separation_backend": backend, "sherpa_spleeter_model": "int8"
+        }
+    outbound.assert_called_once_with(
+        "http://configured-worker:8001/health", **expected_kwargs
     )
+
 
 def test_get_proxy_info(client):
     """Proxy info endpoint should return proxy egress details."""

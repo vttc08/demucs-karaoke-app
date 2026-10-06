@@ -1373,10 +1373,11 @@ The admin settings page proxies a manual Demucs GC action through `/api/settings
 GET /api/settings/demucs-health
 ```
 
-Returns current Demucs health for the configured API URL. The settings UI may provide
-`demucs_api_url`, `separation_backend`, and `sherpa_spleeter_model` query parameters to validate
-values currently being edited before or after saving; omitted parameters use the active runtime
-settings.
+Public capability check using only the configured Demucs URL, API key, backend, and model.
+Query overrides are rejected with `400` before any outbound request. Queue and upload guests
+can continue checking processing availability without an admin login. The settings UI saves
+the current form through the authenticated settings API before checking the saved connection;
+a failed save prevents the health probe.
 
 **Response:**
 ```json

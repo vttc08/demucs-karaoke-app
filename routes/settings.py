@@ -1,5 +1,5 @@
 """API routes for runtime settings."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -45,19 +45,14 @@ def update_runtime_settings(
 
 
 @router.get("/demucs-health", response_model=DemucsHealthResponse)
-def get_demucs_health(
-    demucs_api_url: str | None = None,
-    separation_backend: str | None = None,
-    sherpa_spleeter_model: str | None = None,
-):
-    """Get Demucs health, optionally for settings currently being edited."""
-    return runtime_settings_service.get_demucs_health(
-        demucs_api_url=demucs_api_url.strip() if demucs_api_url else None,
-        separation_backend=separation_backend.strip() if separation_backend else None,
-        sherpa_spleeter_model=(
-            sherpa_spleeter_model.strip() if sherpa_spleeter_model else None
-        ),
-    )
+def get_demucs_health(request: Request):
+    """Public capability check for the configured Demucs service only."""
+    if request.query_params:
+        raise HTTPException(
+            status_code=400,
+            detail="Demucs health uses saved settings; query overrides are not supported",
+        )
+    return runtime_settings_service.get_demucs_health()
 
 
 @router.get("/storage-usage", response_model=StorageUsageResponse)

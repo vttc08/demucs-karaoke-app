@@ -2,7 +2,7 @@
 
 ![Tools settings](../assets/images/settings/tools.webp){ width="400" }
 
-Use this section to inspect the network and storage state without changing the main application configuration. These actions are available only to administrators.
+Use this section to inspect the network and storage state with Check Demucs saving the current settings first. These actions are available only to administrators.
 
 ### Proxy info
 
@@ -19,6 +19,8 @@ Select **Clean cache & DB** to remove temporary cache files and stale database r
 ### Check Demucs
 
 Use this to check connectivity to the Demucs service after adding or modifying the Demucs URL or API key.
+
+Check Demucs first saves the current settings form, including the URL and API key, then checks the saved service. If saving fails, no health request is sent.
 
 ### Run Demucs GC
 

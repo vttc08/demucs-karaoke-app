@@ -2,7 +2,7 @@
 
 ![Configuración de herramientas](../assets/images/settings/tools.webp){ width="400" }
 
-Use esta sección para inspeccionar el estado de red y almacenamiento sin cambiar la configuración principal de la aplicación. Estas acciones solo están disponibles para administradores.
+Use esta sección para inspeccionar el estado de red y almacenamiento teniendo en cuenta que Comprobar Demucs guarda primero los ajustes actuales. Estas acciones solo están disponibles para administradores.
 
 ### Información del proxy
 
@@ -19,6 +19,8 @@ Seleccione **Limpiar caché y BD** para eliminar archivos temporales de caché y
 ### Comprobar Demucs { #check-demucs }
 
 Úselo para comprobar la conectividad con el servicio Demucs después de añadir o modificar la URL o la clave de API de Demucs.
+
+Comprobar Demucs primero guarda el formulario actual, incluida la URL y la clave de API, y luego comprueba el servicio guardado. Si falla el guardado, no se envía la solicitud de comprobación.
 
 ### Ejecutar GC de Demucs { #run-demucs-gc }
 
