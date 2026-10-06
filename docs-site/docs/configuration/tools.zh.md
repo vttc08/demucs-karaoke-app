@@ -2,7 +2,7 @@
 
 ![工具设置](../assets/images/settings/tools.webp){ width="400" }
 
-使用此区域检查网络和存储状态，而不会修改主应用配置。这些操作仅限管理员使用。
+使用此区域检查网络和存储状态，其中检查 Demucs 会先保存当前设置。这些操作仅限管理员使用。
 
 ### 代理信息 { #proxy-info }
 
@@ -19,6 +19,8 @@
 ### 检查 Demucs { #check-demucs }
 
 添加或修改 Demucs URL 或 API key 后，可以使用此选项检查与 Demucs 服务的连接。
+
+检查 Demucs 会先保存当前设置表单（包括 URL 和 API key），然后检查已保存的服务。如果保存失败，则不会发送健康检查请求。
 
 ### 运行 Demucs GC { #run-demucs-gc }
 

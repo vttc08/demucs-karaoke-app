@@ -81,17 +81,11 @@ class RuntimeSettingsService:
     YTDLP_COMMAND_TIMEOUT_SECONDS = 60
     PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-    def get_demucs_health(
-        self,
-        *,
-        demucs_api_url: str | None = None,
-        separation_backend: str | None = None,
-        sherpa_spleeter_model: str | None = None,
-    ) -> DemucsHealthResponse:
-        """Return Demucs health for the selected runtime configuration."""
-        return DemucsClient(api_url=demucs_api_url or settings.demucs_api_url).health_check(
-            separation_backend=separation_backend or settings.separation_backend,
-            sherpa_spleeter_model=sherpa_spleeter_model or settings.sherpa_spleeter_model,
+    def get_demucs_health(self) -> DemucsHealthResponse:
+        """Return Demucs health using only the active saved configuration."""
+        return DemucsClient(api_url=settings.demucs_api_url).health_check(
+            separation_backend=settings.separation_backend,
+            sherpa_spleeter_model=settings.sherpa_spleeter_model,
         )
 
     def preload_whisperx_models(

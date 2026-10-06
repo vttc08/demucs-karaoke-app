@@ -51,8 +51,8 @@ For example, in Nginx Proxy Manager, create an Access List, add the home subnet 
         allow all;
         proxy_pass http://<your-application-ip>:<your-application-port>;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     error_page 403 = @handle_403;
@@ -62,6 +62,10 @@ For example, in Nginx Proxy Manager, create an Access List, add the home subnet 
         return 302 https://<your-karaoke-domain>/access-restricted;
     }
     ```
+
+### Client address behind a reverse proxy { #client-address-behind-a-reverse-proxy }
+
+Uvicorn uses `X-Forwarded-For` and `X-Forwarded-Proto` only when the immediate peer is trusted. Set `FORWARDED_ALLOW_IPS` to the proxy's IP address as seen by the app, or to a CIDR range containing only trusted proxy peers. The default is `127.0.0.1`, which usually does not match a Docker or remote proxy. Uvicorn does not use `X-Real-IP`. In Docker Compose, add the setting to the app's `.env` file; for a local launch, export it or pass `--forwarded-allow-ips` to Uvicorn. See the [environment variable reference](../configuration/environments.md#server-and-routing). Keep the app port private or restrict it to the proxy, and never use `*` when untrusted clients can reach the app directly.
 
 ??? note "Caddy configuration"
 

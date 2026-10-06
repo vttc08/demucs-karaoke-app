@@ -34,6 +34,7 @@ Docker Compose 文件会通过其中的 `environment:` 部分直接提供一些�
 | `HOST` | `0.0.0.0` | 应用监听的网络地址。`0.0.0.0` 表示监听所有网络接口，通常是 Docker 和局域网访问所需的设置。 |
 | `PORT` | `8000` | 应用监听的端口。 |
 | `KARAOKE_BASE_PATH` | 空 | 可选的反向代理 URL 前缀，例如 `/karaoke`。如果应用直接部署在 `/`，请留空。代理转发请求时必须保留此前缀。 |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | 可信反向代理的 IP 地址或 CIDR 网段，多个值用逗号分隔。此 Uvicorn 设置决定是否接受 `X-Forwarded-For` 和 `X-Forwarded-Proto`。请参阅[反向代理后的客户端地址](../tasks/server-administration.md#client-address-behind-a-reverse-proxy)。 |
 | `ENABLED_LOCALES` | `en` | 用户界面可用的语言代码列表，使用逗号分隔，例如 `en,zh-CN`。简体中文使用 `zh-CN`，单独使用 `zh` 不够。 |
 
 ### 数据库和存储 { #database-and-storage }

@@ -51,8 +51,8 @@ Dans Nginx Proxy Manager, par exemple, créez une liste d’accès, ajoutez le s
         allow all;
         proxy_pass http://<your-application-ip>:<your-application-port>;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     error_page 403 = @handle_403;
@@ -62,6 +62,10 @@ Dans Nginx Proxy Manager, par exemple, créez une liste d’accès, ajoutez le s
         return 302 https://<your-karaoke-domain>/access-restricted;
     }
     ```
+
+### Adresse du client derrière un proxy inverse { #client-address-behind-a-reverse-proxy }
+
+Uvicorn utilise `X-Forwarded-For` et `X-Forwarded-Proto` uniquement si le pair directement connecté est approuvé. Définissez `FORWARDED_ALLOW_IPS` sur l'adresse IP du proxy telle qu'elle est vue par l'application, ou sur une plage CIDR contenant uniquement des proxys approuvés. La valeur par défaut est `127.0.0.1`, ce qui ne correspond généralement pas à un proxy Docker ou distant. Uvicorn n'utilise pas `X-Real-IP`. Avec Docker Compose, ajoutez ce paramètre au fichier `.env` de l'application ; pour un lancement local, exportez-le ou passez `--forwarded-allow-ips` à Uvicorn. Consultez la [référence des variables d'environnement](../configuration/environments.md#server-and-routing). Gardez le port de l'application privé ou limité au proxy et n'utilisez jamais `*` si des clients non approuvés peuvent accéder directement à l'application.
 
 ??? note "Caddy configuration"
 

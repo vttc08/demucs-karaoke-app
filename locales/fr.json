@@ -58,6 +58,7 @@
   "login.enter_pulse": "Entrer dans le Pulse",
   "login.invalid_admin": "Identifiant ou mot de passe administrateur incorrect.",
   "login.no_admin": "Aucun compte administrateur n'est configuré. Créez-en un sur le serveur avant de vous connecter.",
+  "login.too_many_attempts": "Trop de tentatives de connexion. Patientez avant de réessayer.",
   "login.password": "Mot de passe",
   "login.title": "NEON PULSE - Entrer sur scène",
   "login.username": "Identifiant",

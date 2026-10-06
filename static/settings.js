@@ -732,7 +732,7 @@ async function loadSettings() {
 
 async function saveSettings() {
     if (!form.reportValidity()) {
-        return;
+        return false;
     }
 
     setFormState(true);
@@ -756,28 +756,26 @@ async function saveSettings() {
         setEngineStatus("unknown", t("settings.check_demucs_hint"), false);
         setStatus(t("settings.saved"));
         showSaveFeedback(t("settings.saved_success"), false);
+        return true;
     } catch (error) {
         setStatus(error.message || t("settings.save_unable"), true);
         showSaveFeedback(String(error.message || t("settings.save_unable")), true);
         setEngineStatus("unknown", String(error.message || t("settings.save_failed_short")), false);
+        return false;
     } finally {
         setFormState(false);
     }
 }
 
 async function checkDemucsHealth() {
-    if (checkDemucsBtn) {
-        checkDemucsBtn.disabled = true;
+    if (!await saveSettings()) {
+        return;
     }
+    setFormState(true);
     setEngineStatus("checking", t("settings.checking_demucs"), false);
     setStatus(t("settings.checking_demucs"));
     try {
-        const query = new URLSearchParams({
-            demucs_api_url: fields.demucs_api_url.value.trim(),
-            separation_backend: fields.separation_backend.value,
-            sherpa_spleeter_model: fields.sherpa_spleeter_model.value,
-        });
-        const response = await fetch(`${DEMUCS_HEALTH_API}?${query.toString()}`);
+        const response = await fetch(DEMUCS_HEALTH_API);
         if (!response.ok) {
             throw new Error(t("settings.demucs_health_fetch_failed"));
         }
@@ -793,9 +791,7 @@ async function checkDemucsHealth() {
         setStatus(health.detail, true);
         showSaveFeedback(health.detail, true);
     } finally {
-        if (checkDemucsBtn) {
-            checkDemucsBtn.disabled = formBusy;
-        }
+        setFormState(false);
     }
 }
 

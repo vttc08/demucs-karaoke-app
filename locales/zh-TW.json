@@ -58,6 +58,7 @@
   "login.enter_pulse": "進入 Pulse",
   "login.invalid_admin": "管理員用戶名或密碼無效。",
   "login.no_admin": "尚未配置管理員賬戶。請先在服務器上創建賬戶再登錄。",
+  "login.too_many_attempts": "登入嘗試次數過多。請稍後再試。",
   "login.password": "密碼",
   "login.title": "NEON PULSE - 進入舞臺",
   "login.username": "用戶名",

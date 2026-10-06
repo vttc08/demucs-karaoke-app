@@ -58,6 +58,7 @@
   "login.enter_pulse": "Entra en el Pulso",
   "login.invalid_admin": "Nombre de usuario o contraseña de administración inválida.",
   "login.no_admin": "Ninguna cuenta de administración está configurada. Crea uno en el servidor antes de iniciar sesión.",
+  "login.too_many_attempts": "Demasiados intentos de inicio de sesión. Espera e inténtalo de nuevo.",
   "login.password": "Contraseña",
   "login.title": "NEON PULSE - Entrar en la etapa",
   "login.username": "Nombre de usuario",
