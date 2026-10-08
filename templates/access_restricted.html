@@ -6,88 +6,114 @@
     <meta name="robots" content="noindex, nofollow">
     <title>{{ t('access.title') }} - {{ t('app.karaoke') }}</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ static_asset_url('/static/tailwind.css') }}">
-
+    <link rel="icon" href="data:,">
     <style>
+        * { box-sizing: border-box; }
         body {
-            background:
-                radial-gradient(circle at top left, rgba(0, 242, 255, 0.16), transparent 28%),
-                radial-gradient(circle at bottom right, rgba(143, 67, 251, 0.16), transparent 30%),
-                #0e0c1f;
+            margin: 0;
+            background: radial-gradient(circle at top left, #00f2ff29, transparent 28%),
+                radial-gradient(circle at bottom right, #8f43fb29, transparent 30%), #0e0c1f;
             color: #e7e2fe;
+            font-family: system-ui, sans-serif;
         }
-
-        .noise::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background-image: linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
-            background-size: 28px 28px;
-            mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 85%);
-            pointer-events: none;
+        main { width: 100%; max-width: 64rem; margin: auto; padding: .75rem 1rem; }
+        section { padding: 1.25rem; border: 1px solid #ffffff0d; border-radius: 1.5rem;
+            background: #131126d9; box-shadow: 0 30px 80px #00000059; }
+        h1, h2, p { margin: 0; }
+        h1 { font-size: 2.25rem; font-weight: 800; letter-spacing: -.025em; }
+        h2 { font-size: 1.25rem; }
+        p { line-height: 1.5rem; }
+        .description { max-width: 42rem; margin-top: .75rem; color: #c9c5d0; font-size: .875rem; }
+        .recovery { display: grid; gap: 1.25rem; margin-top: 1.75rem; }
+        .steps, .retry { padding: 1.25rem; border-radius: 1.25rem; }
+        .steps { background: #1f1c368c; }
+        .steps-heading { display: flex; align-items: center; gap: .5rem; }
+        svg { width: 1.5rem; height: 1.5rem; flex-shrink: 0; }
+        .steps-heading svg { color: #00f2ff; }
+        ol { list-style: none; padding: 0; margin: 1.25rem 0 0; }
+        li { display: flex; gap: .75rem; }
+        li + li { margin-top: 1rem; }
+        .number { display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            width: 2rem; height: 2rem; border-radius: 50%; background: #00f2ff1a;
+            color: #00f2ff; font-size: .875rem; font-weight: 900; }
+        li:nth-child(2) .number { background: #3ce36a1a; color: #3ce36a; }
+        li:nth-child(3) .number { background: #ffb95026; color: #ffb950; }
+        .step-title { font-weight: 600; }
+        .step-description { margin-top: .25rem; color: #c9c5d0; font-size: .875rem; line-height: 1.25rem; }
+        .retry { border: 1px solid #00f2ff26; background: #00f2ff0d; }
+        .retry p { color: #c9c5d0; font-size: .875rem; }
+        a { display: inline-flex; width: 100%; align-items: center; justify-content: center;
+            gap: .5rem; margin-top: 1.25rem; padding: .875rem 1.25rem; border-radius: .75rem;
+            background: #00f2ff; color: #004343; font-size: .875rem; font-weight: 700;
+            text-decoration: none; box-shadow: 0 0 28px #00f2ff33; }
+        a:hover { background: #00dae6; }
+        a:focus-visible { outline: 2px solid #00f2ff; outline-offset: 4px; }
+        @media (min-width: 640px) {
+            main { padding: 1.25rem 1.5rem; }
+            section { padding: 2rem; }
+            h1 { font-size: 3rem; }
+            .description { font-size: 1rem; }
+            .steps, .retry { padding: 1.5rem; }
+            a { width: auto; }
         }
-
-        .access-page .rounded-2xl {
-            border-radius: 1.25rem;
+        @media (min-width: 768px) {
+            .recovery { grid-template-columns: .9fr 1.1fr; gap: 2rem; align-items: start; }
+        }
+        @media (min-width: 1024px) {
+            main { padding-inline: 2rem; }
+            section { padding: 2.5rem; }
+            h1 { font-size: 3.75rem; }
         }
     </style>
 </head>
-<body class="access-page font-body">
-    <main class="noise relative mx-auto flex w-full max-w-5xl items-start px-4 pb-3 pt-3 sm:px-6 sm:pb-5 sm:pt-5 lg:px-8">
-        <section class="relative w-full overflow-hidden rounded-[1.5rem] bg-surface-container-low/85 p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)] ring-1 ring-white/5 backdrop-blur-xl sm:p-8 lg:p-10">
-            <div class="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-error/10 blur-3xl"></div>
-            <div class="absolute -bottom-20 -left-16 h-44 w-44 rounded-full bg-primary/10 blur-3xl"></div>
+<body>
+    <main>
+        <section>
 
-            <div class="relative z-10">
-                <h1 class="max-w-3xl font-headline text-4xl font-extrabold tracking-tight text-on-surface sm:text-5xl lg:text-6xl">{{ t('access.title') }}</h1>
-                <p class="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant sm:text-base">
+            <div>
+                <h1>{{ t('access.title') }}</h1>
+                <p class="description">
                     {{ t('access.description') }}
                 </p>
 
-                <div class="mt-7 grid gap-5 md:grid-cols-[0.9fr_1.1fr] md:items-start md:gap-8">
-                    <div class="rounded-2xl bg-surface-container-high/55 p-5 sm:p-6">
-                        <div class="flex items-center gap-2">
-                            <span class="material-symbols-outlined text-primary">wifi</span>
-                            <h2 class="font-headline text-xl font-bold tracking-tight text-on-surface">{{ t('access.recovery_steps') }}</h2>
+                <div class="recovery">
+                    <div class="steps">
+                        <div class="steps-heading">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0M8 16a6 6 0 0 1 8 0"/><circle cx="12" cy="20" r="1"/></svg>
+                            <h2>{{ t('access.recovery_steps') }}</h2>
                         </div>
 
-                        <ol class="mt-5 space-y-4">
-                            <li class="flex gap-3">
-                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-black text-primary">1</span>
+                        <ol>
+                            <li>
+                                <span class="number">1</span>
                                 <div>
-                                    <p class="font-semibold text-on-surface">{{ t('access.recovery_title_1') }}</p>
-                                    <p class="mt-1 text-sm leading-5 text-on-surface-variant">{{ t('access.recovery_description_1') }}</p>
+                                    <p class="step-title">{{ t('access.recovery_title_1') }}</p>
+                                    <p class="step-description">{{ t('access.recovery_description_1') }}</p>
                                 </div>
                             </li>
-                            <li class="flex gap-3">
-                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/10 text-sm font-black text-secondary">2</span>
+                            <li>
+                                <span class="number">2</span>
                                 <div>
-                                    <p class="font-semibold text-on-surface">{{ t('access.recovery_title_2') }}</p>
-                                    <p class="mt-1 text-sm leading-5 text-on-surface-variant">{{ t('access.recovery_description_2') }}</p>
+                                    <p class="step-title">{{ t('access.recovery_title_2') }}</p>
+                                    <p class="step-description">{{ t('access.recovery_description_2') }}</p>
                                 </div>
                             </li>
-                            <li class="flex gap-3">
-                                <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-tertiary/15 text-sm font-black text-tertiary">3</span>
+                            <li>
+                                <span class="number">3</span>
                                 <div>
-                                    <p class="font-semibold text-on-surface">{{ t('access.recovery_title_3') }}</p>
-                                    <p class="mt-1 text-sm leading-5 text-on-surface-variant">{{ t('access.recovery_description_3') }}</p>
+                                    <p class="step-title">{{ t('access.recovery_title_3') }}</p>
+                                    <p class="step-description">{{ t('access.recovery_description_3') }}</p>
                                 </div>
                             </li>
                         </ol>
                     </div>
 
-                    <div class="flex flex-col justify-end rounded-2xl border border-primary/15 bg-primary/5 p-5 sm:p-6 md:min-h-full">
-                        <p class="text-sm leading-6 text-on-surface-variant">{{ t('access.try_again_detail') }}</p>
+                    <div class="retry">
+                        <p>{{ t('access.try_again_detail') }}</p>
                         <a
                             href="{{ app_url('/queue') }}"
-                            class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-sm font-bold text-on-primary shadow-[0_0_28px_rgba(0,242,255,0.2)] transition hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface-container-low active:scale-[0.98] sm:w-auto"
                         >
-                            <span class="material-symbols-outlined text-lg">arrow_forward</span>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
                             {{ t('access.return_to_app') }}
                         </a>
                     </div>

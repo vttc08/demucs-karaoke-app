@@ -1,5 +1,6 @@
 from .common import *
 import threading
+from html.parser import HTMLParser
 from routes.pages import auth_service, build_docs_url
 from uvicorn import Config
 
@@ -748,6 +749,27 @@ def test_access_restricted_page_loads(client):
     assert b"Your current IP address is not authorized" in response.content
     assert b'href="/queue"' in response.content
     assert b"Try again" in response.content
+
+def test_access_restricted_page_has_no_external_resources(client):
+    """The recovery page must render even when every asset endpoint is denied."""
+    class ResourceParser(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            assert not attrs.get("src")
+            assert not attrs.get("srcset")
+            if tag == "link":
+                assert attrs.get("rel") == "icon"
+                assert attrs.get("href", "").startswith("data:")
+            assert tag not in {"script", "iframe", "object", "embed"}
+
+    response = client.get("/access-restricted")
+    assert response.status_code == 200
+    ResourceParser().feed(response.text)
+    assert "<style>" in response.text
+    assert "url(" not in response.text
+    assert "@import" not in response.text
+    assert "fonts.googleapis.com" not in response.text
+
 
 def test_app_startup_triggers_media_scan():
     """Application lifespan should run media library scan on startup."""
