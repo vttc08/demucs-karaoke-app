@@ -16,6 +16,14 @@ uv run python scripts/admin_user.py create --username admin
 - Set `KARAOKE_BASE_PATH=/karaoke` only when the reverse proxy preserves that prefix upstream.
 - Back up the SQLite database and media directory together, especially before large library scans or cleanup.
 
+### Access restriction recovery page
+
+Allow `/access-restricted` through the proxy's network access rules so denied guests
+can read the recovery instructions. The page includes its CSS and icons inline and
+uses system fonts; it requires no asset, font, or script requests. The translated
+**Try again** link makes a normal request to `/queue`, where access rules still apply.
+Include `KARAOKE_BASE_PATH` in both paths when serving under a prefix.
+
 ### Client address behind a reverse proxy
 
 The admin login limiter uses the client address reported by Uvicorn. Uvicorn accepts
