@@ -95,7 +95,7 @@ COPY services/ ./services/
 COPY static/ ./static/
 COPY templates/ ./templates/
 COPY scripts/ ./scripts/
-COPY config.py database.py logging_config.py main.py models.py ./
+COPY config.py database.py logging_config.py main.py middleware.py models.py ./
 # The generated site is produced above instead of relying on the ignored local
 # static/docs/ directory being included in a clean checkout.
 COPY --from=docs /build/static/docs ./static/docs/
