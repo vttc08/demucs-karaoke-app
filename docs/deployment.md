@@ -101,6 +101,11 @@ and seed the built-in stage presets. The Docker build context is allowlisted in
 stage and copies only the generated help site into `static/docs/`; the final
 image does not contain MkDocs or the source documentation.
 
+When adding a top-level runtime module, include it in both `.dockerignore` and
+the Dockerfile's runtime `COPY` list, and add it to the image workflow's path
+filters. CI imports `main` inside both production images to catch missing
+application modules before publishing.
+
 Build the lightweight image:
 
 ```bash

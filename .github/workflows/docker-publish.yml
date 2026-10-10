@@ -21,6 +21,7 @@ on:
       - database.py
       - logging_config.py
       - main.py
+      - middleware.py
       - models.py
       - .github/workflows/docker-publish.yml
   push:
@@ -45,6 +46,7 @@ on:
       - database.py
       - logging_config.py
       - main.py
+      - middleware.py
       - models.py
       - .github/workflows/docker-publish.yml
 
@@ -63,14 +65,14 @@ jobs:
           - target: app
             image: karaoke:ci-app
             check: >-
-              python -c "import fastapi, yt_dlp" &&
+              python -c "import main, fastapi, yt_dlp" &&
               test -x /usr/local/bin/deno &&
               ffmpeg -version >/dev/null &&
               ffprobe -version >/dev/null
           - target: vocal-sync
             image: karaoke:ci-vocal-sync
             check: >-
-              python -c "import fastapi, numpy, scipy, yt_dlp" &&
+              python -c "import main, fastapi, numpy, scipy, yt_dlp" &&
               test -x /usr/local/bin/deno &&
               ffmpeg -version >/dev/null &&
               ffprobe -version >/dev/null

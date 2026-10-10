@@ -10,6 +10,7 @@
 !database.py
 !logging_config.py
 !main.py
+!middleware.py
 !models.py
 !adapters/
 !adapters/**
