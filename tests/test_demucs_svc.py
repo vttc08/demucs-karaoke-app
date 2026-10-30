@@ -417,6 +417,39 @@ def test_startup_logs_whisperx_preload_failure(monkeypatch, caplog):
     assert "Demucs startup healthy" in caplog.text
 
 
+@pytest.mark.parametrize(
+    ("configured_device", "cuda_available", "expected_device"),
+    [("cpu", True, "cpu"), ("cuda", False, "cpu"), ("cuda", True, "cuda")],
+)
+def test_startup_whisperx_preload_uses_configured_or_available_device(
+    monkeypatch, configured_device, cuda_available, expected_device
+):
+    seen = {}
+    monkeypatch.setattr(demucs_app.settings, "demucs_device", configured_device)
+    monkeypatch.setattr(demucs_app, "_cuda_available", lambda: cuda_available)
+    monkeypatch.setattr(
+        demucs_app,
+        "preload_models",
+        lambda models, *, device: seen.update(models=models, device=device),
+    )
+    monkeypatch.setattr(
+        demucs_app,
+        "_health_snapshot",
+        lambda: {
+            "status": "ok",
+            "model": "htdemucs",
+            "device": configured_device,
+            "detail": "ready",
+            "checks": {},
+        },
+    )
+    monkeypatch.setattr(demucs_app, "_ensure_gc_scheduler_started", lambda: None)
+
+    demucs_app._startup_preload_whisperx_models()
+
+    assert seen["device"] == expected_device
+
+
 def test_align_lyrics_supports_srt_format(monkeypatch):
     whisperx_pipeline = importlib.import_module("demucs_svc.whisperx_pipeline")
 
