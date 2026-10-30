@@ -1299,6 +1299,10 @@ service requires `X-API-Key` on all request paths except the plain `/transfer` H
 
 Worker resource controls are local to the Demucs host: `DEMUCS_MAX_CONCURRENT_JOBS` defaults to `1`, `DEMUCS_MAX_UPLOAD_BYTES` defaults to 2 GiB, and `DEMUCS_MIN_FREE_BYTES` reserves 1 GiB of scratch space.
 
+Each alignment job runs in a spawned child process and loads its own WhisperX models. Startup and
+manual preloading can cache model files on disk, but models held in the service process are not
+shared with alignment children. Concurrent jobs can therefore use additional RAM or GPU memory.
+
 Sherpa model files and CPU tuning are worker-local. Configure `SHERPA_SPLEETER_MODEL_ROOT`,
 `SHERPA_SPLEETER_NUM_THREADS`, and `SHERPA_SPLEETER_FFMPEG_PATH`; install official bundles with
 `uv run python -m demucs_svc.download_sherpa_models`. See `docs/separation-backends.md`.

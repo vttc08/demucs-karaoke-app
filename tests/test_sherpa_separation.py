@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import tarfile
+from types import SimpleNamespace
 
 import pytest
 
@@ -66,9 +67,14 @@ def test_sherpa_provider_cancellation_terminates_child(tmp_path, monkeypatch):
             return self.alive
 
     process = FakeProcess()
+    contexts = []
+
+    def get_context(method):
+        contexts.append(method)
+        return SimpleNamespace(Process=lambda *args, **kwargs: process)
+
     monkeypatch.setattr(
-        "demucs_svc.separation.sherpa_spleeter.multiprocessing.Process",
-        lambda *args, **kwargs: process,
+        "demucs_svc.separation.sherpa_spleeter.multiprocessing.get_context", get_context
     )
     process_updates = []
     runtime = SeparationRuntime(
@@ -93,3 +99,4 @@ def test_sherpa_provider_cancellation_terminates_child(tmp_path, monkeypatch):
 
     assert process_updates == [process, None]
     assert process.alive is False
+    assert contexts == ["spawn"]

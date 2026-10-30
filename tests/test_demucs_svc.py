@@ -9,6 +9,7 @@ import logging
 import time
 import threading
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,6 +33,55 @@ demucs_provider = importlib.import_module("demucs_svc.separation.demucs")
 def _clear_job_store() -> None:
     for job in demucs_app.job_store.all():
         demucs_app.job_store.delete(job.job_id)
+
+
+def _stub_alignment(*, config, vocals_path, output_dir, progress_callback):
+    if config.lyrics_text != "failure":
+        (output_dir / "aligned_lyrics.json").write_text("[]", encoding="utf-8")
+    if config.lyrics_text != "success":
+        raise RuntimeError("alignment failed")
+    progress_callback("whisperx_aligning_lyrics", 50, "indeterminate")
+
+
+def _stub_alignment_child(config, vocals_path, output_dir, error_path, progress_queue):
+    demucs_app._preload_whisperx_models = lambda config: None
+    demucs_app._align_lyrics = _stub_alignment
+    demucs_app._alignment_child_entry(config, vocals_path, output_dir, error_path, progress_queue)
+
+
+@pytest.mark.parametrize("case", ["success", "failure", "failure_with_output"])
+def test_spawned_alignment_from_job_thread(monkeypatch, tmp_path, case):
+    job_id = f"spawn-{case}"
+    config = demucs_models.SeparateConfig(device="cpu", lyrics_text=case, lyrics_format="txt")
+    demucs_app.job_store.create(
+        demucs_app.DemucsJobState(
+            job_id=job_id,
+            model=config.model,
+            device=config.device,
+            output_format=config.output_format,
+            mp3_bitrate=config.mp3_bitrate,
+            original_filename="vocals.wav",
+            status="running",
+        )
+    )
+    monkeypatch.setattr(demucs_app, "_alignment_child_entry", _stub_alignment_child)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                demucs_app._align_lyrics_in_child_process,
+                job_id,
+                config=config,
+                vocals_path=tmp_path / "vocals.wav",
+                output_dir=tmp_path,
+            )
+            if case == "success":
+                assert future.result(timeout=60) == tmp_path / "aligned_lyrics.json"
+            else:
+                with pytest.raises(RuntimeError, match="alignment failed"):
+                    future.result(timeout=60)
+                assert (tmp_path / "aligned_lyrics.json").exists() == (case == "failure_with_output")
+    finally:
+        demucs_app.job_store.delete(job_id)
 
 
 def test_demucs_job_executor_serializes_work(monkeypatch):

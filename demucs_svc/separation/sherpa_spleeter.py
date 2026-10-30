@@ -166,7 +166,7 @@ class SherpaSpleeterProvider:
 
         error_path = request.output_dir / "sherpa_spleeter_error.txt"
         error_path.unlink(missing_ok=True)
-        process = multiprocessing.Process(
+        process = multiprocessing.get_context("spawn").Process(
             target=_sherpa_child_entry,
             args=(
                 request,
