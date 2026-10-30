@@ -14,17 +14,27 @@ WhisperX alignment stage.
 `demucs_svc` is a standalone service. Its dependencies do not come from the main
 karaoke app, so install them in the virtual environment that will run the worker.
 
-From the repository root:
+Choose the requirements profile for the worker host. WhisperX 3.8.6 and pyannote.audio 4.0.7 are
+pinned together because WhisperX 3.4.2 passes a removed pyannote argument. The CPU and CUDA
+profiles also pin matching PyTorch and TorchAudio 2.8 wheels.
+
+From the repository root, install the CPU profile with:
 
 ```bash
-uv pip install -r demucs_svc/requirements.txt
+uv pip install --index-strategy unsafe-first-match -r demucs_svc/requirements-cpu.txt
+```
+
+For a CUDA 12.8 host, use:
+
+```bash
+uv pip install --index-strategy unsafe-first-match -r demucs_svc/requirements-cuda.txt
 ```
 
 If you copied or checked out only the `demucs_svc` directory, run the equivalent
-command from that directory:
+command from that directory, selecting the matching profile:
 
 ```bash
-uv pip install -r requirements.txt
+uv pip install --index-strategy unsafe-first-match -r requirements-cpu.txt
 ```
 
 FFmpeg must also be installed and available through `SHERPA_SPLEETER_FFMPEG_PATH`.
