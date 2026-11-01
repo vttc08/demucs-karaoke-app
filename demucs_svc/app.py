@@ -1237,13 +1237,16 @@ def _start_alignment_job(payload: bytes | Path, original_filename: str, config: 
 
 def _startup_preload_whisperx_models() -> None:
     _gc_scheduler_stop_event.clear()
+    device = settings.demucs_device
     try:
-        preload_models(DEFAULT_WHISPERX_PRELOAD_MODELS, device=DEFAULT_DEMUCS_DEVICE)
+        if device == "cuda" and not _cuda_available():
+            device = "cpu"
+        preload_models(DEFAULT_WHISPERX_PRELOAD_MODELS, device=device)
     except Exception:
         logger.exception(
             "WhisperX preload failed during Demucs startup model=%s device=%s",
             DEFAULT_WHISPERX_PRELOAD_MODELS,
-            DEFAULT_DEMUCS_DEVICE,
+            device,
         )
     startup_health = _health_snapshot()
     if startup_health["status"] == "ok":
@@ -1439,6 +1442,9 @@ def preload_whisperx(
         raise HTTPException(status_code=400, detail="whisperx_preload_models cannot be empty")
     if not whisperx_available():
         raise HTTPException(status_code=503, detail="WhisperX is not installed in this environment")
+
+    if device == "cuda" and not _cuda_available():
+        device = "cpu"
 
     loaded_entries = preload_models(
         whisperx_preload_models,

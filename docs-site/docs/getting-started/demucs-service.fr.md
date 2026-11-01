@@ -53,6 +53,15 @@ cd demucs_svc
 pip install -r requirements.txt
 ```
 
+Pour une installation utilisant uniquement le CPU, exécutez :
+
+```powershell
+uv pip install --index-strategy unsafe-first-match -r requirements-cpu.txt
+```
+
+!!! warning "Attention"
+    Pour utiliser uniquement le CPU, ajoutez explicitement `DEMUCS_DEVICE=cpu` au fichier `.env` de `demucs_svc`.
+
 ### 3. Préparez un jeton Hugging Face. { #3-prepare-a-hugging-face-token }
 
 Certains modèles WhisperX nécessitent une authentification. Acceptez le contrat de licence pour les modèles suivants :

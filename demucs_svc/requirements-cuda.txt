@@ -1,0 +1,9 @@
+
+# CUDA 12.8 PyTorch
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+torch==2.8.0+cu128
+torchaudio==2.8.0+cu128
+
+# Shared dependencies
+-r requirements.txt

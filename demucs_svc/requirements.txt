@@ -8,6 +8,10 @@ pydantic>=2.6.0
 pydantic-settings>=2.1.0
 python-dotenv>=1.0.0
 demucs>=4.0.1
+whisperx==3.8.6
+# pyannote.audio 3.x is incompatible with torchaudio 2.8's removed AudioMetaData API.
+pyannote.audio==4.0.7
+omegaconf==2.4.0
 srt
 pylrc
 sherpa-onnx
