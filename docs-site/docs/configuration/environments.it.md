@@ -87,7 +87,7 @@ Queste variabili controllano il modo in cui l'applicazione principale si connett
 
 | Variabile | Default | Descrizione |
 | --- | --- | --- |
-| `YTDLP_PATH` | `yt-dlp` | Percorso o nome eseguibile per yt-dlp. L'applicazione controlla prima l'ambiente virtuale attivo e poi il sistema `PATH`. |
+| `YTDLP_PATH` | `yt-dlp` | Percorso o nome eseguibile per yt-dlp. L'applicazione controlla prima l'ambiente virtuale attivo e poi il `PATH` di sistema. In Docker, usa `/data/tools/yt-dlp` e mantieni `/data` su uno storage persistente per aggiornare yt-dlp dalle impostazioni senza ricreare l'immagine. |
 | `YTDLP_DENO_PATH` | vuoto | Percorso opzionale a Deno per l'esecuzione JavaScript esterna di yt-dlp. Lasciare vuoto a meno che un video non lo richieda. |
 | `YTDLP_PROXY_URL` | vuoto | Opzionale HTTP, HTTPS, SOCKS4 o SOCKS5 proxy URL per yt-dlp e relative richieste in uscita. |
 | `YTDLP_VIDEO_RESOLUTION` | `default` | I valori supportati sono `default`, `360`, `480`, `720`, `1080` e `2160`. |

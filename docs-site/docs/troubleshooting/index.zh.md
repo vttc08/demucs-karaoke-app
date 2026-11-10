@@ -84,6 +84,8 @@ INFO   Application startup complete.
 
 ## yt-dlp 下载失败 { #yt-dlp-fails-to-download }
 
+视频来源发生变化时，可能需要更新 yt-dlp。请在设置中使用**更新 yt-dlp**。在 Docker 中，请确认 `YTDLP_PATH=/data/tools/yt-dlp`，并将 `/data` 挂载到持久化存储；详情请参阅[环境变量](../configuration/environments.md#downloads-and-external-tools)。
+
 YouTube 可能会屏蔽或限制 VPS 提供商使用的 IP 地址。即使是家庭网络，也可能暂时受到速率限制或被屏蔽。
 
 如果问题是暂时的，最快的解决方法是在失败的任务上选择**重试**。

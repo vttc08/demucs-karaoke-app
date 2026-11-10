@@ -83,6 +83,8 @@ If Demucs is running over the internet, see [Expose a remote Demucs service](../
 
 ## yt-dlp fails to download
 
+yt-dlp may need an update when a video source changes. Use **Update yt-dlp** in Settings. In Docker, make sure `YTDLP_PATH=/data/tools/yt-dlp` and `/data` uses persistent storage; see [environment variables](../configuration/environments.md#downloads-and-external-tools).
+
 YouTube may block or rate-limit IP addresses used by VPS providers. Even a home connection can be temporarily rate-limited or blocked.
 
 If the problem is temporary, the fastest solution is to select **Retry** on the failed task.

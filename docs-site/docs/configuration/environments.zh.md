@@ -87,7 +87,7 @@ Docker Compose 文件会通过其中的 `environment:` 部分直接提供一些�
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `YTDLP_PATH` | `yt-dlp` | yt-dlp 的路径或可执行文件名。应用会先检查当前虚拟环境，然后检查系统的 `PATH`。 |
+| `YTDLP_PATH` | `yt-dlp` | yt-dlp 的路径或可执行文件名。应用会先检查当前虚拟环境，然后检查系统的 `PATH`。在 Docker 中，请使用 `/data/tools/yt-dlp`，并将 `/data` 保存在持久化存储中，这样即可在设置页面更新 yt-dlp，而无需重建镜像。 |
 | `YTDLP_DENO_PATH` | 空 | Deno 的可选路径，用于 yt-dlp 执行外部 JavaScript。除非某个视频需要，否则请留空。 |
 | `YTDLP_PROXY_URL` | 空 | yt-dlp 和相关出站请求使用的可选 HTTP、HTTPS、SOCKS4 或 SOCKS5 代理 URL。 |
 | `YTDLP_VIDEO_RESOLUTION` | `default` | 首选视频分辨率。支持 `default`、`360`、`480`、`720`、`1080` 和 `2160`。 |

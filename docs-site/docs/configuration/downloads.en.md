@@ -22,6 +22,8 @@ An optional proxy URL for yt-dlp and related outbound requests. HTTP, HTTPS, SOC
 
 Use **Check version** to display the installed yt-dlp version. **Update yt-dlp** installs the stable release, while **Install yt-dlp Nightly** installs the nightly release. Update yt-dlp when a provider changes or when the current version no longer works with a video source.
 
+For Docker, set `YTDLP_PATH=/data/tools/yt-dlp` and keep `/data` mounted to persistent storage so updates survive container replacement. See [environment variables](environments.md#downloads-and-external-tools) for details.
+
 ### Parallel YouTube Search
 
 Search the original query and a karaoke variant at the same time. This can return more useful results, but it creates additional outbound requests.
