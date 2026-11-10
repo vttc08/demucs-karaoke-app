@@ -15,6 +15,7 @@ on:
       - locales/**
       - routes/**
       - services/**
+      - scripts/**
       - static/**
       - templates/**
       - config.py
@@ -40,6 +41,7 @@ on:
       - locales/**
       - routes/**
       - services/**
+      - scripts/**
       - static/**
       - templates/**
       - config.py

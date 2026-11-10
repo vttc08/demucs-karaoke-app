@@ -184,6 +184,19 @@ that identity read/write access before starting the container. The image makes
 an empty `/data` directory writable for its unprivileged default user, but a
 bind mount's host permissions always take precedence.
 
+Docker stores its self-updating yt-dlp executable in `/data/tools/yt-dlp`.
+Use the Settings page to install stable or nightly updates without rebuilding;
+the executable survives container recreation as long as `/data` is retained.
+The container user needs write access to `/data/tools`. Existing Compose users
+should update their `YTDLP_PATH` environment value from `yt-dlp` to
+`/data/tools/yt-dlp` and recreate the container. A deliberately customized
+`YTDLP_PATH` continues to use that executable instead. To restore the version
+bundled with the image, stop the container, remove `data/tools/yt-dlp`, and
+start it again. Deno and yt-dlp-ejs are provided by the image and still require
+an image update when they need upgrading.
+yt-dlp will not replace a newer nightly build with an older stable build when
+selecting stable; restore the bundled executable as described above if needed.
+
 Create the first admin account from inside the running container:
 
 ```bash

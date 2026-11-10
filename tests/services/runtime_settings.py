@@ -857,6 +857,7 @@ def test_runtime_settings_update_ytdlp_reports_updated():
     assert result.updated is True
     assert result.before_version == "2026.03.01"
     assert result.after_version == "2026.03.15"
+    assert mock_run.call_args.args[0][1:] == ["--update-to", "stable"]
 
 def test_runtime_settings_update_ytdlp_reports_up_to_date():
     """yt-dlp update should report no change when version is unchanged."""

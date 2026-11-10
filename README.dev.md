@@ -211,7 +211,7 @@ For client IP handling and login limits behind a proxy or Docker NAT, see
        - Configure the stage QR overlay URL for the fullscreen stage view; QR size and placement are adjusted per device on `/stage`
        - Configure the default vocals volume used when `/stage` or `/queue` loads after a restart
        - Optionally configure a Deno runtime path for yt-dlp external JavaScript execution
-       - Check current yt-dlp version and update from UI; release binaries use `yt-dlp -U`, while pip/uv installs fall back to an in-environment package update
+  - Check current yt-dlp version and update from UI; release binaries use yt-dlp's channel updater, while pip/uv installs fall back to an in-environment package update
       - Apply settings immediately without restarting the app (for processing/runtime behavior)
        - Persist changes to the database so settings survive app reloads and restarts
        - View real-time Demucs engine health (online/offline with detail)
