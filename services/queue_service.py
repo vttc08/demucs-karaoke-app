@@ -925,6 +925,8 @@ class QueueService:
             active_task = self._active_task_for_queue_item(item)
         if active_task is None or active_task.status not in {"failed", "canceled"}:
             return False
+        if active_task.status == "failed":
+            return True
         if is_admin:
             return True
         return self.can_manage_queue_item(
@@ -960,7 +962,7 @@ class QueueService:
             session.query(ProcessingTask)
             .filter(
                 ProcessingTask.target_queue_item_id == item.id,
-                ProcessingTask.status.in_(["pending", "downloading", "processing"]),
+                ProcessingTask.status.in_(["pending", "downloading", "processing", "failed", "canceled"]),
             )
             .order_by(ProcessingTask.id.desc())
             .first()

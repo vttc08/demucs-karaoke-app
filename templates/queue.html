@@ -346,7 +346,7 @@
                         </div>
                         <div class="flex shrink-0 items-center gap-1">
                             {% if item.can_retry_task %}
-                            <button class="queue-row-action text-primary hover:bg-primary/15" onclick="retryTask('{{ item.task_id }}', this)" title="{{ t('common.retry') }}" aria-label="{{ t('common.retry') }}"><span class="material-symbols-outlined text-[19px]">refresh</span></button>
+                            <button type="button" class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60" onclick="retryTask('{{ item.task_id }}', this)" title="{{ t('common.retry') }}" aria-label="{{ t('common.retry') }}"><span class="material-symbols-outlined text-[16px]">refresh</span><span>{{ t('common.retry') }}</span></button>
                             {% endif %}
                             {% if item.can_cancel_task %}
                             <button class="queue-row-action text-error hover:bg-error/15" onclick="cancelTask('{{ item.task_id }}', this)" title="{{ t('queue.cancel_task') }}" aria-label="{{ t('queue.cancel_task') }}"><span class="material-symbols-outlined text-[19px]">close</span></button>
