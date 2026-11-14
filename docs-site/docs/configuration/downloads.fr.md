@@ -20,7 +20,9 @@ Une URL proxy facultative pour yt-dlp et les demandes sortantes associées. Les 
 
 ### version yt-dlp { #yt-dlp-version }
 
-Utilisez**Vérifier la version**pour afficher la version yt-dlp installée.**Update yt-dlp**installe la version stable, tandis que**Installer yt-dlp Nightly**installe la version nocturne. Mettez à jour yt-dlp lorsqu'un fournisseur change ou lorsque la version actuelle ne fonctionne plus avec une source vidéo.
+Utilisez **Vérifier la version** pour afficher la version yt-dlp installée. **Mettre à jour yt-dlp** installe la version stable, tandis que **Installer yt-dlp Nightly** installe la version nightly. Mettez à jour yt-dlp lorsqu'un fournisseur change ou lorsque la version actuelle ne fonctionne plus avec une source vidéo.
+
+Dans Docker, définissez `YTDLP_PATH=/data/tools/yt-dlp` et conservez `/data` sur un stockage persistant afin que les mises à jour survivent au remplacement du conteneur. Consultez les [variables d'environnement](environments.md#downloads-and-external-tools) pour en savoir plus.
 
 ### Recherche YouTube parallèle { #parallel-youtube-search }
 

@@ -974,11 +974,7 @@ class RuntimeSettingsService:
             raise ValueError(f"Unsupported yt-dlp update channel: {channel}")
 
         before = self.get_ytdlp_version()
-        cmd = [settings.ytdlp_path, "-U"] if channel == "stable" else [
-            settings.ytdlp_path,
-            "--update-to",
-            "nightly",
-        ]
+        cmd = [settings.ytdlp_path, "--update-to", channel]
         try:
             result = subprocess.run(
                 cmd,

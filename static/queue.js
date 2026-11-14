@@ -1664,7 +1664,7 @@ function renderQueueStageItem(item, movableIndexById, movableCount) {
     const statusHtml = isProcessing ? renderQueueProgressBlock(item) : !isPlaying ? `
         <span class="queue-status-chip ${item.status === 'failed' ? 'queue-status-failed' : item.status === 'ready' ? 'queue-status-ready' : 'queue-status-waiting'}">${status.icon}${escapeHtml(status.label)}</span>` : '';
     const retryActionHtml = item.can_retry_task ? `
-        <button class="queue-row-action text-primary hover:bg-primary/15" onclick="retryTask('${item.task_id}', this)" title="${escapeHtml(t('common.retry'))}" aria-label="${escapeHtml(t('common.retry'))}"><span class="material-symbols-outlined text-[19px]">refresh</span></button>` : '';
+        <button type="button" class="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-primary transition-colors hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-60" onclick="retryTask('${item.task_id}', this)" title="${escapeHtml(t('common.retry'))}" aria-label="${escapeHtml(t('common.retry'))}"><span class="material-symbols-outlined text-[16px]">refresh</span><span>${escapeHtml(t('common.retry'))}</span></button>` : '';
     const removeActionHtml = item.can_remove ? `
         <button class="queue-row-action hover:text-error" onclick="removeSong('${item.id}')" title="${escapeHtml(t('queue.remove'))}" aria-label="${escapeHtml(t('queue.remove'))}"><span class="material-symbols-outlined text-[19px]">remove</span></button>` : '';
     const cancelActionHtml = item.can_cancel_task ? `

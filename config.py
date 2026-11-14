@@ -141,7 +141,8 @@ class Settings(BaseSettings):
         super().__init__(**kwargs)
         self.karaoke_base_path = normalize_base_path(self.karaoke_base_path)
         # Resolve executable paths on initialization
-        self.ytdlp_path = find_executable(self.ytdlp_path.split('/')[-1])
+        if '/' not in self.ytdlp_path:
+            self.ytdlp_path = find_executable(self.ytdlp_path)
         self.ffmpeg_path = find_executable(self.ffmpeg_path.split('/')[-1])
 
     def ensure_paths(self):

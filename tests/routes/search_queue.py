@@ -1078,8 +1078,9 @@ def test_retry_failed_queue_task_route_allows_owner_guest(client):
     asyncio.run(task_stream_manager.clear_task(task_id))
 
 
-def test_retry_failed_queue_task_route_rejects_non_owner_guest(client):
-    """Guests should not retry another guest's failed queue task."""
+@pytest.mark.parametrize("guest_id", [None, "guest-other"])
+def test_retry_failed_queue_task_route_allows_any_visitor(client, guest_id):
+    """Any visitor can retry a failed queue task without owning the song."""
     with TestingSessionLocal() as db:
         media = MediaItem(
             youtube_id="retry-failed-other",
@@ -1115,10 +1116,19 @@ def test_retry_failed_queue_task_route_rejects_non_owner_guest(client):
         db.commit()
         task_id = task.id
 
-    client.cookies.set("karaoke_guest_id", "guest-other")
-    response = client.post(f"/api/tasks/{task_id}/retry")
+    if guest_id is not None:
+        client.cookies.set("karaoke_guest_id", guest_id)
+    else:
+        client.cookies.clear()
+    queue_response = client.get("/api/queue/")
+    assert queue_response.status_code == 200
+    assert queue_response.json()[0]["can_retry_task"] is True
+    with patch("routes.tasks.task_execution_coordinator.start") as mock_start:
+        response = client.post(f"/api/tasks/{task_id}/retry")
 
-    assert response.status_code == 403
+    assert response.status_code == 200
+    assert response.json()["status"] == ProcessingTaskStatus.PENDING.value
+    mock_start.assert_called_once_with(task_id)
     asyncio.run(task_stream_manager.clear_task(task_id))
 
 

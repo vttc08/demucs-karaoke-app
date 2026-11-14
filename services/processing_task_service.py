@@ -844,15 +844,17 @@ class ProcessingTaskService:
             return True
         if task.target_queue_item_id is None:
             return False
-        normalized_requester_id = self._normalize_optional_id(requester_id)
-        if normalized_requester_id is None:
-            return False
         queue_item = (
             db.query(QueueItem)
             .filter(QueueItem.id == task.target_queue_item_id)
             .first()
         )
         if queue_item is None:
+            return False
+        if task.status == ProcessingTaskStatus.FAILED.value:
+            return True
+        normalized_requester_id = self._normalize_optional_id(requester_id)
+        if normalized_requester_id is None:
             return False
         return self._normalize_optional_id(queue_item.user_id) == normalized_requester_id
 

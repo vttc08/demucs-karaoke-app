@@ -12,7 +12,7 @@ services:
       MEDIA_PATH: /data/media
       CACHE_PATH: /data/cache
       LOG_DIR: /data/logs
-      YTDLP_PATH: yt-dlp
+      YTDLP_PATH: /data/tools/yt-dlp
       YTDLP_DENO_PATH: /usr/local/bin/deno
       FFMPEG_PATH: ffmpeg
     volumes:

@@ -51,6 +51,8 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project
+RUN python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp', '/tmp/yt-dlp')" \
+    && chmod 0755 /tmp/yt-dlp
 
 FROM dependencies AS vocal-sync-dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -76,7 +78,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MEDIA_PATH=/data/media \
     CACHE_PATH=/data/cache \
     LOG_DIR=/data/logs \
-    YTDLP_PATH=yt-dlp \
+    YTDLP_PATH=/data/tools/yt-dlp \
     YTDLP_DENO_PATH="" \
     FFMPEG_PATH=ffmpeg
 
@@ -95,6 +97,7 @@ COPY services/ ./services/
 COPY static/ ./static/
 COPY templates/ ./templates/
 COPY scripts/ ./scripts/
+COPY --from=dependencies /tmp/yt-dlp /usr/local/share/yt-dlp
 COPY config.py database.py logging_config.py main.py middleware.py models.py ./
 # The generated site is produced above instead of relying on the ignored local
 # static/docs/ directory being included in a clean checkout.
@@ -105,6 +108,7 @@ COPY --from=docs /build/static/docs ./static/docs/
 USER 10001:10001
 EXPOSE 8000
 VOLUME ["/data"]
+ENTRYPOINT ["/bin/sh", "/app/scripts/docker-entrypoint.sh"]
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # All production images use the pinned static FFmpeg binaries. This avoids
